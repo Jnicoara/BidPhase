@@ -146,6 +146,8 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
   const pageSizesRef = useRef<{ w: number; h: number }[]>([]);
   const [pageSizesReady, setPageSizesReady] = useState(0);
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
+  const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
 
   // ── Page top offsets ───────────────────────────────────────────────────────
   const getPageTops = useCallback((): number[] => {
@@ -362,9 +364,7 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
       ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      // Center dot
-      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = "#F5C518"; ctx.fill();
+      // No center dot — hairlines only for maximum precision
     }
   }, [runs, activeRunId, scalePoints, crosshair, normToCanvas, getPageTops, scaleRatio, renderZoom, pageSizesReady]);
 
@@ -885,7 +885,28 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
       <div
         ref={scrollAreaRef}
         className="flex-1 overflow-auto relative"
-        style={{ cursor: mode !== "none" ? "none" : "default" }}
+        style={{ cursor: mode !== "none" ? "none" : isPanning ? "grabbing" : "grab" }}
+        onMouseDown={(e) => {
+          if (mode !== "none") return;
+          // Only left button
+          if (e.button !== 0) return;
+          const el = scrollAreaRef.current;
+          if (!el) return;
+          panRef.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+          setIsPanning(true);
+          e.preventDefault();
+        }}
+        onMouseMove={(e) => {
+          if (!panRef.current) return;
+          const el = scrollAreaRef.current;
+          if (!el) return;
+          const dx = e.clientX - panRef.current.startX;
+          const dy = e.clientY - panRef.current.startY;
+          el.scrollLeft = panRef.current.scrollLeft - dx;
+          el.scrollTop  = panRef.current.scrollTop  - dy;
+        }}
+        onMouseUp={() => { panRef.current = null; setIsPanning(false); }}
+        onMouseLeave={() => { panRef.current = null; setIsPanning(false); }}
       >
         {pdfLoading ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
