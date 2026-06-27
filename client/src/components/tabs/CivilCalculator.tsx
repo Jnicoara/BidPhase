@@ -47,33 +47,44 @@ function ConduitPipeIcon({ size = 16, className = "" }: { size?: number; classNa
 }
 
 function MaleAdapterIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
-  // PVC straight threaded connector: two pipe bodies joined at center with a coupling band
+  // Electrical conduit connector (set-screw type):
+  // left pipe stub → wider connector body with set-screw on top → right pipe stub
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
       className={className}>
-      {/* Left pipe end */}
-      <line x1="2" y1="10" x2="9" y2="10" />
-      <line x1="2" y1="14" x2="9" y2="14" />
+      {/* Left pipe stub */}
+      <line x1="2" y1="10" x2="8" y2="10" />
+      <line x1="2" y1="14" x2="8" y2="14" />
       <line x1="2" y1="10" x2="2" y2="14" />
-      {/* Center coupling (wider band) */}
-      <rect x="9" y="8" width="6" height="8" rx="1" />
-      {/* Right pipe end */}
-      <line x1="15" y1="10" x2="22" y2="10" />
-      <line x1="15" y1="14" x2="22" y2="14" />
+      {/* Connector body (taller/wider than pipe) */}
+      <rect x="8" y="7" width="8" height="10" rx="1" />
+      {/* Set-screw on top of body */}
+      <line x1="11" y1="7" x2="11" y2="4" />
+      <line x1="13" y1="7" x2="13" y2="4" />
+      <line x1="11" y1="4" x2="13" y2="4" />
+      {/* Right pipe stub */}
+      <line x1="16" y1="10" x2="22" y2="10" />
+      <line x1="16" y1="14" x2="22" y2="14" />
       <line x1="22" y1="10" x2="22" y2="14" />
     </svg>
   );
 }
 
 function StrippedWireIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
-  // Single conductor wire: a simple horizontal line with a small circle at the end
+  // Single conductor: insulated wire (tube) on left, stripped end on right showing bare conductor circle
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
       className={className}>
-      <line x1="2" y1="12" x2="20" y2="12" />
-      <circle cx="21" cy="12" r="1.5" />
+      {/* Insulated wire body */}
+      <line x1="2" y1="9" x2="17" y2="9" />
+      <line x1="2" y1="15" x2="17" y2="15" />
+      <line x1="2" y1="9" x2="2" y2="15" />
+      {/* Insulation cut end */}
+      <line x1="17" y1="9" x2="17" y2="15" />
+      {/* Bare conductor circle (cross-section of stripped end) */}
+      <circle cx="21" cy="12" r="2.5" />
     </svg>
   );
 }
