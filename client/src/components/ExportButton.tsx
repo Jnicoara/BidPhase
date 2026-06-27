@@ -1,12 +1,21 @@
 /**
  * BidPhase — Global Floating Export Button
- * Aggregates materials from all three tabs (active projects)
- * Downloads a clean, formatted CSV for supplier ordering
- * Design: Safety Yellow, bottom-right fixed
+ *
+ * Aggregates materials from all three active projects and downloads a
+ * clean, formatted CSV for supplier ordering.
+ *
+ * Civil export reads the richer RunItem shape stored via AppContext.
+ * Each run row includes: conduit type, conduit size, distance, pipe sticks,
+ * wire footage, conductor count, conductor material, conductor size, and
+ * page number. Fittings are emitted as indented sub-rows beneath each run.
+ *
+ * Design: Safety Yellow (#F5C518) fixed bottom-right button.
  */
 import { useApp } from "@/contexts/AppContext";
 import { toast } from "sonner";
 import { Download } from "lucide-react";
+
+// ─── CSV helpers ──────────────────────────────────────────────────────────────
 
 function escapeCSV(val: string | number): string {
   const s = String(val);
@@ -20,90 +29,135 @@ function buildCSV(rows: string[][]): string {
   return rows.map((row) => row.map(escapeCSV).join(",")).join("\n");
 }
 
+// ─── RunItem shape (mirrors CivilCalculator.tsx) ──────────────────────────────
+// The full run data is stored in civilState as `runs` via an `as any` cast
+// because CivilState in AppContext is intentionally kept minimal (it only
+// declares the legacy scalar fields). The richer run array is appended at
+// runtime and read back here with the same pattern.
+interface RunItem {
+  id: string;
+  name: string;
+  pageNumber?: number;
+  feet: number;
+  conduitSize: string;
+  conduitType?: string;
+  conductors: number;
+  conductorMaterial?: string;
+  conductorSize?: string;
+  fittings: Record<string, number>;
+}
+
+// Fitting id → human-readable label (must stay in sync with FITTING_TYPES in CivilCalculator.tsx)
+// Note: "tee" was removed from the UI in a prior refactor — it is intentionally absent here.
+const FITTING_LABELS: Record<string, string> = {
+  connector: "Connectors",
+  coupling:  "Couplings",
+  lb:        "LBs",
+  elbow90:   "90° Elbows",
+  elbow45:   "45° Elbows",
+  sweep:     "Sweeps",
+  offset:    "Offsets",
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function ExportButton() {
-  const { civilState, assemblyState, roomState, activeCivilProject, activeCommercialProject, activeResidentialProject } = useApp();
+  const {
+    civilState,
+    assemblyState,
+    roomState,
+    activeCivilProject,
+    activeCommercialProject,
+    activeResidentialProject,
+  } = useApp();
 
   const handleExport = () => {
     const rows: string[][] = [];
 
-    // ── Header ──────────────────────────────────────────────────
-    rows.push(["BidPhase — Material Export", "", "", "", "", ""]);
-    rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", ""]);
+    // ── Header ──────────────────────────────────────────────────────────────
+    rows.push(["BidPhase — Material Export", "", "", "", "", "", "", "", ""]);
+    rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", "", "", ""]);
     rows.push([]);
 
-    // ── Section 1: Civil / Underground (per-run) ─────────────────
-    const runs = ((civilState as any).runs ?? []) as Array<{
-      id: string;
-      name: string;
-      feet: number;
-      conduitSize: string;
-      conductors: number;
-      fittings: Record<string, number>;
-    }>;
+    // ── Section 1: Civil & Underground (per-run) ─────────────────────────────
+    // Run data is stored in civilState.runs (appended at runtime in CivilEditor).
+    const runs = ((civilState as any).runs ?? []) as RunItem[];
 
     if (runs.length > 0) {
-      rows.push([`SECTION: Civil & Underground — ${activeCivilProject.name}`, "", "", "", "", ""]);
-      rows.push(["Run Name", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft w/ 10% slack)", "Conductors"]);
+      rows.push([`SECTION: Civil & Underground — ${activeCivilProject.name}`, "", "", "", "", "", "", "", ""]);
+      rows.push([
+        "Run Name",
+        "Page",
+        "Conduit Type",
+        "Conduit Size",
+        "Distance (ft)",
+        "Pipe Sticks",
+        "Wire (ft w/ 10% slack)",
+        "Conductors",
+        "Conductor Spec",
+      ]);
 
       for (const run of runs) {
         const sticks = Math.ceil(run.feet / 10);
         const wire = parseFloat((run.feet * run.conductors * 1.1).toFixed(1));
+        const conduitType = run.conduitType ?? "EMT";
+        const conductorMat = run.conductorMaterial ?? "CU";
+        const conductorSz = run.conductorSize ?? "12";
+        const conductorSpec = `#${conductorSz} AWG ${conductorMat === "CU" ? "Cu" : "Al"}`;
+
         rows.push([
           run.name,
+          run.pageNumber != null ? String(run.pageNumber) : "",
+          conduitType,
           `${run.conduitSize}"`,
           String(run.feet),
           String(sticks),
           String(wire),
           String(run.conductors),
+          conductorSpec,
         ]);
 
-        // Fittings sub-rows
-        const fittingLabels: Record<string, string> = {
-          connector: "Connectors",
-          coupling: "Couplings",
-          lb: "LBs",
-          elbow90: "90° Elbows",
-          elbow45: "45° Elbows",
-          sweep: "Sweeps",
-          tee: "Tees",
-          offset: "Offsets",
-        };
+        // Fittings sub-rows (indented for readability)
         const hasFittings = Object.values(run.fittings).some((v) => v > 0);
         if (hasFittings) {
-          rows.push(["  Fittings:", "", "", "", "", ""]);
+          rows.push(["  Fittings:", "", "", "", "", "", "", "", ""]);
           for (const [key, count] of Object.entries(run.fittings)) {
             if (count > 0) {
-              rows.push([`    ${fittingLabels[key] ?? key}`, "EA", String(count), "", "", ""]);
+              const label = FITTING_LABELS[key] ?? key;
+              rows.push([`    ${label}`, "EA", String(count), "", "", "", "", "", ""]);
             }
           }
         }
       }
 
-      // Project totals
+      // Project totals row
       const totalSticks = runs.reduce((a, r) => a + Math.ceil(r.feet / 10), 0);
-      const totalWire = runs.reduce((a, r) => a + parseFloat((r.feet * r.conductors * 1.1).toFixed(1)), 0);
-      rows.push(["TOTAL", "", "", String(totalSticks), String(parseFloat(totalWire.toFixed(1))), ""]);
-      rows.push([]);
-    } else if (civilState.distance > 0) {
-      // Legacy single-distance fallback
-      const { distance, conductors } = civilState;
-      const sticks = Math.ceil(distance / 10);
-      const wireLength = parseFloat((distance * conductors * 1.1).toFixed(1));
-      rows.push([`SECTION: Civil & Underground — ${activeCivilProject.name}`, "", "", "", "", ""]);
-      rows.push(["Description", "Unit", "Quantity", "Notes", "", ""]);
-      rows.push(["10-ft Conduit Sticks", "EA", String(sticks), `${distance} ft run`, "", ""]);
-      rows.push(["Wire (Total w/ 10% Slack)", "FT", String(wireLength), `${conductors} conductors`, "", ""]);
+      const totalWire = runs.reduce(
+        (a, r) => a + parseFloat((r.feet * r.conductors * 1.1).toFixed(1)),
+        0
+      );
+      rows.push([
+        "TOTAL",
+        "",
+        "",
+        "",
+        "",
+        String(totalSticks),
+        String(parseFloat(totalWire.toFixed(1))),
+        "",
+        "",
+      ]);
       rows.push([]);
     }
 
-    // ── Section 2: Commercial Assembly ──────────────────────────
+    // ── Section 2: Commercial Assembly ──────────────────────────────────────
     if (assemblyState.materials.length > 0) {
-      rows.push([`SECTION: Commercial — ${activeCommercialProject.name}`, "", "", "", "", ""]);
+      rows.push([`SECTION: Commercial — ${activeCommercialProject.name}`, "", "", "", "", "", "", "", ""]);
       rows.push([
         `Assembly: ${assemblyState.assemblyId} × ${assemblyState.quantity}`,
-        "", "", "", "", "",
+        "", "", "", "", "", "", "", "",
       ]);
-      rows.push(["Description", "Unit", "Quantity", "Unit Cost", "Ext. Cost", ""]);
+      rows.push(["Description", "Unit", "Quantity", "Unit Cost", "Ext. Cost", "", "", "", ""]);
       for (const m of assemblyState.materials) {
         rows.push([
           m.description,
@@ -111,29 +165,31 @@ export default function ExportButton() {
           String(m.quantity),
           `$${m.unitCost.toFixed(2)}`,
           `$${(m.unitCost * m.quantity).toFixed(2)}`,
-          "",
+          "", "", "", "",
         ]);
       }
-      rows.push(["Total Labor Hours", "HRS", String(assemblyState.totalLaborHours), "", "", ""]);
+      rows.push(["Total Labor Hours", "HRS", String(assemblyState.totalLaborHours), "", "", "", "", "", ""]);
       rows.push([]);
     }
 
-    // ── Section 3: Residential ─────────────────────────────────
+    // ── Section 3: Residential ───────────────────────────────────────────────
     if (roomState.materials.length > 0) {
-      rows.push([`SECTION: Residential — ${activeResidentialProject.name}`, "", "", "", "", ""]);
-      rows.push([`Room: ${roomState.roomId}`, "", "", "", "", ""]);
-      rows.push(["Description", "Unit", "Quantity", "", "", ""]);
+      rows.push([`SECTION: Residential — ${activeResidentialProject.name}`, "", "", "", "", "", "", "", ""]);
+      rows.push([`Room: ${roomState.roomId}`, "", "", "", "", "", "", "", ""]);
+      rows.push(["Description", "Unit", "Quantity", "", "", "", "", "", ""]);
       for (const m of roomState.materials) {
-        rows.push([m.description, m.unit, String(m.quantity), "", "", ""]);
+        rows.push([m.description, m.unit, String(m.quantity), "", "", "", "", "", ""]);
       }
       rows.push([]);
     }
 
+    // Guard: nothing to export
     if (rows.length <= 3) {
       toast.error("No data to export. Open a project and add runs or assemblies first.");
       return;
     }
 
+    // Trigger download
     const csv = buildCSV(rows);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);

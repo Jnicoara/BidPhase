@@ -7,7 +7,7 @@
  * Each tab now embeds a PlanPanel on the left side — no standalone Plan Viewer tab.
  */
 import { useApp } from "@/contexts/AppContext";
-import CivilCalculator from "@/components/tabs/CivilCalculator";
+import CivilCalculator, { CivilIcon } from "@/components/tabs/CivilCalculator";
 import CommercialAssembly from "@/components/tabs/CommercialAssembly";
 import ResidentialRoughIn from "@/components/tabs/ResidentialRoughIn";
 import SettingsTab from "@/components/tabs/SettingsTab";
@@ -20,50 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/**
- * CivilIcon — conduits rising from underground into a panel cabinet.
- * Designed to match Lucide's Home / Building2 stroke style:
- *   strokeWidth 2, strokeLinecap round, strokeLinejoin round, no fill.
- *
- * Anatomy (24×24 grid):
- *   - Panel cabinet: rect 4,2 → 16,11  (w=16, h=9) with a horizontal bus bar inside
- *   - Ground line:   y=16 spanning x=2..22
- *   - Three conduits: vertical lines from y=11 down to y=16, then continuing
- *     underground as dashed stubs to y=21, with small entry knockouts at y=11
- */
-function CivilIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      {/* Panel / CT cabinet body */}
-      <rect x="3" y="2" width="18" height="10" rx="1.5" />
-      {/* Bus bar inside panel */}
-      <line x1="6" y1="7" x2="18" y2="7" />
-      {/* Three conduit knockouts at panel bottom */}
-      <circle cx="7.5" cy="12" r="0" />{/* anchor point only */}
-      {/* Left conduit — exits panel bottom, goes underground */}
-      <line x1="7.5" y1="12" x2="7.5" y2="16" />
-      <line x1="7.5" y1="16" x2="7.5" y2="21" strokeDasharray="1.5 1.5" />
-      {/* Center conduit */}
-      <line x1="12" y1="12" x2="12" y2="16" />
-      <line x1="12" y1="16" x2="12" y2="21" strokeDasharray="1.5 1.5" />
-      {/* Right conduit */}
-      <line x1="16.5" y1="12" x2="16.5" y2="16" />
-      <line x1="16.5" y1="16" x2="16.5" y2="21" strokeDasharray="1.5 1.5" />
-      {/* Ground / grade line */}
-      <line x1="2" y1="16" x2="22" y2="16" />
-    </svg>
-  );
-}
+// CivilIcon is imported from CivilCalculator.tsx (single source of truth).
 
 const TABS = [
   { id: "residential", label: "Residential",      icon: Home,         short: "Res."  },

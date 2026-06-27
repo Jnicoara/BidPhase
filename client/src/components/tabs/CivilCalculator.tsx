@@ -90,8 +90,10 @@ function StrippedWireIcon({ size = 16, className = "" }: { size?: number; classN
 }
 import { toast } from "sonner";
 
-// ─── Civil & Underground icon (shared with BidPhaseShell) ─────────────────────
-function CivilIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+// ─── Civil & Underground icon ────────────────────────────────────────────────
+// Exported so BidPhaseShell can import it directly instead of duplicating the
+// SVG definition. Both the sidebar nav and the editor header use this icon.
+export function CivilIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -226,6 +228,18 @@ function FittingCounter({
 }
 
 // ─── Run Card ─────────────────────────────────────────────────────────────────
+/**
+ * RunCard — editable card for a single conduit run pushed from PlanPanel.
+ *
+ * Data flow:
+ *   PlanPanel (canvas) → onPushDistance callback → CivilEditor.handlePush
+ *   → syncRuns → RunItem[] stored in local state + persisted via setCivilState.
+ *   RunCard receives a single RunItem and fires onUpdate/onRemove to mutate
+ *   the parent's runs array, which re-syncs to context on every change.
+ *
+ * The color dot in the header uses the run index mod 6 to cycle through a
+ *   fixed palette — it is purely decorative and does not affect calculations.
+ */
 function RunCard({
   run,
   index,
@@ -453,9 +467,20 @@ function RunCard({
   );
 }
 
-// ─── Editor view ─────────────────────────────────────────────────────────────
-
 // ─── Cross-page totals ────────────────────────────────────────────────────────
+/**
+ * CrossPageTotals — read-only project-wide material summary.
+ *
+ * Receives the full `runs` array (all pages) and aggregates:
+ *   - Conduit footage + sticks, grouped by type+size (e.g. "EMT 3/4"")
+ *   - Fittings count, grouped by conduit spec + fitting type
+ *   - Wire footage, grouped by conductor spec (e.g. "#12 AWG Cu")
+ *   - Per-page breakdown strip (only shown when there are ≥2 pages)
+ *
+ * This component is always rendered with the full cross-page run list even
+ * when the right panel is filtered to a single page — it intentionally shows
+ * the whole-project picture, not just the current page.
+ */
 function CrossPageTotals({ runs }: { runs: RunItem[] }) {
   if (runs.length === 0) return null;
 
