@@ -31,66 +31,83 @@ import {
   Link2
 } from "lucide-react";
 
-// ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ──
+// ─── Custom section icons (realistic but clean line-art style) ──────────────────
 function ConduitPipeIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
-  // A horizontal conduit pipe: two parallel lines (walls) with end caps
+  // Conduit viewed from the end (annular cross-section) + side profile showing the bore
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
       className={className}>
-      {/* Pipe body — two horizontal walls */}
-      <line x1="2" y1="9" x2="22" y2="9" />
-      <line x1="2" y1="15" x2="22" y2="15" />
-      {/* Left end cap */}
-      <line x1="2" y1="9" x2="2" y2="15" />
-      {/* Right end cap */}
-      <line x1="22" y1="9" x2="22" y2="15" />
-      {/* Center stripe (pipe seam) */}
-      <line x1="2" y1="12" x2="22" y2="12" strokeDasharray="3 3" strokeOpacity="0.5" />
+      {/* Outer wall of pipe body */}
+      <line x1="5" y1="7" x2="20" y2="7" />
+      <line x1="5" y1="17" x2="20" y2="17" />
+      {/* Inner bore walls */}
+      <line x1="5" y1="10" x2="20" y2="10" strokeOpacity="0.55" />
+      <line x1="5" y1="14" x2="20" y2="14" strokeOpacity="0.55" />
+      {/* Left end face — annular ring (outer arc + inner arc) */}
+      <path d="M5 7 Q2 9 2 12 Q2 15 5 17" />
+      <path d="M5 10 Q3.5 11 3.5 12 Q3.5 13 5 14" strokeOpacity="0.55" />
+      {/* Right end face — annular ring */}
+      <path d="M20 7 Q23 9 23 12 Q23 15 20 17" />
+      <path d="M20 10 Q21.5 11 21.5 12 Q21.5 13 20 14" strokeOpacity="0.55" />
     </svg>
   );
 }
 
 function MaleAdapterIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
-  // Male conduit adapter: pipe body on left, threaded male end (narrowing) on right
+  // Threaded male adapter: wide conduit body → shoulder taper → narrower threaded male nipple
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
       className={className}>
-      {/* Pipe body (wider section) */}
-      <line x1="2" y1="8" x2="14" y2="8" />
-      <line x1="2" y1="16" x2="14" y2="16" />
-      <line x1="2" y1="8" x2="2" y2="16" />
+      {/* Wide conduit body */}
+      <line x1="1" y1="7" x2="12" y2="7" />
+      <line x1="1" y1="17" x2="12" y2="17" />
+      <line x1="1" y1="7" x2="1" y2="17" />
+      {/* Inner bore on body end */}
+      <line x1="1" y1="10" x2="4" y2="10" strokeOpacity="0.5" />
+      <line x1="1" y1="14" x2="4" y2="14" strokeOpacity="0.5" />
       {/* Shoulder taper */}
-      <line x1="14" y1="8" x2="17" y2="10" />
-      <line x1="14" y1="16" x2="17" y2="14" />
-      {/* Male threaded end (narrower) */}
-      <line x1="17" y1="10" x2="22" y2="10" />
-      <line x1="17" y1="14" x2="22" y2="14" />
-      <line x1="22" y1="10" x2="22" y2="14" />
-      {/* Thread marks */}
-      <line x1="18.5" y1="10" x2="18.5" y2="14" strokeOpacity="0.5" />
-      <line x1="20" y1="10" x2="20" y2="14" strokeOpacity="0.5" />
+      <line x1="12" y1="7" x2="15" y2="9.5" />
+      <line x1="12" y1="17" x2="15" y2="14.5" />
+      {/* Threaded male nipple — outer walls */}
+      <line x1="15" y1="9.5" x2="23" y2="9.5" />
+      <line x1="15" y1="14.5" x2="23" y2="14.5" />
+      <line x1="23" y1="9.5" x2="23" y2="14.5" />
+      {/* Thread rings (evenly spaced vertical lines across nipple) */}
+      <line x1="16.5" y1="9.5" x2="16.5" y2="14.5" strokeOpacity="0.5" />
+      <line x1="18.5" y1="9.5" x2="18.5" y2="14.5" strokeOpacity="0.5" />
+      <line x1="20.5" y1="9.5" x2="20.5" y2="14.5" strokeOpacity="0.5" />
     </svg>
   );
 }
 
 function StrippedWireIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
-  // Single wire: insulated section (thick) on left, stripped bare conductor on right
+  // Wire cross-section: outer jacket → inner insulation layer → copper conductor core
+  // Plus side view: insulated section on left, stripped copper conductor on right
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
       className={className}>
-      {/* Insulation jacket (tube) */}
-      <line x1="2" y1="9" x2="15" y2="9" />
-      <line x1="2" y1="15" x2="15" y2="15" />
-      <line x1="2" y1="9" x2="2" y2="15" />
-      {/* Insulation end cut */}
-      <line x1="15" y1="9" x2="15" y2="15" />
-      {/* Bare conductor extending right */}
-      <line x1="15" y1="12" x2="22" y2="12" strokeWidth="2" />
+      {/* Outer jacket (thick insulation) */}
+      <line x1="1" y1="7" x2="14" y2="7" />
+      <line x1="1" y1="17" x2="14" y2="17" />
+      <line x1="1" y1="7" x2="1" y2="17" />
+      {/* Inner insulation layer */}
+      <line x1="1" y1="9.5" x2="14" y2="9.5" strokeOpacity="0.5" />
+      <line x1="1" y1="14.5" x2="14" y2="14.5" strokeOpacity="0.5" />
+      {/* Insulation cut face */}
+      <line x1="14" y1="7" x2="14" y2="17" />
+      {/* Conductor core inside insulation (center line) */}
+      <line x1="3" y1="12" x2="14" y2="12" strokeWidth="1" strokeOpacity="0.6" />
+      {/* Stripped conductor — bare copper strands (wider, exposed) */}
+      <line x1="14" y1="12" x2="22" y2="12" strokeWidth="2.5" />
+      {/* Strand texture marks on bare section */}
+      <line x1="16" y1="10.5" x2="16" y2="13.5" strokeWidth="1" strokeOpacity="0.55" />
+      <line x1="18" y1="10.5" x2="18" y2="13.5" strokeWidth="1" strokeOpacity="0.55" />
+      <line x1="20" y1="10.5" x2="20" y2="13.5" strokeWidth="1" strokeOpacity="0.55" />
       {/* Conductor tip */}
-      <circle cx="22" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="22" cy="12" r="1.25" fill="currentColor" stroke="none" />
     </svg>
   );
 }
