@@ -118,6 +118,10 @@ export default function PlanViewer() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   /** The inner container that gets CSS transform: scale(zoom) */
   const pagesContainerRef = useRef<HTMLDivElement>(null);
+  /** The outer spacer div whose size = naturalSize * zoom, tells scroll container the true area */
+  const spacerRef = useRef<HTMLDivElement>(null);
+  /** Zoom badge span — updated directly in rAF loop so it stays in sync */
+  const zoomBadgeRef = useRef<HTMLSpanElement>(null);
   /** Pinch zoom state */
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
   const modeRef = useRef(mode);
@@ -309,14 +313,21 @@ export default function PlanViewer() {
   }, []);
 
   // ── Natural (unscaled) page dimensions ───────────────────────────────────
+  // Stored as refs so the rAF loop can read them without stale closure issues
+  const naturalWidthRef  = useRef(0);
+  const naturalHeightRef = useRef(0);
   const naturalWidth = useMemo(() => {
     const sizes = pageSizesRef.current;
-    return Math.max(...sizes.map(s => s?.w ?? 0), 0);
+    const w = Math.max(...sizes.map(s => s?.w ?? 0), 0);
+    naturalWidthRef.current = w;
+    return w;
   }, [pageSizesReady]); // eslint-disable-line
 
   const naturalHeight = useMemo(() => {
     const sizes = pageSizesRef.current;
-    return sizes.reduce((acc, s) => acc + (s?.h ?? 0) + PAGE_GAP, 0);
+    const h = sizes.reduce((acc, s) => acc + (s?.h ?? 0) + PAGE_GAP, 0);
+    naturalHeightRef.current = h;
+    return h;
   }, [pageSizesReady]); // eslint-disable-line
 
   // ── rAF-driven smooth zoom engine ─────────────────────────────────────────
@@ -338,17 +349,28 @@ export default function PlanViewer() {
     focalViewportY: number;
   } | null>(null);
 
-  const applyZoomDelta = useCallback((
-    delta: number,
+  /**
+   * Apply a zoom level, keeping the focal point stationary.
+   * instant=true: snap immediately (for toolbar buttons — no overshoot).
+   * instant=false (default): lerp-animate (for scroll wheel / trackpad).
+   */
+  const applyZoomTo = useCallback((
+    targetZoomRaw: number,
     focalViewportX?: number,
-    focalViewportY?: number
+    focalViewportY?: number,
+    instant = false
   ) => {
     const scrollEl = scrollAreaRef.current;
     if (!scrollEl) return;
 
+    // Cancel any running animation when starting a new one
+    if (animRef.current) {
+      cancelAnimationFrame(animRef.current.rafId);
+      animRef.current = null;
+    }
+
     const currentZoom = zoomRef.current;
-    const rawTarget = currentZoom + delta;
-    const targetZoom = clampZoom(parseFloat(rawTarget.toFixed(3)));
+    const targetZoom = clampZoom(parseFloat(targetZoomRaw.toFixed(3)));
     if (Math.abs(targetZoom - currentZoom) < 0.001) return;
 
     // Determine focal point (default: center of scroll viewport)
@@ -360,26 +382,34 @@ export default function PlanViewer() {
     const focalContentX = (scrollEl.scrollLeft + vpX) / currentZoom;
     const focalContentY = (scrollEl.scrollTop  + vpY) / currentZoom;
 
-    if (animRef.current) {
-      // Merge into the running animation: keep focal point, update target
-      cancelAnimationFrame(animRef.current.rafId);
-      animRef.current.targetZoom    = targetZoom;
-      animRef.current.focalContentX = focalContentX;
-      animRef.current.focalContentY = focalContentY;
-      animRef.current.focalViewportX = vpX;
-      animRef.current.focalViewportY = vpY;
-    } else {
-      animRef.current = {
-        rafId: 0,
-        targetZoom,
-        focalContentX,
-        focalContentY,
-        focalViewportX: vpX,
-        focalViewportY: vpY,
-      };
+    /** Apply a single zoom value z to DOM and scroll */
+    const applyFrame = (z: number) => {
+      zoomRef.current = z;
+      const container = pagesContainerRef.current;
+      if (container) container.style.transform = `scale(${z})`;
+      const badge = zoomBadgeRef.current;
+      if (badge) badge.textContent = `${Math.round(z * 100)}%`;
+      const spacer = spacerRef.current;
+      if (spacer) {
+        const nw = naturalWidthRef.current;
+        const nh = naturalHeightRef.current;
+        if (nw > 0) { spacer.style.width = `${nw * z}px`; spacer.style.minWidth = `${nw * z}px`; }
+        if (nh > 0) spacer.style.height = `${nh * z + 32}px`;
+      }
+      scrollEl.scrollLeft = focalContentX * z - vpX;
+      scrollEl.scrollTop  = focalContentY * z - vpY;
+    };
+
+    if (instant) {
+      // Snap immediately — no lerp, no overshoot
+      applyFrame(targetZoom);
+      setZoom(targetZoom);
+      return;
     }
 
-    const LERP = 0.22; // smoothing factor per frame (higher = snappier)
+    // Lerp animation for scroll wheel / trackpad
+    const LERP = 0.22;
+    animRef.current = { rafId: 0, targetZoom, focalContentX, focalContentY, focalViewportX: vpX, focalViewportY: vpY };
 
     const tick = () => {
       const anim = animRef.current;
@@ -388,18 +418,9 @@ export default function PlanViewer() {
       const next = prev + (anim.targetZoom - prev) * LERP;
       const done = Math.abs(anim.targetZoom - next) < 0.0005;
       const z = done ? anim.targetZoom : next;
-
-      // Update zoom state + ref
-      zoomRef.current = z;
-      setZoom(z);
-
-      // Immediately adjust scroll so focal content point stays fixed
-      if (scrollEl) {
-        scrollEl.scrollLeft = anim.focalContentX * z - anim.focalViewportX;
-        scrollEl.scrollTop  = anim.focalContentY * z - anim.focalViewportY;
-      }
-
+      applyFrame(z);
       if (done) {
+        setZoom(z);
         animRef.current = null;
       } else {
         anim.rafId = requestAnimationFrame(tick);
@@ -434,11 +455,13 @@ export default function PlanViewer() {
       }
       // Hard clamp per event so no single event jumps more than 30%
       delta = Math.max(-0.3, Math.min(0.3, delta));
-      applyZoomDelta(delta, e.clientX, e.clientY);
+      // Use pending target zoom (if animating) as the base so rapid scrolls accumulate correctly
+      const base = animRef.current?.targetZoom ?? zoomRef.current;
+      applyZoomTo(base + delta, e.clientX, e.clientY);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [applyZoomDelta]);
+  }, [applyZoomTo]);
 
   // ── Pinch zoom (touch) ────────────────────────────────────────────────────
   useEffect(() => {
@@ -463,10 +486,29 @@ export default function PlanViewer() {
         const ratio = getTouchDist(e) / pinchRef.current.startDist;
         const newZoom = clampZoom(pinchRef.current.startZoom * ratio);
         const mid = getTouchMid(e);
-        // Update zoom without focal-point scroll for simplicity on touch
-        // (focal-point scroll on touch is complex and often feels wrong)
+        // Apply directly via DOM — same frame as scroll, no React lag
+        zoomRef.current = newZoom;
+        const container = pagesContainerRef.current;
+        if (container) container.style.transform = `scale(${newZoom})`;
+        const spacer = spacerRef.current;
+        if (spacer) {
+          const nw = naturalWidthRef.current;
+          const nh = naturalHeightRef.current;
+          if (nw > 0) { spacer.style.width = `${nw * newZoom}px`; spacer.style.minWidth = `${nw * newZoom}px`; }
+          if (nh > 0) spacer.style.height = `${nh * newZoom + 32}px`;
+        }
+        const scrollEl = scrollAreaRef.current;
+        if (scrollEl) {
+          const rect = scrollEl.getBoundingClientRect();
+          const vpX = mid.x - rect.left;
+          const vpY = mid.y - rect.top;
+          const focalContentX = (scrollEl.scrollLeft + vpX) / pinchRef.current.startZoom;
+          const focalContentY = (scrollEl.scrollTop  + vpY) / pinchRef.current.startZoom;
+          scrollEl.scrollLeft = focalContentX * newZoom - vpX;
+          scrollEl.scrollTop  = focalContentY * newZoom - vpY;
+        }
+        // Sync React state for badge update (batched, low priority)
         setZoom(newZoom);
-        void mid; // suppress unused warning
       }
     };
     const onTouchEnd = () => { pinchRef.current = null; };
@@ -578,16 +620,34 @@ export default function PlanViewer() {
   };
 
   // ── Toolbar zoom step buttons ──────────────────────────────────────────────
-  // Zoom toward the center of the viewport
-  const zoomIn  = () => applyZoomDelta(0.25);
-  const zoomOut = () => applyZoomDelta(-0.25);
-  // Animate reset: drive zoom → 1.0 via the same rAF loop
+  // Snap to defined zoom steps so the badge always shows clean values
+  const ZOOM_STEPS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+  // Use the pending target zoom (if animating) or current zoom to find the next step
+  const getEffectiveZoom = () => animRef.current?.targetZoom ?? zoomRef.current;
+  const zoomIn = () => {
+    const scrollEl = scrollAreaRef.current;
+    const rect = scrollEl?.getBoundingClientRect();
+    const current = getEffectiveZoom();
+    const next = ZOOM_STEPS.find(s => s > current + 0.01) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    const cx = rect ? rect.left + rect.width / 2 : undefined;
+    const cy = rect ? rect.top + rect.height / 2 : undefined;
+    applyZoomTo(next, cx, cy, true);
+  };
+  const zoomOut = () => {
+    const scrollEl = scrollAreaRef.current;
+    const rect = scrollEl?.getBoundingClientRect();
+    const current = getEffectiveZoom();
+    const prev = [...ZOOM_STEPS].reverse().find(s => s < current - 0.01) ?? ZOOM_STEPS[0];
+    const cx = rect ? rect.left + rect.width / 2 : undefined;
+    const cy = rect ? rect.top + rect.height / 2 : undefined;
+    applyZoomTo(prev, cx, cy, true);
+  };
+  // Snap reset to 1.0 instantly
   const zoomReset = () => {
     const scrollEl = scrollAreaRef.current;
     if (!scrollEl) { setZoom(1); return; }
     const rect = scrollEl.getBoundingClientRect();
-    const delta = 1.0 - zoomRef.current;
-    if (Math.abs(delta) > 0.001) applyZoomDelta(delta, rect.left + rect.width / 2, rect.top + rect.height / 2);
+    applyZoomTo(1.0, rect.left + rect.width / 2, rect.top + rect.height / 2, true);
   };
 
   return (
@@ -689,7 +749,7 @@ export default function PlanViewer() {
           <Button size="icon" variant="ghost" className="h-8 w-8" title="Zoom in" onClick={zoomIn}>
             <ZoomIn size={14} />
           </Button>
-          <span className="text-xs font-mono text-muted-foreground w-10 text-center">
+          <span ref={zoomBadgeRef} className="text-xs font-mono text-muted-foreground w-10 text-center">
             {Math.round(zoom * 100)}%
           </span>
           <Button size="icon" variant="ghost" className="h-8 w-8" title="Zoom out" onClick={zoomOut}>
@@ -745,6 +805,7 @@ export default function PlanViewer() {
           </div>
         ) : (
           <div
+            ref={spacerRef}
             style={{
               width: naturalWidth > 0 ? naturalWidth * zoom : "100%",
               height: naturalHeight > 0 ? naturalHeight * zoom + 32 : "auto",
