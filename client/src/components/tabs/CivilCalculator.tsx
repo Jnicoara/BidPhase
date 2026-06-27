@@ -27,10 +27,29 @@ import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
-  Shovel, Package, Cable, Plus, Minus, ChevronLeft,
+  Package, Cable, Plus, Minus, ChevronLeft,
   Wrench, Link2
 } from "lucide-react";
 import { toast } from "sonner";
+
+// ─── Civil & Underground icon (shared with BidPhaseShell) ─────────────────────
+function CivilIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      <rect x="3" y="2" width="18" height="10" rx="1.5" />
+      <line x1="6" y1="7" x2="18" y2="7" />
+      <line x1="7.5" y1="12" x2="7.5" y2="16" />
+      <line x1="7.5" y1="16" x2="7.5" y2="21" strokeDasharray="1.5 1.5" />
+      <line x1="12" y1="12" x2="12" y2="16" />
+      <line x1="12" y1="16" x2="12" y2="21" strokeDasharray="1.5 1.5" />
+      <line x1="16.5" y1="12" x2="16.5" y2="16" />
+      <line x1="16.5" y1="16" x2="16.5" y2="21" strokeDasharray="1.5 1.5" />
+      <line x1="2" y1="16" x2="22" y2="16" />
+    </svg>
+  );
+}
 
 // ─── Conductor materials & sizes ────────────────────────────────────────────
 const CONDUCTOR_MATERIALS = [
@@ -674,7 +693,7 @@ function CivilEditor({
             <div className="px-5 pt-4 pb-3 border-b border-border bg-card shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
-                  <Shovel size={16} className="text-[#F5C518]" />
+                  <CivilIcon size={16} className="text-[#F5C518]" />
                 </div>
                 <div>
                   <h1
@@ -777,7 +796,7 @@ export default function CivilCalculator() {
     return (
       <ProjectHomepage
         title="Civil & Underground"
-        icon={<Shovel size={18} className="text-[#F5C518]" />}
+        icon={<CivilIcon size={18} className="text-[#F5C518]" />}
         projects={projectCards}
         activeId={activeCivilId}
         onOpen={handleOpen}
