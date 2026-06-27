@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Configure PDF.js worker
+// Configure PDF.js worker — must match pdfjs-dist version used by react-pdf
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url
