@@ -200,97 +200,101 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);   // fixed-size overflow:hidden viewport
+  const scrollAreaRef = viewportRef;                  // alias kept for legacy code
   const pagesContainerRef = useRef<HTMLDivElement>(null);
   const pageSizeRef = useRef<{ w: number; h: number } | null>(null);
   const [pageReady, setPageReady] = useState(false);
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
-  const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
+  // Free-drag pan state — stored as translate offsets (px)
+  const panOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
+  // Legacy panRef alias (scroll-based pan no longer used)
+  const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
 
   // ── Fit-to-page zoom ─────────────────────────────────────────────────────
-  // Computed after page renders. Used as the MINIMUM zoom (50% of fit = smallest allowed).
-  const fitZoomRef = useRef<number>(1.0);
-  const [fitZoom, setFitZoom] = useState<number>(1.0); // reactive copy for display
-  const autoFittedRef = useRef<boolean>(false); // only auto-fit once per page load
+  const fitZoomRef = useRef<number>(0.40);
+  const [fitZoom, setFitZoom] = useState<number>(0.40);
+  const autoFittedRef = useRef<boolean>(false);
+
+  // Center page in viewport at given zoom
+  const centerPage = useCallback((z: number) => {
+    const vp = viewportRef.current;
+    const ps = pageSizeRef.current;
+    if (!vp || !ps) return;
+    const vpW = vp.clientWidth;
+    const vpH = vp.clientHeight;
+    const pageW = ps.w; // already at renderZoom scale
+    const pageH = ps.h;
+    // Natural page size at zoom=1
+    const natW = pageW / renderZoomRef.current;
+    const natH = pageH / renderZoomRef.current;
+    const ox = (vpW - natW * z) / 2;
+    const oy = (vpH - natH * z) / 2;
+    panOffsetRef.current = { x: ox, y: oy };
+    setPanOffset({ x: ox, y: oy });
+  }, []);
 
   useEffect(() => {
     if (!pageReady || !pageSizeRef.current) return;
-    const el = scrollAreaRef.current;
-    if (!el) return;
-    const vpW = el.clientWidth;
-    const vpH = el.clientHeight;
-    // Compute page natural size at zoom=1 from current rendered size
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const vpW = vp.clientWidth;
+    const vpH = vp.clientHeight;
     const curZoom = renderZoomRef.current;
-    const pageNatW = pageSizeRef.current.w / curZoom; // natural px width at zoom=1
+    const pageNatW = pageSizeRef.current.w / curZoom;
     const pageNatH = pageSizeRef.current.h / curZoom;
-    const fitW = (vpW - 16) / pageNatW;
-    const fitH = (vpH - 16) / pageNatH;
+    const fitW = (vpW - 32) / pageNatW;
+    const fitH = (vpH - 32) / pageNatH;
     const fit = parseFloat(Math.min(fitW, fitH, MAX_ZOOM).toFixed(4));
     fitZoomRef.current = fit;
     setFitZoom(fit);
-    // Auto-start at 40% zoom on first render of each page, then center
     if (!autoFittedRef.current) {
       autoFittedRef.current = true;
       const startZoom = 0.40;
-      applyZoom(startZoom);
-      // Center the page in the viewport after applying start zoom
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const scrollEl = scrollAreaRef.current;
-          if (!scrollEl) return;
-          scrollEl.scrollLeft = Math.max(0, scrollEl.scrollWidth - scrollEl.clientWidth) / 2;
-          scrollEl.scrollTop  = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight) / 2;
-        });
-      });
+      // Apply start zoom then center
+      setDisplayZoom(startZoom);
+      displayZoomRef.current = startZoom;
+      if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
+      zoomDebounceRef.current = setTimeout(() => {
+        setRenderZoom(startZoom);
+        renderZoomRef.current = startZoom;
+        pageSizeRef.current = null;
+        setPageReady(false);
+      }, 150);
+      centerPage(startZoom);
     }
-  }, [pageReady]); // eslint-disable-line
+  }, [pageReady, centerPage]); // eslint-disable-line
 
-  // Reset auto-fit flag when page changes so each new page auto-fits
+  // Reset auto-fit flag when page changes
   useEffect(() => {
     autoFittedRef.current = false;
   }, [currentPage, pdfFile]);
 
-  // ── Re-center page when the scroll area is resized (panel drag) ──────────
-  // The user wants the PDF to stay centered between the left edge and the right panel
-  // as the divider moves, so horizontal resize always recenters the page box.
-  const scrollFractionRef = useRef({ y: 0.5 });
-
-  // Keep only the vertical scroll fraction up-to-date as the user pans
+  // Re-center when viewport resizes (panel drag)
   useEffect(() => {
-    const el = scrollAreaRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const maxTop = el.scrollHeight - el.clientHeight;
-      scrollFractionRef.current = {
-        y: maxTop > 0 ? el.scrollTop / maxTop : 0.5,
-      };
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // ResizeObserver: when the pane width changes, always center the PDF horizontally.
-  // Keep vertical position proportional so the current row on the sheet does not jump.
-  useEffect(() => {
-    const el = scrollAreaRef.current;
-    if (!el) return;
-    let lastW = el.clientWidth;
-    let lastH = el.clientHeight;
+    const vp = viewportRef.current;
+    if (!vp) return;
+    let lastW = vp.clientWidth;
+    let lastH = vp.clientHeight;
     const ro = new ResizeObserver(() => {
-      const newW = el.clientWidth;
-      const newH = el.clientHeight;
+      const newW = vp.clientWidth;
+      const newH = vp.clientHeight;
       if (newW === lastW && newH === lastH) return;
+      const dw = newW - lastW;
+      const dh = newH - lastH;
       lastW = newW;
       lastH = newH;
-      requestAnimationFrame(() => {
-        const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
-        const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
-        el.scrollLeft = maxLeft / 2;
-        el.scrollTop = maxTop * scrollFractionRef.current.y;
-      });
+      // Shift pan offset by half the size delta so the page stays centered
+      panOffsetRef.current = {
+        x: panOffsetRef.current.x + dw / 2,
+        y: panOffsetRef.current.y + dh / 2,
+      };
+      setPanOffset({ ...panOffsetRef.current });
     });
-    ro.observe(el);
+    ro.observe(vp);
     return () => ro.disconnect();
   }, []);
 
@@ -537,31 +541,37 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     focalClientX?: number,
     focalClientY?: number
   ) => {
-    const scrollEl = scrollAreaRef.current;
-    if (!scrollEl) return;
+    const vp = viewportRef.current;
+    if (!vp) return;
 
     const oldZoom = displayZoomRef.current;
-    // Min = 50% of fit-to-page (so you can always see the whole page with some margin)
     const effectiveMin = Math.max(fitZoomRef.current * 0.50, MIN_ZOOM);
     const newZoom = clamp(parseFloat(newZoomRaw.toFixed(4)), effectiveMin, MAX_ZOOM);
     if (Math.abs(newZoom - oldZoom) < 0.001) return;
 
-    // Preserve focal point in scroll space (no gutter offset — gutter is inside the inner wrapper)
-    const rect = scrollEl.getBoundingClientRect();
+    // Focal point in viewport-local coords
+    const rect = vp.getBoundingClientRect();
     const vpX = focalClientX !== undefined ? focalClientX - rect.left : rect.width / 2;
     const vpY = focalClientY !== undefined ? focalClientY - rect.top  : rect.height / 2;
-    const contentX = (scrollEl.scrollLeft + vpX) / oldZoom;
-    const contentY = (scrollEl.scrollTop  + vpY) / oldZoom;
 
-    // Update display zoom immediately — CSS scale gives instant visual feedback
+    // The point in "page space" under the cursor must stay fixed:
+    //   vpX = panOffset.x + pagePoint.x * oldZoom  →  pagePoint.x = (vpX - panOffset.x) / oldZoom
+    // After zoom: newPanOffset.x = vpX - pagePoint.x * newZoom
+    const ox = panOffsetRef.current.x;
+    const oy = panOffsetRef.current.y;
+    const pageX = (vpX - ox) / oldZoom;
+    const pageY = (vpY - oy) / oldZoom;
+    const newOx = vpX - pageX * newZoom;
+    const newOy = vpY - pageY * newZoom;
+
+    panOffsetRef.current = { x: newOx, y: newOy };
+    setPanOffset({ x: newOx, y: newOy });
+
+    // Update display zoom immediately
     setDisplayZoom(newZoom);
     displayZoomRef.current = newZoom;
 
-    // Adjust scroll synchronously so focal point stays fixed
-    scrollEl.scrollLeft = contentX * newZoom - vpX;
-    scrollEl.scrollTop  = contentY * newZoom - vpY;
-
-    // Debounce the actual PDF re-render (expensive)
+    // Debounce the actual PDF re-render
     if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
     zoomDebounceRef.current = setTimeout(() => {
       pageSizeRef.current = null;
@@ -585,20 +595,23 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
 
   // Reset zoom = 40% centered
   const zoomReset = useCallback(() => {
-    applyZoom(0.40);
-    // Re-center after the scroll adjustment from applyZoom
-    requestAnimationFrame(() => {
-      const el = scrollAreaRef.current;
-      if (!el) return;
-      el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth) / 2;
-      el.scrollTop  = Math.max(0, el.scrollHeight - el.clientHeight) / 2;
-    });
-  }, [applyZoom]);
+    const targetZoom = 0.40;
+    setDisplayZoom(targetZoom);
+    displayZoomRef.current = targetZoom;
+    if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
+    zoomDebounceRef.current = setTimeout(() => {
+      pageSizeRef.current = null;
+      setPageReady(false);
+      setRenderZoom(targetZoom);
+      renderZoomRef.current = targetZoom;
+    }, 150);
+    centerPage(targetZoom);
+  }, [centerPage, setRenderZoom]);
 
   // ── Wheel zoom ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const el = scrollAreaRef.current;
-    if (!el) return;
+    const vp = viewportRef.current;
+    if (!vp) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       let delta: number;
@@ -610,14 +623,14 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       }
       applyZoom(displayZoomRef.current + clamp(delta, -0.3, 0.3), e.clientX, e.clientY);
     };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    return () => vp.removeEventListener("wheel", onWheel);
   }, [applyZoom]);
 
   // ── Pinch zoom ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const el = scrollAreaRef.current;
-    if (!el) return;
+    const vp = viewportRef.current;
+    if (!vp) return;
     const getTouchDist = (e: TouchEvent) => Math.hypot(
       e.touches[1].clientX - e.touches[0].clientX,
       e.touches[1].clientY - e.touches[0].clientY
@@ -638,13 +651,13 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       }
     };
     const onTouchEnd = () => { pinchRef.current = null; };
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    vp.addEventListener("touchstart", onTouchStart, { passive: true });
+    vp.addEventListener("touchmove", onTouchMove, { passive: false });
+    vp.addEventListener("touchend", onTouchEnd, { passive: true });
     return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
+      vp.removeEventListener("touchstart", onTouchStart);
+      vp.removeEventListener("touchmove", onTouchMove);
+      vp.removeEventListener("touchend", onTouchEnd);
     };
   }, [applyZoom]);
 
@@ -683,10 +696,14 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   }, [zoomIn, zoomOut, zoomReset, scaleRatio, numPages]); // eslint-disable-line
 
   // ── Canvas click handler ───────────────────────────────────────────────────
+  // Canvas is rendered at renderZoom; getBoundingClientRect gives display size.
+  // During the transient CSS scale (displayZoom != renderZoom) the canvas is also
+  // scaled, so we must account for the visual scale to get correct canvas pixels.
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
+    // rect.width = canvas.width * (displayZoom / renderZoom) during transient scale
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     const cx = (e.clientX - rect.left) * scaleX;
@@ -1198,44 +1215,37 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
         )}
       </div>
 
-      {/* ── Scroll area ──────────────────────────────────────────────── */}
+      {/* ── Viewport (overflow:hidden, free-drag pan) ───────────────────── */}
       <div
-        ref={scrollAreaRef}
-        className="flex-1 overflow-auto relative"
+        ref={viewportRef}
+        className="flex-1 relative overflow-hidden"
         style={{
-          scrollbarWidth: "none",
-          msOverflowStyle: "none",
           cursor: isPanning ? "grabbing" : mode !== "none" ? "none" : "grab",
-        } as React.CSSProperties}
+        }}
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => {
-          const el = scrollAreaRef.current;
-          if (!el) return;
-          // Right-click (button=2) always pans regardless of mode
-          if (e.button === 2) {
-            panRef.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
-            setIsPanning(true);
-            e.preventDefault();
-            return;
-          }
-          // Left-click pans only when in "none" mode
-          if (e.button === 0 && mode === "none") {
-            panRef.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+          // Both left-click (idle mode) and right-click always pan
+          if (e.button === 2 || (e.button === 0 && mode === "none")) {
+            dragRef.current = {
+              startX: e.clientX,
+              startY: e.clientY,
+              ox: panOffsetRef.current.x,
+              oy: panOffsetRef.current.y,
+            };
             setIsPanning(true);
             e.preventDefault();
           }
         }}
         onMouseMove={(e) => {
-          if (!panRef.current) return;
-          const el = scrollAreaRef.current;
-          if (!el) return;
-          const dx = e.clientX - panRef.current.startX;
-          const dy = e.clientY - panRef.current.startY;
-          el.scrollLeft = panRef.current.scrollLeft - dx;
-          el.scrollTop  = panRef.current.scrollTop  - dy;
+          if (!dragRef.current) return;
+          const dx = e.clientX - dragRef.current.startX;
+          const dy = e.clientY - dragRef.current.startY;
+          const newOffset = { x: dragRef.current.ox + dx, y: dragRef.current.oy + dy };
+          panOffsetRef.current = newOffset;
+          setPanOffset(newOffset);
         }}
-        onMouseUp={() => { panRef.current = null; setIsPanning(false); }}
-        onMouseLeave={() => { panRef.current = null; setIsPanning(false); }}
+        onMouseUp={() => { dragRef.current = null; setIsPanning(false); }}
+        onMouseLeave={() => { dragRef.current = null; setIsPanning(false); }}
       >
         {pdfLoading ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -1254,35 +1264,20 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
             </label>
           </div>
         ) : (
+          /* Free-drag page container — positioned via CSS transform */
           <div
-            className="min-w-full min-h-full flex justify-center items-start"
-            style={{ paddingInline: 12 }}
+            ref={pagesContainerRef}
+            style={{
+              position: "absolute",
+              transformOrigin: "top left",
+              // translate(pan) then scale(zoom) — order matters
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${displayZoom})`,
+              // Visual scale between displayZoom and renderZoom for smooth intermediate feedback
+              // The Page component renders at renderZoom; we scale the container to displayZoom
+            }}
           >
-            {/* Outer transform wrapper — scales instantly with displayZoom for smooth visual feedback */}
-            <div
-              ref={pagesContainerRef}
-              style={{
-                display: "inline-block",
-                transformOrigin: "top left",
-                // CSS scale gives instant visual feedback while PDF re-renders at renderZoom
-                transform: Math.abs(displayZoom / renderZoom - 1) > 0.001
-                  ? `scale(${displayZoom / renderZoom})`
-                  : "none",
-                // Expand wrapper so scroll area doesn't collapse during transient scale
-                ...(Math.abs(displayZoom / renderZoom - 1) > 0.001 ? {
-                  width: `${100 / (displayZoom / renderZoom)}%`,
-                  height: `${100 / (displayZoom / renderZoom)}%`,
-                } : {}),
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-block",
-                  position: "relative",
-                  // Extra gutter so the page can be panned past its edges when zoomed in
-                  padding: `${PAGE_GUTTER * renderZoom}px`,
-                }}
-              >
+            {/* Inner wrapper rendered at renderZoom — no gutter needed since we can pan freely */}
+            <div style={{ position: "relative", display: "inline-block" }}>
               <Document
                 file={pdfFile}
                 onLoadSuccess={({ numPages: n }) => {
@@ -1296,7 +1291,6 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
                   </div>
                 }
               >
-                {/* Single page view — only render currentPage */}
                 <Page
                   pageNumber={currentPage}
                   scale={BASE_DPI * renderZoom}
@@ -1308,14 +1302,14 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
                 />
               </Document>
 
-                {/* Overlay canvas — positioned at gutter offset to align with the PDF page */}
+              {/* Overlay canvas — sits directly on top of the PDF page */}
               {pageReady && (
                 <canvas
                   ref={canvasRef}
                   style={{
                     position: "absolute",
-                    top: PAGE_GUTTER * renderZoom,
-                    left: PAGE_GUTTER * renderZoom,
+                    top: 0,
+                    left: 0,
                     pointerEvents: mode !== "none" ? "auto" : "none",
                     zIndex: 10,
                     cursor: "none",
@@ -1325,7 +1319,6 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
                   onMouseLeave={() => setCrosshair(null)}
                 />
               )}
-              </div>
             </div>
           </div>
         )}
