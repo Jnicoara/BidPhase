@@ -5,14 +5,12 @@
  * Each tab has its own list of named projects; the active project per tab is
  * stored in localStorage. Each project stores its own calculator state.
  *
- * Architecture note — CivilState vs. actual run data:
- *   CivilState is intentionally kept as a minimal "legacy scalar" interface
- *   (distance / conductors / conduitSize) so that the type stays stable and
- *   the localStorage key "bp_civil_projects" remains backward-compatible.
- *   The richer per-run array (RunItem[]) is stored by CivilEditor at runtime
- *   by spreading `{ runs: RunItem[] }` onto the state object via an `as any`
- *   cast. ExportButton reads it back the same way. This is a known trade-off:
- *   the type is intentionally loose here to avoid a breaking schema migration.
+ * Architecture note — CivilState and run data:
+ *   CivilState includes both legacy scalar fields (distance / conductors /
+ *   conduitSize, kept for backward-compat with old localStorage data) and a
+ *   typed `runs?: RunItem[]` field managed by CivilEditor. CivilEditor writes
+ *   runs via `setCivilState({ ...s, runs: next })` and ExportButton reads
+ *   `civilState.runs` directly — no type casts needed.
  *   If the schema needs to evolve, update CivilState, defaultCivilProject, and
  *   the CivilEditor initializer together.
  *
@@ -52,16 +50,85 @@ export const CONDUIT_SIZES = [
 
 export type ConduitSize = typeof CONDUIT_SIZES[number]["value"];
 
-// ─── Civil / Underground ─────────────────────────────────────────────────────
-// NOTE: This interface only declares the legacy scalar fields for type safety.
-// At runtime, CivilEditor appends `{ runs: RunItem[] }` to this object via an
-// `as any` cast (see CivilCalculator.tsx → syncRuns). ExportButton reads the
-// same `runs` array back with the same cast. Do NOT add `runs` here unless
-// you also update the localStorage migration logic.
-export interface CivilState {
-  distance: number;
+// ─── Civil run types (shared between CivilCalculator and ExportButton) ────────
+// These are defined here so CivilState can reference RunItem[] without
+// a circular import. CivilCalculator imports and re-uses these types.
+
+export const CONDUCTOR_MATERIALS = [
+  { id: "CU", label: "Copper",   short: "Cu" },
+  { id: "AL", label: "Aluminum", short: "Al" },
+] as const;
+export type ConductorMaterial = typeof CONDUCTOR_MATERIALS[number]["id"];
+
+// Standard AWG + kcmil conductor sizes (NEC Table 310.12)
+export const CONDUCTOR_SIZES = [
+  "14", "12", "10", "8", "6", "4", "3", "2", "1",
+  "1/0", "2/0", "3/0", "4/0",
+  "250", "300", "350", "400", "500", "600", "750", "1000",
+] as const;
+export type ConductorSize = typeof CONDUCTOR_SIZES[number];
+
+// Conduit material types used in Civil runs (superset of the AppContext CONDUIT_TYPES)
+export const CIVIL_CONDUIT_TYPES = [
+  { id: "EMT",  label: "EMT"  },
+  { id: "IMC",  label: "IMC"  },
+  { id: "RMC",  label: "RMC"  },
+  { id: "PVC",  label: "PVC"  },
+  { id: "LFMC", label: "LFMC" },
+  { id: "LFNC", label: "LFNC" },
+] as const;
+export type CivilConduitType = typeof CIVIL_CONDUIT_TYPES[number]["id"];
+
+// Fitting types used in Civil runs
+export const FITTING_TYPES = [
+  { id: "connector",  label: "Connectors",   short: "CONN" },
+  { id: "coupling",   label: "Couplings",    short: "COUP" },
+  { id: "lb",         label: "LBs",          short: "LB"   },
+  { id: "elbow90",    label: "90° Elbows",   short: "90°"  },
+  { id: "elbow45",    label: "45° Elbows",   short: "45°"  },
+  { id: "sweep",      label: "Sweeps",       short: "SWP"  },
+  { id: "offset",     label: "Offsets",      short: "OFF"  },
+] as const;
+export type FittingId = typeof FITTING_TYPES[number]["id"];
+
+export interface FittingCounts {
+  connector: number;
+  coupling: number;
+  lb: number;
+  elbow90: number;
+  elbow45: number;
+  sweep: number;
+  offset: number;
+}
+
+/** A single measured conduit run pushed from PlanPanel into CivilCalculator. */
+export interface RunItem {
+  id: string;
+  name: string;
+  pageNumber?: number;        // which PDF page this run came from
+  feet: number;
+  conduitSize: string;        // e.g. "3/4"
+  conduitType: CivilConduitType;
   conductors: number;
+  conductorMaterial: ConductorMaterial;
+  conductorSize: ConductorSize;
+  fittings: FittingCounts;
+}
+
+// ─── Civil / Underground ─────────────────────────────────────────────────────
+export interface CivilState {
+  /** Legacy scalar — distance of the first/only run (kept for backward-compat). */
+  distance: number;
+  /** Legacy scalar — conductor count (kept for backward-compat). */
+  conductors: number;
+  /** Legacy scalar — conduit size (kept for backward-compat). */
   conduitSize: ConduitSize;
+  /**
+   * Per-run items managed by CivilEditor.
+   * Optional so that old localStorage data (without `runs`) still deserialises
+   * correctly — CivilEditor defaults to [] when this is undefined.
+   */
+  runs?: RunItem[];
 }
 
 export interface CivilProject {

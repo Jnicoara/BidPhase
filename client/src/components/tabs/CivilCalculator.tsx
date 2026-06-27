@@ -13,8 +13,22 @@
  */
 import { useState, useCallback } from "react";
 import { useApp } from "@/contexts/AppContext";
-import { CONDUIT_SIZES } from "@/contexts/AppContext";
-import type { CivilState } from "@/contexts/AppContext";
+import {
+  CONDUIT_SIZES,
+  CONDUCTOR_MATERIALS,
+  CONDUCTOR_SIZES,
+  CIVIL_CONDUIT_TYPES,
+  FITTING_TYPES,
+} from "@/contexts/AppContext";
+import type {
+  CivilState,
+  RunItem,
+  FittingCounts,
+  FittingId,
+  ConductorMaterial,
+  ConductorSize,
+  CivilConduitType as ConduitType,
+} from "@/contexts/AppContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -111,69 +125,10 @@ export function CivilIcon({ size = 20, className = "" }: { size?: number; classN
   );
 }
 
-// ─── Conductor materials & sizes ────────────────────────────────────────────
-const CONDUCTOR_MATERIALS = [
-  { id: "CU", label: "Copper",   short: "Cu" },
-  { id: "AL", label: "Aluminum", short: "Al" },
-] as const;
-type ConductorMaterial = typeof CONDUCTOR_MATERIALS[number]["id"];
-
-// Standard AWG + kcmil conductor sizes (NEC Table 310.12)
-const CONDUCTOR_SIZES = [
-  "14", "12", "10", "8", "6", "4", "3", "2", "1",
-  "1/0", "2/0", "3/0", "4/0",
-  "250", "300", "350", "400", "500", "600", "750", "1000",
-] as const;
-type ConductorSize = typeof CONDUCTOR_SIZES[number];
-
-// ─── Conduit material types ───────────────────────────────────────────────────
-const CONDUIT_TYPES = [
-  { id: "EMT",  label: "EMT"  },
-  { id: "IMC",  label: "IMC"  },
-  { id: "RMC",  label: "RMC"  },
-  { id: "PVC",  label: "PVC"  },
-  { id: "LFMC", label: "LFMC" },
-  { id: "LFNC", label: "LFNC" },
-] as const;
-
-type ConduitType = typeof CONDUIT_TYPES[number]["id"];
-
-// ─── Fitting types ────────────────────────────────────────────────────────────
-const FITTING_TYPES = [
-  { id: "connector",  label: "Connectors",   short: "CONN" },
-  { id: "coupling",   label: "Couplings",    short: "COUP" },
-  { id: "lb",         label: "LBs",          short: "LB"   },
-  { id: "elbow90",    label: "90° Elbows",   short: "90°"  },
-  { id: "elbow45",    label: "45° Elbows",   short: "45°"  },
-  { id: "sweep",      label: "Sweeps",       short: "SWP"  },
-  { id: "offset",     label: "Offsets",      short: "OFF"  },
-] as const;
-
-type FittingId = typeof FITTING_TYPES[number]["id"];
-
-interface FittingCounts {
-  connector: number;
-  coupling: number;
-  lb: number;
-  elbow90: number;
-  elbow45: number;
-  sweep: number;
-  offset: number;
-}
-
-// ─── Per-run item (auto-pushed from plan panel) ───────────────────────────────
-interface RunItem {
-  id: string;
-  name: string;
-  pageNumber?: number;  // which PDF page this run came from
-  feet: number;
-  conduitSize: string;
-  conduitType: ConduitType;
-  conductors: number;
-  conductorMaterial: ConductorMaterial;
-  conductorSize: ConductorSize;
-  fittings: FittingCounts;
-}
+// Types and constants (RunItem, FittingCounts, FITTING_TYPES, etc.) are
+// imported from AppContext.tsx — see imports at the top of this file.
+// Local alias so existing JSX references to CONDUIT_TYPES still work:
+const CONDUIT_TYPES = CIVIL_CONDUIT_TYPES;
 
 function defaultFittings(): FittingCounts {
   return { connector: 0, coupling: 0, lb: 0, elbow90: 0, elbow45: 0, sweep: 0, offset: 0 };
@@ -674,12 +629,9 @@ function CivilEditor({
   const s = activeCivilProject.state;
 
   // Per-run items — stored in component state (persisted via AppContext civilState.runs)
-  // We keep runs in local state here and sync to civilState for CSV export
-  const [runs, setRuns] = useState<RunItem[]>(() => {
-    // If civilState has runs, restore them; otherwise start empty
-    const stored = (s as any).runs as RunItem[] | undefined;
-    return stored ?? [];
-  });
+  // We keep runs in local state here and sync to civilState for CSV export.
+  // CivilState.runs is typed as RunItem[] | undefined so no cast is needed.
+  const [runs, setRuns] = useState<RunItem[]>(() => s.runs ?? []);
 
   // Track which PDF page is currently active in PlanPanel
   const [activePage, setActivePage] = useState<number>(1);
@@ -690,8 +642,9 @@ function CivilEditor({
   const syncRuns = useCallback(
     (next: RunItem[]) => {
       setRuns(next);
-      // Persist runs into civilState so CSV export can read them
-      setCivilState({ ...s, ...(({ runs: next }) as any) } as CivilState);
+      // Persist runs into civilState so CSV export can read them.
+      // CivilState.runs is now properly typed as RunItem[] | undefined.
+      setCivilState({ ...s, runs: next });
     },
     [s, setCivilState]
   );
@@ -880,8 +833,8 @@ export default function CivilCalculator() {
     name: p.name,
     createdAt: p.createdAt,
     summary:
-      (p.state as any).runs?.length > 0
-        ? `${(p.state as any).runs.length} run${(p.state as any).runs.length !== 1 ? "s" : ""}`
+      (p.state.runs?.length ?? 0) > 0
+        ? `${p.state.runs!.length} run${p.state.runs!.length !== 1 ? "s" : ""}`
         : "No runs yet",
   }));
 
