@@ -403,10 +403,11 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
         ctx.globalAlpha = 1;
       }
 
-      // Per-segment labels
+      // Per-segment labels — scale WITH zoom so they shrink when zoomed out
       if (scaleRatio && pageReady) {
         const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
-        const fontSize = Math.round(13 * S);
+        // Font size in canvas pixels — scales with zoom (appears ~13px at 100% zoom)
+        const fontSize = Math.max(8, Math.round(13 * RENDER_BASE_ZOOM));
         ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
         for (let i = 1; i < pts.length; i++) {
           const a = pts[i - 1];
@@ -423,24 +424,17 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
           const flip = Math.abs(angle) > Math.PI / 2;
           ctx.rotate(flip ? angle + Math.PI : angle);
 
-          const pad = 6 * S;
-          const tw = ctx.measureText(label).width + pad * 2;
-          const th = fontSize + pad;
-          const rx = 4 * S;
-          // Solid dark background
-          ctx.fillStyle = "rgba(10,10,10,0.88)";
-          ctx.beginPath();
-          ctx.roundRect(-tw / 2, -(th + 4 * S), tw, th, rx);
-          ctx.fill();
-          // Colored border
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 1.5 * S;
-          ctx.stroke();
-
-          ctx.fillStyle = "#ffffff";
+          // Text shadow for readability without a background box
+          ctx.shadowColor = "rgba(0,0,0,0.85)";
+          ctx.shadowBlur = 4;
+          ctx.shadowOffsetX = 1;
+          ctx.shadowOffsetY = 1;
+          ctx.fillStyle = color;
           ctx.textAlign = "center";
           ctx.textBaseline = "bottom";
-          ctx.fillText(label, 0, -(4 * S));
+          ctx.fillText(label, 0, -4);
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
           ctx.restore();
         }
       }
