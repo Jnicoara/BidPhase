@@ -505,8 +505,8 @@ function CivilEditor({
       </div>
 
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-        {/* ── Plan Panel ── */}
-        <ResizablePanel defaultSize={50} minSize={25} maxSize={75}>
+        {/* ── Plan Panel — always gets at least 55% so the right panel can never cover the PDF ── */}
+        <ResizablePanel defaultSize={60} minSize={55} maxSize={80}>
           <PlanPanel
             tabKey={`civil_${projectId}`}
             onPushDistance={(ft: number, runName: string, conduitSize?: string, pageNumber?: number) => handlePush(ft, runName, conduitSize, pageNumber)}
@@ -516,8 +516,8 @@ function CivilEditor({
 
         <ResizableHandle withHandle />
 
-        {/* ── Calculator / Runs ── */}
-        <ResizablePanel defaultSize={50} minSize={25}>
+        {/* ── Calculator / Runs — max 45% so it stays to the right of the PDF ── */}
+        <ResizablePanel defaultSize={40} minSize={20} maxSize={45}>
           <div className="flex flex-col h-full overflow-hidden">
             {/* Header */}
             <div className="px-5 pt-4 pb-3 border-b border-border bg-card shrink-0">
