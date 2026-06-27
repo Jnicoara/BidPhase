@@ -1,5 +1,5 @@
 /**
- * BidPhase — Tab 1: Digital Plan Viewer (Takeoff Tool) — v3
+ * BidPhase — Tab 1: Digital Plan Viewer (Takeoff Tool) — v4
  *
  * Coordinate system design:
  * ─────────────────────────
@@ -19,6 +19,7 @@ import {
   useRef,
   useCallback,
   useEffect,
+  useMemo,
 } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -104,8 +105,11 @@ export default function PlanViewer() {
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   /** Map from pageIndex → wrapper div element */
   const pageWrappers = useRef<Map<number, HTMLDivElement>>(new Map());
+  /** Pinch state for touch zoom */
+  const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
 
   // ── Compute cumulative top offsets at zoom=1 ───────────────────────────────
   const getPageTops_zoom1 = useCallback((): number[] => {
@@ -305,6 +309,55 @@ export default function PlanViewer() {
     setPageSizesReady((n) => n + 1);
   }, []);
 
+  // ── Wheel zoom (desktop) ──────────────────────────────────────────────────
+  useEffect(() => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return; // only zoom on ctrl+scroll (standard browser behavior)
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoom((z) => {
+        const next = Math.min(Math.max(+(z + delta).toFixed(2), 0.25), 4);
+        return next;
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [setZoom]);
+
+  // ── Pinch zoom (touch) ────────────────────────────────────────────────────
+  useEffect(() => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const getTouchDist = (e: TouchEvent) => {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchRef.current = { startDist: getTouchDist(e), startZoom: zoom };
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchRef.current) {
+        e.preventDefault();
+        const ratio = getTouchDist(e) / pinchRef.current.startDist;
+        const next = Math.min(Math.max(+(pinchRef.current.startZoom * ratio).toFixed(2), 0.25), 4);
+        setZoom(next);
+      }
+    };
+    const onTouchEnd = () => { pinchRef.current = null; };
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [zoom, setZoom]);
+
   // ── Canvas events ──────────────────────────────────────────────────────────
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -337,15 +390,20 @@ export default function PlanViewer() {
   };
 
   // ── Undo ───────────────────────────────────────────────────────────────────
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     if (mode === "set-scale-p2") {
+      // In scale mode: undo the first point, go back to p1
       setScalePoints([]);
       setMode("set-scale-p1");
       toast.info("Point 1 cleared — click it again.");
+    } else if (mode === "set-scale-p1" && scalePoints.length > 0) {
+      setScalePoints([]);
+      toast.info("Scale points cleared.");
     } else if (measurePoints.length > 0) {
+      // In measure mode OR idle with existing points: remove last point
       setMeasurePoints((prev) => prev.slice(0, -1));
     }
-  };
+  }, [mode, scalePoints, measurePoints, setScalePoints, setMeasurePoints]);
 
   // ── Confirm scale ──────────────────────────────────────────────────────────
   const confirmScale = () => {
@@ -368,9 +426,13 @@ export default function PlanViewer() {
     toast.success(`${measuredFeet} ft pushed to Civil Calculator.`);
   };
 
-  const canUndo =
+  // Undo is available whenever there's something to undo
+  const canUndo = useMemo(() =>
     mode === "set-scale-p2" ||
-    measurePoints.length > 0;
+    (mode === "set-scale-p1" && scalePoints.length > 0) ||
+    measurePoints.length > 0,
+    [mode, scalePoints, measurePoints]
+  );
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -463,11 +525,11 @@ export default function PlanViewer() {
 
         {/* Zoom controls */}
         <div className="ml-auto flex items-center gap-1">
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setZoom((z) => Math.min(+(z + 0.25).toFixed(2), 4))}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" title="Zoom in (Ctrl+Scroll)" onClick={() => setZoom((z) => Math.min(+(z + 0.25).toFixed(2), 4))}>
             <ZoomIn size={14} />
           </Button>
           <span className="text-xs font-mono text-muted-foreground w-10 text-center">{Math.round(zoom * 100)}%</span>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setZoom((z) => Math.max(+(z - 0.25).toFixed(2), 0.25))}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" title="Zoom out (Ctrl+Scroll)" onClick={() => setZoom((z) => Math.max(+(z - 0.25).toFixed(2), 0.25))}>
             <ZoomOut size={14} />
           </Button>
           <Button size="icon" variant="ghost" className="h-8 w-8" title="Reset zoom" onClick={() => setZoom(1)}>
@@ -494,7 +556,7 @@ export default function PlanViewer() {
       )}
 
       {/* ── Scroll area ───────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto" style={{ scrollBehavior: "smooth" }}>
+      <div ref={scrollAreaRef} className="flex-1 overflow-auto" style={{ scrollBehavior: "smooth" }}>
         {!pdfFile ? (
           <div className="flex flex-col items-center justify-center gap-4 mt-20 text-center px-4">
             <div className="w-20 h-20 rounded-2xl bg-card border border-border flex items-center justify-center">
