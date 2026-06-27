@@ -128,7 +128,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const [currentPage, setCurrentPage] = useLocalStorage<number>(`bp_page_${tabKey}`, 1);
 
   // ── Zoom state ─────────────────────────────────────────────────────────────
-  const [zoom, setZoom] = useLocalStorage<number>(`bp_zoom_${tabKey}`, 1.0);
+  const [zoom, setZoom] = useLocalStorage<number>(`bp_zoom_${tabKey}`, 0.40);
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   const renderZoom = zoom;
@@ -227,11 +227,12 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     const fit = parseFloat(Math.min(fitW, fitH, MAX_ZOOM).toFixed(4));
     fitZoomRef.current = fit;
     setFitZoom(fit);
-    // Auto-fit the page on first render of each page
+    // Auto-start at 40% zoom on first render of each page, then center
     if (!autoFittedRef.current) {
       autoFittedRef.current = true;
-      applyZoom(fit);
-      // Center the page in the viewport after fit
+      const startZoom = 0.40;
+      applyZoom(startZoom);
+      // Center the page in the viewport after applying start zoom
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           const scrollEl = scrollAreaRef.current;
@@ -545,9 +546,9 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     applyZoom(prev);
   }, [applyZoom]);
 
-  // Reset zoom = fit-to-page
+  // Reset zoom = 40% centered
   const zoomReset = useCallback(() => {
-    applyZoom(fitZoomRef.current);
+    applyZoom(0.40);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const el = scrollAreaRef.current;
@@ -817,7 +818,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
                       <Document file={pdfFile} loading={<div className="h-32 w-full" />}>
                         <Page
                           pageNumber={pNum}
-                          width={220}
+                          width={440}
                           renderAnnotationLayer={false}
                           renderTextLayer={false}
                         />
