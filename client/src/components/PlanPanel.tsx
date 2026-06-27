@@ -50,6 +50,7 @@ import {
   Lock,
   Pencil,
   Check,
+  MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CONDUIT_SIZES, type ConduitSize } from "@/contexts/AppContext";
@@ -62,7 +63,19 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure";
+type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure" | "count";
+
+/** A single count pin dropped in Count Mode. Stored per-page, per-tabKey. */
+interface CountPin {
+  id: string;
+  nx: number;   // normalised x ∈ [0,1] relative to page width at RENDER_BASE_ZOOM
+  ny: number;   // normalised y ∈ [0,1] relative to page height at RENDER_BASE_ZOOM
+  color: string;
+  assemblyId: string; // which assembly this pin belongs to
+}
+
+// Per-page pin storage: pageIndex → CountPin[]
+type PagePinsMap = Record<number, CountPin[]>;
 
 interface NormPoint {
   pageIndex: number; // always 0 in single-page mode (relative to current page)
@@ -290,9 +303,26 @@ interface PlanPanelProps {
   onPushDistance?: (ft: number, runName: string, conduitSize?: string, pageNumber?: number) => void;
   onDeleteRun?: (runName: string, pageNumber?: number) => void;
   onCurrentPageChange?: (page: number) => void;
+  /** ID of the currently active assembly (used to tag each dropped pin) */
+  activeAssemblyId?: string;
+  /** Color matching the active assembly (used to colour each dropped pin) */
+  activeAssemblyColor?: string;
+  /** Called when a pin is added — parent should increment assembly quantity */
+  onPinAdded?: () => void;
+  /** Called when a pin is removed — parent should decrement assembly quantity */
+  onPinRemoved?: () => void;
 }
 
-export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurrentPageChange }: PlanPanelProps) {
+export default function PlanPanel({
+  tabKey,
+  onPushDistance,
+  onDeleteRun,
+  onCurrentPageChange,
+  activeAssemblyId = "",
+  activeAssemblyColor = "#F5C518",
+  onPinAdded,
+  onPinRemoved,
+}: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
   const [pdfHash, setPdfHash] = useLocalStorage<string | null>(`bp_pdfhash_${tabKey}`, null);
@@ -347,6 +377,23 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurre
   }, [pageIdx, setPageScaleMap]);
 
   const [knownDistance, setKnownDistance] = useState<string>("");
+
+  // ── Per-page count pins ────────────────────────────────────────────────────
+  // Stored as: bp_countpins_{tabKey}  →  PagePinsMap
+  const [pagePinsMap, setPagePinsMap] = useLocalStorage<PagePinsMap>(`bp_countpins_${tabKey}`, {});
+  const currentPins: CountPin[] = pagePinsMap[pageIdx] ?? [];
+
+  const setCurrentPins = useCallback((updater: CountPin[] | ((prev: CountPin[]) => CountPin[])) => {
+    setPagePinsMap((prev) => {
+      const existing = prev[pageIdx] ?? [];
+      const next = typeof updater === "function" ? updater(existing) : updater;
+      return { ...prev, [pageIdx]: next };
+    });
+  }, [pageIdx, setPagePinsMap]);
+
+  // Ref so canvas handlers can read current pins without stale closure
+  const currentPinsRef = useRef(currentPins);
+  useEffect(() => { currentPinsRef.current = currentPins; }, [currentPins]);
 
   // Get runs for current page (lazy-init with one default run)
   const currentRuns: MeasureRun[] = pageRunsMap[pageIdx] ?? [defaultRun(0)];
@@ -707,6 +754,38 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurre
       }
     };
 
+    // ── Count pins ──────────────────────────────────────────────────────────
+    const pinsToRender = currentPinsRef.current;
+    pinsToRender.forEach((pin, idx) => {
+      const px = normToCanvas({ pageIndex: 0, nx: pin.nx, ny: pin.ny });
+      if (!px) return;
+      const r = 8 * S;
+      // Outer glow
+      ctx.beginPath();
+      ctx.arc(px.x, px.y, r * 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = pin.color;
+      ctx.globalAlpha = 0.18;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Dark shadow ring
+      ctx.beginPath();
+      ctx.arc(px.x, px.y, r + 1.5 * S, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fill();
+      // Filled circle
+      ctx.beginPath();
+      ctx.arc(px.x, px.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = pin.color;
+      ctx.fill();
+      // Number label inside pin
+      const labelSize = Math.max(7, Math.round(9 * S));
+      ctx.font = `bold ${labelSize}px 'JetBrains Mono', monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#000";
+      ctx.fillText(String(idx + 1), px.x, px.y);
+    });
+
     // Draw all inactive runs first, then active on top
     if (!hideUnselected) {
       currentRuns.forEach((run) => {
@@ -780,7 +859,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurre
       ctx.stroke();
       ctx.restore();
     }
-  }, [currentRuns, currentActiveRunId, scalePoints, crosshair, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom]);
+  }, [currentRuns, currentActiveRunId, scalePoints, crosshair, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
 
@@ -996,8 +1075,50 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurre
           r.id === currentActiveRunId ? { ...r, points: [...r.points, pt] } : r
         )
       );
+    } else if (m === "count") {
+      // Drop a count pin at the clicked location
+      const newPin: CountPin = {
+        id: nanoid6(),
+        nx: pt.nx,
+        ny: pt.ny,
+        color: activeAssemblyColor,
+        assemblyId: activeAssemblyId,
+      };
+      setCurrentPins((prev) => [...prev, newPin]);
+      onPinAdded?.();
+      toast.success(`Pin ${currentPinsRef.current.length + 1} placed.`);
     }
-  }, [canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId]);
+  }, [canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId, activeAssemblyColor, activeAssemblyId, setCurrentPins, onPinAdded]);
+
+  // ── Canvas right-click: delete nearest count pin ────────────────────────
+  const handleCanvasContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (modeRef.current !== "count") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const cx = (e.clientX - rect.left) * scaleX;
+    const cy = (e.clientY - rect.top)  * scaleY;
+    const s = pageSizeRef.current;
+    if (!s) return;
+    // Find the nearest pin within a 20-screen-pixel hit radius
+    const HIT_RADIUS = 20 * (canvas.width / (s.w * (displayZoomRef.current / RENDER_BASE_ZOOM)));
+    const pins = currentPinsRef.current;
+    let closest: { idx: number; dist: number } | null = null;
+    pins.forEach((pin, idx) => {
+      const px = normToCanvas({ pageIndex: 0, nx: pin.nx, ny: pin.ny });
+      if (!px) return;
+      const d = dist2D(cx, cy, px.x, px.y);
+      if (d < HIT_RADIUS && (!closest || d < closest.dist)) closest = { idx, dist: d };
+    });
+    if (closest !== null) {
+      setCurrentPins((prev) => prev.filter((_, i) => i !== (closest as { idx: number }).idx));
+      onPinRemoved?.();
+      toast.info("Pin removed.");
+    }
+  }, [normToCanvas, setCurrentPins, onPinRemoved]);
 
   // ── Canvas mouse move (thin crosshair) ────────────────────────────────────
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1240,6 +1361,34 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurre
           Measure
         </Button>
 
+        {/* Count Mode toggle */}
+        <Button
+          size="sm"
+          className="h-7 text-xs px-2.5"
+          variant={mode === "count" ? "default" : "outline"}
+          onClick={() => {
+            if (mode === "count") {
+              setMode("none");
+              modeRef.current = "none";
+              toast.info("Count Mode off.");
+            } else {
+              setMode("count");
+              modeRef.current = "count";
+              toast.info("Count Mode: click to place a pin · right-click to remove.");
+            }
+          }}
+          disabled={!pdfFile}
+          title="Count Mode — click to place a pin, right-click to remove"
+        >
+          <MapPin size={12} className="mr-1" />
+          Count
+          {currentPins.length > 0 && (
+            <span className="ml-1 px-1 rounded-full text-[9px] font-mono bg-[#F5C518] text-black">
+              {currentPins.length}
+            </span>
+          )}
+        </Button>
+
         <Button
           size="sm"
           className="h-7 text-xs px-2.5"
@@ -1436,6 +1585,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurre
           {mode === "set-scale-p2" && scalePoints.length < 2 && "Click the END of the reference line."}
           {mode === "set-scale-p2" && scalePoints.length >= 2 && "Enter real-world distance (ft) → Confirm."}
           {mode === "measure" && `Measuring: ${activeRun?.name} · Click to add points · U=undo · Esc=done`}
+          {mode === "count" && `Count Mode · Click=place pin · Right-click=remove · ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on this page`}
           {mode === "none" && `Page ${currentPage}/${numPages || "–"} · Scroll=zoom · ←/→=page · M=measure`}
         </span>
         {activeRun?.totalFeet !== null && activeRun.totalFeet !== undefined && activeRun.totalFeet > 0 && (
@@ -1457,7 +1607,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurre
         style={{
           cursor: isPanning ? "grabbing" : mode !== "none" ? "none" : "grab",
         }}
-        onContextMenu={(e) => e.preventDefault()}
+        onContextMenu={(e) => { if (mode !== "count") e.preventDefault(); }}
         onMouseDown={(e) => {
           // Both left-click (idle mode) and right-click always pan
           if (e.button === 2 || (e.button === 0 && mode === "none")) {
@@ -1551,6 +1701,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurre
                     cursor: "none",
                   }}
                   onClick={handleCanvasClick}
+                  onContextMenu={handleCanvasContextMenu}
                   onMouseMove={handleCanvasMouseMove}
                   onMouseLeave={() => setCrosshair(null)}
                 />

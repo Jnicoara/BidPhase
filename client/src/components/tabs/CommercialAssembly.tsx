@@ -118,6 +118,14 @@ function CommercialEditor({
   const s = activeCommercialProject.state;
   const { assemblyId, quantity } = s;
 
+  // Assign a stable color per assembly id so pins match the active assembly
+  const ASSEMBLY_PALETTE = [
+    "#00FF88", "#00CFFF", "#FF6B00", "#FF3FD4", "#FFE600",
+    "#BF5FFF", "#FF4444", "#00FFD1", "#FF9900", "#39FF14",
+  ];
+  const assemblyColorIndex = ASSEMBLIES.findIndex((a) => a.id === assemblyId);
+  const activeAssemblyColor = ASSEMBLY_PALETTE[assemblyColorIndex >= 0 ? assemblyColorIndex % ASSEMBLY_PALETTE.length : 0];
+
   const selectedAssembly = ASSEMBLIES.find((a) => a.id === assemblyId) ?? ASSEMBLIES[0];
   const qty = Math.max(1, quantity || 1);
   const bom = buildBOM(selectedAssembly, qty);
@@ -145,7 +153,13 @@ function CommercialEditor({
 
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
         <ResizablePanel defaultSize={50} minSize={25} maxSize={75}>
-          <PlanPanel tabKey={`commercial_${projectId}`} />
+          <PlanPanel
+            tabKey={`commercial_${projectId}`}
+            activeAssemblyId={assemblyId}
+            activeAssemblyColor={activeAssemblyColor}
+            onPinAdded={() => setAssemblyState({ ...s, quantity: qty + 1 })}
+            onPinRemoved={() => setAssemblyState({ ...s, quantity: Math.max(1, qty - 1) })}
+          />
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={50} minSize={25}>
