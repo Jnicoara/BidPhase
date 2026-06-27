@@ -1,5 +1,6 @@
 /**
- * BidPhase — Tab 3: Commercial Buildout (Assembly Multiplier)
+ * BidPhase — Tab 2: Commercial Buildout (Assembly Multiplier)
+ * Layout: ResizablePanelGroup — PlanPanel (left) | Calculator (right)
  * Assemblies: "20A Commercial Receptacle" and "2x4 LED Troffer"
  * Inputs: Assembly dropdown + Quantity
  * Outputs: Itemized BOM (materials × qty) + Total Labor Hours
@@ -16,6 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import PlanPanel from "@/components/PlanPanel";
 import { Building2, Clock, DollarSign } from "lucide-react";
 
 // ── Assembly data ─────────────────────────────────────────────────────────────
@@ -89,210 +96,184 @@ export default function CommercialAssembly() {
     bom.reduce((sum, m) => sum + m.unitCost * m.quantity, 0).toFixed(2)
   );
 
-  // Sync to context for CSV export
   useEffect(() => {
-    setAssemblyState({
-      assemblyId,
-      quantity: qty,
-      materials: bom,
-      totalLaborHours,
-    });
+    setAssemblyState({ assemblyId, quantity: qty, materials: bom, totalLaborHours });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assemblyId, qty]);
 
   return (
-    <div className="flex flex-col h-full overflow-auto">
-      {/* Header */}
-      <div className="px-6 pt-6 pb-4 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
-            <Building2 size={18} className="text-[#F5C518]" />
-          </div>
-          <div>
-            <h1
-              className="text-xl font-bold text-foreground"
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            >
-              Commercial Buildout
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Assembly multiplier — bill of materials &amp; labor
-            </p>
-          </div>
-        </div>
-      </div>
+    <ResizablePanelGroup direction="horizontal" className="h-full">
+      {/* ── Left: Plan Panel ────────────────────────────────────── */}
+      <ResizablePanel defaultSize={50} minSize={25} maxSize={75}>
+        <PlanPanel tabKey="commercial" />
+      </ResizablePanel>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-3xl mx-auto space-y-6">
-          {/* ── Inputs ──────────────────────────────────────────── */}
-          <div className="bp-card p-5 space-y-5">
-            <h2
-              className="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            >
-              Inputs
-            </h2>
+      <ResizableHandle withHandle />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              {/* Assembly selector */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Assembly Type</Label>
-                <Select
-                  value={assemblyId}
-                  onValueChange={(v) =>
-                    setAssemblyState({ ...assemblyState, assemblyId: v, quantity: qty })
-                  }
+      {/* ── Right: Calculator ────────────────────────────────────── */}
+      <ResizablePanel defaultSize={50} minSize={25}>
+        <div className="flex flex-col h-full overflow-auto">
+          {/* Header */}
+          <div className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
+                <Building2 size={16} className="text-[#F5C518]" />
+              </div>
+              <div>
+                <h1
+                  className="text-lg font-bold text-foreground"
+                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
                 >
-                  <SelectTrigger className="bg-input border-border h-11">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    {ASSEMBLIES.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Quantity */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Quantity</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={qty}
-                  onChange={(e) =>
-                    setAssemblyState({
-                      ...assemblyState,
-                      quantity: parseInt(e.target.value) || 1,
-                    })
-                  }
-                  className="font-mono text-lg h-11 bg-input border-border"
-                />
-              </div>
-            </div>
-
-            {/* Assembly info */}
-            <div className="flex items-center gap-4 pt-1 border-t border-border text-xs text-muted-foreground font-mono">
-              <span>
-                Labor rate:{" "}
-                <span className="text-foreground">{selectedAssembly.blendedLaborHours} hrs/unit</span>
-              </span>
-              <span>
-                Materials:{" "}
-                <span className="text-foreground">{selectedAssembly.materials.length} line items</span>
-              </span>
-            </div>
-          </div>
-
-          {/* ── Summary cards ────────────────────────────────────── */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bp-card p-5">
-              <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium uppercase tracking-wider mb-2">
-                <Clock size={13} />
-                Total Labor Hours
-              </div>
-              <div
-                className="text-4xl font-bold text-[#F5C518]"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              >
-                {totalLaborHours}
-              </div>
-              <div className="text-xs text-muted-foreground font-mono mt-1">
-                {selectedAssembly.blendedLaborHours} hrs × {qty} units
-              </div>
-            </div>
-            <div className="bp-card p-5">
-              <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium uppercase tracking-wider mb-2">
-                <DollarSign size={13} />
-                Est. Material Cost
-              </div>
-              <div
-                className="text-4xl font-bold text-[#22C55E]"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              >
-                ${totalMaterialCost.toLocaleString()}
-              </div>
-              <div className="text-xs text-muted-foreground font-mono mt-1">
-                materials only · no labor
+                  Commercial Buildout
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  Assembly multiplier — BOM &amp; labor
+                </p>
               </div>
             </div>
           </div>
 
-          {/* ── Bill of Materials ────────────────────────────────── */}
-          <div className="bp-card overflow-hidden">
-            <div className="px-5 py-3 border-b border-border bg-secondary/30">
-              <h2
-                className="text-sm font-semibold text-foreground"
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              >
-                Bill of Materials — {selectedAssembly.name} × {qty}
-              </h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs text-muted-foreground uppercase tracking-wider font-mono">
-                    <th className="text-left px-5 py-3 font-medium">Description</th>
-                    <th className="text-center px-4 py-3 font-medium">Unit</th>
-                    <th className="text-right px-4 py-3 font-medium">Qty</th>
-                    <th className="text-right px-5 py-3 font-medium">Unit Cost</th>
-                    <th className="text-right px-5 py-3 font-medium">Ext. Cost</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bom.map((row, i) => (
-                    <tr
-                      key={i}
-                      className="border-b border-border/50 hover:bg-accent/30 transition-colors"
+          <div className="flex-1 overflow-auto p-4">
+            <div className="max-w-2xl mx-auto space-y-5">
+              {/* ── Inputs ──────────────────────────────────────── */}
+              <div className="bp-card p-4 space-y-4">
+                <h2
+                  className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                >
+                  Inputs
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Assembly Type</Label>
+                    <Select
+                      value={assemblyId}
+                      onValueChange={(v) =>
+                        setAssemblyState({ ...assemblyState, assemblyId: v, quantity: qty })
+                      }
                     >
-                      <td className="px-5 py-3 text-foreground">{row.description}</td>
-                      <td className="px-4 py-3 text-center font-mono text-muted-foreground text-xs">
-                        {row.unit}
-                      </td>
-                      <td
-                        className="px-4 py-3 text-right font-mono font-semibold text-foreground"
-                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                      >
-                        {row.quantity}
-                      </td>
-                      <td
-                        className="px-5 py-3 text-right font-mono text-muted-foreground text-xs"
-                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                      >
-                        ${row.unitCost.toFixed(2)}
-                      </td>
-                      <td
-                        className="px-5 py-3 text-right font-mono font-semibold text-[#22C55E]"
-                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                      >
-                        ${(row.unitCost * row.quantity).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-border bg-secondary/20">
-                    <td colSpan={4} className="px-5 py-3 text-right text-sm font-semibold text-foreground"
-                      style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                      Total Material Cost
-                    </td>
-                    <td
-                      className="px-5 py-3 text-right font-bold text-[#22C55E] text-base"
-                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                    >
-                      ${totalMaterialCost.toLocaleString()}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                      <SelectTrigger className="bg-input border-border h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        {ASSEMBLIES.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Quantity</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={qty}
+                      onChange={(e) =>
+                        setAssemblyState({ ...assemblyState, quantity: parseInt(e.target.value) || 1 })
+                      }
+                      className="font-mono text-base h-10 bg-input border-border"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 pt-1 border-t border-border text-[10px] text-muted-foreground font-mono">
+                  <span>Labor: <span className="text-foreground">{selectedAssembly.blendedLaborHours} hrs/unit</span></span>
+                  <span>Items: <span className="text-foreground">{selectedAssembly.materials.length}</span></span>
+                </div>
+              </div>
+
+              {/* ── Summary cards ────────────────────────────────── */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bp-card p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-[10px] font-medium uppercase tracking-wider mb-2">
+                    <Clock size={12} />Total Labor Hrs
+                  </div>
+                  <div
+                    className="text-3xl font-bold text-[#F5C518]"
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  >
+                    {totalLaborHours}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-1">
+                    {selectedAssembly.blendedLaborHours} × {qty} units
+                  </div>
+                </div>
+                <div className="bp-card p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-[10px] font-medium uppercase tracking-wider mb-2">
+                    <DollarSign size={12} />Est. Material
+                  </div>
+                  <div
+                    className="text-3xl font-bold text-[#22C55E]"
+                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                  >
+                    ${totalMaterialCost.toLocaleString()}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-1">
+                    materials only
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Bill of Materials ────────────────────────────── */}
+              <div className="bp-card overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border bg-secondary/30">
+                  <h2
+                    className="text-xs font-semibold text-foreground"
+                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                  >
+                    Bill of Materials — {selectedAssembly.name} × {qty}
+                  </h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border text-[10px] text-muted-foreground uppercase tracking-wider font-mono">
+                        <th className="text-left px-4 py-2.5 font-medium">Description</th>
+                        <th className="text-center px-3 py-2.5 font-medium">Unit</th>
+                        <th className="text-right px-3 py-2.5 font-medium">Qty</th>
+                        <th className="text-right px-4 py-2.5 font-medium">Unit $</th>
+                        <th className="text-right px-4 py-2.5 font-medium">Ext. $</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bom.map((row, i) => (
+                        <tr key={i} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
+                          <td className="px-4 py-2.5 text-foreground">{row.description}</td>
+                          <td className="px-3 py-2.5 text-center font-mono text-muted-foreground">{row.unit}</td>
+                          <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground"
+                            style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                            {row.quantity}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-muted-foreground"
+                            style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                            ${row.unitCost.toFixed(2)}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono font-semibold text-[#22C55E]"
+                            style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                            ${(row.unitCost * row.quantity).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-border bg-secondary/20">
+                        <td colSpan={4} className="px-4 py-2.5 text-right text-xs font-semibold text-foreground"
+                          style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                          Total Material Cost
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-bold text-[#22C55E] text-sm"
+                          style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                          ${totalMaterialCost.toLocaleString()}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

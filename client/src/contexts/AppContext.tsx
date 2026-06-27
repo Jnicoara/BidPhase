@@ -66,7 +66,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pushedDistance, setPushedDistance] = useLocalStorage<number>("bp_pushed_distance", 0);
-  const [activeTab, setActiveTab] = useLocalStorage<string>("bp_active_tab", "plan");
+  const [activeTab, setActiveTab] = useLocalStorage<string>("bp_active_tab", "civil");
   const [civilState, setCivilState] = useLocalStorage<CivilState>("bp_civil", {
     distance: 0,
     conductors: 2,
@@ -86,9 +86,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (ft: number) => {
       setPushedDistance(ft);
       setCivilState((prev) => ({ ...prev, distance: ft }));
-      setActiveTab("civil");
+      // No tab switch — plan panel is embedded in each tab
     },
-    [setPushedDistance, setCivilState, setActiveTab]
+    [setPushedDistance, setCivilState]
   );
 
   return (

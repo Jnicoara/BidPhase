@@ -1,5 +1,6 @@
 /**
- * BidPhase — Tab 4: Residential Rough-In (Room Configurator)
+ * BidPhase — Tab 3: Residential Rough-In (Room Configurator)
+ * Layout: ResizablePanelGroup — PlanPanel (left) | Calculator (right)
  * Rooms: "Standard Bedroom" and "Kitchen"
  * Outputs: Editable baseline material list (Romex, boxes, staples, etc.)
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent
@@ -14,6 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import PlanPanel from "@/components/PlanPanel";
 import { Home } from "lucide-react";
 
 // ── Room data ─────────────────────────────────────────────────────────────────
@@ -67,7 +74,6 @@ export default function ResidentialRoughIn() {
 
   const template = ROOM_TEMPLATES.find((r) => r.id === roomId) ?? ROOM_TEMPLATES[0];
 
-  // When room changes, load template defaults
   useEffect(() => {
     setRoomState({ roomId, materials: template.materials.map((m) => ({ ...m })) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,111 +87,114 @@ export default function ResidentialRoughIn() {
   const updateQty = (index: number, value: string) => {
     const qty = parseInt(value);
     if (isNaN(qty) || qty < 0) return;
-    const updated = materials.map((m, i) =>
-      i === index ? { ...m, quantity: qty } : m
-    );
+    const updated = materials.map((m, i) => (i === index ? { ...m, quantity: qty } : m));
     setRoomState({ ...roomState, materials: updated });
   };
 
   return (
-    <div className="flex flex-col h-full overflow-auto">
-      {/* Header */}
-      <div className="px-6 pt-6 pb-4 border-b border-border bg-card shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
-            <Home size={18} className="text-[#F5C518]" />
-          </div>
-          <div>
-            <h1
-              className="text-xl font-bold text-foreground"
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            >
-              Residential Rough-In
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Room configurator — editable baseline material list
-            </p>
-          </div>
-        </div>
-      </div>
+    <ResizablePanelGroup direction="horizontal" className="h-full">
+      {/* ── Left: Plan Panel ────────────────────────────────────── */}
+      <ResizablePanel defaultSize={50} minSize={25} maxSize={75}>
+        <PlanPanel tabKey="residential" />
+      </ResizablePanel>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-2xl mx-auto space-y-6">
-          {/* ── Room selector ────────────────────────────────────── */}
-          <div className="bp-card p-5 space-y-3">
-            <h2
-              className="text-sm font-semibold text-muted-foreground uppercase tracking-wider"
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            >
-              Room Type
-            </h2>
-            <Select value={roomId} onValueChange={handleRoomChange}>
-              <SelectTrigger className="bg-input border-border h-11">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                {ROOM_TEMPLATES.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Quantities below are baseline defaults — edit any field to match your actual takeoff.
-            </p>
-          </div>
+      <ResizableHandle withHandle />
 
-          {/* ── Material list ─────────────────────────────────────── */}
-          <div className="bp-card overflow-hidden">
-            <div className="px-5 py-3 border-b border-border bg-secondary/30">
-              <h2
-                className="text-sm font-semibold text-foreground"
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              >
-                {template.name} — Rough-In Materials
-              </h2>
-            </div>
-            <div className="divide-y divide-border/50">
-              {(materials.length > 0 ? materials : template.materials).map((mat, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-4 px-5 py-3 hover:bg-accent/20 transition-colors"
+      {/* ── Right: Calculator ────────────────────────────────────── */}
+      <ResizablePanel defaultSize={50} minSize={25}>
+        <div className="flex flex-col h-full overflow-auto">
+          {/* Header */}
+          <div className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
+                <Home size={16} className="text-[#F5C518]" />
+              </div>
+              <div>
+                <h1
+                  className="text-lg font-bold text-foreground"
+                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
                 >
-                  {/* Description */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground truncate">{mat.description}</p>
-                    <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{mat.unit}</p>
-                  </div>
-
-                  {/* Editable quantity */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Input
-                      type="number"
-                      min={0}
-                      value={mat.quantity}
-                      onChange={(e) => updateQty(i, e.target.value)}
-                      className="w-20 h-9 text-right font-mono text-sm bg-input border-border text-foreground"
-                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                    />
-                    <span className="text-xs text-muted-foreground font-mono w-6">{mat.unit}</span>
-                  </div>
-                </div>
-              ))}
+                  Residential Rough-In
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  Room configurator — editable material list
+                </p>
+              </div>
             </div>
+          </div>
 
-            {/* Footer summary */}
-            <div className="px-5 py-3 border-t border-border bg-secondary/20 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground font-mono">
-                {materials.length} line items
-              </span>
-              <span className="text-xs text-[#F5C518] font-mono">
-                Editable — changes saved automatically
-              </span>
+          <div className="flex-1 overflow-auto p-4">
+            <div className="max-w-lg mx-auto space-y-5">
+              {/* ── Room selector ────────────────────────────────── */}
+              <div className="bp-card p-4 space-y-3">
+                <h2
+                  className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                >
+                  Room Type
+                </h2>
+                <Select value={roomId} onValueChange={handleRoomChange}>
+                  <SelectTrigger className="bg-input border-border h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    {ROOM_TEMPLATES.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">
+                  Baseline defaults — edit any field to match your actual takeoff.
+                </p>
+              </div>
+
+              {/* ── Material list ─────────────────────────────────── */}
+              <div className="bp-card overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border bg-secondary/30">
+                  <h2
+                    className="text-xs font-semibold text-foreground"
+                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                  >
+                    {template.name} — Rough-In Materials
+                  </h2>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {(materials.length > 0 ? materials : template.materials).map((mat, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-foreground truncate">{mat.description}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{mat.unit}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={mat.quantity}
+                          onChange={(e) => updateQty(i, e.target.value)}
+                          className="w-18 h-8 text-right font-mono text-xs bg-input border-border text-foreground"
+                          style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                        />
+                        <span className="text-[10px] text-muted-foreground font-mono w-5">{mat.unit}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 py-2.5 border-t border-border bg-secondary/20 flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {materials.length} line items
+                  </span>
+                  <span className="text-[10px] text-[#F5C518] font-mono">
+                    Changes saved automatically
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

@@ -1,17 +1,17 @@
 /**
  * BidPhaseShell — Main layout shell
  * Desktop: fixed left sidebar (icon-only 64px, expands to 220px on hover)
- * Mobile:  fixed bottom navigation bar with 4 tabs
+ * Mobile:  fixed bottom navigation bar with 3 tabs
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
+ *
+ * Each tab now embeds a PlanPanel on the left side — no standalone Plan Viewer tab.
  */
 import { useApp } from "@/contexts/AppContext";
-import PlanViewer from "@/components/tabs/PlanViewer";
 import CivilCalculator from "@/components/tabs/CivilCalculator";
 import CommercialAssembly from "@/components/tabs/CommercialAssembly";
 import ResidentialRoughIn from "@/components/tabs/ResidentialRoughIn";
 import ExportButton from "@/components/ExportButton";
 import {
-  Map,
   Zap,
   Building2,
   Home,
@@ -20,10 +20,9 @@ import {
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { id: "plan",       label: "Plan Viewer",    icon: Map,         short: "Plan" },
-  { id: "civil",      label: "Civil / UG",     icon: Zap,         short: "Civil" },
-  { id: "commercial", label: "Commercial",     icon: Building2,   short: "Comm." },
-  { id: "residential",label: "Residential",   icon: Home,        short: "Res." },
+  { id: "civil",       label: "Civil / UG",   icon: Zap,       short: "Civil" },
+  { id: "commercial",  label: "Commercial",   icon: Building2, short: "Comm." },
+  { id: "residential", label: "Residential",  icon: Home,      short: "Res." },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -33,11 +32,10 @@ export default function BidPhaseShell() {
 
   const renderTab = () => {
     switch (activeTab as TabId) {
-      case "plan":        return <PlanViewer />;
       case "civil":       return <CivilCalculator />;
       case "commercial":  return <CommercialAssembly />;
       case "residential": return <ResidentialRoughIn />;
-      default:            return <PlanViewer />;
+      default:            return <CivilCalculator />;
     }
   };
 
@@ -101,7 +99,7 @@ export default function BidPhaseShell() {
             className="text-[10px] text-muted-foreground whitespace-nowrap
                        opacity-0 group-hover:opacity-100 transition-opacity duration-150 font-mono"
           >
-            v1.0 · Field Edition
+            v2.0 · Field Edition
           </span>
         </div>
       </aside>
@@ -128,7 +126,7 @@ export default function BidPhaseShell() {
         </header>
 
         {/* Tab content */}
-        <div className="flex-1 overflow-auto tab-enter" key={activeTab}>
+        <div className="flex-1 overflow-hidden tab-enter" key={activeTab}>
           {renderTab()}
         </div>
       </main>
