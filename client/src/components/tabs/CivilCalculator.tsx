@@ -32,6 +32,18 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+// ─── Conduit material types ───────────────────────────────────────────────────
+const CONDUIT_TYPES = [
+  { id: "EMT",  label: "EMT"  },
+  { id: "IMC",  label: "IMC"  },
+  { id: "RMC",  label: "RMC"  },
+  { id: "PVC",  label: "PVC"  },
+  { id: "LFMC", label: "LFMC" },
+  { id: "LFNC", label: "LFNC" },
+] as const;
+
+type ConduitType = typeof CONDUIT_TYPES[number]["id"];
+
 // ─── Fitting types ────────────────────────────────────────────────────────────
 const FITTING_TYPES = [
   { id: "connector",  label: "Connectors",   short: "CONN" },
@@ -40,7 +52,6 @@ const FITTING_TYPES = [
   { id: "elbow90",    label: "90° Elbows",   short: "90°"  },
   { id: "elbow45",    label: "45° Elbows",   short: "45°"  },
   { id: "sweep",      label: "Sweeps",       short: "SWP"  },
-  { id: "tee",        label: "Tees",         short: "TEE"  },
   { id: "offset",     label: "Offsets",      short: "OFF"  },
 ] as const;
 
@@ -53,7 +64,6 @@ interface FittingCounts {
   elbow90: number;
   elbow45: number;
   sweep: number;
-  tee: number;
   offset: number;
 }
 
@@ -63,12 +73,13 @@ interface RunItem {
   name: string;
   feet: number;
   conduitSize: string;
+  conduitType: ConduitType;
   conductors: number;
   fittings: FittingCounts;
 }
 
 function defaultFittings(): FittingCounts {
-  return { connector: 0, coupling: 0, lb: 0, elbow90: 0, elbow45: 0, sweep: 0, tee: 0, offset: 0 };
+  return { connector: 0, coupling: 0, lb: 0, elbow90: 0, elbow45: 0, sweep: 0, offset: 0 };
 }
 
 function calcWire(feet: number, conductors: number) {
@@ -153,7 +164,7 @@ function RunCard({
             {run.name}
           </span>
           <span className="text-[10px] font-mono text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
-            {run.conduitSize}"
+            {run.conduitType ?? "EMT"} {run.conduitSize}"
           </span>
         </div>
         <button
@@ -192,6 +203,27 @@ function RunCard({
               onValueChange={([v]) => onUpdate(run.id, { conductors: v })}
               className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
             />
+          </div>
+        </div>
+
+        {/* Conduit type */}
+        <div className="space-y-1.5">
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Type</Label>
+          <div className="flex flex-wrap gap-1">
+            {CONDUIT_TYPES.map((ct) => (
+              <button
+                key={ct.id}
+                onClick={() => onUpdate(run.id, { conduitType: ct.id as ConduitType })}
+                className={cn(
+                  "px-2.5 py-1 rounded text-[10px] font-mono font-semibold border transition-all",
+                  (run.conduitType ?? "EMT") === ct.id
+                    ? "bg-yellow-400 text-black border-yellow-400"
+                    : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                )}
+              >
+                {ct.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -310,10 +342,12 @@ function CivilEditor({
         name: runName,
         feet: ft,
         conduitSize: conduitSize ?? "3/4",
+        conduitType: "EMT",
         conductors: 2,
         fittings: defaultFittings(),
       };
-      syncRuns([...runs, newRun]);
+      // Newest first — prepend
+      syncRuns([newRun, ...runs]);
       toast.success(`"${runName}" pushed — ${ft} ft added as a new run.`);
     },
     [runs, syncRuns]
@@ -326,6 +360,14 @@ function CivilEditor({
   const removeRun = (id: string) => {
     syncRuns(runs.filter((r) => r.id !== id));
   };
+
+  // Called when a run is deleted from PlanPanel's run strip
+  const handleDeleteRun = useCallback(
+    (runName: string) => {
+      syncRuns(runs.filter((r) => r.name !== runName));
+    },
+    [runs, syncRuns]
+  );
 
   const totalWire = runs.reduce((acc, r) => acc + calcWire(r.feet, r.conductors), 0);
   const totalSticks = runs.reduce((acc, r) => acc + calcSticks(r.feet), 0);
@@ -350,6 +392,7 @@ function CivilEditor({
           <PlanPanel
             tabKey={`civil_${projectId}`}
             onPushDistance={(ft, runName, conduitSize) => handlePush(ft, runName, conduitSize)}
+            onDeleteRun={handleDeleteRun}
           />
         </ResizablePanel>
 
@@ -392,6 +435,7 @@ function CivilEditor({
                 </div>
               ) : (
                 <>
+                  {/* Newest first — already prepended on push */}
                   {runs.map((run, i) => (
                     <RunCard
                       key={run.id}

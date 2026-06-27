@@ -10,6 +10,16 @@ import React, { createContext, useContext, useCallback } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { nanoid } from "nanoid";
 
+// ─── Conduit types ──────────────────────────────────────────────────────────
+export const CONDUIT_TYPES = [
+  { value: "EMT",  label: "EMT"  },
+  { value: "IMC",  label: "IMC"  },
+  { value: "RMC",  label: "RMC"  },
+  { value: "PVC",  label: "PVC"  },
+  { value: "LFMC", label: "LFMC" },
+] as const;
+export type ConduitType = typeof CONDUIT_TYPES[number]["value"];
+
 // ─── Conduit sizes ────────────────────────────────────────────────────────────
 export const CONDUIT_SIZES = [
   { value: "1/2", label: '½"' },

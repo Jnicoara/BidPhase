@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CONDUIT_SIZES, type ConduitSize } from "@/contexts/AppContext";
+import { Eye, EyeOff } from "lucide-react";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -95,9 +96,10 @@ function nanoid6() {
 interface PlanPanelProps {
   tabKey: string;
   onPushDistance?: (ft: number, runName: string, conduitSize?: string) => void;
+  onDeleteRun?: (runName: string) => void;
 }
 
-export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
+export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
   const [pdfHash, setPdfHash] = useLocalStorage<string | null>(`bp_pdfhash_${tabKey}`, null);
@@ -148,6 +150,7 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
   const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
+  const [hideUnselected, setHideUnselected] = useState(false);
 
   // ── Page top offsets ───────────────────────────────────────────────────────
   const getPageTops = useCallback((): number[] => {
@@ -322,11 +325,13 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
     };
 
     // Draw all inactive runs first, then active on top
-    runs.forEach((run, idx) => {
-      if (run.id !== activeRunId) {
-        drawRun(run, RUN_COLORS[idx % RUN_COLORS.length], false);
-      }
-    });
+    if (!hideUnselected) {
+      runs.forEach((run, idx) => {
+        if (run.id !== activeRunId) {
+          drawRun(run, RUN_COLORS[idx % RUN_COLORS.length], false);
+        }
+      });
+    }
     const activeIdx = runs.findIndex((r) => r.id === activeRunId);
     if (activeIdx >= 0) drawRun(runs[activeIdx], RUN_COLORS[activeIdx % RUN_COLORS.length], true);
 
@@ -366,7 +371,7 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       // No center dot — hairlines only for maximum precision
     }
-  }, [runs, activeRunId, scalePoints, crosshair, normToCanvas, getPageTops, scaleRatio, renderZoom, pageSizesReady]);
+  }, [runs, activeRunId, scalePoints, crosshair, normToCanvas, getPageTops, scaleRatio, renderZoom, pageSizesReady, hideUnselected]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas, pageSizesReady]);
 
@@ -642,12 +647,14 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
 
   const deleteRun = useCallback((runId: string) => {
     setRuns((prev) => {
+      const target = prev.find((r) => r.id === runId);
+      if (target) onDeleteRun?.(target.name);
       const next = prev.filter((r) => r.id !== runId);
       const safe = next.length > 0 ? next : [{ id: nanoid6(), name: "Run 1", points: [], totalFeet: null, conduitSize: "3/4" as ConduitSize }];
       if (activeRunId === runId) setActiveRunId(safe[0].id);
       return safe;
     });
-  }, [activeRunId, setRuns, setActiveRunId]);
+  }, [activeRunId, setRuns, setActiveRunId, onDeleteRun]);
 
   // ── Push to calculator ─────────────────────────────────────────────────────
   const handlePush = () => {
@@ -775,80 +782,69 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
         {/* ── Named Runs Bar ────────────────────────────────────────────── */}
       {pdfFile && (
         <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border bg-muted/30 shrink-0 overflow-x-auto">
-          {runs.map((run, idx) => (
-            <div
-              key={run.id}
-              className={cn(
-                "flex items-center gap-1 rounded border transition-all",
-                run.id === activeRunId
-                  ? "bg-card border-border"
-                  : "border-transparent"
-              )}
-            >
-              <button
-                onClick={() => setActiveRunId(run.id)}
+          {runs.map((run, idx) => {
+            const isActive = run.id === activeRunId;
+            return (
+              <div
+                key={run.id}
                 className={cn(
-                  "flex items-center gap-1.5 pl-2 pr-1 py-0.5 text-[10px] font-medium whitespace-nowrap transition-all",
-                  run.id === activeRunId ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  "flex items-center gap-1 rounded border transition-all",
+                  isActive
+                    ? "bg-[#F5C518]/10 border-[#F5C518]/50 shadow-sm"
+                    : "border-transparent opacity-60 hover:opacity-90"
                 )}
               >
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ background: RUN_COLORS[idx % RUN_COLORS.length] }}
-                />
-                {/* Inline rename on double-click */}
-                <span
-                  onDoubleClick={(e) => {
-                    const span = e.currentTarget;
-                    span.contentEditable = "true";
-                    span.focus();
-                    const range = document.createRange();
-                    range.selectNodeContents(span);
-                    window.getSelection()?.removeAllRanges();
-                    window.getSelection()?.addRange(range);
-                  }}
-                  onBlur={(e) => {
-                    const val = e.currentTarget.textContent?.trim();
-                    e.currentTarget.contentEditable = "false";
-                    if (val) renameRun(run.id, val);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLElement).blur(); }
-                    if (e.key === "Escape") { (e.target as HTMLElement).contentEditable = "false"; }
-                  }}
-                  suppressContentEditableWarning
-                >
-                  {run.name}
-                </span>
-                {run.totalFeet !== null && (
-                  <span className="font-mono" style={{ color: RUN_COLORS[idx % RUN_COLORS.length] }}>
-                    {run.totalFeet}'
-                  </span>
-                )}
-              </button>
-              {/* Conduit size selector for this run */}
-              {run.id === activeRunId && (
-                <select
-                  value={run.conduitSize ?? "3/4"}
-                  onChange={(e) => setRunConduitSize(run.id, e.target.value as ConduitSize)}
-                  className="h-5 text-[9px] bg-background border border-border rounded px-0.5 text-muted-foreground cursor-pointer"
-                  title="Conduit size for this run"
-                >
-                  {CONDUIT_SIZES.map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
-              )}
-              {/* Delete run button (only if more than 1 run) */}
-              {runs.length > 1 && run.id === activeRunId && (
                 <button
-                  onClick={() => deleteRun(run.id)}
-                  className="px-1 py-0.5 text-[9px] text-muted-foreground hover:text-destructive transition-colors"
-                  title="Delete this run"
-                >✕</button>
-              )}
-            </div>
-          ))}
+                  onClick={() => setActiveRunId(run.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 pl-2 pr-1.5 py-0.5 text-[10px] whitespace-nowrap transition-all",
+                    isActive ? "font-bold text-foreground" : "font-medium text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span
+                    className={cn("w-2 h-2 rounded-full shrink-0", isActive && "ring-2 ring-offset-1 ring-offset-background")}
+                    style={{ background: RUN_COLORS[idx % RUN_COLORS.length] }}
+                  />
+                  <span
+                    onDoubleClick={(e) => {
+                      const span = e.currentTarget;
+                      span.contentEditable = "true";
+                      span.focus();
+                      const range = document.createRange();
+                      range.selectNodeContents(span);
+                      window.getSelection()?.removeAllRanges();
+                      window.getSelection()?.addRange(range);
+                    }}
+                    onBlur={(e) => {
+                      const val = e.currentTarget.textContent?.trim();
+                      e.currentTarget.contentEditable = "false";
+                      if (val) renameRun(run.id, val);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLElement).blur(); }
+                      if (e.key === "Escape") { (e.target as HTMLElement).contentEditable = "false"; }
+                    }}
+                    suppressContentEditableWarning
+                  >
+                    {run.name}
+                  </span>
+                  {run.totalFeet !== null && (
+                    <span className="font-mono" style={{ color: RUN_COLORS[idx % RUN_COLORS.length] }}>
+                      {run.totalFeet}'
+                    </span>
+                  )}
+                </button>
+                {/* Delete run button (only if more than 1 run) */}
+                {runs.length > 1 && isActive && (
+                  <button
+                    onClick={() => deleteRun(run.id)}
+                    className="px-1 py-0.5 text-[9px] text-muted-foreground hover:text-destructive transition-colors"
+                    title="Delete this run"
+                  >✕</button>
+                )}
+              </div>
+            );
+          })}
           <button
             onClick={addRun}
             className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground transition-colors"
@@ -856,6 +852,20 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
           >
             <Plus size={10} />
             New Run
+          </button>
+          {/* Hide unselected runs toggle */}
+          <button
+            onClick={() => setHideUnselected((v) => !v)}
+            className={cn(
+              "ml-auto flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] transition-all",
+              hideUnselected
+                ? "border-[#F5C518]/50 bg-[#F5C518]/10 text-[#F5C518]"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+            title={hideUnselected ? "Show all runs" : "Hide other runs"}
+          >
+            {hideUnselected ? <EyeOff size={11} /> : <Eye size={11} />}
+            <span>{hideUnselected ? "Solo" : "All"}</span>
           </button>
         </div>
       )}
