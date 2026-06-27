@@ -92,12 +92,14 @@ const PAGE_GUTTER = 400;
 
 // Run colors — cycles through these for each named run
 const RUN_COLORS = [
-  "#22C55E", // green
-  "#3B82F6", // blue
-  "#F97316", // orange
-  "#A855F7", // purple
-  "#EC4899", // pink
-  "#14B8A6", // teal
+  "#00FF88", // neon green
+  "#00CFFF", // electric cyan
+  "#FF6B00", // vivid orange
+  "#FF3FD4", // hot magenta
+  "#FFE600", // bright yellow
+  "#BF5FFF", // vivid violet
+  "#FF4444", // neon red
+  "#00FFD1", // aqua mint
 ];
 
 function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)); }
@@ -378,42 +380,54 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       const pts = run.points.map(normToCanvas).filter(Boolean) as { x: number; y: number }[];
       if (pts.length === 0) return;
 
-      // Glow pass — wide soft halo for vibrancy
+      // Outer glow halo — wide, low-opacity bloom
       if (pts.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.strokeStyle = color;
-        ctx.lineWidth = (isActive ? 10 : 7) * S;
+        ctx.lineWidth = (isActive ? 14 : 10) * S;
         ctx.setLineDash([]);
-        ctx.globalAlpha = isActive ? 0.18 : 0.12;
+        ctx.globalAlpha = isActive ? 0.22 : 0.14;
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
 
-      // Shadow/outline pass for contrast against light backgrounds
-      if (pts.length >= 2) {
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-        ctx.strokeStyle = "rgba(0,0,0,0.6)";
-        ctx.lineWidth = (isActive ? 5 : 4) * S;
-        ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
-        ctx.stroke();
-      }
-
-      // Polyline (colored) — bright core
+      // Mid glow — tighter, brighter
       if (pts.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.strokeStyle = color;
-        ctx.lineWidth = (isActive ? 3 : 2) * S;
+        ctx.lineWidth = (isActive ? 6 : 4) * S;
         ctx.setLineDash([]);
-        ctx.globalAlpha = isActive ? 1 : 0.85;
+        ctx.globalAlpha = isActive ? 0.45 : 0.30;
         ctx.stroke();
         ctx.globalAlpha = 1;
+      }
+
+      // Dark outline for contrast on light plans
+      if (pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.lineWidth = (isActive ? 4.5 : 3.5) * S;
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.stroke();
+      }
+
+      // Crisp bright core line
+      if (pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (isActive ? 2.5 : 1.8) * S;
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.stroke();
       }
 
       // Labels — per-segment or collapsed run total depending on zoom
@@ -433,6 +447,29 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
           return true;
         })();
 
+        // Helper: draw a label with a semi-transparent pill background
+        const drawLabel = (text: string, x: number, y: number, angle: number) => {
+          ctx.save();
+          ctx.translate(x, y);
+          const flip = Math.abs(angle) > Math.PI / 2;
+          ctx.rotate(flip ? angle + Math.PI : angle);
+          const pad = 5 * S;
+          const tw = ctx.measureText(text).width + pad * 2;
+          const th = fontSize + pad * 1.2;
+          const ry = 3 * S;
+          // Semi-transparent dark pill
+          ctx.fillStyle = "rgba(0,0,0,0.72)";
+          ctx.beginPath();
+          ctx.roundRect(-tw / 2, -(th + 3 * S), tw, th, ry);
+          ctx.fill();
+          // Colored text
+          ctx.fillStyle = color;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(text, 0, -(3 * S));
+          ctx.restore();
+        };
+
         if (showPerSeg) {
           // Per-segment labels
           for (let i = 1; i < pts.length; i++) {
@@ -443,39 +480,14 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
             const mx = (a.x + b.x) / 2;
             const my = (a.y + b.y) / 2;
             const angle = Math.atan2(b.y - a.y, b.x - a.x);
-            const label = `${segFt.toFixed(1)}'`;
-            ctx.save();
-            ctx.translate(mx, my);
-            const flip = Math.abs(angle) > Math.PI / 2;
-            ctx.rotate(flip ? angle + Math.PI : angle);
-            ctx.shadowColor = "rgba(0,0,0,0.9)";
-            ctx.shadowBlur = 3;
-            ctx.shadowOffsetX = 1;
-            ctx.shadowOffsetY = 1;
-            ctx.fillStyle = color;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "bottom";
-            ctx.fillText(label, 0, -3);
-            ctx.shadowColor = "transparent";
-            ctx.shadowBlur = 0;
-            ctx.restore();
+            drawLabel(`${segFt.toFixed(1)}'`, mx, my, angle);
           }
         } else if (pts.length >= 2) {
           // Collapsed: show run total near midpoint of whole run
           const totalPx = pts.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y), 0);
           const totalFt = totalPx / pxPerFt;
           const mid = pts[Math.floor(pts.length / 2)];
-          const label = `${totalFt.toFixed(1)}' total`;
-          ctx.shadowColor = "rgba(0,0,0,0.9)";
-          ctx.shadowBlur = 4;
-          ctx.shadowOffsetX = 1;
-          ctx.shadowOffsetY = 1;
-          ctx.fillStyle = color;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "bottom";
-          ctx.fillText(label, mid.x, mid.y - 6);
-          ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
+          drawLabel(`${totalFt.toFixed(1)}' total`, mid.x, mid.y, 0);
         }
       }
 
