@@ -367,20 +367,38 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // ── Scale factor so strokes/fonts appear constant size on screen ────────────
+    // Canvas is rendered at RENDER_BASE_ZOOM but displayed at displayZoom via CSS.
+    // To make a 2px screen line, we need: canvasPx = 2 * (RENDER_BASE_ZOOM / displayZoom)
+    const dz = displayZoomRef.current || 0.40;
+    const S = RENDER_BASE_ZOOM / dz;  // canvas px per 1 screen px
+
     // ── Draw a run (polyline + dots + per-segment labels) ──────────────────
     const drawRun = (run: MeasureRun, color: string, isActive: boolean) => {
       const pts = run.points.map(normToCanvas).filter(Boolean) as { x: number; y: number }[];
       if (pts.length === 0) return;
 
-      // Polyline
+      // Shadow/outline pass for contrast against light backgrounds
+      if (pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.lineWidth = (isActive ? 5 : 4) * S;
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.stroke();
+      }
+
+      // Polyline (colored)
       if (pts.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.strokeStyle = color;
-        ctx.lineWidth = isActive ? 2 : 1.5;
+        ctx.lineWidth = (isActive ? 3 : 2) * S;
         ctx.setLineDash([]);
-        ctx.globalAlpha = isActive ? 1 : 0.6;
+        ctx.globalAlpha = isActive ? 1 : 0.75;
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
@@ -388,6 +406,8 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       // Per-segment labels
       if (scaleRatio && pageReady) {
         const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
+        const fontSize = Math.round(13 * S);
+        ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
         for (let i = 1; i < pts.length; i++) {
           const a = pts[i - 1];
           const b = pts[i];
@@ -403,46 +423,66 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
           const flip = Math.abs(angle) > Math.PI / 2;
           ctx.rotate(flip ? angle + Math.PI : angle);
 
-          const tw = ctx.measureText(label).width + 8;
-          const th = 14;
-          ctx.fillStyle = "rgba(0,0,0,0.65)";
+          const pad = 6 * S;
+          const tw = ctx.measureText(label).width + pad * 2;
+          const th = fontSize + pad;
+          const rx = 4 * S;
+          // Solid dark background
+          ctx.fillStyle = "rgba(10,10,10,0.88)";
           ctx.beginPath();
-          ctx.roundRect(-tw / 2, -th - 4, tw, th, 3);
+          ctx.roundRect(-tw / 2, -(th + 4 * S), tw, th, rx);
           ctx.fill();
+          // Colored border
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5 * S;
+          ctx.stroke();
 
-          ctx.fillStyle = color;
-          ctx.font = `bold 10px 'JetBrains Mono', monospace`;
+          ctx.fillStyle = "#ffffff";
           ctx.textAlign = "center";
           ctx.textBaseline = "bottom";
-          ctx.fillText(label, 0, -4);
+          ctx.fillText(label, 0, -(4 * S));
           ctx.restore();
         }
       }
 
       // Dots
+      const dotR = (isActive ? 5 : 4) * S;
       pts.forEach((p, i) => {
+        // Dot shadow
         ctx.beginPath();
-        ctx.arc(p.x, p.y, isActive ? 4 : 3, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, dotR + 1.5 * S, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fill();
+        // Dot fill
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
         ctx.fillStyle = color;
-        ctx.globalAlpha = isActive ? 1 : 0.6;
+        ctx.globalAlpha = isActive ? 1 : 0.75;
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.strokeStyle = "rgba(0,0,0,0.5)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
         if (isActive && (i === 0 || i === pts.length - 1)) {
           ctx.fillStyle = color;
-          ctx.font = "bold 10px 'JetBrains Mono', monospace";
-          ctx.fillText(i === 0 ? "▶" : "■", p.x + 6, p.y - 5);
+          ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
+          ctx.fillText(i === 0 ? "▶" : "■", p.x + 7 * S, p.y - 6 * S);
         }
       });
 
       // Run name label near first point
       if (pts.length > 0 && currentRuns.length > 1) {
+        const nameFontSize = Math.round(12 * S);
+        ctx.font = `bold ${nameFontSize}px 'Space Grotesk', sans-serif`;
+        const nameText = run.name;
+        const nw = ctx.measureText(nameText).width + 8 * S;
+        const nh = nameFontSize + 6 * S;
+        const nx = pts[0].x + 10 * S;
+        const ny = pts[0].y + 14 * S;
+        ctx.fillStyle = "rgba(10,10,10,0.75)";
+        ctx.beginPath();
+        ctx.roundRect(nx - 4 * S, ny - nh + 2 * S, nw, nh, 3 * S);
+        ctx.fill();
         ctx.fillStyle = color;
-        ctx.font = `bold 10px 'Space Grotesk', sans-serif`;
-        ctx.globalAlpha = isActive ? 1 : 0.5;
-        ctx.fillText(run.name, pts[0].x + 8, pts[0].y + 12);
+        ctx.globalAlpha = isActive ? 1 : 0.6;
+        ctx.fillText(nameText, nx, ny);
         ctx.globalAlpha = 1;
       }
     };
@@ -458,29 +498,36 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     const activeIdx = currentRuns.findIndex((r) => r.id === currentActiveRunId);
     if (activeIdx >= 0) drawRun(currentRuns[activeIdx], RUN_COLORS[activeIdx % RUN_COLORS.length], true);
 
-    // ── Scale reference line ───────────────────────────────────────────────
+    // ── Scale reference line ───────────────────────────────────────────────────
     const scalePts = scalePoints.map(normToCanvas).filter(Boolean) as { x: number; y: number }[];
     if (scalePts.length >= 2) {
       ctx.beginPath();
       ctx.moveTo(scalePts[0].x, scalePts[0].y);
       ctx.lineTo(scalePts[1].x, scalePts[1].y);
+      ctx.strokeStyle = "rgba(0,0,0,0.5)";
+      ctx.lineWidth = 4 * S;
+      ctx.setLineDash([]);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(scalePts[0].x, scalePts[0].y);
+      ctx.lineTo(scalePts[1].x, scalePts[1].y);
       ctx.strokeStyle = "#F5C518";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([8, 5]);
+      ctx.lineWidth = 2 * S;
+      ctx.setLineDash([8 * S, 5 * S]);
       ctx.stroke();
       ctx.setLineDash([]);
     }
     scalePts.forEach((p, i) => {
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 6 * S, 0, Math.PI * 2);
       ctx.fillStyle = "#F5C518";
       ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.5)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.lineWidth = 1.5 * S;
       ctx.stroke();
       ctx.fillStyle = "#F5C518";
-      ctx.font = "bold 10px 'JetBrains Mono', monospace";
-      ctx.fillText(`S${i + 1}`, p.x + 7, p.y - 5);
+      ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
+      ctx.fillText(`S${i + 1}`, p.x + 8 * S, p.y - 6 * S);
     });
 
     // ── Vibrant precision crosshair ──────────────────────────────────────────
@@ -488,32 +535,32 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       const { x, y } = crosshair;
       ctx.save();
       ctx.setLineDash([]);
-      // Outer glow
-      ctx.strokeStyle = "rgba(255,220,0,0.22)";
-      ctx.lineWidth = 6;
+      // Outer glow (constant screen size)
+      ctx.strokeStyle = "rgba(255,220,0,0.20)";
+      ctx.lineWidth = 8 * S;
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       // Mid glow
-      ctx.strokeStyle = "rgba(255,230,0,0.55)";
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "rgba(255,230,0,0.50)";
+      ctx.lineWidth = 3 * S;
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       // Crisp inner line
       ctx.strokeStyle = "rgba(255,238,0,1)";
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1 * S;
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       // Center dot
       ctx.beginPath();
-      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.arc(x, y, 5 * S, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(255,238,0,1)";
       ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.75)";
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(0,0,0,0.8)";
+      ctx.lineWidth = 1.5 * S;
       ctx.stroke();
       ctx.restore();
     }
-  }, [currentRuns, currentActiveRunId, scalePoints, crosshair, normToCanvas, scaleRatio, renderZoom, pageReady, hideUnselected]);
+  }, [currentRuns, currentActiveRunId, scalePoints, crosshair, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
 
