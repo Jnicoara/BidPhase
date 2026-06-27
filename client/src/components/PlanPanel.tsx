@@ -127,16 +127,19 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   // ── Current page (1-indexed) ───────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useLocalStorage<number>(`bp_page_${tabKey}`, 1);
 
-  // ── Zoom state — split into renderZoom (triggers PDF re-render) and displayZoom (instant CSS scale) ──
-  const [renderZoom, setRenderZoom] = useLocalStorage<number>(`bp_zoom_${tabKey}`, 0.40);
-  const [displayZoom, setDisplayZoom] = useState<number>(renderZoom);
-  const renderZoomRef = useRef(renderZoom);
+  // ── Zoom state ────────────────────────────────────────────────────────────
+  // PDF renders ONCE at RENDER_BASE_ZOOM (fixed high-res). All zoom is pure CSS scale.
+  // displayZoom is the logical zoom the user sees (e.g. 0.40 = 40%).
+  // The CSS transform is: scale(displayZoom / RENDER_BASE_ZOOM)
+  const RENDER_BASE_ZOOM = 1.5; // fixed render resolution — never changes
+  const [displayZoom, setDisplayZoom] = useLocalStorage<number>(`bp_zoom_${tabKey}`, 0.40);
   const displayZoomRef = useRef(displayZoom);
-  useEffect(() => { renderZoomRef.current = renderZoom; }, [renderZoom]);
   useEffect(() => { displayZoomRef.current = displayZoom; }, [displayZoom]);
-  // Alias for backward compat with existing code that uses zoomRef
-  const zoom = renderZoom;
-  const zoomRef = renderZoomRef;
+  // Legacy aliases so existing code that references renderZoom / zoomRef still compiles
+  const renderZoom = RENDER_BASE_ZOOM;
+  const renderZoomRef = useRef(RENDER_BASE_ZOOM);
+  const zoom = displayZoom;
+  const zoomRef = displayZoomRef;
 
   // ── Per-page runs ──────────────────────────────────────────────────────────
   // pageRunsMap[pageIndex] = MeasureRun[]  (pageIndex is 0-based internally)
@@ -219,54 +222,48 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const [fitZoom, setFitZoom] = useState<number>(0.40);
   const autoFittedRef = useRef<boolean>(false);
 
-  // Center page in viewport at given zoom
+  // Page natural size in CSS pixels at displayZoom=1
+  // pageSizeRef stores the rendered size at RENDER_BASE_ZOOM, so natural = size / RENDER_BASE_ZOOM
+  const pageNatSize = useCallback(() => {
+    const ps = pageSizeRef.current;
+    if (!ps) return null;
+    return { w: ps.w / RENDER_BASE_ZOOM, h: ps.h / RENDER_BASE_ZOOM };
+  }, [RENDER_BASE_ZOOM]);
+
+  // Center page in viewport at given displayZoom
   const centerPage = useCallback((z: number) => {
     const vp = viewportRef.current;
-    const ps = pageSizeRef.current;
-    if (!vp || !ps) return;
+    const nat = pageNatSize();
+    if (!vp || !nat) return;
     const vpW = vp.clientWidth;
     const vpH = vp.clientHeight;
-    const pageW = ps.w; // already at renderZoom scale
-    const pageH = ps.h;
-    // Natural page size at zoom=1
-    const natW = pageW / renderZoomRef.current;
-    const natH = pageH / renderZoomRef.current;
-    const ox = (vpW - natW * z) / 2;
-    const oy = (vpH - natH * z) / 2;
+    const ox = (vpW - nat.w * z) / 2;
+    const oy = (vpH - nat.h * z) / 2;
     panOffsetRef.current = { x: ox, y: oy };
     setPanOffset({ x: ox, y: oy });
-  }, []);
+  }, [pageNatSize]);
 
   useEffect(() => {
     if (!pageReady || !pageSizeRef.current) return;
     const vp = viewportRef.current;
     if (!vp) return;
+    const nat = pageNatSize();
+    if (!nat) return;
     const vpW = vp.clientWidth;
     const vpH = vp.clientHeight;
-    const curZoom = renderZoomRef.current;
-    const pageNatW = pageSizeRef.current.w / curZoom;
-    const pageNatH = pageSizeRef.current.h / curZoom;
-    const fitW = (vpW - 32) / pageNatW;
-    const fitH = (vpH - 32) / pageNatH;
+    const fitW = (vpW - 32) / nat.w;
+    const fitH = (vpH - 32) / nat.h;
     const fit = parseFloat(Math.min(fitW, fitH, MAX_ZOOM).toFixed(4));
     fitZoomRef.current = fit;
     setFitZoom(fit);
     if (!autoFittedRef.current) {
       autoFittedRef.current = true;
       const startZoom = 0.40;
-      // Apply start zoom then center
       setDisplayZoom(startZoom);
       displayZoomRef.current = startZoom;
-      if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
-      zoomDebounceRef.current = setTimeout(() => {
-        setRenderZoom(startZoom);
-        renderZoomRef.current = startZoom;
-        pageSizeRef.current = null;
-        setPageReady(false);
-      }, 150);
       centerPage(startZoom);
     }
-  }, [pageReady, centerPage]); // eslint-disable-line
+  }, [pageReady, centerPage, pageNatSize]); // eslint-disable-line
 
   // Reset auto-fit flag when page changes
   useEffect(() => {
@@ -287,7 +284,6 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       const dh = newH - lastH;
       lastW = newW;
       lastH = newH;
-      // Shift pan offset by half the size delta so the page stays centered
       panOffsetRef.current = {
         x: panOffsetRef.current.x + dw / 2,
         y: panOffsetRef.current.y + dh / 2,
@@ -533,8 +529,8 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   }, []);
 
   // ── Zoom helpers ──────────────────────────────────────────────────────────
-  // Debounce timer for PDF re-render after zoom settles
-  const zoomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // No debounce needed — PDF renders once at RENDER_BASE_ZOOM, zoom is pure CSS scale.
+  const zoomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null); // kept for compat
 
   const applyZoom = useCallback((
     newZoomRaw: number,
@@ -554,9 +550,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     const vpX = focalClientX !== undefined ? focalClientX - rect.left : rect.width / 2;
     const vpY = focalClientY !== undefined ? focalClientY - rect.top  : rect.height / 2;
 
-    // The point in "page space" under the cursor must stay fixed:
-    //   vpX = panOffset.x + pagePoint.x * oldZoom  →  pagePoint.x = (vpX - panOffset.x) / oldZoom
-    // After zoom: newPanOffset.x = vpX - pagePoint.x * newZoom
+    // Keep the point under the cursor fixed in page space
     const ox = panOffsetRef.current.x;
     const oy = panOffsetRef.current.y;
     const pageX = (vpX - ox) / oldZoom;
@@ -564,22 +558,19 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     const newOx = vpX - pageX * newZoom;
     const newOy = vpY - pageY * newZoom;
 
-    panOffsetRef.current = { x: newOx, y: newOy };
-    setPanOffset({ x: newOx, y: newOy });
+    // Clamp pan so at least 80px of the page stays visible in each axis
+    const nat = pageNatSize();
+    const MARGIN = 80;
+    const clampedOx = nat ? clamp(newOx, -(nat.w * newZoom - MARGIN), vp.clientWidth - MARGIN) : newOx;
+    const clampedOy = nat ? clamp(newOy, -(nat.h * newZoom - MARGIN), vp.clientHeight - MARGIN) : newOy;
 
-    // Update display zoom immediately
+    panOffsetRef.current = { x: clampedOx, y: clampedOy };
+    setPanOffset({ x: clampedOx, y: clampedOy });
+
+    // Pure CSS scale — no PDF re-render needed
     setDisplayZoom(newZoom);
     displayZoomRef.current = newZoom;
-
-    // Debounce the actual PDF re-render
-    if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
-    zoomDebounceRef.current = setTimeout(() => {
-      pageSizeRef.current = null;
-      setPageReady(false);
-      setRenderZoom(newZoom);
-      renderZoomRef.current = newZoom;
-    }, 150);
-  }, [setRenderZoom]);
+  }, [pageNatSize]);
 
   const zoomIn = useCallback(() => {
     const cur = displayZoomRef.current;
@@ -598,15 +589,8 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     const targetZoom = 0.40;
     setDisplayZoom(targetZoom);
     displayZoomRef.current = targetZoom;
-    if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
-    zoomDebounceRef.current = setTimeout(() => {
-      pageSizeRef.current = null;
-      setPageReady(false);
-      setRenderZoom(targetZoom);
-      renderZoomRef.current = targetZoom;
-    }, 150);
     centerPage(targetZoom);
-  }, [centerPage, setRenderZoom]);
+  }, [centerPage]);
 
   // ── Wheel zoom ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -614,14 +598,13 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     if (!vp) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      let delta: number;
-      if (e.deltaMode === 1) {
-        delta = e.deltaY > 0 ? -0.15 : 0.15;
-      } else {
-        const abs = Math.abs(e.deltaY);
-        delta = abs > 50 ? (e.deltaY > 0 ? -0.15 : 0.15) : e.deltaY * -0.004;
-      }
-      applyZoom(displayZoomRef.current + clamp(delta, -0.3, 0.3), e.clientX, e.clientY);
+      // Snap to nearest 5% step in the direction of scroll
+      const cur = displayZoomRef.current;
+      const goingUp = e.deltaY < 0;
+      const next = goingUp
+        ? ZOOM_STEPS.find(s => s > cur + 0.005) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]
+        : [...ZOOM_STEPS].reverse().find(s => s < cur - 0.005) ?? ZOOM_STEPS[0];
+      applyZoom(next, e.clientX, e.clientY);
     };
     vp.addEventListener("wheel", onWheel, { passive: false });
     return () => vp.removeEventListener("wheel", onWheel);
@@ -1271,9 +1254,10 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
               position: "absolute",
               transformOrigin: "top left",
               // translate(pan) then scale(zoom) — order matters
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${displayZoom})`,
-              // Visual scale between displayZoom and renderZoom for smooth intermediate feedback
-              // The Page component renders at renderZoom; we scale the container to displayZoom
+              // PDF renders at RENDER_BASE_ZOOM; CSS scale adjusts to displayZoom
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${displayZoom / RENDER_BASE_ZOOM})`,
+              // will-change: transform tells the browser to promote to its own GPU layer
+              willChange: "transform",
             }}
           >
             {/* Inner wrapper rendered at renderZoom — no gutter needed since we can pan freely */}
@@ -1293,7 +1277,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
               >
                 <Page
                   pageNumber={currentPage}
-                  scale={BASE_DPI * renderZoom}
+                  scale={BASE_DPI * RENDER_BASE_ZOOM}
                   renderAnnotationLayer={false}
                   renderTextLayer={false}
                   onRenderSuccess={(page) =>
