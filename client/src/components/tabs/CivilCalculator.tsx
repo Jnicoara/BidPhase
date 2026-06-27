@@ -337,18 +337,30 @@ function CivilEditor({
 
   const handlePush = useCallback(
     (ft: number, runName: string, conduitSize?: string) => {
-      const newRun: RunItem = {
-        id: `run-${Date.now()}`,
-        name: runName,
-        feet: ft,
-        conduitSize: conduitSize ?? "3/4",
-        conduitType: "EMT",
-        conductors: 2,
-        fittings: defaultFittings(),
-      };
-      // Newest first — prepend
-      syncRuns([newRun, ...runs]);
-      toast.success(`"${runName}" pushed — ${ft} ft added as a new run.`);
+      const existingIdx = runs.findIndex((r) => r.name === runName);
+      if (existingIdx !== -1) {
+        // Replace existing run — update footage + conduit size, keep other settings
+        const updated = runs.map((r) =>
+          r.name === runName
+            ? { ...r, feet: ft, conduitSize: conduitSize ?? r.conduitSize }
+            : r
+        );
+        syncRuns(updated);
+        toast.success(`"${runName}" updated — ${ft} ft.`);
+      } else {
+        const newRun: RunItem = {
+          id: `run-${Date.now()}`,
+          name: runName,
+          feet: ft,
+          conduitSize: conduitSize ?? "3/4",
+          conduitType: "EMT",
+          conductors: 2,
+          fittings: defaultFittings(),
+        };
+        // Newest first — prepend
+        syncRuns([newRun, ...runs]);
+        toast.success(`"${runName}" pushed — ${ft} ft added as a new run.`);
+      }
     },
     [runs, syncRuns]
   );
