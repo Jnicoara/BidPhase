@@ -4,9 +4,10 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   BidPhase Design System — Tactical Dark Mode SaaS
+   BidPhase Design System — Tactical SaaS
    Signature accent: Safety Yellow #F5C518
    Fonts: Space Grotesk (headers), Inter (body), JetBrains Mono (numbers)
+   Supports: Light mode (default) + Dark mode (.dark class on <html>)
    ============================================================ */
 
 @theme inline {
@@ -48,9 +49,10 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* BidPhase dark theme — always dark */
+/* ── DARK THEME (default BidPhase look) ─────────────────────────────────── */
 :root {
   --radius: 0.5rem;
+  color-scheme: dark;
 
   /* Core backgrounds */
   --background: oklch(0.12 0.01 265);       /* #0F1117 near-black */
@@ -66,7 +68,7 @@
 
   /* Primary = Safety Yellow */
   --primary: oklch(0.84 0.18 88);           /* #F5C518 safety yellow */
-  --primary-foreground: oklch(0.12 0.01 265); /* dark text on yellow */
+  --primary-foreground: oklch(0.12 0.01 265);
 
   /* Secondary */
   --secondary: oklch(0.22 0.012 265);
@@ -74,9 +76,9 @@
 
   /* Muted */
   --muted: oklch(0.20 0.01 265);
-  --muted-foreground: oklch(0.58 0.015 265); /* #8B90A0 */
+  --muted-foreground: oklch(0.58 0.015 265);
 
-  /* Accent = yellow tint surface */
+  /* Accent */
   --accent: oklch(0.22 0.015 265);
   --accent-foreground: oklch(0.93 0.005 265);
 
@@ -85,9 +87,9 @@
   --destructive-foreground: oklch(0.985 0 0);
 
   /* Borders / inputs */
-  --border: oklch(0.26 0.012 265);          /* #2A2D3A */
+  --border: oklch(0.26 0.012 265);
   --input: oklch(0.22 0.012 265);
-  --ring: oklch(0.84 0.18 88);              /* yellow focus ring */
+  --ring: oklch(0.84 0.18 88);
 
   /* Charts */
   --chart-1: oklch(0.84 0.18 88);
@@ -116,9 +118,109 @@
   --bp-muted: #8B90A0;
   --bp-success: #22C55E;
   --bp-grid-dot: rgba(255,255,255,0.04);
+
+  /* Floating panel tokens (used by ExportButton modal, dropdowns) */
+  --bp-panel-bg: #141414;
+  --bp-panel-bg-2: #1a1a1a;
+  --bp-panel-preview-bg: #0d0d0d;
+  --bp-panel-border: rgba(255,255,255,0.10);
+  --bp-panel-hover: rgba(255,255,255,0.10);
+  --bp-panel-text: #ffffff;
+  --bp-panel-text-dim: #999999;
+  --bp-panel-text-muted: #666666;
+  --bp-panel-text-faint: #444444;
+  --bp-panel-divider: rgba(255,255,255,0.10);
+  --bp-input-bg: #111111;
+  --bp-input-border: rgba(255,255,255,0.10);
+  --bp-input-placeholder: rgba(255,255,255,0.20);
 }
 
-/* Force dark theme always */
+/* ── LIGHT THEME (.dark class removed from <html>) ──────────────────────── */
+:root:not(.dark) {
+  color-scheme: light;
+
+  /* Core backgrounds */
+  --background: oklch(0.97 0.005 265);      /* #F5F6FA off-white */
+  --foreground: oklch(0.18 0.015 265);      /* #1A1D27 near-black */
+
+  /* Card / surface */
+  --card: oklch(1.0 0 0);                   /* pure white */
+  --card-foreground: oklch(0.18 0.015 265);
+
+  /* Popover */
+  --popover: oklch(1.0 0 0);
+  --popover-foreground: oklch(0.18 0.015 265);
+
+  /* Primary = Safety Yellow (same in both modes) */
+  --primary: oklch(0.84 0.18 88);
+  --primary-foreground: oklch(0.12 0.01 265);
+
+  /* Secondary */
+  --secondary: oklch(0.92 0.005 265);
+  --secondary-foreground: oklch(0.18 0.015 265);
+
+  /* Muted */
+  --muted: oklch(0.93 0.005 265);
+  --muted-foreground: oklch(0.45 0.015 265);
+
+  /* Accent */
+  --accent: oklch(0.92 0.008 265);
+  --accent-foreground: oklch(0.18 0.015 265);
+
+  /* Destructive */
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  /* Borders / inputs */
+  --border: oklch(0.85 0.008 265);
+  --input: oklch(0.95 0.005 265);
+  --ring: oklch(0.84 0.18 88);
+
+  /* Charts */
+  --chart-1: oklch(0.84 0.18 88);
+  --chart-2: oklch(0.65 0.15 88);
+  --chart-3: oklch(0.48 0.12 88);
+  --chart-4: oklch(0.35 0.08 88);
+  --chart-5: oklch(0.25 0.05 88);
+
+  /* Sidebar — slightly darker than page bg */
+  --sidebar: oklch(0.93 0.006 265);
+  --sidebar-foreground: oklch(0.18 0.015 265);
+  --sidebar-primary: oklch(0.84 0.18 88);
+  --sidebar-primary-foreground: oklch(0.12 0.01 265);
+  --sidebar-accent: oklch(0.88 0.006 265);
+  --sidebar-accent-foreground: oklch(0.18 0.015 265);
+  --sidebar-border: oklch(0.82 0.008 265);
+  --sidebar-ring: oklch(0.84 0.18 88);
+
+  /* BidPhase custom tokens — light overrides */
+  --bp-yellow: #D4A900;                     /* slightly darker yellow for light bg contrast */
+  --bp-yellow-dim: rgba(212, 169, 0, 0.12);
+  --bp-surface: #ffffff;
+  --bp-surface-2: #f0f1f5;
+  --bp-border: #d8dae3;
+  --bp-text: #1A1D27;
+  --bp-muted: #6b7080;
+  --bp-success: #16a34a;
+  --bp-grid-dot: rgba(0,0,0,0.04);
+
+  /* Floating panel tokens */
+  --bp-panel-bg: #ffffff;
+  --bp-panel-bg-2: #f5f6fa;
+  --bp-panel-preview-bg: #f0f1f5;
+  --bp-panel-border: rgba(0,0,0,0.10);
+  --bp-panel-hover: rgba(0,0,0,0.06);
+  --bp-panel-text: #1a1d27;
+  --bp-panel-text-dim: #555555;
+  --bp-panel-text-muted: #888888;
+  --bp-panel-text-faint: #aaaaaa;
+  --bp-panel-divider: rgba(0,0,0,0.08);
+  --bp-input-bg: #f5f6fa;
+  --bp-input-border: rgba(0,0,0,0.12);
+  --bp-input-placeholder: rgba(0,0,0,0.25);
+}
+
+/* Dark class — just sets color-scheme; variables come from :root above */
 .dark {
   color-scheme: dark;
 }
@@ -126,9 +228,6 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-  }
-  html {
-    color-scheme: dark;
   }
   body {
     @apply bg-background text-foreground;

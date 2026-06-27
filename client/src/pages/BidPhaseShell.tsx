@@ -56,7 +56,7 @@ export default function BidPhaseShell() {
           <img
             src="/manus-storage/bidphase-logo_e745a05f.png"
             alt="BidPhase"
-            className="w-9 h-9 shrink-0 rounded-md object-contain bg-black p-0.5"
+            className="w-9 h-9 shrink-0 rounded-md object-contain bg-sidebar p-0.5"
           />
           <span
             className="font-display font-bold text-base text-foreground whitespace-nowrap
@@ -116,7 +116,7 @@ export default function BidPhaseShell() {
           <img
             src="/manus-storage/bidphase-logo_e745a05f.png"
             alt="BidPhase"
-            className="w-8 h-8 rounded-md object-contain bg-black p-0.5"
+            className="w-8 h-8 rounded-md object-contain bg-sidebar p-0.5"
           />
           <span
             className="font-bold text-base text-foreground"

@@ -6,6 +6,13 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AppProvider } from "./contexts/AppContext";
 import BidPhaseShell from "./pages/BidPhaseShell";
+import { useTheme } from "./contexts/ThemeContext";
+
+// Toaster that follows the active theme
+function ToasterWithTheme() {
+  const { theme } = useTheme();
+  return <Toaster theme={theme} />;
+}
 
 function Router() {
   return (
@@ -20,10 +27,10 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="dark">
+      <ThemeProvider defaultTheme="dark" switchable={true}>
         <AppProvider>
           <TooltipProvider>
-            <Toaster theme="dark" />
+            <ToasterWithTheme />
             <Router />
           </TooltipProvider>
         </AppProvider>

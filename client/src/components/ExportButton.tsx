@@ -573,10 +573,8 @@ function PrintPreviewModal({
           value={jobInfo[key]}
           onChange={(e) => setJobInfo((p) => ({ ...p, [key]: e.target.value }))}
           placeholder={placeholder}
-          className="bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-sm text-white
-                     placeholder:text-white/20 focus:outline-none focus:border-[#F5C518]/60
-                     resize-none transition-colors"
-          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+          className="rounded-lg px-3 py-2 text-sm transition-colors resize-none focus:outline-none focus:border-[#F5C518]/60"
+          style={{ fontFamily: "'Space Grotesk', sans-serif", background: 'var(--bp-input-bg)', border: '1px solid var(--bp-input-border)', color: 'var(--bp-panel-text)' }}
         />
       ) : (
         <input
@@ -584,10 +582,8 @@ function PrintPreviewModal({
           value={jobInfo[key]}
           onChange={(e) => setJobInfo((p) => ({ ...p, [key]: e.target.value }))}
           placeholder={placeholder}
-          className="bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-sm text-white
-                     placeholder:text-white/20 focus:outline-none focus:border-[#F5C518]/60
-                     transition-colors"
-          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+          className="rounded-lg px-3 py-2 text-sm transition-colors focus:outline-none focus:border-[#F5C518]/60"
+          style={{ fontFamily: "'Space Grotesk', sans-serif", background: 'var(--bp-input-bg)', border: '1px solid var(--bp-input-border)', color: 'var(--bp-panel-text)' }}
         />
       )}
     </div>
@@ -602,10 +598,9 @@ function PrintPreviewModal({
     >
       {/* Modal panel */}
       <div
-        className="relative flex flex-col md:flex-row gap-0 bg-[#141414] border border-white/10
-                   rounded-2xl shadow-2xl overflow-hidden w-full max-w-4xl mx-4
+        className="relative flex flex-col md:flex-row gap-0 rounded-2xl shadow-2xl overflow-hidden w-full max-w-4xl mx-4
                    animate-in slide-in-from-bottom-4 fade-in duration-200"
-        style={{ maxHeight: "90vh" }}
+        style={{ maxHeight: "90vh", background: 'var(--bp-panel-bg)', border: '1px solid var(--bp-panel-border)' }}
       >
         {/* ── Left: form ── */}
         <div className="flex flex-col gap-5 p-6 md:w-72 shrink-0 border-r border-white/10 overflow-y-auto">
@@ -647,7 +642,7 @@ function PrintPreviewModal({
         </div>
 
         {/* ── Right: preview ── */}
-        <div className="flex-1 bg-[#0d0d0d] flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bp-panel-preview-bg)' }}>
           <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
             <span className="text-xs font-medium text-[#666]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
               First-page preview
@@ -748,25 +743,27 @@ export default function ExportButton() {
         {/* Dropdown menu */}
         {open && (
           <div
-            className="flex flex-col gap-1 bg-[#1a1a1a] border border-white/10 rounded-xl
-                       shadow-xl shadow-black/40 overflow-hidden
+            className="flex flex-col gap-1 rounded-xl shadow-xl overflow-hidden
                        animate-in slide-in-from-bottom-2 fade-in duration-150"
+            style={{ background: 'var(--bp-panel-bg-2)', border: '1px solid var(--bp-panel-border)' }}
           >
             <button
               onClick={handlePDFClick}
-              className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white
-                         hover:bg-white/10 transition-colors duration-100 text-left"
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors duration-100 text-left"
+              style={{ fontFamily: "'Space Grotesk', sans-serif", color: 'var(--bp-panel-text)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bp-panel-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
               <FileText size={15} className="text-[#F5C518]" />
               Export PDF
             </button>
-            <div className="h-px bg-white/10 mx-3" />
+            <div className="h-px mx-3" style={{ background: 'var(--bp-panel-divider)' }} />
             <button
               onClick={handleCSV}
-              className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white
-                         hover:bg-white/10 transition-colors duration-100 text-left"
-              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors duration-100 text-left"
+              style={{ fontFamily: "'Space Grotesk', sans-serif", color: 'var(--bp-panel-text)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bp-panel-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
               <FileSpreadsheet size={15} className="text-[#F5C518]" />
               Export CSV
