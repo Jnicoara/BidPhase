@@ -319,12 +319,25 @@ export default function PlanViewer() {
     return sizes.reduce((acc, s) => acc + (s?.h ?? 0) + PAGE_GAP, 0);
   }, [pageSizesReady]); // eslint-disable-line
 
-  // ── Smooth zoom engine ─────────────────────────────────────────────────────
+  // ── rAF-driven smooth zoom engine ─────────────────────────────────────────
   /**
-   * Apply a zoom delta. Uses CSS transform — no PDF re-render, instant.
-   * focalViewportX/Y: viewport coords of the zoom focal point (cursor/pinch center).
-   * When provided, the content under that point stays stationary.
+   * Smooth zoom that keeps the focal point (cursor / pinch center) stationary.
+   *
+   * Strategy: drive an animation loop with requestAnimationFrame that
+   * interpolates zoom from current → target every frame, and simultaneously
+   * adjusts scrollLeft/scrollTop so the focal content point never moves.
+   * Both values change together in the same rAF callback — no CSS transition
+   * is used, so transform and scroll are always in perfect sync.
    */
+  const animRef = useRef<{
+    rafId: number;
+    targetZoom: number;
+    focalContentX: number; // unscaled content px under focal point
+    focalContentY: number;
+    focalViewportX: number; // viewport px of focal point
+    focalViewportY: number;
+  } | null>(null);
+
   const applyZoomDelta = useCallback((
     delta: number,
     focalViewportX?: number,
@@ -333,24 +346,67 @@ export default function PlanViewer() {
     const scrollEl = scrollAreaRef.current;
     if (!scrollEl) return;
 
-    const oldZoom = zoomRef.current;
-    const newZoom = clampZoom(parseFloat((oldZoom + delta).toFixed(3)));
-    if (Math.abs(newZoom - oldZoom) < 0.001) return;
+    const currentZoom = zoomRef.current;
+    const rawTarget = currentZoom + delta;
+    const targetZoom = clampZoom(parseFloat(rawTarget.toFixed(3)));
+    if (Math.abs(targetZoom - currentZoom) < 0.001) return;
 
-    if (focalViewportX !== undefined && focalViewportY !== undefined) {
-      const rect = scrollEl.getBoundingClientRect();
-      // Content position under cursor (in unscaled content pixels)
-      const contentX = (scrollEl.scrollLeft + focalViewportX - rect.left) / oldZoom;
-      const contentY = (scrollEl.scrollTop + focalViewportY - rect.top) / oldZoom;
-      setZoom(newZoom);
-      requestAnimationFrame(() => {
-        // Scroll so the same content point stays under cursor
-        scrollEl.scrollLeft = contentX * newZoom - (focalViewportX - rect.left);
-        scrollEl.scrollTop = contentY * newZoom - (focalViewportY - rect.top);
-      });
+    // Determine focal point (default: center of scroll viewport)
+    const rect = scrollEl.getBoundingClientRect();
+    const vpX = focalViewportX !== undefined ? focalViewportX - rect.left : rect.width / 2;
+    const vpY = focalViewportY !== undefined ? focalViewportY - rect.top  : rect.height / 2;
+
+    // Content coordinate under the focal point at the CURRENT zoom
+    const focalContentX = (scrollEl.scrollLeft + vpX) / currentZoom;
+    const focalContentY = (scrollEl.scrollTop  + vpY) / currentZoom;
+
+    if (animRef.current) {
+      // Merge into the running animation: keep focal point, update target
+      cancelAnimationFrame(animRef.current.rafId);
+      animRef.current.targetZoom    = targetZoom;
+      animRef.current.focalContentX = focalContentX;
+      animRef.current.focalContentY = focalContentY;
+      animRef.current.focalViewportX = vpX;
+      animRef.current.focalViewportY = vpY;
     } else {
-      setZoom(newZoom);
+      animRef.current = {
+        rafId: 0,
+        targetZoom,
+        focalContentX,
+        focalContentY,
+        focalViewportX: vpX,
+        focalViewportY: vpY,
+      };
     }
+
+    const LERP = 0.22; // smoothing factor per frame (higher = snappier)
+
+    const tick = () => {
+      const anim = animRef.current;
+      if (!anim) return;
+      const prev = zoomRef.current;
+      const next = prev + (anim.targetZoom - prev) * LERP;
+      const done = Math.abs(anim.targetZoom - next) < 0.0005;
+      const z = done ? anim.targetZoom : next;
+
+      // Update zoom state + ref
+      zoomRef.current = z;
+      setZoom(z);
+
+      // Immediately adjust scroll so focal content point stays fixed
+      if (scrollEl) {
+        scrollEl.scrollLeft = anim.focalContentX * z - anim.focalViewportX;
+        scrollEl.scrollTop  = anim.focalContentY * z - anim.focalViewportY;
+      }
+
+      if (done) {
+        animRef.current = null;
+      } else {
+        anim.rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    animRef.current.rafId = requestAnimationFrame(tick);
   }, [setZoom]);
 
   // ── Wheel zoom (desktop) ──────────────────────────────────────────────────
@@ -522,9 +578,17 @@ export default function PlanViewer() {
   };
 
   // ── Toolbar zoom step buttons ──────────────────────────────────────────────
-  const zoomIn = () => applyZoomDelta(0.25);
+  // Zoom toward the center of the viewport
+  const zoomIn  = () => applyZoomDelta(0.25);
   const zoomOut = () => applyZoomDelta(-0.25);
-  const zoomReset = () => setZoom(1);
+  // Animate reset: drive zoom → 1.0 via the same rAF loop
+  const zoomReset = () => {
+    const scrollEl = scrollAreaRef.current;
+    if (!scrollEl) { setZoom(1); return; }
+    const rect = scrollEl.getBoundingClientRect();
+    const delta = 1.0 - zoomRef.current;
+    if (Math.abs(delta) > 0.001) applyZoomDelta(delta, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  };
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -697,8 +761,7 @@ export default function PlanViewer() {
                 position: "absolute",
                 top: 0,
                 left: 0,
-                // Smooth zoom transition — GPU composited, no layout
-                transition: "transform 0.08s cubic-bezier(0.23, 1, 0.32, 1)",
+                // No CSS transition — rAF loop drives smooth zoom + scroll in sync
               }}
             >
               {/* PDF Pages */}
