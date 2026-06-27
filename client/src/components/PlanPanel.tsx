@@ -42,6 +42,7 @@ import {
   Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CONDUIT_SIZES, type ConduitSize } from "@/contexts/AppContext";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -62,6 +63,7 @@ interface MeasureRun {
   name: string;
   points: NormPoint[];
   totalFeet: number | null;
+  conduitSize: ConduitSize;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -98,7 +100,14 @@ interface PlanPanelProps {
 export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
+  const [pdfHash, setPdfHash] = useLocalStorage<string | null>(`bp_pdfhash_${tabKey}`, null);
   const [numPages, setNumPages] = useState<number>(0);
+
+  // ── Scale persistence keyed by PDF hash ────────────────────────────────────
+  // scaleRatio and scalePoints are stored per-PDF so reopening the same file
+  // auto-restores the previously set scale without re-clicking.
+  const scaleStorageKey = pdfHash ? `bp_scale_${tabKey}_${pdfHash}` : `bp_scale_${tabKey}_nohash`;
+  const scalePointsKey  = pdfHash ? `bp_scalepts_${tabKey}_${pdfHash}` : `bp_scalepts_${tabKey}_nohash`;
 
   // ── Zoom state ─────────────────────────────────────────────────────────────
   const [zoom, setZoom] = useLocalStorage<number>(`bp_zoom_${tabKey}`, 1.0);
@@ -110,14 +119,14 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
   const displayZoom = zoom;
   const displayZoomRef = zoomRef;
 
-  // ── Scale state ────────────────────────────────────────────────────────────
-  const [scaleRatio, setScaleRatio] = useLocalStorage<number | null>(`bp_scale_${tabKey}`, null);
-  const [scalePoints, setScalePoints] = useLocalStorage<NormPoint[]>(`bp_scalepts_${tabKey}`, []);
+  // ── Scale state (persisted per PDF hash) ─────────────────────────────────
+  const [scaleRatio, setScaleRatio] = useLocalStorage<number | null>(scaleStorageKey, null);
+  const [scalePoints, setScalePoints] = useLocalStorage<NormPoint[]>(scalePointsKey, []);
   const [knownDistance, setKnownDistance] = useState<string>("");
 
   // ── Named measurement runs ─────────────────────────────────────────────────
   const [runs, setRuns] = useLocalStorage<MeasureRun[]>(`bp_runs_${tabKey}`, [
-    { id: "default", name: "Run 1", points: [], totalFeet: null },
+    { id: "default", name: "Run 1", points: [], totalFeet: null, conduitSize: "3/4" },
   ]);
   const [activeRunId, setActiveRunId] = useLocalStorage<string>(`bp_activerun_${tabKey}`, "default");
 
@@ -368,15 +377,22 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
     if (file.type !== "application/pdf") { toast.error("Please upload a PDF file."); return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setPdfFile(ev.target?.result as string);
-      setScaleRatio(null);
-      setScalePoints([]);
-      setRuns([{ id: "default", name: "Run 1", points: [], totalFeet: null }]);
+      const dataUrl = ev.target?.result as string;
+      // Compute a lightweight hash from the first 2KB of the data URL for scale persistence
+      const sample = dataUrl.slice(0, 2048);
+      let h = 0;
+      for (let i = 0; i < sample.length; i++) { h = (Math.imul(31, h) + sample.charCodeAt(i)) | 0; }
+      const hash = (h >>> 0).toString(16);
+      setPdfHash(hash);
+      setPdfFile(dataUrl);
+      // Runs reset on new file; scale is restored automatically via hash-keyed localStorage
+      setRuns([{ id: "default", name: "Run 1", points: [], totalFeet: null, conduitSize: "3/4" }]);
       setActiveRunId("default");
       setMode("none");
       modeRef.current = "none";
       pageSizesRef.current = [];
       setPageSizesReady(0);
+      toast.success("PDF loaded. Scale auto-restored if previously set.");
     };
     reader.readAsDataURL(file);
   };
@@ -611,10 +627,27 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
   const addRun = useCallback(() => {
     const id = nanoid6();
     const name = `Run ${runs.length + 1}`;
-    setRuns((prev) => [...prev, { id, name, points: [], totalFeet: null }]);
+    setRuns((prev) => [...prev, { id, name, points: [], totalFeet: null, conduitSize: "3/4" }]);
     setActiveRunId(id);
     toast.info(`New run "${name}" created.`);
   }, [runs.length, setRuns, setActiveRunId]);
+
+  const setRunConduitSize = useCallback((runId: string, size: ConduitSize) => {
+    setRuns((prev) => prev.map((r) => r.id === runId ? { ...r, conduitSize: size } : r));
+  }, [setRuns]);
+
+  const renameRun = useCallback((runId: string, name: string) => {
+    setRuns((prev) => prev.map((r) => r.id === runId ? { ...r, name } : r));
+  }, [setRuns]);
+
+  const deleteRun = useCallback((runId: string) => {
+    setRuns((prev) => {
+      const next = prev.filter((r) => r.id !== runId);
+      const safe = next.length > 0 ? next : [{ id: nanoid6(), name: "Run 1", points: [], totalFeet: null, conduitSize: "3/4" as ConduitSize }];
+      if (activeRunId === runId) setActiveRunId(safe[0].id);
+      return safe;
+    });
+  }, [activeRunId, setRuns, setActiveRunId]);
 
   // ── Push to calculator ─────────────────────────────────────────────────────
   const handlePush = () => {
@@ -739,31 +772,82 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
         </div>
       </div>
 
-      {/* ── Named Runs Bar ────────────────────────────────────────────── */}
+        {/* ── Named Runs Bar ────────────────────────────────────────────── */}
       {pdfFile && (
         <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border bg-muted/30 shrink-0 overflow-x-auto">
           {runs.map((run, idx) => (
-            <button
+            <div
               key={run.id}
-              onClick={() => setActiveRunId(run.id)}
               className={cn(
-                "flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap transition-all",
+                "flex items-center gap-1 rounded border transition-all",
                 run.id === activeRunId
-                  ? "bg-card border border-border text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-card border-border"
+                  : "border-transparent"
               )}
             >
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ background: RUN_COLORS[idx % RUN_COLORS.length] }}
-              />
-              {run.name}
-              {run.totalFeet !== null && (
-                <span className="font-mono" style={{ color: RUN_COLORS[idx % RUN_COLORS.length] }}>
-                  {run.totalFeet}'
+              <button
+                onClick={() => setActiveRunId(run.id)}
+                className={cn(
+                  "flex items-center gap-1.5 pl-2 pr-1 py-0.5 text-[10px] font-medium whitespace-nowrap transition-all",
+                  run.id === activeRunId ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ background: RUN_COLORS[idx % RUN_COLORS.length] }}
+                />
+                {/* Inline rename on double-click */}
+                <span
+                  onDoubleClick={(e) => {
+                    const span = e.currentTarget;
+                    span.contentEditable = "true";
+                    span.focus();
+                    const range = document.createRange();
+                    range.selectNodeContents(span);
+                    window.getSelection()?.removeAllRanges();
+                    window.getSelection()?.addRange(range);
+                  }}
+                  onBlur={(e) => {
+                    const val = e.currentTarget.textContent?.trim();
+                    e.currentTarget.contentEditable = "false";
+                    if (val) renameRun(run.id, val);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLElement).blur(); }
+                    if (e.key === "Escape") { (e.target as HTMLElement).contentEditable = "false"; }
+                  }}
+                  suppressContentEditableWarning
+                >
+                  {run.name}
                 </span>
+                {run.totalFeet !== null && (
+                  <span className="font-mono" style={{ color: RUN_COLORS[idx % RUN_COLORS.length] }}>
+                    {run.totalFeet}'
+                  </span>
+                )}
+              </button>
+              {/* Conduit size selector for this run */}
+              {run.id === activeRunId && (
+                <select
+                  value={run.conduitSize ?? "3/4"}
+                  onChange={(e) => setRunConduitSize(run.id, e.target.value as ConduitSize)}
+                  className="h-5 text-[9px] bg-background border border-border rounded px-0.5 text-muted-foreground cursor-pointer"
+                  title="Conduit size for this run"
+                >
+                  {CONDUIT_SIZES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
               )}
-            </button>
+              {/* Delete run button (only if more than 1 run) */}
+              {runs.length > 1 && run.id === activeRunId && (
+                <button
+                  onClick={() => deleteRun(run.id)}
+                  className="px-1 py-0.5 text-[9px] text-muted-foreground hover:text-destructive transition-colors"
+                  title="Delete this run"
+                >✕</button>
+              )}
+            </div>
           ))}
           <button
             onClick={addRun}
