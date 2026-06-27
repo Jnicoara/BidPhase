@@ -5,17 +5,23 @@
  *   1. CSV  — flat spreadsheet for supplier ordering / data import
  *   2. PDF  — formatted Bill of Materials for printing / emailing
  *
+ * PDF flow:
+ *   1. User clicks "Export PDF"
+ *   2. A modal opens with a short form (job name, contractor name, address)
+ *      and a live first-page preview rendered to a <canvas> via jsPDF's
+ *      output("datauristring") → <img>.
+ *   3. User clicks "Download PDF" to save the file.
+ *
  * Both exports aggregate materials from all three active projects.
  * Civil export reads RunItem[] from civilState.runs (fully typed — no casts).
  *
- * Design: Safety Yellow (#F5C518) fixed bottom-right button with a
- * slide-up dropdown that reveals CSV and PDF options.
+ * Design: Safety Yellow (#F5C518) fixed bottom-right button.
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useApp } from "@/contexts/AppContext";
 import type { RunItem } from "@/contexts/AppContext";
 import { toast } from "sonner";
-import { Download, FileText, FileSpreadsheet, ChevronUp } from "lucide-react";
+import { Download, FileText, FileSpreadsheet, ChevronUp, X, Printer } from "lucide-react";
 import { jsPDF } from "jspdf";
 
 // ─── Shared data helpers ──────────────────────────────────────────────────────
@@ -42,151 +48,41 @@ function calcWire(feet: number, conductors: number): number {
   return parseFloat((feet * conductors * 1.1).toFixed(1));
 }
 
-// ─── CSV export ───────────────────────────────────────────────────────────────
+// ─── Job info type ────────────────────────────────────────────────────────────
 
-function escapeCSV(val: string | number): string {
-  const s = String(val);
-  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
+export interface JobInfo {
+  jobName: string;
+  contractorName: string;
+  address: string;
 }
 
-function buildCSV(rows: string[][]): string {
-  return rows.map((row) => row.map(escapeCSV).join(",")).join("\n");
-}
-
-function exportCSV(
-  runs: RunItem[],
-  assemblyState: ReturnType<typeof useApp>["assemblyState"],
-  roomState: ReturnType<typeof useApp>["roomState"],
-  civilName: string,
-  commercialName: string,
-  residentialName: string,
-): void {
-  const rows: string[][] = [];
-
-  rows.push(["BidPhase — Material Export", "", "", "", "", "", "", "", ""]);
-  rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", "", "", ""]);
-  rows.push([]);
-
-  // Section 1: Civil
-  if (runs.length > 0) {
-    rows.push([`SECTION: Civil & Underground — ${civilName}`, "", "", "", "", "", "", "", ""]);
-    rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft w/ 10% slack)", "Conductors", "Conductor Spec"]);
-
-    for (const run of runs) {
-      const sticks = calcSticks(run.feet);
-      const wire   = calcWire(run.feet, run.conductors);
-      rows.push([
-        run.name,
-        run.pageNumber != null ? String(run.pageNumber) : "",
-        run.conduitType ?? "EMT",
-        `${run.conduitSize}"`,
-        String(run.feet),
-        String(sticks),
-        String(wire),
-        String(run.conductors),
-        conductorSpec(run),
-      ]);
-      const hasFittings = Object.values(run.fittings).some((v) => v > 0);
-      if (hasFittings) {
-        rows.push(["  Fittings:", "", "", "", "", "", "", "", ""]);
-        for (const [key, count] of Object.entries(run.fittings)) {
-          if (count > 0) rows.push([`    ${FITTING_LABELS[key] ?? key}`, "EA", String(count), "", "", "", "", "", ""]);
-        }
-      }
-    }
-
-    const totalSticks = runs.reduce((a, r) => a + calcSticks(r.feet), 0);
-    const totalWire   = runs.reduce((a, r) => a + calcWire(r.feet, r.conductors), 0);
-    rows.push(["TOTAL", "", "", "", "", String(totalSticks), String(parseFloat(totalWire.toFixed(1))), "", ""]);
-    rows.push([]);
-  }
-
-  // Section 2: Commercial
-  if (assemblyState.materials.length > 0) {
-    rows.push([`SECTION: Commercial — ${commercialName}`, "", "", "", "", "", "", "", ""]);
-    rows.push([`Assembly: ${assemblyState.assemblyId} × ${assemblyState.quantity}`, "", "", "", "", "", "", "", ""]);
-    rows.push(["Description", "Unit", "Quantity", "Unit Cost", "Ext. Cost", "", "", "", ""]);
-    for (const m of assemblyState.materials) {
-      rows.push([m.description, m.unit, String(m.quantity), `$${m.unitCost.toFixed(2)}`, `$${(m.unitCost * m.quantity).toFixed(2)}`, "", "", "", ""]);
-    }
-    rows.push(["Total Labor Hours", "HRS", String(assemblyState.totalLaborHours), "", "", "", "", "", ""]);
-    rows.push([]);
-  }
-
-  // Section 3: Residential
-  if (roomState.materials.length > 0) {
-    rows.push([`SECTION: Residential — ${residentialName}`, "", "", "", "", "", "", "", ""]);
-    rows.push([`Room: ${roomState.roomId}`, "", "", "", "", "", "", "", ""]);
-    rows.push(["Description", "Unit", "Quantity", "", "", "", "", "", ""]);
-    for (const m of roomState.materials) {
-      rows.push([m.description, m.unit, String(m.quantity), "", "", "", "", "", ""]);
-    }
-    rows.push([]);
-  }
-
-  if (rows.length <= 3) {
-    toast.error("No data to export. Open a project and add runs or assemblies first.");
-    return;
-  }
-
-  const csv  = buildCSV(rows);
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = `BidPhase_Export_${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast.success("Material list exported as CSV.");
-}
-
-// ─── PDF export ───────────────────────────────────────────────────────────────
+// ─── PDF builder (pure function — returns jsPDF instance) ─────────────────────
 
 /**
- * Generates a formatted Bill of Materials PDF using jsPDF.
- *
- * Layout:
- *   - Cover header with BidPhase branding + generation timestamp
- *   - One section per tab (Civil / Commercial / Residential)
- *   - Civil: table with run rows + fittings sub-rows + project totals
- *   - Commercial: assembly details + materials table
- *   - Residential: room materials table
- *   - Page numbers in footer
+ * Builds the full Bill of Materials PDF document.
+ * Accepts optional JobInfo to populate the cover header.
+ * Returns the jsPDF instance so callers can either save or render a preview.
  */
-function exportPDF(
+function buildPDF(
   runs: RunItem[],
   assemblyState: ReturnType<typeof useApp>["assemblyState"],
   roomState: ReturnType<typeof useApp>["roomState"],
   civilName: string,
   commercialName: string,
   residentialName: string,
-): void {
-  const hasData =
-    runs.length > 0 ||
-    assemblyState.materials.length > 0 ||
-    roomState.materials.length > 0;
-
-  if (!hasData) {
-    toast.error("No data to export. Open a project and add runs or assemblies first.");
-    return;
-  }
-
+  jobInfo: JobInfo,
+): jsPDF {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const PW = doc.internal.pageSize.getWidth();   // 612
   const PH = doc.internal.pageSize.getHeight();  // 792
-  const ML = 48;   // margin left
-  const MR = 48;   // margin right
-  const CW = PW - ML - MR;  // content width
+  const ML = 48;
+  const MR = 48;
+  const CW = PW - ML - MR;
   const dateStr = new Date().toLocaleString();
 
   // ── Color palette ────────────────────────────────────────────────────────
-  const YELLOW  = [245, 197, 24]  as [number, number, number];  // #F5C518
-  const DARK    = [18, 18, 18]    as [number, number, number];  // near-black
+  const YELLOW  = [245, 197, 24]  as [number, number, number];
+  const DARK    = [18, 18, 18]    as [number, number, number];
   const MID     = [60, 60, 60]    as [number, number, number];
   const LIGHT   = [120, 120, 120] as [number, number, number];
   const RULE    = [220, 220, 220] as [number, number, number];
@@ -210,7 +106,7 @@ function exportPDF(
   function drawFooter() {
     doc.setFontSize(8);
     doc.setTextColor(...LIGHT);
-    doc.text(`BidPhase — Material Export  ·  Page ${pageNum}`, ML, PH - 24);
+    doc.text(`BidPhase — Bill of Materials  ·  Page ${pageNum}`, ML, PH - 24);
     doc.text(dateStr, PW - MR, PH - 24, { align: "right" });
     doc.setDrawColor(...RULE);
     doc.setLineWidth(0.5);
@@ -218,11 +114,13 @@ function exportPDF(
   }
 
   // ── Cover header ─────────────────────────────────────────────────────────
-  // Yellow accent bar
+  // Top yellow accent bar
   doc.setFillColor(...YELLOW);
   doc.rect(0, 0, PW, 6, "F");
 
   y = 48;
+
+  // BidPhase brand + "Bill of Materials" subtitle
   doc.setFontSize(22);
   doc.setTextColor(...DARK);
   doc.setFont("helvetica", "bold");
@@ -232,13 +130,43 @@ function exportPDF(
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...LIGHT);
   y += 16;
-  doc.text("Material Export — Bill of Materials", ML, y);
+  doc.text("Bill of Materials", ML, y);
 
+  // Date top-right
   doc.setFontSize(9);
   doc.setTextColor(...LIGHT);
   doc.text(dateStr, PW - MR, 48, { align: "right" });
 
-  // Divider
+  // ── Job / contractor info block ──────────────────────────────────────────
+  // Rendered to the right of the BidPhase brand, or below if fields are filled
+  const hasJobInfo = jobInfo.jobName || jobInfo.contractorName || jobInfo.address;
+  if (hasJobInfo) {
+    // Right-aligned info block
+    let infoY = 48;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...DARK);
+    if (jobInfo.jobName) {
+      doc.text(jobInfo.jobName, PW - MR, infoY, { align: "right" });
+      infoY += 13;
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...MID);
+    if (jobInfo.contractorName) {
+      doc.text(jobInfo.contractorName, PW - MR, infoY, { align: "right" });
+      infoY += 12;
+    }
+    if (jobInfo.address) {
+      // Address may be multi-line — split on newlines or commas
+      const lines = jobInfo.address.split(/\n|,\s*/).filter(Boolean);
+      for (const line of lines) {
+        doc.text(line.trim(), PW - MR, infoY, { align: "right" });
+        infoY += 11;
+      }
+    }
+  }
+
+  // Yellow divider
   y += 14;
   doc.setDrawColor(...YELLOW);
   doc.setLineWidth(1.5);
@@ -333,14 +261,14 @@ function exportPDF(
     sectionHeader("Civil & Underground", civilName);
 
     const civilCols = [
-      { label: "Run Name",     width: 110 },
-      { label: "Pg",           width: 24,  align: "right" as const },
-      { label: "Type",         width: 38 },
-      { label: "Size",         width: 38 },
-      { label: "Dist (ft)",    width: 56,  align: "right" as const },
-      { label: "Sticks",       width: 44,  align: "right" as const },
-      { label: "Wire (ft)",    width: 56,  align: "right" as const },
-      { label: "Cond.",        width: 36,  align: "right" as const },
+      { label: "Run Name",       width: 110 },
+      { label: "Pg",             width: 24,  align: "right" as const },
+      { label: "Type",           width: 38 },
+      { label: "Size",           width: 38 },
+      { label: "Dist (ft)",      width: 56,  align: "right" as const },
+      { label: "Sticks",         width: 44,  align: "right" as const },
+      { label: "Wire (ft)",      width: 56,  align: "right" as const },
+      { label: "Cond.",          width: 36,  align: "right" as const },
       { label: "Conductor Spec", width: CW - 402 },
     ];
 
@@ -373,7 +301,6 @@ function exportPDF(
       );
       rowIdx++;
 
-      // Fittings sub-rows
       for (const [key, count] of Object.entries(run.fittings)) {
         if (count > 0) {
           tableRow(
@@ -388,9 +315,9 @@ function exportPDF(
     }
 
     totalsRow("TOTAL", [String(totalSticks), totalWire.toFixed(1)], [
-      { width: 110 }, { width: 24 }, { width: 38 }, { width: 38 }, { width: 56 }, { width: 44 }, { width: 56 },
+      { width: 110 }, { width: 24 }, { width: 38 }, { width: 38 },
+      { width: 56 }, { width: 44 }, { width: 56 },
     ]);
-
     y += 16;
   }
 
@@ -399,7 +326,6 @@ function exportPDF(
     checkY(60);
     sectionHeader("Commercial Assembly", commercialName);
 
-    // Assembly info row
     doc.setFontSize(8.5);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...MID);
@@ -407,11 +333,11 @@ function exportPDF(
     y += 20;
 
     const commCols = [
-      { label: "Description",  width: CW - 220 },
-      { label: "Unit",         width: 50 },
-      { label: "Qty",          width: 50,  align: "right" as const },
-      { label: "Unit Cost",    width: 60,  align: "right" as const },
-      { label: "Ext. Cost",    width: 60,  align: "right" as const },
+      { label: "Description", width: CW - 220 },
+      { label: "Unit",        width: 50 },
+      { label: "Qty",         width: 50,  align: "right" as const },
+      { label: "Unit Cost",   width: 60,  align: "right" as const },
+      { label: "Ext. Cost",   width: 60,  align: "right" as const },
     ];
 
     tableHeader(commCols);
@@ -431,7 +357,6 @@ function exportPDF(
       { width: CW - 220 }, { width: 50 }, { width: 50 }, { width: 60 }, { width: 60 },
     ]);
 
-    // Labor hours
     checkY(20);
     y += 6;
     doc.setFontSize(8.5);
@@ -453,24 +378,302 @@ function exportPDF(
     y += 20;
 
     const resCols = [
-      { label: "Description",  width: CW - 120 },
-      { label: "Unit",         width: 60 },
-      { label: "Qty",          width: 60, align: "right" as const },
+      { label: "Description", width: CW - 120 },
+      { label: "Unit",        width: 60 },
+      { label: "Qty",         width: 60, align: "right" as const },
     ];
 
     tableHeader(resCols);
-
     roomState.materials.forEach((m, i) => {
       tableRow(resCols, [m.description, m.unit, String(m.quantity)], i % 2 === 1);
     });
-
     y += 10;
   }
 
   drawFooter();
+  return doc;
+}
 
-  doc.save(`BidPhase_BOM_${new Date().toISOString().slice(0, 10)}.pdf`);
-  toast.success("Bill of Materials exported as PDF.");
+// ─── CSV export ───────────────────────────────────────────────────────────────
+
+function escapeCSV(val: string | number): string {
+  const s = String(val);
+  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function buildCSV(rows: string[][]): string {
+  return rows.map((row) => row.map(escapeCSV).join(",")).join("\n");
+}
+
+function exportCSV(
+  runs: RunItem[],
+  assemblyState: ReturnType<typeof useApp>["assemblyState"],
+  roomState: ReturnType<typeof useApp>["roomState"],
+  civilName: string,
+  commercialName: string,
+  residentialName: string,
+): void {
+  const rows: string[][] = [];
+
+  rows.push(["BidPhase — Material Export", "", "", "", "", "", "", "", ""]);
+  rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", "", "", ""]);
+  rows.push([]);
+
+  if (runs.length > 0) {
+    rows.push([`SECTION: Civil & Underground — ${civilName}`, "", "", "", "", "", "", "", ""]);
+    rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft w/ 10% slack)", "Conductors", "Conductor Spec"]);
+    for (const run of runs) {
+      rows.push([
+        run.name,
+        run.pageNumber != null ? String(run.pageNumber) : "",
+        run.conduitType ?? "EMT",
+        `${run.conduitSize}"`,
+        String(run.feet),
+        String(calcSticks(run.feet)),
+        String(calcWire(run.feet, run.conductors)),
+        String(run.conductors),
+        conductorSpec(run),
+      ]);
+      const hasFittings = Object.values(run.fittings).some((v) => v > 0);
+      if (hasFittings) {
+        rows.push(["  Fittings:", "", "", "", "", "", "", "", ""]);
+        for (const [key, count] of Object.entries(run.fittings)) {
+          if (count > 0) rows.push([`    ${FITTING_LABELS[key] ?? key}`, "EA", String(count), "", "", "", "", "", ""]);
+        }
+      }
+    }
+    const totalSticks = runs.reduce((a, r) => a + calcSticks(r.feet), 0);
+    const totalWire   = runs.reduce((a, r) => a + calcWire(r.feet, r.conductors), 0);
+    rows.push(["TOTAL", "", "", "", "", String(totalSticks), String(parseFloat(totalWire.toFixed(1))), "", ""]);
+    rows.push([]);
+  }
+
+  if (assemblyState.materials.length > 0) {
+    rows.push([`SECTION: Commercial — ${commercialName}`, "", "", "", "", "", "", "", ""]);
+    rows.push([`Assembly: ${assemblyState.assemblyId} × ${assemblyState.quantity}`, "", "", "", "", "", "", "", ""]);
+    rows.push(["Description", "Unit", "Quantity", "Unit Cost", "Ext. Cost", "", "", "", ""]);
+    for (const m of assemblyState.materials) {
+      rows.push([m.description, m.unit, String(m.quantity), `$${m.unitCost.toFixed(2)}`, `$${(m.unitCost * m.quantity).toFixed(2)}`, "", "", "", ""]);
+    }
+    rows.push(["Total Labor Hours", "HRS", String(assemblyState.totalLaborHours), "", "", "", "", "", ""]);
+    rows.push([]);
+  }
+
+  if (roomState.materials.length > 0) {
+    rows.push([`SECTION: Residential — ${residentialName}`, "", "", "", "", "", "", "", ""]);
+    rows.push([`Room: ${roomState.roomId}`, "", "", "", "", "", "", "", ""]);
+    rows.push(["Description", "Unit", "Quantity", "", "", "", "", "", ""]);
+    for (const m of roomState.materials) {
+      rows.push([m.description, m.unit, String(m.quantity), "", "", "", "", "", ""]);
+    }
+    rows.push([]);
+  }
+
+  if (rows.length <= 3) {
+    toast.error("No data to export. Open a project and add runs or assemblies first.");
+    return;
+  }
+
+  const csv  = buildCSV(rows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `BidPhase_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast.success("Material list exported as CSV.");
+}
+
+// ─── Print Preview Modal ──────────────────────────────────────────────────────
+
+/**
+ * Modal that shows:
+ *   - A short form for job name, contractor name, and address
+ *   - A live preview image of the first page (regenerated on form change)
+ *   - A "Download PDF" button that saves the full document
+ */
+function PrintPreviewModal({
+  runs,
+  assemblyState,
+  roomState,
+  civilName,
+  commercialName,
+  residentialName,
+  onClose,
+}: {
+  runs: RunItem[];
+  assemblyState: ReturnType<typeof useApp>["assemblyState"];
+  roomState: ReturnType<typeof useApp>["roomState"];
+  civilName: string;
+  commercialName: string;
+  residentialName: string;
+  onClose: () => void;
+}) {
+  const [jobInfo, setJobInfo] = useState<JobInfo>({
+    jobName: "",
+    contractorName: "",
+    address: "",
+  });
+  // Data URI of the first page preview image
+  const [previewSrc, setPreviewSrc] = useState<string>("");
+
+  // Regenerate preview whenever jobInfo changes (debounced 300ms)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const regeneratePreview = useCallback(() => {
+    const doc = buildPDF(runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo);
+    // jsPDF can output the first page as a data URI for <img> preview
+    const dataUri = doc.output("datauristring");
+    setPreviewSrc(dataUri);
+  }, [runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo]);
+
+  // Initial render + debounced re-render on form change
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(regeneratePreview, 300);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [regeneratePreview]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const handleDownload = () => {
+    const doc = buildPDF(runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo);
+    const jobSlug = jobInfo.jobName
+      ? `_${jobInfo.jobName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "")}`
+      : "";
+    doc.save(`BidPhase_BOM${jobSlug}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    toast.success("Bill of Materials downloaded.");
+    onClose();
+  };
+
+  const field = (
+    label: string,
+    key: keyof JobInfo,
+    placeholder: string,
+    multiline = false,
+  ) => (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-medium text-[#999]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+        {label}
+      </label>
+      {multiline ? (
+        <textarea
+          rows={2}
+          value={jobInfo[key]}
+          onChange={(e) => setJobInfo((p) => ({ ...p, [key]: e.target.value }))}
+          placeholder={placeholder}
+          className="bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-sm text-white
+                     placeholder:text-white/20 focus:outline-none focus:border-[#F5C518]/60
+                     resize-none transition-colors"
+          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+        />
+      ) : (
+        <input
+          type="text"
+          value={jobInfo[key]}
+          onChange={(e) => setJobInfo((p) => ({ ...p, [key]: e.target.value }))}
+          placeholder={placeholder}
+          className="bg-[#111] border border-white/10 rounded-lg px-3 py-2 text-sm text-white
+                     placeholder:text-white/20 focus:outline-none focus:border-[#F5C518]/60
+                     transition-colors"
+          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+        />
+      )}
+    </div>
+  );
+
+  return (
+    // Backdrop
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm
+                 animate-in fade-in duration-150"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      {/* Modal panel */}
+      <div
+        className="relative flex flex-col md:flex-row gap-0 bg-[#141414] border border-white/10
+                   rounded-2xl shadow-2xl overflow-hidden w-full max-w-4xl mx-4
+                   animate-in slide-in-from-bottom-4 fade-in duration-200"
+        style={{ maxHeight: "90vh" }}
+      >
+        {/* ── Left: form ── */}
+        <div className="flex flex-col gap-5 p-6 md:w-72 shrink-0 border-r border-white/10 overflow-y-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                Export PDF
+              </h2>
+              <p className="text-xs text-[#777] mt-0.5">Add job details to the header</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-[#666] hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Form fields */}
+          {field("Job Name", "jobName", "e.g. Main St. Substation")}
+          {field("Contractor / Company", "contractorName", "e.g. Acme Electric Co.")}
+          {field("Address", "address", "123 Main St, City, ST 00000", true)}
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Download button */}
+          <button
+            onClick={handleDownload}
+            className="flex items-center justify-center gap-2 w-full py-3 rounded-xl
+                       bg-[#F5C518] text-black font-semibold text-sm
+                       hover:bg-[#e0b315] active:scale-95 transition-all duration-150"
+            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+          >
+            <Printer size={15} />
+            Download PDF
+          </button>
+        </div>
+
+        {/* ── Right: preview ── */}
+        <div className="flex-1 bg-[#0d0d0d] flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
+            <span className="text-xs font-medium text-[#666]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              First-page preview
+            </span>
+            <span className="text-xs text-[#444]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              Updates as you type
+            </span>
+          </div>
+          <div className="flex-1 overflow-auto p-4 flex items-start justify-center">
+            {previewSrc ? (
+              <img
+                src={previewSrc}
+                alt="PDF first-page preview"
+                className="w-full max-w-[520px] rounded-lg shadow-xl border border-white/5"
+                style={{ imageRendering: "crisp-edges" }}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-40 text-[#444] text-sm">
+                Generating preview…
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -485,7 +688,8 @@ export default function ExportButton() {
     activeResidentialProject,
   } = useApp();
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]           = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -502,64 +706,89 @@ export default function ExportButton() {
 
   const runs: RunItem[] = civilState.runs ?? [];
 
+  const hasData =
+    runs.length > 0 ||
+    assemblyState.materials.length > 0 ||
+    roomState.materials.length > 0;
+
   const handleCSV = () => {
     setOpen(false);
     exportCSV(runs, assemblyState, roomState, activeCivilProject.name, activeCommercialProject.name, activeResidentialProject.name);
   };
 
-  const handlePDF = () => {
+  const handlePDFClick = () => {
     setOpen(false);
-    exportPDF(runs, assemblyState, roomState, activeCivilProject.name, activeCommercialProject.name, activeResidentialProject.name);
+    if (!hasData) {
+      toast.error("No data to export. Open a project and add runs or assemblies first.");
+      return;
+    }
+    setShowPreview(true);
   };
 
   return (
-    <div
-      ref={menuRef}
-      className="fixed bottom-20 right-5 md:bottom-6 md:right-6 z-40 flex flex-col items-end gap-2"
-    >
-      {/* Dropdown menu — slides up when open */}
-      {open && (
-        <div
-          className="flex flex-col gap-1 bg-[#1a1a1a] border border-white/10 rounded-xl
-                     shadow-xl shadow-black/40 overflow-hidden
-                     animate-in slide-in-from-bottom-2 fade-in duration-150"
-        >
-          <button
-            onClick={handlePDF}
-            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white
-                       hover:bg-white/10 transition-colors duration-100 text-left"
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-          >
-            <FileText size={15} className="text-[#F5C518]" />
-            Export PDF
-          </button>
-          <div className="h-px bg-white/10 mx-3" />
-          <button
-            onClick={handleCSV}
-            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white
-                       hover:bg-white/10 transition-colors duration-100 text-left"
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-          >
-            <FileSpreadsheet size={15} className="text-[#F5C518]" />
-            Export CSV
-          </button>
-        </div>
+    <>
+      {/* Print Preview Modal */}
+      {showPreview && (
+        <PrintPreviewModal
+          runs={runs}
+          assemblyState={assemblyState}
+          roomState={roomState}
+          civilName={activeCivilProject.name}
+          commercialName={activeCommercialProject.name}
+          residentialName={activeResidentialProject.name}
+          onClose={() => setShowPreview(false)}
+        />
       )}
 
-      {/* Main toggle button */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        title="Export Material List"
-        className="flex items-center gap-2 px-4 py-3 rounded-full
-                   bg-[#F5C518] text-black font-semibold text-sm
-                   shadow-lg shadow-[#F5C518]/20
-                   hover:bg-[#e0b315] active:scale-95
-                   transition-all duration-150"
-        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+      {/* Floating export button + dropdown */}
+      <div
+        ref={menuRef}
+        className="fixed bottom-20 right-5 md:bottom-6 md:right-6 z-40 flex flex-col items-end gap-2"
       >
-        {open ? <ChevronUp size={16} /> : <Download size={16} />}
-        <span className="hidden sm:inline">Export</span>
-      </button>
-    </div>
+        {/* Dropdown menu */}
+        {open && (
+          <div
+            className="flex flex-col gap-1 bg-[#1a1a1a] border border-white/10 rounded-xl
+                       shadow-xl shadow-black/40 overflow-hidden
+                       animate-in slide-in-from-bottom-2 fade-in duration-150"
+          >
+            <button
+              onClick={handlePDFClick}
+              className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white
+                         hover:bg-white/10 transition-colors duration-100 text-left"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            >
+              <FileText size={15} className="text-[#F5C518]" />
+              Export PDF
+            </button>
+            <div className="h-px bg-white/10 mx-3" />
+            <button
+              onClick={handleCSV}
+              className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white
+                         hover:bg-white/10 transition-colors duration-100 text-left"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            >
+              <FileSpreadsheet size={15} className="text-[#F5C518]" />
+              Export CSV
+            </button>
+          </div>
+        )}
+
+        {/* Main toggle button */}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          title="Export Material List"
+          className="flex items-center gap-2 px-4 py-3 rounded-full
+                     bg-[#F5C518] text-black font-semibold text-sm
+                     shadow-lg shadow-[#F5C518]/20
+                     hover:bg-[#e0b315] active:scale-95
+                     transition-all duration-150"
+          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+        >
+          {open ? <ChevronUp size={16} /> : <Download size={16} />}
+          <span className="hidden sm:inline">Export</span>
+        </button>
+      </div>
+    </>
   );
 }
