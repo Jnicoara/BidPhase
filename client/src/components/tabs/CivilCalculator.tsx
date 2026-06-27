@@ -32,6 +32,21 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+// ─── Conductor materials & sizes ────────────────────────────────────────────
+const CONDUCTOR_MATERIALS = [
+  { id: "CU", label: "Copper",   short: "Cu" },
+  { id: "AL", label: "Aluminum", short: "Al" },
+] as const;
+type ConductorMaterial = typeof CONDUCTOR_MATERIALS[number]["id"];
+
+// Standard AWG + kcmil conductor sizes (NEC Table 310.12)
+const CONDUCTOR_SIZES = [
+  "14", "12", "10", "8", "6", "4", "3", "2", "1",
+  "1/0", "2/0", "3/0", "4/0",
+  "250", "300", "350", "400", "500", "600", "750", "1000",
+] as const;
+type ConductorSize = typeof CONDUCTOR_SIZES[number];
+
 // ─── Conduit material types ───────────────────────────────────────────────────
 const CONDUIT_TYPES = [
   { id: "EMT",  label: "EMT"  },
@@ -76,6 +91,8 @@ interface RunItem {
   conduitSize: string;
   conduitType: ConduitType;
   conductors: number;
+  conductorMaterial: ConductorMaterial;
+  conductorSize: ConductorSize;
   fittings: FittingCounts;
 }
 
@@ -85,6 +102,12 @@ function defaultFittings(): FittingCounts {
 
 function calcWire(feet: number, conductors: number) {
   return parseFloat((feet * conductors * 1.1).toFixed(1));
+}
+
+function conductorLabel(mat: ConductorMaterial, size: ConductorSize) {
+  const isKcmil = Number(size) >= 250 || ["1/0","2/0","3/0","4/0"].includes(size);
+  const unit = isKcmil && !size.includes("/") ? " kcmil" : " AWG";
+  return `#${size}${unit} ${mat === "CU" ? "Cu" : "Al"}`;
 }
 
 function calcSticks(feet: number) {
@@ -254,6 +277,48 @@ function RunCard({
           </div>
         </div>
 
+        {/* Conductor material */}
+        <div className="space-y-1.5">
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Material</Label>
+          <div className="flex gap-2">
+            {CONDUCTOR_MATERIALS.map((cm) => (
+              <button
+                key={cm.id}
+                onClick={() => onUpdate(run.id, { conductorMaterial: cm.id as ConductorMaterial })}
+                className={cn(
+                  "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
+                  (run.conductorMaterial ?? "CU") === cm.id
+                    ? "bg-yellow-400 text-black border-yellow-400"
+                    : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                )}
+              >
+                {cm.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Conductor size */}
+        <div className="space-y-1.5">
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Size</Label>
+          <div className="grid grid-cols-5 gap-1">
+            {CONDUCTOR_SIZES.map((sz) => (
+              <button
+                key={sz}
+                onClick={() => onUpdate(run.id, { conductorSize: sz as ConductorSize })}
+                className={cn(
+                  "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                  (run.conductorSize ?? "12") === sz
+                    ? "bg-yellow-400 text-black border-yellow-400"
+                    : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                )}
+              >
+                {sz}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Calculated outputs */}
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-muted/20 rounded-lg p-2.5">
@@ -317,77 +382,160 @@ function RunCard({
 function CrossPageTotals({ runs }: { runs: RunItem[] }) {
   if (runs.length === 0) return null;
 
-  const totalFeet = runs.reduce((a, r) => a + r.feet, 0);
-  const totalSticks = runs.reduce((a, r) => a + calcSticks(r.feet), 0);
-  const totalWire = runs.reduce((a, r) => a + calcWire(r.feet, r.conductors), 0);
+  const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
 
-  const totalFittings: FittingCounts = runs.reduce(
-    (acc, r) => {
-      const f = r.fittings;
-      return {
-        connector: acc.connector + f.connector,
-        coupling:  acc.coupling  + f.coupling,
-        lb:        acc.lb        + f.lb,
-        elbow90:   acc.elbow90   + f.elbow90,
-        elbow45:   acc.elbow45   + f.elbow45,
-        sweep:     acc.sweep     + f.sweep,
-        offset:    acc.offset    + f.offset,
-      };
-    },
-    defaultFittings()
+  // ── Conduit breakdown by type+size ──────────────────────────────────────────
+  type ConduitKey = string; // e.g. "EMT 3/4""
+  const conduitMap = new Map<ConduitKey, { type: string; size: string; feet: number; sticks: number }>();
+  for (const r of runs) {
+    const key = `${r.conduitType ?? "EMT"} ${r.conduitSize}"`;
+    const existing = conduitMap.get(key);
+    if (existing) {
+      existing.feet   += r.feet;
+      existing.sticks += calcSticks(r.feet);
+    } else {
+      conduitMap.set(key, { type: r.conduitType ?? "EMT", size: r.conduitSize, feet: r.feet, sticks: calcSticks(r.feet) });
+    }
+  }
+  const conduitRows = Array.from(conduitMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+  // ── Wire breakdown by conductor spec ────────────────────────────────────────
+  type WireKey = string; // e.g. "#12 AWG Cu"
+  const wireMap = new Map<WireKey, { label: string; qty: number; feet: number }>();
+  for (const r of runs) {
+    if (r.conductors < 1) continue;
+    const mat  = r.conductorMaterial ?? "CU";
+    const size = r.conductorSize ?? "12";
+    const label = conductorLabel(mat as ConductorMaterial, size as ConductorSize);
+    const wireFt = calcWire(r.feet, r.conductors);
+    const existing = wireMap.get(label);
+    if (existing) {
+      existing.feet += wireFt;
+      existing.qty  += r.conductors;
+    } else {
+      wireMap.set(label, { label, qty: r.conductors, feet: wireFt });
+    }
+  }
+  const wireRows = Array.from(wireMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+  // ── Fittings breakdown by type ───────────────────────────────────────────────
+  // Group by conduit type+size so you know which fittings go where
+  type FittingKey = string; // e.g. "EMT 3/4" — Connectors"
+  const fittingMap = new Map<FittingKey, { conduitSpec: string; fittingLabel: string; count: number }>();
+  for (const r of runs) {
+    const spec = `${r.conduitType ?? "EMT"} ${r.conduitSize}"`;
+    for (const ft of FITTING_TYPES) {
+      const count = r.fittings[ft.id];
+      if (count === 0) continue;
+      const key = `${spec}__${ft.id}`;
+      const existing = fittingMap.get(key);
+      if (existing) {
+        existing.count += count;
+      } else {
+        fittingMap.set(key, { conduitSpec: spec, fittingLabel: ft.label, count });
+      }
+    }
+  }
+  const fittingRows = Array.from(fittingMap.values()).sort((a, b) =>
+    a.conduitSpec.localeCompare(b.conduitSpec) || a.fittingLabel.localeCompare(b.fittingLabel)
   );
 
-  const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
+  const totalFeet   = runs.reduce((a, r) => a + r.feet, 0);
+  const totalSticks = runs.reduce((a, r) => a + calcSticks(r.feet), 0);
+  const totalWire   = runs.reduce((a, r) => a + calcWire(r.feet, r.conductors), 0);
+
+  const SectionHeader = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
+    <div className="flex items-center gap-2 mt-4 mb-2 pb-1 border-b border-border/40">
+      <span className="text-[#F5C518]">{icon}</span>
+      <span className="text-[10px] font-semibold text-[#F5C518] uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{title}</span>
+    </div>
+  );
 
   return (
     <div className="bp-card p-4 border-[#F5C518]/30 bg-[#F5C518]/5">
       <h3
-        className="text-xs font-semibold text-[#F5C518] uppercase tracking-wider mb-3 flex items-center gap-2"
+        className="text-xs font-semibold text-[#F5C518] uppercase tracking-wider mb-1 flex items-center gap-2"
         style={{ fontFamily: "'Space Grotesk', sans-serif" }}
       >
-        ∑ Project Totals
+        ∑ Project Material List
         {pages.length > 0 && (
           <span className="text-[10px] font-mono text-muted-foreground normal-case tracking-normal">
-            across {pages.length} page{pages.length !== 1 ? "s" : ""}
+            {runs.length} run{runs.length !== 1 ? "s" : ""} · {pages.length} page{pages.length !== 1 ? "s" : ""}
           </span>
         )}
       </h3>
 
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Total Footage</div>
-          <div className="text-xl font-bold font-mono text-[#F5C518]">{totalFeet.toFixed(1)}</div>
-          <div className="text-[10px] text-muted-foreground font-mono">ft</div>
+      {/* Summary strip */}
+      <div className="grid grid-cols-3 gap-2 mb-1 mt-3">
+        <div className="bg-muted/20 rounded p-2 text-center">
+          <div className="text-lg font-bold font-mono text-[#F5C518]">{totalFeet.toFixed(0)}</div>
+          <div className="text-[9px] text-muted-foreground font-mono uppercase">Total ft</div>
         </div>
-        <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Pipe Sticks</div>
-          <div className="text-xl font-bold font-mono text-[#F5C518]">{totalSticks}</div>
-          <div className="text-[10px] text-muted-foreground font-mono">10-ft sticks</div>
+        <div className="bg-muted/20 rounded p-2 text-center">
+          <div className="text-lg font-bold font-mono text-[#F5C518]">{totalSticks}</div>
+          <div className="text-[9px] text-muted-foreground font-mono uppercase">Sticks</div>
         </div>
-        <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Total Wire</div>
-          <div className="text-xl font-bold font-mono text-[#F5C518]">{totalWire.toFixed(1)}</div>
-          <div className="text-[10px] text-muted-foreground font-mono">ft w/ 10% slack</div>
+        <div className="bg-muted/20 rounded p-2 text-center">
+          <div className="text-lg font-bold font-mono text-[#F5C518]">{totalWire.toFixed(0)}</div>
+          <div className="text-[9px] text-muted-foreground font-mono uppercase">Wire ft</div>
         </div>
       </div>
 
-      {FITTING_TYPES.some((ft) => totalFittings[ft.id] > 0) && (
-        <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">Total Fittings</div>
-          <div className="grid grid-cols-4 gap-1.5">
-            {FITTING_TYPES.filter((ft) => totalFittings[ft.id] > 0).map((ft) => (
-              <div key={ft.id} className="bg-muted/20 rounded p-2 text-center">
-                <div className="text-base font-bold font-mono text-foreground">{totalFittings[ft.id]}</div>
-                <div className="text-[9px] text-muted-foreground font-mono">{ft.short}</div>
+      {/* ── Conduit ── */}
+      <SectionHeader icon={<Package size={11} />} title="Conduit" />
+      <div className="space-y-1">
+        {conduitRows.map(([key, row]) => (
+          <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
+            <span className="font-mono text-foreground font-semibold">{row.type} {row.size}"</span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[#F5C518]">{row.feet.toFixed(1)} ft</span>
+              <span className="font-mono text-muted-foreground">{row.sticks} sticks</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Fittings ── */}
+      {fittingRows.length > 0 && (
+        <>
+          <SectionHeader icon={<Wrench size={11} />} title="Fittings" />
+          <div className="space-y-1">
+            {fittingRows.map((row, i) => (
+              <div key={i} className="flex items-center justify-between text-[11px] py-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-muted-foreground text-[10px]">{row.conduitSpec}</span>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span className="font-mono text-foreground">{row.fittingLabel}</span>
+                </div>
+                <span className="font-mono text-[#F5C518] font-bold">{row.count}</span>
               </div>
             ))}
           </div>
-        </div>
+        </>
       )}
 
+      {/* ── Wire / Conductors ── */}
+      {wireRows.length > 0 && (
+        <>
+          <SectionHeader icon={<Cable size={11} />} title="Conductors" />
+          <div className="space-y-1">
+            {wireRows.map(([key, row]) => (
+              <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
+                <span className="font-mono text-foreground font-semibold">{row.label}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[#F5C518]">{row.feet.toFixed(1)} ft</span>
+                  <span className="font-mono text-muted-foreground text-[10px]">w/ 10% slack</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ── Per-page breakdown ── */}
       {pages.length > 1 && (
-        <div className="mt-3 pt-3 border-t border-border/40">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">Per-Page Breakdown</div>
+        <>
+          <SectionHeader icon={<Link2 size={11} />} title="Per-Page Breakdown" />
           <div className="space-y-1">
             {pages.map((pg) => {
               const pgRuns = runs.filter((r) => r.pageNumber === pg);
@@ -405,7 +553,7 @@ function CrossPageTotals({ runs }: { runs: RunItem[] }) {
               );
             })}
           </div>
-        </div>
+        </>
       )}
     </div>
   );
@@ -461,6 +609,8 @@ function CivilEditor({
           conduitSize: conduitSize ?? "3/4",
           conduitType: "EMT",
           conductors: 2,
+          conductorMaterial: "CU",
+          conductorSize: "12",
           fittings: defaultFittings(),
         };
         syncRuns([newRun, ...runs]);

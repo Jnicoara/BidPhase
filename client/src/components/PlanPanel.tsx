@@ -483,14 +483,35 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       ctx.fillText(`S${i + 1}`, p.x + 7, p.y - 5);
     });
 
-    // ── Thin precision crosshair ───────────────────────────────────────────
+    // ── Vibrant precision crosshair ──────────────────────────────────────────
     if (crosshair && modeRef.current !== "none") {
       const { x, y } = crosshair;
-      ctx.strokeStyle = "rgba(245,197,24,0.45)";
-      ctx.lineWidth = 1;
+      ctx.save();
       ctx.setLineDash([]);
+      // Outer glow
+      ctx.strokeStyle = "rgba(255,220,0,0.22)";
+      ctx.lineWidth = 6;
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      // Mid glow
+      ctx.strokeStyle = "rgba(255,230,0,0.55)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      // Crisp inner line
+      ctx.strokeStyle = "rgba(255,238,0,1)";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      // Center dot
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,238,0,1)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.75)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
     }
   }, [currentRuns, currentActiveRunId, scalePoints, crosshair, normToCanvas, scaleRatio, renderZoom, pageReady, hideUnselected]);
 
