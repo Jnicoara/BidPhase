@@ -146,7 +146,7 @@ function ResidentialEditor({
                 </div>
                 <div>
                   <h1 className="text-base font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Residential Rough-In
+                    Residential
                   </h1>
                   <p className="text-xs text-muted-foreground">{projectName}</p>
                 </div>
@@ -249,7 +249,7 @@ export default function ResidentialRoughIn() {
   if (!resolvedOpenId) {
     return (
       <ProjectHomepage
-        title="Residential Rough-In"
+        title="Residential"
         icon={<Home size={18} className="text-[#F5C518]" />}
         projects={projectCards}
         activeId={activeResidentialId}

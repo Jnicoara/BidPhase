@@ -98,7 +98,7 @@ export default function ExportButton() {
 
     // ── Section 2: Commercial Assembly ──────────────────────────
     if (assemblyState.materials.length > 0) {
-      rows.push([`SECTION: Commercial Assembly — ${activeCommercialProject.name}`, "", "", "", "", ""]);
+      rows.push([`SECTION: Commercial — ${activeCommercialProject.name}`, "", "", "", "", ""]);
       rows.push([
         `Assembly: ${assemblyState.assemblyId} × ${assemblyState.quantity}`,
         "", "", "", "", "",
@@ -118,9 +118,9 @@ export default function ExportButton() {
       rows.push([]);
     }
 
-    // ── Section 3: Residential Rough-In ─────────────────────────
+    // ── Section 3: Residential ─────────────────────────────────
     if (roomState.materials.length > 0) {
-      rows.push([`SECTION: Residential Rough-In — ${activeResidentialProject.name}`, "", "", "", "", ""]);
+      rows.push([`SECTION: Residential — ${activeResidentialProject.name}`, "", "", "", "", ""]);
       rows.push([`Room: ${roomState.roomId}`, "", "", "", "", ""]);
       rows.push(["Description", "Unit", "Quantity", "", "", ""]);
       for (const m of roomState.materials) {

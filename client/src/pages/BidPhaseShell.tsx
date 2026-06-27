@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Custom conduit/underground icon — three parallel pipes going underground
+// Civil & Underground icon — conduit pipes entering ground, Lucide-style
 function ConduitIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   return (
     <svg
@@ -29,21 +29,22 @@ function ConduitIcon({ size = 20, className = "" }: { size?: number; className?:
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
     >
-      {/* Ground line */}
-      <line x1="2" y1="13" x2="22" y2="13" strokeWidth="2" />
-      {/* Three conduit pipes going underground */}
-      <path d="M6 13 Q6 18 6 20" />
-      <path d="M12 13 Q12 18 12 20" />
-      <path d="M18 13 Q18 18 18 20" />
-      {/* Conduit entry caps above ground */}
-      <path d="M4 13 L4 7 Q4 5 6 5 Q8 5 8 7 L8 13" />
-      <path d="M10 13 L10 7 Q10 5 12 5 Q14 5 14 7 L14 13" />
-      <path d="M16 13 L16 7 Q16 5 18 5 Q20 5 20 7 L20 13" />
+      {/* Ground surface line */}
+      <line x1="1" y1="12" x2="23" y2="12" />
+      {/* Left pipe — rectangle cap above ground, line below */}
+      <rect x="3" y="5" width="4" height="7" rx="1" />
+      <line x1="5" y1="12" x2="5" y2="19" />
+      {/* Center pipe */}
+      <rect x="10" y="5" width="4" height="7" rx="1" />
+      <line x1="12" y1="12" x2="12" y2="19" />
+      {/* Right pipe */}
+      <rect x="17" y="5" width="4" height="7" rx="1" />
+      <line x1="19" y1="12" x2="19" y2="19" />
     </svg>
   );
 }

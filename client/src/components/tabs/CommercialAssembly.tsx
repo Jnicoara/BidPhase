@@ -157,7 +157,7 @@ function CommercialEditor({
                 </div>
                 <div>
                   <h1 className="text-base font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Commercial Buildout
+                    Commercial
                   </h1>
                   <p className="text-xs text-muted-foreground">{projectName}</p>
                 </div>
@@ -301,7 +301,7 @@ export default function CommercialAssembly() {
   if (!resolvedOpenId) {
     return (
       <ProjectHomepage
-        title="Commercial Buildout"
+        title="Commercial"
         icon={<Building2 size={18} className="text-[#F5C518]" />}
         projects={projectCards}
         activeId={activeCommercialId}
