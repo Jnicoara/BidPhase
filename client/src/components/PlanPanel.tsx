@@ -127,14 +127,16 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   // ── Current page (1-indexed) ───────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useLocalStorage<number>(`bp_page_${tabKey}`, 1);
 
-  // ── Zoom state ─────────────────────────────────────────────────────────────
-  const [zoom, setZoom] = useLocalStorage<number>(`bp_zoom_${tabKey}`, 0.40);
-  const zoomRef = useRef(zoom);
-  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-  const renderZoom = zoom;
-  const renderZoomRef = zoomRef;
-  const displayZoom = zoom;
-  const displayZoomRef = zoomRef;
+  // ── Zoom state — split into renderZoom (triggers PDF re-render) and displayZoom (instant CSS scale) ──
+  const [renderZoom, setRenderZoom] = useLocalStorage<number>(`bp_zoom_${tabKey}`, 0.40);
+  const [displayZoom, setDisplayZoom] = useState<number>(renderZoom);
+  const renderZoomRef = useRef(renderZoom);
+  const displayZoomRef = useRef(displayZoom);
+  useEffect(() => { renderZoomRef.current = renderZoom; }, [renderZoom]);
+  useEffect(() => { displayZoomRef.current = displayZoom; }, [displayZoom]);
+  // Alias for backward compat with existing code that uses zoomRef
+  const zoom = renderZoom;
+  const zoomRef = renderZoomRef;
 
   // ── Per-page runs ──────────────────────────────────────────────────────────
   // pageRunsMap[pageIndex] = MeasureRun[]  (pageIndex is 0-based internally)
@@ -219,7 +221,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     const vpW = el.clientWidth;
     const vpH = el.clientHeight;
     // Compute page natural size at zoom=1 from current rendered size
-    const curZoom = zoomRef.current;
+    const curZoom = renderZoomRef.current;
     const pageNatW = pageSizeRef.current.w / curZoom; // natural px width at zoom=1
     const pageNatH = pageSizeRef.current.h / curZoom;
     const fitW = (vpW - 16) / pageNatW;
@@ -538,53 +540,45 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     const scrollEl = scrollAreaRef.current;
     if (!scrollEl) return;
 
-    const oldZoom = zoomRef.current;
+    const oldZoom = displayZoomRef.current;
     // Min = 50% of fit-to-page (so you can always see the whole page with some margin)
     const effectiveMin = Math.max(fitZoomRef.current * 0.50, MIN_ZOOM);
     const newZoom = clamp(parseFloat(newZoomRaw.toFixed(4)), effectiveMin, MAX_ZOOM);
     if (Math.abs(newZoom - oldZoom) < 0.001) return;
 
-    // Preserve focal point in scroll space
+    // Preserve focal point in scroll space (no gutter offset — gutter is inside the inner wrapper)
     const rect = scrollEl.getBoundingClientRect();
     const vpX = focalClientX !== undefined ? focalClientX - rect.left : rect.width / 2;
     const vpY = focalClientY !== undefined ? focalClientY - rect.top  : rect.height / 2;
-    // Content coords are relative to the page natural size (zoom=1)
-    // We account for the gutter padding that scales with zoom
-    const gutterOld = PAGE_GUTTER * oldZoom;
-    const contentX = (scrollEl.scrollLeft + vpX - gutterOld) / oldZoom;
-    const contentY = (scrollEl.scrollTop  + vpY - gutterOld) / oldZoom;
+    const contentX = (scrollEl.scrollLeft + vpX) / oldZoom;
+    const contentY = (scrollEl.scrollTop  + vpY) / oldZoom;
 
-    // Update zoom immediately — PDF re-renders at new scale
-    setZoom(newZoom);
-    zoomRef.current = newZoom;
+    // Update display zoom immediately — CSS scale gives instant visual feedback
+    setDisplayZoom(newZoom);
+    displayZoomRef.current = newZoom;
 
-    // Reposition scroll after React re-renders the page at new scale
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (scrollEl) {
-          const gutterNew = PAGE_GUTTER * newZoom;
-          scrollEl.scrollLeft = contentX * newZoom + gutterNew - vpX;
-          scrollEl.scrollTop  = contentY * newZoom + gutterNew - vpY;
-        }
-      });
-    });
+    // Adjust scroll synchronously so focal point stays fixed
+    scrollEl.scrollLeft = contentX * newZoom - vpX;
+    scrollEl.scrollTop  = contentY * newZoom - vpY;
 
-    // Debounce: only trigger pageSizeRef reset after zoom settles (avoids feedback loop)
+    // Debounce the actual PDF re-render (expensive)
     if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
     zoomDebounceRef.current = setTimeout(() => {
       pageSizeRef.current = null;
       setPageReady(false);
+      setRenderZoom(newZoom);
+      renderZoomRef.current = newZoom;
     }, 150);
-  }, [setZoom]);
+  }, [setRenderZoom]);
 
   const zoomIn = useCallback(() => {
-    const cur = zoomRef.current;
+    const cur = displayZoomRef.current;
     const next = ZOOM_STEPS.find(s => s > cur + 0.005) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
     applyZoom(next);
   }, [applyZoom]);
 
   const zoomOut = useCallback(() => {
-    const cur = zoomRef.current;
+    const cur = displayZoomRef.current;
     const prev = [...ZOOM_STEPS].reverse().find(s => s < cur - 0.005) ?? ZOOM_STEPS[0];
     applyZoom(prev);
   }, [applyZoom]);
@@ -592,13 +586,12 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   // Reset zoom = 40% centered
   const zoomReset = useCallback(() => {
     applyZoom(0.40);
+    // Re-center after the scroll adjustment from applyZoom
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const el = scrollAreaRef.current;
-        if (!el) return;
-        el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth) / 2;
-        el.scrollTop  = Math.max(0, el.scrollHeight - el.clientHeight) / 2;
-      });
+      const el = scrollAreaRef.current;
+      if (!el) return;
+      el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth) / 2;
+      el.scrollTop  = Math.max(0, el.scrollHeight - el.clientHeight) / 2;
     });
   }, [applyZoom]);
 
@@ -615,7 +608,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
         const abs = Math.abs(e.deltaY);
         delta = abs > 50 ? (e.deltaY > 0 ? -0.15 : 0.15) : e.deltaY * -0.004;
       }
-      applyZoom(zoomRef.current + clamp(delta, -0.3, 0.3), e.clientX, e.clientY);
+      applyZoom(displayZoomRef.current + clamp(delta, -0.3, 0.3), e.clientX, e.clientY);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -1265,15 +1258,31 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
             className="min-w-full min-h-full flex justify-center items-start"
             style={{ paddingInline: 12 }}
           >
+            {/* Outer transform wrapper — scales instantly with displayZoom for smooth visual feedback */}
             <div
               ref={pagesContainerRef}
               style={{
                 display: "inline-block",
-                position: "relative",
-                // Extra gutter so the page can be panned past its edges when zoomed in
-                padding: `${PAGE_GUTTER * zoom}px`,
+                transformOrigin: "top left",
+                // CSS scale gives instant visual feedback while PDF re-renders at renderZoom
+                transform: Math.abs(displayZoom / renderZoom - 1) > 0.001
+                  ? `scale(${displayZoom / renderZoom})`
+                  : "none",
+                // Expand wrapper so scroll area doesn't collapse during transient scale
+                ...(Math.abs(displayZoom / renderZoom - 1) > 0.001 ? {
+                  width: `${100 / (displayZoom / renderZoom)}%`,
+                  height: `${100 / (displayZoom / renderZoom)}%`,
+                } : {}),
               }}
             >
+              <div
+                style={{
+                  display: "inline-block",
+                  position: "relative",
+                  // Extra gutter so the page can be panned past its edges when zoomed in
+                  padding: `${PAGE_GUTTER * renderZoom}px`,
+                }}
+              >
               <Document
                 file={pdfFile}
                 onLoadSuccess={({ numPages: n }) => {
@@ -1299,14 +1308,14 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
                 />
               </Document>
 
-              {/* Overlay canvas */}
+                {/* Overlay canvas — positioned at gutter offset to align with the PDF page */}
               {pageReady && (
                 <canvas
                   ref={canvasRef}
                   style={{
                     position: "absolute",
-                    top: 0,
-                    left: 0,
+                    top: PAGE_GUTTER * renderZoom,
+                    left: PAGE_GUTTER * renderZoom,
                     pointerEvents: mode !== "none" ? "auto" : "none",
                     zIndex: 10,
                     cursor: "none",
@@ -1316,6 +1325,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
                   onMouseLeave={() => setCrosshair(null)}
                 />
               )}
+              </div>
             </div>
           </div>
         )}
