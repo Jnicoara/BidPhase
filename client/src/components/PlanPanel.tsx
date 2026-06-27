@@ -94,7 +94,7 @@ function nanoid6() {
 
 interface PlanPanelProps {
   tabKey: string;
-  onPushDistance?: (ft: number, runName: string) => void;
+  onPushDistance?: (ft: number, runName: string, conduitSize?: string) => void;
 }
 
 export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
@@ -653,7 +653,7 @@ export default function PlanPanel({ tabKey, onPushDistance }: PlanPanelProps) {
   const handlePush = () => {
     const ft = activeRun?.totalFeet;
     if (!ft || ft <= 0) { toast.error("No measurement on active run."); return; }
-    onPushDistance?.(ft, activeRun.name);
+    onPushDistance?.(ft, activeRun.name, activeRun.conduitSize);
     toast.success(`${ft} ft pushed from "${activeRun.name}".`);
   };
 

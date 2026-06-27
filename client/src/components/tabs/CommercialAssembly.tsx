@@ -3,7 +3,7 @@
  * Design: Tactical Dark Mode SaaS · Space Grotesk headers · JetBrains Mono outputs
  *
  * Features:
- * - Multi-project manager (add / rename / delete / switch)
+ * - Project homepage (card grid) → open project editor
  * - Embedded PlanPanel (resizable split pane, project-scoped)
  * - Assembly dropdown + quantity → itemized BOM + labor hours
  */
@@ -18,9 +18,9 @@ import {
   ResizablePanelGroup, ResizablePanel, ResizableHandle,
 } from "@/components/ui/resizable";
 import PlanPanel from "@/components/PlanPanel";
+import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
-import { Building2, Clock, DollarSign, Plus, Pencil, Trash2, Check, X } from "lucide-react";
-import { toast } from "sonner";
+import { Building2, Clock, DollarSign, ChevronLeft } from "lucide-react";
 
 // ── Assembly data ─────────────────────────────────────────────────────────────
 interface AssemblyMaterial { description: string; unit: string; unitCost: number; qtyPerAssembly: number; }
@@ -104,95 +104,16 @@ function buildBOM(assembly: Assembly, qty: number): AssemblyMaterialLine[] {
   }));
 }
 
-// ─── Project Manager Strip ────────────────────────────────────────────────────
-function ProjectStrip() {
-  const {
-    commercialProjects, activeCommercialId,
-    switchCommercialProject, addCommercialProject,
-    renameCommercialProject, deleteCommercialProject,
-  } = useApp();
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [showNew, setShowNew] = useState(false);
-  const [newName, setNewName] = useState("");
-
-  const commitEdit = (id: string) => {
-    const t = editName.trim();
-    if (t) renameCommercialProject(id, t);
-    setEditingId(null);
-  };
-
-  const handleAdd = () => {
-    const name = newName.trim() || `Job ${commercialProjects.length + 1}`;
-    addCommercialProject(name);
-    setNewName("");
-    setShowNew(false);
-    toast.success(`Project "${name}" created.`);
-  };
-
-  return (
-    <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-muted/20 shrink-0 overflow-x-auto">
-      <span className="text-[10px] font-semibold text-muted-foreground mr-1 shrink-0 uppercase tracking-wide">Jobs:</span>
-      {commercialProjects.map((proj) => (
-        <div key={proj.id} className={cn(
-          "flex items-center gap-0.5 rounded border transition-all shrink-0",
-          proj.id === activeCommercialId ? "bg-yellow-400/10 border-yellow-400/40" : "border-transparent hover:border-border"
-        )}>
-          {editingId === proj.id ? (
-            <div className="flex items-center gap-0.5 px-1">
-              <input autoFocus value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") commitEdit(proj.id); if (e.key === "Escape") setEditingId(null); }}
-                className="h-5 w-24 text-[10px] bg-background border border-border rounded px-1 text-foreground"
-              />
-              <button onClick={() => commitEdit(proj.id)} className="text-green-400 hover:text-green-300"><Check size={10} /></button>
-              <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground"><X size={10} /></button>
-            </div>
-          ) : (
-            <>
-              <button onClick={() => switchCommercialProject(proj.id)}
-                className={cn("px-2 py-0.5 text-[10px] font-medium whitespace-nowrap transition-colors",
-                  proj.id === activeCommercialId ? "text-yellow-400" : "text-muted-foreground hover:text-foreground")}>
-                {proj.name}
-              </button>
-              <button onClick={() => { setEditingId(proj.id); setEditName(proj.name); }}
-                className="px-0.5 text-muted-foreground hover:text-foreground transition-colors" title="Rename">
-                <Pencil size={9} />
-              </button>
-              {commercialProjects.length > 1 && (
-                <button onClick={() => { deleteCommercialProject(proj.id); toast.info(`Deleted "${proj.name}".`); }}
-                  className="px-0.5 text-muted-foreground hover:text-destructive transition-colors" title="Delete">
-                  <Trash2 size={9} />
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      ))}
-      {showNew ? (
-        <div className="flex items-center gap-0.5 shrink-0">
-          <input autoFocus value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setShowNew(false); }}
-            placeholder="Job name…"
-            className="h-5 w-24 text-[10px] bg-background border border-border rounded px-1 text-foreground"
-          />
-          <button onClick={handleAdd} className="text-green-400 hover:text-green-300"><Check size={10} /></button>
-          <button onClick={() => setShowNew(false)} className="text-muted-foreground hover:text-foreground"><X size={10} /></button>
-        </div>
-      ) : (
-        <button onClick={() => setShowNew(true)}
-          className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0">
-          <Plus size={10} /> New Job
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
-export default function CommercialAssembly() {
+// ─── Editor view ─────────────────────────────────────────────────────────────
+function CommercialEditor({
+  projectId,
+  projectName,
+  onBack,
+}: {
+  projectId: string;
+  projectName: string;
+  onBack: () => void;
+}) {
   const { activeCommercialProject, setAssemblyState } = useApp();
   const s = activeCommercialProject.state;
   const { assemblyId, quantity } = s;
@@ -210,29 +131,40 @@ export default function CommercialAssembly() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <ProjectStrip />
+      {/* Back bar */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/10 shrink-0">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronLeft size={14} /> All Projects
+        </button>
+        <span className="text-muted-foreground/40">/</span>
+        <span className="text-xs font-medium text-foreground">{projectName}</span>
+      </div>
+
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
         <ResizablePanel defaultSize={50} minSize={25} maxSize={75}>
-          <PlanPanel tabKey={`commercial_${activeCommercialProject.id}`} />
+          <PlanPanel tabKey={`commercial_${projectId}`} />
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={50} minSize={25}>
-          <div className="flex flex-col h-full overflow-auto">
-            <div className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
+          <div className="flex flex-col h-full overflow-hidden">
+            <div className="px-5 pt-4 pb-3 border-b border-border bg-card shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
                   <Building2 size={16} className="text-[#F5C518]" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <h1 className="text-base font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                     Commercial Buildout
                   </h1>
-                  <p className="text-xs text-muted-foreground">{activeCommercialProject.name}</p>
+                  <p className="text-xs text-muted-foreground">{projectName}</p>
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-4">
+            <div className="flex-1 overflow-auto p-4 pb-24">
               <div className="max-w-2xl mx-auto space-y-5">
                 {/* Inputs */}
                 <div className="bp-card p-4 space-y-4">
@@ -270,55 +202,53 @@ export default function CommercialAssembly() {
                     <div className="flex items-center gap-2 text-muted-foreground text-[10px] font-medium uppercase tracking-wider mb-2">
                       <Clock size={12} />Total Labor Hrs
                     </div>
-                    <div className="text-3xl font-bold text-[#F5C518]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                      {totalLaborHours}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground font-mono mt-1">{selectedAssembly.blendedLaborHours} × {qty} units</div>
+                    <div className="text-3xl font-bold font-mono text-[#F5C518]">{totalLaborHours}</div>
+                    <div className="text-xs text-muted-foreground font-mono mt-1">hrs @ {qty} units</div>
                   </div>
                   <div className="bp-card p-4">
                     <div className="flex items-center gap-2 text-muted-foreground text-[10px] font-medium uppercase tracking-wider mb-2">
-                      <DollarSign size={12} />Est. Material
+                      <DollarSign size={12} />Material Cost
                     </div>
-                    <div className="text-3xl font-bold text-[#22C55E]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                      ${totalMaterialCost.toLocaleString()}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground font-mono mt-1">materials only</div>
+                    <div className="text-3xl font-bold font-mono text-[#F5C518]">${totalMaterialCost.toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground font-mono mt-1">est. material only</div>
                   </div>
                 </div>
 
-                {/* BOM */}
+                {/* BOM Table */}
                 <div className="bp-card overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-border bg-secondary/30">
-                    <h2 className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                      Bill of Materials — {selectedAssembly.name} × {qty}
+                  <div className="px-4 py-3 border-b border-border">
+                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      Bill of Materials
                     </h2>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b border-border text-[10px] text-muted-foreground uppercase tracking-wider font-mono">
-                          <th className="text-left px-4 py-2.5 font-medium">Description</th>
-                          <th className="text-center px-3 py-2.5 font-medium">Unit</th>
-                          <th className="text-right px-3 py-2.5 font-medium">Qty</th>
-                          <th className="text-right px-4 py-2.5 font-medium">Unit $</th>
-                          <th className="text-right px-4 py-2.5 font-medium">Ext. $</th>
+                        <tr className="border-b border-border bg-muted/20">
+                          <th className="text-left px-4 py-2 text-muted-foreground font-medium">Description</th>
+                          <th className="text-center px-3 py-2 text-muted-foreground font-medium">Unit</th>
+                          <th className="text-right px-3 py-2 text-muted-foreground font-medium">Qty</th>
+                          <th className="text-right px-3 py-2 text-muted-foreground font-medium">Unit $</th>
+                          <th className="text-right px-4 py-2 text-muted-foreground font-medium">Ext $</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {bom.map((row, i) => (
-                          <tr key={i} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                            <td className="px-4 py-2.5 text-foreground">{row.description}</td>
-                            <td className="px-3 py-2.5 text-center font-mono text-muted-foreground">{row.unit}</td>
-                            <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{row.quantity}</td>
-                            <td className="px-4 py-2.5 text-right font-mono text-muted-foreground" style={{ fontFamily: "'JetBrains Mono', monospace" }}>${row.unitCost.toFixed(2)}</td>
-                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-[#22C55E]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>${(row.unitCost * row.quantity).toFixed(2)}</td>
+                        {bom.map((item, i) => (
+                          <tr key={i} className={cn("border-b border-border/50 hover:bg-muted/10 transition-colors", i % 2 === 0 ? "" : "bg-muted/5")}>
+                            <td className="px-4 py-2 text-foreground">{item.description}</td>
+                            <td className="px-3 py-2 text-center font-mono text-muted-foreground">{item.unit}</td>
+                            <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">{item.quantity}</td>
+                            <td className="px-3 py-2 text-right font-mono text-muted-foreground">${item.unitCost.toFixed(2)}</td>
+                            <td className="px-4 py-2 text-right font-mono font-semibold text-[#F5C518]">
+                              ${(item.unitCost * item.quantity).toFixed(2)}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
-                        <tr className="border-t-2 border-border bg-secondary/20">
-                          <td colSpan={4} className="px-4 py-2.5 text-right text-xs font-semibold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Total Material Cost</td>
-                          <td className="px-4 py-2.5 text-right font-bold text-[#22C55E] text-sm" style={{ fontFamily: "'JetBrains Mono', monospace" }}>${totalMaterialCost.toLocaleString()}</td>
+                        <tr className="border-t border-border bg-muted/20">
+                          <td colSpan={4} className="px-4 py-2 text-right text-xs font-semibold text-muted-foreground">Total Material</td>
+                          <td className="px-4 py-2 text-right font-mono font-bold text-[#F5C518]">${totalMaterialCost.toFixed(2)}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -330,5 +260,67 @@ export default function CommercialAssembly() {
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+export default function CommercialAssembly() {
+  const {
+    commercialProjects,
+    activeCommercialId,
+    addCommercialProject,
+    renameCommercialProject,
+    deleteCommercialProject,
+    switchCommercialProject,
+  } = useApp();
+
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null);
+
+  const handleOpen = (id: string) => {
+    switchCommercialProject(id);
+    setOpenProjectId(id);
+  };
+
+  const handleNew = (name: string) => {
+    addCommercialProject(name);
+    setTimeout(() => setOpenProjectId("__new__"), 80);
+  };
+
+  const resolvedOpenId =
+    openProjectId === "__new__" ? activeCommercialId : openProjectId;
+
+  const projectCards = commercialProjects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    createdAt: p.createdAt,
+    summary: p.state.assemblyId
+      ? `${ASSEMBLIES.find((a) => a.id === p.state.assemblyId)?.name ?? p.state.assemblyId} × ${p.state.quantity || 1}`
+      : "No assembly selected",
+  }));
+
+  if (!resolvedOpenId) {
+    return (
+      <ProjectHomepage
+        title="Commercial Buildout"
+        icon={<Building2 size={18} className="text-[#F5C518]" />}
+        projects={projectCards}
+        activeId={activeCommercialId}
+        onOpen={handleOpen}
+        onNew={handleNew}
+        onRename={renameCommercialProject}
+        onDelete={deleteCommercialProject}
+      />
+    );
+  }
+
+  const proj = commercialProjects.find((p) => p.id === resolvedOpenId);
+  const name = proj?.name ?? "Project";
+
+  return (
+    <CommercialEditor
+      projectId={resolvedOpenId}
+      projectName={name}
+      onBack={() => setOpenProjectId(null)}
+    />
   );
 }

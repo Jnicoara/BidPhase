@@ -1,8 +1,8 @@
 /**
  * BidPhase — Global Floating Export Button
- * Aggregates materials from Tab 2 (Civil), Tab 3 (Assembly), Tab 4 (Room)
+ * Aggregates materials from all three tabs (active projects)
  * Downloads a clean, formatted CSV for supplier ordering
- * Design: Safety Yellow, pulse ring on idle
+ * Design: Safety Yellow, bottom-right fixed
  */
 import { useApp } from "@/contexts/AppContext";
 import { toast } from "sonner";
@@ -21,42 +21,89 @@ function buildCSV(rows: string[][]): string {
 }
 
 export default function ExportButton() {
-  const { civilState, assemblyState, roomState } = useApp();
+  const { civilState, assemblyState, roomState, activeCivilProject, activeCommercialProject, activeResidentialProject } = useApp();
 
   const handleExport = () => {
     const rows: string[][] = [];
 
     // ── Header ──────────────────────────────────────────────────
-    rows.push(["BidPhase — Material Export", "", "", "", ""]);
-    rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", ""]);
+    rows.push(["BidPhase — Material Export", "", "", "", "", ""]);
+    rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", ""]);
     rows.push([]);
 
-    // ── Section 1: Civil / Underground ──────────────────────────
-    const { distance, conductors } = civilState;
-    if (distance > 0) {
-      const sticks = Math.ceil(distance / 10);
-      const couplings = Math.max(sticks - 1, 0);
-      const wireLength = parseFloat((distance * conductors * 1.1).toFixed(1));
+    // ── Section 1: Civil / Underground (per-run) ─────────────────
+    const runs = ((civilState as any).runs ?? []) as Array<{
+      id: string;
+      name: string;
+      feet: number;
+      conduitSize: string;
+      conductors: number;
+      fittings: Record<string, number>;
+    }>;
 
-      rows.push(["SECTION: Civil & Underground", "", "", "", ""]);
-      rows.push(["Description", "Unit", "Quantity", "Notes", ""]);
-      rows.push(["10-ft Conduit Sticks", "EA", String(sticks), `${distance} ft run`, ""]);
-      rows.push(["Conduit Couplings", "EA", String(couplings), `${sticks} sticks - 1`, ""]);
-      rows.push(["Wire (Total w/ 10% Slack)", "FT", String(wireLength), `${conductors} conductors`, ""]);
+    if (runs.length > 0) {
+      rows.push([`SECTION: Civil & Underground — ${activeCivilProject.name}`, "", "", "", "", ""]);
+      rows.push(["Run Name", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft w/ 10% slack)", "Conductors"]);
+
+      for (const run of runs) {
+        const sticks = Math.ceil(run.feet / 10);
+        const wire = parseFloat((run.feet * run.conductors * 1.1).toFixed(1));
+        rows.push([
+          run.name,
+          `${run.conduitSize}"`,
+          String(run.feet),
+          String(sticks),
+          String(wire),
+          String(run.conductors),
+        ]);
+
+        // Fittings sub-rows
+        const fittingLabels: Record<string, string> = {
+          connector: "Connectors",
+          coupling: "Couplings",
+          lb: "LBs",
+          elbow90: "90° Elbows",
+          elbow45: "45° Elbows",
+          sweep: "Sweeps",
+          tee: "Tees",
+          offset: "Offsets",
+        };
+        const hasFittings = Object.values(run.fittings).some((v) => v > 0);
+        if (hasFittings) {
+          rows.push(["  Fittings:", "", "", "", "", ""]);
+          for (const [key, count] of Object.entries(run.fittings)) {
+            if (count > 0) {
+              rows.push([`    ${fittingLabels[key] ?? key}`, "EA", String(count), "", "", ""]);
+            }
+          }
+        }
+      }
+
+      // Project totals
+      const totalSticks = runs.reduce((a, r) => a + Math.ceil(r.feet / 10), 0);
+      const totalWire = runs.reduce((a, r) => a + parseFloat((r.feet * r.conductors * 1.1).toFixed(1)), 0);
+      rows.push(["TOTAL", "", "", String(totalSticks), String(parseFloat(totalWire.toFixed(1))), ""]);
+      rows.push([]);
+    } else if (civilState.distance > 0) {
+      // Legacy single-distance fallback
+      const { distance, conductors } = civilState;
+      const sticks = Math.ceil(distance / 10);
+      const wireLength = parseFloat((distance * conductors * 1.1).toFixed(1));
+      rows.push([`SECTION: Civil & Underground — ${activeCivilProject.name}`, "", "", "", "", ""]);
+      rows.push(["Description", "Unit", "Quantity", "Notes", "", ""]);
+      rows.push(["10-ft Conduit Sticks", "EA", String(sticks), `${distance} ft run`, "", ""]);
+      rows.push(["Wire (Total w/ 10% Slack)", "FT", String(wireLength), `${conductors} conductors`, "", ""]);
       rows.push([]);
     }
 
     // ── Section 2: Commercial Assembly ──────────────────────────
     if (assemblyState.materials.length > 0) {
-      rows.push(["SECTION: Commercial Assembly", "", "", "", ""]);
+      rows.push([`SECTION: Commercial Assembly — ${activeCommercialProject.name}`, "", "", "", "", ""]);
       rows.push([
         `Assembly: ${assemblyState.assemblyId} × ${assemblyState.quantity}`,
-        "",
-        "",
-        "",
-        "",
+        "", "", "", "", "",
       ]);
-      rows.push(["Description", "Unit", "Quantity", "Unit Cost", "Ext. Cost"]);
+      rows.push(["Description", "Unit", "Quantity", "Unit Cost", "Ext. Cost", ""]);
       for (const m of assemblyState.materials) {
         rows.push([
           m.description,
@@ -64,31 +111,26 @@ export default function ExportButton() {
           String(m.quantity),
           `$${m.unitCost.toFixed(2)}`,
           `$${(m.unitCost * m.quantity).toFixed(2)}`,
+          "",
         ]);
       }
-      rows.push([
-        "Total Labor Hours",
-        "HRS",
-        String(assemblyState.totalLaborHours),
-        "",
-        "",
-      ]);
+      rows.push(["Total Labor Hours", "HRS", String(assemblyState.totalLaborHours), "", "", ""]);
       rows.push([]);
     }
 
     // ── Section 3: Residential Rough-In ─────────────────────────
     if (roomState.materials.length > 0) {
-      rows.push(["SECTION: Residential Rough-In", "", "", "", ""]);
-      rows.push([`Room: ${roomState.roomId}`, "", "", "", ""]);
-      rows.push(["Description", "Unit", "Quantity", "", ""]);
+      rows.push([`SECTION: Residential Rough-In — ${activeResidentialProject.name}`, "", "", "", "", ""]);
+      rows.push([`Room: ${roomState.roomId}`, "", "", "", "", ""]);
+      rows.push(["Description", "Unit", "Quantity", "", "", ""]);
       for (const m of roomState.materials) {
-        rows.push([m.description, m.unit, String(m.quantity), "", ""]);
+        rows.push([m.description, m.unit, String(m.quantity), "", "", ""]);
       }
       rows.push([]);
     }
 
     if (rows.length <= 3) {
-      toast.error("No data to export. Fill in at least one calculator tab first.");
+      toast.error("No data to export. Open a project and add runs or assemblies first.");
       return;
     }
 
@@ -115,7 +157,7 @@ export default function ExportButton() {
                  bg-[#F5C518] text-black font-semibold text-sm
                  shadow-lg shadow-[#F5C518]/20
                  hover:bg-[#e0b315] active:scale-95
-                 transition-all duration-150 export-pulse"
+                 transition-all duration-150"
       style={{ fontFamily: "'Space Grotesk', sans-serif" }}
     >
       <Download size={16} />

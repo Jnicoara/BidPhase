@@ -3,7 +3,7 @@
  * Design: Tactical Dark Mode SaaS · Space Grotesk headers · JetBrains Mono outputs
  *
  * Features:
- * - Multi-project manager (add / rename / delete / switch)
+ * - Project homepage (card grid) → open project editor
  * - Embedded PlanPanel (resizable split pane, project-scoped)
  * - Room type selector with editable baseline material list
  */
@@ -17,9 +17,8 @@ import {
   ResizablePanelGroup, ResizablePanel, ResizableHandle,
 } from "@/components/ui/resizable";
 import PlanPanel from "@/components/PlanPanel";
-import { cn } from "@/lib/utils";
-import { Home, Plus, Pencil, Trash2, Check, X } from "lucide-react";
-import { toast } from "sonner";
+import ProjectHomepage from "@/components/ProjectHomepage";
+import { Home, ChevronLeft } from "lucide-react";
 
 // ── Room data ─────────────────────────────────────────────────────────────────
 interface RoomTemplate { id: string; name: string; materials: RoomMaterialLine[]; }
@@ -86,95 +85,16 @@ const ROOM_TEMPLATES: RoomTemplate[] = [
   },
 ];
 
-// ─── Project Manager Strip ────────────────────────────────────────────────────
-function ProjectStrip() {
-  const {
-    residentialProjects, activeResidentialId,
-    switchResidentialProject, addResidentialProject,
-    renameResidentialProject, deleteResidentialProject,
-  } = useApp();
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [showNew, setShowNew] = useState(false);
-  const [newName, setNewName] = useState("");
-
-  const commitEdit = (id: string) => {
-    const t = editName.trim();
-    if (t) renameResidentialProject(id, t);
-    setEditingId(null);
-  };
-
-  const handleAdd = () => {
-    const name = newName.trim() || `Job ${residentialProjects.length + 1}`;
-    addResidentialProject(name);
-    setNewName("");
-    setShowNew(false);
-    toast.success(`Project "${name}" created.`);
-  };
-
-  return (
-    <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-muted/20 shrink-0 overflow-x-auto">
-      <span className="text-[10px] font-semibold text-muted-foreground mr-1 shrink-0 uppercase tracking-wide">Jobs:</span>
-      {residentialProjects.map((proj) => (
-        <div key={proj.id} className={cn(
-          "flex items-center gap-0.5 rounded border transition-all shrink-0",
-          proj.id === activeResidentialId ? "bg-yellow-400/10 border-yellow-400/40" : "border-transparent hover:border-border"
-        )}>
-          {editingId === proj.id ? (
-            <div className="flex items-center gap-0.5 px-1">
-              <input autoFocus value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") commitEdit(proj.id); if (e.key === "Escape") setEditingId(null); }}
-                className="h-5 w-24 text-[10px] bg-background border border-border rounded px-1 text-foreground"
-              />
-              <button onClick={() => commitEdit(proj.id)} className="text-green-400 hover:text-green-300"><Check size={10} /></button>
-              <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground"><X size={10} /></button>
-            </div>
-          ) : (
-            <>
-              <button onClick={() => switchResidentialProject(proj.id)}
-                className={cn("px-2 py-0.5 text-[10px] font-medium whitespace-nowrap transition-colors",
-                  proj.id === activeResidentialId ? "text-yellow-400" : "text-muted-foreground hover:text-foreground")}>
-                {proj.name}
-              </button>
-              <button onClick={() => { setEditingId(proj.id); setEditName(proj.name); }}
-                className="px-0.5 text-muted-foreground hover:text-foreground transition-colors" title="Rename">
-                <Pencil size={9} />
-              </button>
-              {residentialProjects.length > 1 && (
-                <button onClick={() => { deleteResidentialProject(proj.id); toast.info(`Deleted "${proj.name}".`); }}
-                  className="px-0.5 text-muted-foreground hover:text-destructive transition-colors" title="Delete">
-                  <Trash2 size={9} />
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      ))}
-      {showNew ? (
-        <div className="flex items-center gap-0.5 shrink-0">
-          <input autoFocus value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setShowNew(false); }}
-            placeholder="Job name…"
-            className="h-5 w-24 text-[10px] bg-background border border-border rounded px-1 text-foreground"
-          />
-          <button onClick={handleAdd} className="text-green-400 hover:text-green-300"><Check size={10} /></button>
-          <button onClick={() => setShowNew(false)} className="text-muted-foreground hover:text-foreground"><X size={10} /></button>
-        </div>
-      ) : (
-        <button onClick={() => setShowNew(true)}
-          className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0">
-          <Plus size={10} /> New Job
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
-export default function ResidentialRoughIn() {
+// ─── Editor view ─────────────────────────────────────────────────────────────
+function ResidentialEditor({
+  projectId,
+  projectName,
+  onBack,
+}: {
+  projectId: string;
+  projectName: string;
+  onBack: () => void;
+}) {
   const { activeResidentialProject, setRoomState } = useApp();
   const s = activeResidentialProject.state;
   const { roomId, materials } = s;
@@ -200,29 +120,40 @@ export default function ResidentialRoughIn() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <ProjectStrip />
+      {/* Back bar */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/10 shrink-0">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronLeft size={14} /> All Projects
+        </button>
+        <span className="text-muted-foreground/40">/</span>
+        <span className="text-xs font-medium text-foreground">{projectName}</span>
+      </div>
+
       <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
         <ResizablePanel defaultSize={50} minSize={25} maxSize={75}>
-          <PlanPanel tabKey={`residential_${activeResidentialProject.id}`} />
+          <PlanPanel tabKey={`residential_${projectId}`} />
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize={50} minSize={25}>
-          <div className="flex flex-col h-full overflow-auto">
-            <div className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
+          <div className="flex flex-col h-full overflow-hidden">
+            <div className="px-5 pt-4 pb-3 border-b border-border bg-card shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
                   <Home size={16} className="text-[#F5C518]" />
                 </div>
                 <div>
-                  <h1 className="text-lg font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <h1 className="text-base font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                     Residential Rough-In
                   </h1>
-                  <p className="text-xs text-muted-foreground">{activeResidentialProject.name}</p>
+                  <p className="text-xs text-muted-foreground">{projectName}</p>
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-4">
+            <div className="flex-1 overflow-auto p-4 pb-24">
               <div className="max-w-lg mx-auto space-y-5">
                 {/* Room selector */}
                 <div className="bp-card p-4 space-y-3">
@@ -277,5 +208,67 @@ export default function ResidentialRoughIn() {
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+export default function ResidentialRoughIn() {
+  const {
+    residentialProjects,
+    activeResidentialId,
+    addResidentialProject,
+    renameResidentialProject,
+    deleteResidentialProject,
+    switchResidentialProject,
+  } = useApp();
+
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null);
+
+  const handleOpen = (id: string) => {
+    switchResidentialProject(id);
+    setOpenProjectId(id);
+  };
+
+  const handleNew = (name: string) => {
+    addResidentialProject(name);
+    setTimeout(() => setOpenProjectId("__new__"), 80);
+  };
+
+  const resolvedOpenId =
+    openProjectId === "__new__" ? activeResidentialId : openProjectId;
+
+  const projectCards = residentialProjects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    createdAt: p.createdAt,
+    summary: p.state.roomId
+      ? ROOM_TEMPLATES.find((r) => r.id === p.state.roomId)?.name ?? p.state.roomId
+      : "No room selected",
+  }));
+
+  if (!resolvedOpenId) {
+    return (
+      <ProjectHomepage
+        title="Residential Rough-In"
+        icon={<Home size={18} className="text-[#F5C518]" />}
+        projects={projectCards}
+        activeId={activeResidentialId}
+        onOpen={handleOpen}
+        onNew={handleNew}
+        onRename={renameResidentialProject}
+        onDelete={deleteResidentialProject}
+      />
+    );
+  }
+
+  const proj = residentialProjects.find((p) => p.id === resolvedOpenId);
+  const name = proj?.name ?? "Project";
+
+  return (
+    <ResidentialEditor
+      projectId={resolvedOpenId}
+      projectName={name}
+      onBack={() => setOpenProjectId(null)}
+    />
   );
 }

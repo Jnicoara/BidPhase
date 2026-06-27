@@ -3,12 +3,15 @@
  * Design: Tactical Dark Mode SaaS · Space Grotesk headers · JetBrains Mono outputs
  *
  * Features:
+ * - Project homepage (card grid) → open project editor
  * - Multi-project manager (add / rename / delete / switch)
  * - Embedded PlanPanel (resizable split pane)
- * - Conduit size selector
- * - Auto-calculated outputs: pipe sticks, couplings, wire length w/ 10% slack
+ * - Per-run line items auto-pushed from the plan panel
+ * - Conduit size selector per run
+ * - Manual fittings selector (connectors, couplings, LBs, elbows, sweeps, etc.)
+ * - Total wire length with 10% slack
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useApp } from "@/contexts/AppContext";
 import { CONDUIT_SIZES } from "@/contexts/AppContext";
 import type { CivilState } from "@/contexts/AppContext";
@@ -21,293 +24,481 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import PlanPanel from "@/components/PlanPanel";
+import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
-import { Zap, Package, Link2, Cable, Plus, Pencil, Trash2, Check, X } from "lucide-react";
+import {
+  Zap, Package, Cable, Plus, Minus, ChevronLeft,
+  Wrench, Link2
+} from "lucide-react";
 import { toast } from "sonner";
 
-function calcOutputs(distance: number, conductors: number) {
-  if (distance <= 0) return { sticks: 0, couplings: 0, wireLength: 0 };
-  const sticks = Math.ceil(distance / 10);
-  const couplings = Math.max(sticks - 1, 0);
-  const wireLength = parseFloat((distance * conductors * 1.1).toFixed(1));
-  return { sticks, couplings, wireLength };
+// ─── Fitting types ────────────────────────────────────────────────────────────
+const FITTING_TYPES = [
+  { id: "connector",  label: "Connectors",   short: "CONN" },
+  { id: "coupling",   label: "Couplings",    short: "COUP" },
+  { id: "lb",         label: "LBs",          short: "LB"   },
+  { id: "elbow90",    label: "90° Elbows",   short: "90°"  },
+  { id: "elbow45",    label: "45° Elbows",   short: "45°"  },
+  { id: "sweep",      label: "Sweeps",       short: "SWP"  },
+  { id: "tee",        label: "Tees",         short: "TEE"  },
+  { id: "offset",     label: "Offsets",      short: "OFF"  },
+] as const;
+
+type FittingId = typeof FITTING_TYPES[number]["id"];
+
+interface FittingCounts {
+  connector: number;
+  coupling: number;
+  lb: number;
+  elbow90: number;
+  elbow45: number;
+  sweep: number;
+  tee: number;
+  offset: number;
 }
 
-// ─── Project Manager Strip ────────────────────────────────────────────────────
-function ProjectStrip() {
-  const {
-    civilProjects,
-    activeCivilId,
-    switchCivilProject,
-    addCivilProject,
-    renameCivilProject,
-    deleteCivilProject,
-  } = useApp();
+// ─── Per-run item (auto-pushed from plan panel) ───────────────────────────────
+interface RunItem {
+  id: string;
+  name: string;
+  feet: number;
+  conduitSize: string;
+  conductors: number;
+  fittings: FittingCounts;
+}
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [showNew, setShowNew] = useState(false);
-  const [newName, setNewName] = useState("");
+function defaultFittings(): FittingCounts {
+  return { connector: 0, coupling: 0, lb: 0, elbow90: 0, elbow45: 0, sweep: 0, tee: 0, offset: 0 };
+}
 
-  const commitEdit = (id: string) => {
-    const t = editName.trim();
-    if (t) renameCivilProject(id, t);
-    setEditingId(null);
-  };
+function calcWire(feet: number, conductors: number) {
+  return parseFloat((feet * conductors * 1.1).toFixed(1));
+}
 
-  const handleAdd = () => {
-    const name = newName.trim() || `Job ${civilProjects.length + 1}`;
-    addCivilProject(name);
-    setNewName("");
-    setShowNew(false);
-    toast.success(`Project "${name}" created.`);
-  };
+function calcSticks(feet: number) {
+  return Math.ceil(feet / 10);
+}
 
+// ─── Fitting Counter ──────────────────────────────────────────────────────────
+function FittingCounter({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
   return (
-    <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-muted/20 shrink-0 overflow-x-auto">
-      <span className="text-[10px] font-semibold text-muted-foreground mr-1 shrink-0 uppercase tracking-wide">Jobs:</span>
-      {civilProjects.map((proj) => (
-        <div
-          key={proj.id}
-          className={cn(
-            "flex items-center gap-0.5 rounded border transition-all shrink-0",
-            proj.id === activeCivilId
-              ? "bg-yellow-400/10 border-yellow-400/40"
-              : "border-transparent hover:border-border"
-          )}
-        >
-          {editingId === proj.id ? (
-            <div className="flex items-center gap-0.5 px-1">
-              <input
-                autoFocus
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitEdit(proj.id);
-                  if (e.key === "Escape") setEditingId(null);
-                }}
-                className="h-5 w-24 text-[10px] bg-background border border-border rounded px-1 text-foreground"
-              />
-              <button onClick={() => commitEdit(proj.id)} className="text-green-400 hover:text-green-300"><Check size={10} /></button>
-              <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground"><X size={10} /></button>
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={() => switchCivilProject(proj.id)}
-                className={cn(
-                  "px-2 py-0.5 text-[10px] font-medium whitespace-nowrap transition-colors",
-                  proj.id === activeCivilId ? "text-yellow-400" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {proj.name}
-              </button>
-              <button
-                onClick={() => { setEditingId(proj.id); setEditName(proj.name); }}
-                className="px-0.5 text-muted-foreground hover:text-foreground transition-colors"
-                title="Rename"
-              >
-                <Pencil size={9} />
-              </button>
-              {civilProjects.length > 1 && (
-                <button
-                  onClick={() => { deleteCivilProject(proj.id); toast.info(`Deleted "${proj.name}".`); }}
-                  className="px-0.5 text-muted-foreground hover:text-destructive transition-colors"
-                  title="Delete project"
-                >
-                  <Trash2 size={9} />
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      ))}
-
-      {showNew ? (
-        <div className="flex items-center gap-0.5 shrink-0">
-          <input
-            autoFocus
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleAdd();
-              if (e.key === "Escape") setShowNew(false);
-            }}
-            placeholder="Job name…"
-            className="h-5 w-24 text-[10px] bg-background border border-border rounded px-1 text-foreground"
-          />
-          <button onClick={handleAdd} className="text-green-400 hover:text-green-300"><Check size={10} /></button>
-          <button onClick={() => setShowNew(false)} className="text-muted-foreground hover:text-foreground"><X size={10} /></button>
-        </div>
-      ) : (
+    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-border/40 last:border-0">
+      <span className="text-xs text-muted-foreground font-mono">{label}</span>
+      <div className="flex items-center gap-1">
         <button
-          onClick={() => setShowNew(true)}
-          className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          onClick={() => onChange(Math.max(0, value - 1))}
+          className="w-5 h-5 rounded border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#F5C518]/50 transition-colors"
         >
-          <Plus size={10} /> New Job
+          <Minus size={10} />
         </button>
-      )}
+        <span className="w-7 text-center text-xs font-mono font-semibold text-foreground">
+          {value}
+        </span>
+        <button
+          onClick={() => onChange(value + 1)}
+          className="w-5 h-5 rounded border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#F5C518]/50 transition-colors"
+        >
+          <Plus size={10} />
+        </button>
+      </div>
     </div>
   );
 }
 
-// ─── Output Card ──────────────────────────────────────────────────────────────
-function OutputCard({ icon, label, value, unit }: { icon: React.ReactNode; label: string; value: string | number; unit: string }) {
+// ─── Run Card ─────────────────────────────────────────────────────────────────
+function RunCard({
+  run,
+  index,
+  onUpdate,
+  onRemove,
+}: {
+  run: RunItem;
+  index: number;
+  onUpdate: (id: string, partial: Partial<RunItem>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [showFittings, setShowFittings] = useState(false);
+  const sticks = calcSticks(run.feet);
+  const wire = calcWire(run.feet, run.conductors);
+
+  const updateFitting = (key: FittingId, val: number) => {
+    onUpdate(run.id, { fittings: { ...run.fittings, [key]: val } });
+  };
+
+  const totalFittings = Object.values(run.fittings).reduce((a, b) => a + b, 0);
+
   return (
-    <div className="bp-card p-4 flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-muted-foreground text-xs font-medium uppercase tracking-wider">
-        {icon}{label}
+    <div className="bp-card overflow-hidden">
+      {/* Run header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/10">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{
+              background: ["#22C55E","#3B82F6","#F97316","#A855F7","#EC4899","#14B8A6"][index % 6],
+            }}
+          />
+          <span
+            className="text-sm font-semibold text-foreground"
+            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+          >
+            {run.name}
+          </span>
+          <span className="text-[10px] font-mono text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
+            {run.conduitSize}"
+          </span>
+        </div>
+        <button
+          onClick={() => onRemove(run.id)}
+          className="text-muted-foreground hover:text-destructive transition-colors"
+          title="Remove run"
+        >
+          <Minus size={12} />
+        </button>
       </div>
-      <div className="text-3xl font-bold tracking-tight" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-        {value}
+
+      {/* Run body */}
+      <div className="p-4 space-y-4">
+        {/* Distance + Conductors row */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Distance (ft)</Label>
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={run.feet || ""}
+              onChange={(e) => onUpdate(run.id, { feet: parseFloat(e.target.value) || 0 })}
+              placeholder="0"
+              className="h-8 font-mono text-sm bg-input border-border"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductors</Label>
+              <span className="text-sm font-bold text-[#F5C518] font-mono">{run.conductors}</span>
+            </div>
+            <Slider
+              min={1} max={12} step={1}
+              value={[run.conductors]}
+              onValueChange={([v]) => onUpdate(run.id, { conductors: v })}
+              className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+            />
+          </div>
+        </div>
+
+        {/* Conduit size */}
+        <div className="space-y-1.5">
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Size</Label>
+          <div className="grid grid-cols-5 gap-1">
+            {CONDUIT_SIZES.map((cs) => (
+              <button
+                key={cs.value}
+                onClick={() => onUpdate(run.id, { conduitSize: cs.value })}
+                className={cn(
+                  "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                  run.conduitSize === cs.value
+                    ? "bg-yellow-400 text-black border-yellow-400"
+                    : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                )}
+              >
+                {cs.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Calculated outputs */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-muted/20 rounded-lg p-2.5">
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+              <Package size={10} /> Pipe Sticks
+            </div>
+            <div className="text-xl font-bold font-mono text-foreground">{sticks}</div>
+            <div className="text-[10px] text-muted-foreground font-mono">10-ft sticks</div>
+          </div>
+          <div className="bg-muted/20 rounded-lg p-2.5">
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+              <Cable size={10} /> Wire Length
+            </div>
+            <div className="text-xl font-bold font-mono text-foreground">{wire}</div>
+            <div className="text-[10px] text-muted-foreground font-mono">ft w/ 10% slack</div>
+          </div>
+        </div>
+
+        {/* Fittings toggle */}
+        <button
+          onClick={() => setShowFittings((v) => !v)}
+          className={cn(
+            "w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all text-xs font-medium",
+            showFittings
+              ? "border-[#F5C518]/40 bg-[#F5C518]/5 text-[#F5C518]"
+              : "border-border bg-muted/20 text-muted-foreground hover:text-foreground hover:border-border/80"
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <Wrench size={12} />
+            <span>Fittings</span>
+            {totalFittings > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-[#F5C518]/20 text-[#F5C518] text-[10px] font-bold">
+                {totalFittings}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] text-muted-foreground">{showFittings ? "▲" : "▼"}</span>
+        </button>
+
+        {showFittings && (
+          <div className="bg-muted/10 rounded-lg px-3 py-2 border border-border/50">
+            {FITTING_TYPES.map((ft) => (
+              <FittingCounter
+                key={ft.id}
+                label={ft.label}
+                value={run.fittings[ft.id]}
+                onChange={(v) => updateFitting(ft.id, v)}
+              />
+            ))}
+          </div>
+        )}
       </div>
-      <div className="text-xs text-muted-foreground font-mono">{unit}</div>
+    </div>
+  );
+}
+
+// ─── Editor view ─────────────────────────────────────────────────────────────
+function CivilEditor({
+  projectId,
+  projectName,
+  onBack,
+}: {
+  projectId: string;
+  projectName: string;
+  onBack: () => void;
+}) {
+  const { activeCivilProject, setCivilState } = useApp();
+  const s = activeCivilProject.state;
+
+  // Per-run items — stored in component state (persisted via AppContext civilState.runs)
+  // We keep runs in local state here and sync to civilState for CSV export
+  const [runs, setRuns] = useState<RunItem[]>(() => {
+    // If civilState has runs, restore them; otherwise start empty
+    const stored = (s as any).runs as RunItem[] | undefined;
+    return stored ?? [];
+  });
+
+  const syncRuns = useCallback(
+    (next: RunItem[]) => {
+      setRuns(next);
+      // Persist runs into civilState so CSV export can read them
+      setCivilState({ ...s, ...(({ runs: next }) as any) } as CivilState);
+    },
+    [s, setCivilState]
+  );
+
+  const handlePush = useCallback(
+    (ft: number, runName: string, conduitSize?: string) => {
+      const newRun: RunItem = {
+        id: `run-${Date.now()}`,
+        name: runName,
+        feet: ft,
+        conduitSize: conduitSize ?? "3/4",
+        conductors: 2,
+        fittings: defaultFittings(),
+      };
+      syncRuns([...runs, newRun]);
+      toast.success(`"${runName}" pushed — ${ft} ft added as a new run.`);
+    },
+    [runs, syncRuns]
+  );
+
+  const updateRun = (id: string, partial: Partial<RunItem>) => {
+    syncRuns(runs.map((r) => (r.id === id ? { ...r, ...partial } : r)));
+  };
+
+  const removeRun = (id: string) => {
+    syncRuns(runs.filter((r) => r.id !== id));
+  };
+
+  const totalWire = runs.reduce((acc, r) => acc + calcWire(r.feet, r.conductors), 0);
+  const totalSticks = runs.reduce((acc, r) => acc + calcSticks(r.feet), 0);
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Back bar */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/10 shrink-0">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronLeft size={14} /> All Projects
+        </button>
+        <span className="text-muted-foreground/40">/</span>
+        <span className="text-xs font-medium text-foreground">{projectName}</span>
+      </div>
+
+      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+        {/* ── Plan Panel ── */}
+        <ResizablePanel defaultSize={50} minSize={25} maxSize={75}>
+          <PlanPanel
+            tabKey={`civil_${projectId}`}
+            onPushDistance={(ft, runName, conduitSize) => handlePush(ft, runName, conduitSize)}
+          />
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* ── Calculator / Runs ── */}
+        <ResizablePanel defaultSize={50} minSize={25}>
+          <div className="flex flex-col h-full overflow-hidden">
+            {/* Header */}
+            <div className="px-5 pt-4 pb-3 border-b border-border bg-card shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
+                  <Zap size={16} className="text-[#F5C518]" />
+                </div>
+                <div>
+                  <h1
+                    className="text-base font-bold text-foreground"
+                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                  >
+                    Civil & Underground
+                  </h1>
+                  <p className="text-xs text-muted-foreground">{projectName}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Runs list */}
+            <div className="flex-1 overflow-auto p-4 pb-24 space-y-4">
+              {runs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
+                    <Link2 size={20} className="text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">No runs yet</p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">
+                      Load a PDF, measure a conduit run, then push it here.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {runs.map((run, i) => (
+                    <RunCard
+                      key={run.id}
+                      run={run}
+                      index={i}
+                      onUpdate={updateRun}
+                      onRemove={removeRun}
+                    />
+                  ))}
+
+                  {/* Totals summary */}
+                  <div className="bp-card p-4 border-[#F5C518]/20">
+                    <h3
+                      className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3"
+                      style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                    >
+                      Project Totals
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Pipe Sticks</div>
+                        <div className="text-2xl font-bold font-mono text-[#F5C518]">{totalSticks}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Total Wire</div>
+                        <div className="text-2xl font-bold font-mono text-[#F5C518]">{totalWire.toFixed(1)} ft</div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function CivilCalculator() {
-  const { activeCivilProject, setCivilState } = useApp();
-  const s = activeCivilProject.state;
-  const { sticks, couplings, wireLength } = calcOutputs(s.distance, s.conductors);
+  const {
+    civilProjects,
+    activeCivilId,
+    activeCivilProject,
+    addCivilProject,
+    renameCivilProject,
+    deleteCivilProject,
+    switchCivilProject,
+  } = useApp();
 
-  const update = (partial: Partial<CivilState>) => setCivilState({ ...s, ...partial });
+  // "null" means show homepage; a project id means show editor
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null);
 
-  const handlePush = (ft: number) => {
-    update({ distance: ft });
-    toast.success(`${ft} ft pushed to Civil calculator.`);
+  const handleOpen = (id: string) => {
+    switchCivilProject(id);
+    setOpenProjectId(id);
   };
 
+  const handleNew = (name: string) => {
+    addCivilProject(name);
+    // After adding, the new project becomes active — open it immediately
+    // We need a small delay since addCivilProject is async state update
+    setTimeout(() => {
+      // The new project is the last one
+      setOpenProjectId(null); // trigger re-render to pick up new activeCivilId
+      // Actually open it after state settles
+      setTimeout(() => setOpenProjectId("__new__"), 50);
+    }, 50);
+  };
+
+  // When openProjectId is "__new__", resolve to actual activeCivilId
+  const resolvedOpenId =
+    openProjectId === "__new__" ? activeCivilId : openProjectId;
+
+  const projectCards = civilProjects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    createdAt: p.createdAt,
+    summary:
+      (p.state as any).runs?.length > 0
+        ? `${(p.state as any).runs.length} run${(p.state as any).runs.length !== 1 ? "s" : ""}`
+        : "No runs yet",
+  }));
+
+  if (!resolvedOpenId) {
+    return (
+      <ProjectHomepage
+        title="Civil & Underground"
+        icon={<Zap size={18} className="text-[#F5C518]" />}
+        projects={projectCards}
+        activeId={activeCivilId}
+        onOpen={handleOpen}
+        onNew={handleNew}
+        onRename={renameCivilProject}
+        onDelete={deleteCivilProject}
+      />
+    );
+  }
+
+  const proj = civilProjects.find((p) => p.id === resolvedOpenId) ?? activeCivilProject;
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      <ProjectStrip />
-      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-        {/* ── Plan Panel ── */}
-        <ResizablePanel defaultSize={50} minSize={25} maxSize={75}>
-          <PlanPanel tabKey="civil" onPushDistance={handlePush} />
-        </ResizablePanel>
-
-        <ResizableHandle withHandle />
-
-        {/* ── Calculator ── */}
-        <ResizablePanel defaultSize={50} minSize={25}>
-          <div className="flex flex-col h-full overflow-auto">
-            {/* Header */}
-            <div className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
-                  <Zap size={16} className="text-[#F5C518]" />
-                </div>
-                <div>
-                  <h1 className="text-lg font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Civil & Underground
-                  </h1>
-                  <p className="text-xs text-muted-foreground">{activeCivilProject.name}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-auto p-4">
-              <div className="max-w-lg mx-auto space-y-6">
-                {/* Inputs */}
-                <div className="bp-card p-4 space-y-5">
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Inputs
-                  </h2>
-
-                  {/* Distance */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">Total Distance</Label>
-                      <span className="text-xs text-muted-foreground font-mono">feet</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={s.distance || ""}
-                        onChange={(e) => update({ distance: parseFloat(e.target.value) || 0 })}
-                        placeholder="0"
-                        className="font-mono text-base h-10 bg-input border-border text-foreground"
-                      />
-                      <span className="text-muted-foreground text-sm font-mono shrink-0">ft</span>
-                    </div>
-                    {s.distance === 0 && (
-                      <p className="text-[10px] text-[#F5C518] font-mono">↑ Type distance or push from the plan on the left</p>
-                    )}
-                  </div>
-
-                  {/* Conductors */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">Conductors</Label>
-                      <span className="text-xl font-bold text-[#F5C518]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
-                        {s.conductors}
-                      </span>
-                    </div>
-                    <Slider
-                      min={1} max={12} step={1}
-                      value={[s.conductors]}
-                      onValueChange={([v]) => update({ conductors: v })}
-                      className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
-                    />
-                    <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
-                      <span>1</span><span>3</span><span>6</span><span>9</span><span>12</span>
-                    </div>
-                  </div>
-
-                  {/* Conduit Size */}
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Conduit Size</Label>
-                    <div className="grid grid-cols-5 gap-1">
-                      {CONDUIT_SIZES.map((cs) => (
-                        <button
-                          key={cs.value}
-                          onClick={() => update({ conduitSize: cs.value })}
-                          className={cn(
-                            "py-1.5 rounded text-[11px] font-mono font-medium border transition-all",
-                            s.conduitSize === cs.value
-                              ? "bg-yellow-400 text-black border-yellow-400"
-                              : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                          )}
-                        >
-                          {cs.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Outputs */}
-                <div>
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Calculated Outputs
-                  </h2>
-                  <div className="grid grid-cols-1 gap-3">
-                    <OutputCard icon={<Package size={12} />} label="10-ft Pipe Sticks" value={sticks} unit={`⌈${s.distance} ÷ 10⌉ = ${sticks} sticks`} />
-                    <OutputCard icon={<Link2 size={12} />} label="Couplings Required" value={couplings} unit={`${sticks} sticks − 1 = ${couplings}`} />
-                    <OutputCard icon={<Cable size={12} />} label="Total Wire Length" value={wireLength} unit={`${s.distance} ft × ${s.conductors} cond. × 1.10 slack`} />
-                  </div>
-                </div>
-
-                {/* Formula reference */}
-                <div className="bp-card p-3 space-y-2">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Formula Reference
-                  </p>
-                  <div className="grid grid-cols-3 gap-2 text-[10px] font-mono text-muted-foreground">
-                    <div className="space-y-0.5"><p className="text-foreground font-semibold">Pipe Sticks</p><p>⌈ Distance ÷ 10 ⌉</p></div>
-                    <div className="space-y-0.5"><p className="text-foreground font-semibold">Couplings</p><p>Sticks − 1</p></div>
-                    <div className="space-y-0.5"><p className="text-foreground font-semibold">Wire Length</p><p>Dist × Cond × 1.10</p></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-    </div>
+    <CivilEditor
+      projectId={proj.id}
+      projectName={proj.name}
+      onBack={() => setOpenProjectId(null)}
+    />
   );
 }
