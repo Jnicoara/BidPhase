@@ -378,19 +378,32 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       const pts = run.points.map(normToCanvas).filter(Boolean) as { x: number; y: number }[];
       if (pts.length === 0) return;
 
+      // Glow pass — wide soft halo for vibrancy
+      if (pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (isActive ? 10 : 7) * S;
+        ctx.setLineDash([]);
+        ctx.globalAlpha = isActive ? 0.18 : 0.12;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
       // Shadow/outline pass for contrast against light backgrounds
       if (pts.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.strokeStyle = "rgba(0,0,0,0.6)";
         ctx.lineWidth = (isActive ? 5 : 4) * S;
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
         ctx.stroke();
       }
 
-      // Polyline (colored)
+      // Polyline (colored) — bright core
       if (pts.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
@@ -398,44 +411,71 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
         ctx.strokeStyle = color;
         ctx.lineWidth = (isActive ? 3 : 2) * S;
         ctx.setLineDash([]);
-        ctx.globalAlpha = isActive ? 1 : 0.75;
+        ctx.globalAlpha = isActive ? 1 : 0.85;
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
 
-      // Per-segment labels — scale WITH zoom so they shrink when zoomed out
+      // Labels — per-segment or collapsed run total depending on zoom
       if (scaleRatio && pageReady) {
         const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
-        // Font size in canvas pixels — scales with zoom (appears ~13px at 100% zoom)
-        const fontSize = Math.max(8, Math.round(13 * RENDER_BASE_ZOOM));
+        // Font scales with canvas resolution (shrinks as you zoom out)
+        const fontSize = Math.max(6, Math.round(9 * RENDER_BASE_ZOOM));
         ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
-        for (let i = 1; i < pts.length; i++) {
-          const a = pts[i - 1];
-          const b = pts[i];
-          const segPx = dist2D(a.x, a.y, b.x, b.y);
-          const segFt = segPx / pxPerFt;
-          const mx = (a.x + b.x) / 2;
-          const my = (a.y + b.y) / 2;
-          const angle = Math.atan2(b.y - a.y, b.x - a.x);
-          const label = `${segFt.toFixed(1)}'`;
 
-          ctx.save();
-          ctx.translate(mx, my);
-          const flip = Math.abs(angle) > Math.PI / 2;
-          ctx.rotate(flip ? angle + Math.PI : angle);
+        // Collapse threshold: if any segment's screen-pixel length < 40px, show run total only
+        const MIN_SEG_SCREEN_PX = 40;
+        const showPerSeg = pts.length < 2 ? false : (() => {
+          for (let i = 1; i < pts.length; i++) {
+            const screenLen = dist2D(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y) * dz / RENDER_BASE_ZOOM;
+            if (screenLen < MIN_SEG_SCREEN_PX) return false;
+          }
+          return true;
+        })();
 
-          // Text shadow for readability without a background box
-          ctx.shadowColor = "rgba(0,0,0,0.85)";
+        if (showPerSeg) {
+          // Per-segment labels
+          for (let i = 1; i < pts.length; i++) {
+            const a = pts[i - 1];
+            const b = pts[i];
+            const segPx = dist2D(a.x, a.y, b.x, b.y);
+            const segFt = segPx / pxPerFt;
+            const mx = (a.x + b.x) / 2;
+            const my = (a.y + b.y) / 2;
+            const angle = Math.atan2(b.y - a.y, b.x - a.x);
+            const label = `${segFt.toFixed(1)}'`;
+            ctx.save();
+            ctx.translate(mx, my);
+            const flip = Math.abs(angle) > Math.PI / 2;
+            ctx.rotate(flip ? angle + Math.PI : angle);
+            ctx.shadowColor = "rgba(0,0,0,0.9)";
+            ctx.shadowBlur = 3;
+            ctx.shadowOffsetX = 1;
+            ctx.shadowOffsetY = 1;
+            ctx.fillStyle = color;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillText(label, 0, -3);
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.restore();
+          }
+        } else if (pts.length >= 2) {
+          // Collapsed: show run total near midpoint of whole run
+          const totalPx = pts.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y), 0);
+          const totalFt = totalPx / pxPerFt;
+          const mid = pts[Math.floor(pts.length / 2)];
+          const label = `${totalFt.toFixed(1)}' total`;
+          ctx.shadowColor = "rgba(0,0,0,0.9)";
           ctx.shadowBlur = 4;
           ctx.shadowOffsetX = 1;
           ctx.shadowOffsetY = 1;
           ctx.fillStyle = color;
           ctx.textAlign = "center";
           ctx.textBaseline = "bottom";
-          ctx.fillText(label, 0, -4);
+          ctx.fillText(label, mid.x, mid.y - 6);
           ctx.shadowColor = "transparent";
           ctx.shadowBlur = 0;
-          ctx.restore();
         }
       }
 
