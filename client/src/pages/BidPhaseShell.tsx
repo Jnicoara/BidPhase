@@ -10,32 +10,63 @@ import { useApp } from "@/contexts/AppContext";
 import CivilCalculator from "@/components/tabs/CivilCalculator";
 import CommercialAssembly from "@/components/tabs/CommercialAssembly";
 import ResidentialRoughIn from "@/components/tabs/ResidentialRoughIn";
+import SettingsTab from "@/components/tabs/SettingsTab";
 import ExportButton from "@/components/ExportButton";
 import {
-  Zap,
   Building2,
   Home,
   ChevronRight,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Custom conduit/underground icon — three parallel pipes going underground
+function ConduitIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {/* Ground line */}
+      <line x1="2" y1="13" x2="22" y2="13" strokeWidth="2" />
+      {/* Three conduit pipes going underground */}
+      <path d="M6 13 Q6 18 6 20" />
+      <path d="M12 13 Q12 18 12 20" />
+      <path d="M18 13 Q18 18 18 20" />
+      {/* Conduit entry caps above ground */}
+      <path d="M4 13 L4 7 Q4 5 6 5 Q8 5 8 7 L8 13" />
+      <path d="M10 13 L10 7 Q10 5 12 5 Q14 5 14 7 L14 13" />
+      <path d="M16 13 L16 7 Q16 5 18 5 Q20 5 20 7 L20 13" />
+    </svg>
+  );
+}
+
 const TABS = [
-  { id: "civil",       label: "Civil / UG",   icon: Zap,       short: "Civil" },
-  { id: "commercial",  label: "Commercial",   icon: Building2, short: "Comm." },
-  { id: "residential", label: "Residential",  icon: Home,      short: "Res." },
+  { id: "residential", label: "Residential",      icon: Home,         short: "Res."  },
+  { id: "commercial",  label: "Commercial",        icon: Building2,    short: "Comm." },
+  { id: "civil",       label: "Civil / UG",        icon: ConduitIcon,  short: "Civil" },
+  { id: "settings",    label: "Settings",          icon: Settings,     short: "Set."  },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 export default function BidPhaseShell() {
-  const { activeTab, setActiveTab } = useApp();
+  const { activeTab, setActiveTab, uiFontScale } = useApp();
 
   const renderTab = () => {
     switch (activeTab as TabId) {
-      case "civil":       return <CivilCalculator />;
-      case "commercial":  return <CommercialAssembly />;
       case "residential": return <ResidentialRoughIn />;
-      default:            return <CivilCalculator />;
+      case "commercial":  return <CommercialAssembly />;
+      case "civil":       return <CivilCalculator />;
+      case "settings":    return <SettingsTab />;
+      default:            return <ResidentialRoughIn />;
     }
   };
 
@@ -125,8 +156,12 @@ export default function BidPhaseShell() {
           </div>
         </header>
 
-        {/* Tab content */}
-        <div className="flex-1 overflow-hidden tab-enter" key={activeTab}>
+        {/* Tab content — font scale applied here so all em-based text scales */}
+        <div
+          className="flex-1 overflow-hidden tab-enter"
+          key={activeTab}
+          style={{ fontSize: `${uiFontScale}rem` }}
+        >
           {renderTab()}
         </div>
       </main>

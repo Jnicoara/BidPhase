@@ -158,6 +158,10 @@ interface AppContextValue {
   // ── Plan → calculator push ──────────────────────────────────────────────────
   pushDistanceToCivil: (ft: number) => void;
 
+  // ── UI settings ────────────────────────────────────────────────────────────
+  uiFontScale: number;           // 0.8 – 1.4, default 1.1
+  setUiFontScale: (v: number) => void;
+
   // ── Legacy single-state accessors for ExportButton ─────────────────────────
   civilState: CivilState;
   assemblyState: AssemblyState;
@@ -175,7 +179,8 @@ function ensureOne<T extends { id: string }>(
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [activeTab, setActiveTab] = useLocalStorage<string>("bp_active_tab", "civil");
+  const [activeTab, setActiveTab] = useLocalStorage<string>("bp_active_tab", "residential");
+  const [uiFontScale, setUiFontScale] = useLocalStorage<number>("bp_ui_font_scale", 1.1);
 
   // ── Civil ─────────────────────────────────────────────────────────────────
   const [civilProjects, setCivilProjects] = useLocalStorage<CivilProject[]>(
@@ -390,6 +395,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         switchResidentialProject,
 
         pushDistanceToCivil,
+
+        uiFontScale,
+        setUiFontScale,
 
         // Legacy accessors for ExportButton
         civilState: activeCivilProject.state,
