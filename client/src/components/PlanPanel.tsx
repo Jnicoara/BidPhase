@@ -337,7 +337,8 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   // ── Recompute run totals when points/scale/zoom changes ───────────────────
   useEffect(() => {
     if (!scaleRatio || !pageReady) return;
-    const pxPerFt = scaleRatio * renderZoom;
+    // scaleRatio is px/ft at zoom=1; canvas pixels are at RENDER_BASE_ZOOM
+    const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
     setCurrentRuns((prev) =>
       prev.map((run) => {
         if (run.points.length < 2) return { ...run, totalFeet: null };
@@ -348,7 +349,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
         return { ...run, totalFeet: parseFloat((totalPx / pxPerFt).toFixed(2)) };
       })
     );
-  }, [currentRuns.map(r => r.points.length).join(","), scaleRatio, renderZoom, pageReady]); // eslint-disable-line
+  }, [currentRuns.map(r => r.points.length).join(","), scaleRatio, pageReady]); // eslint-disable-line
 
   // ── Draw overlay canvas ────────────────────────────────────────────────────
   const drawCanvas = useCallback(() => {
@@ -386,7 +387,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
 
       // Per-segment labels
       if (scaleRatio && pageReady) {
-        const pxPerFt = scaleRatio * renderZoom;
+        const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
         for (let i = 1; i < pts.length; i++) {
           const a = pts[i - 1];
           const b = pts[i];
@@ -715,12 +716,12 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     if (modeRef.current === "none") { setCrosshair(null); return; }
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    // Use offsetX/Y (pre-transform canvas local coords) — correct even inside CSS-scaled container
+    const scaleX = canvas.width  / canvas.offsetWidth;
+    const scaleY = canvas.height / canvas.offsetHeight;
     setCrosshair({
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top)  * scaleY,
+      x: e.nativeEvent.offsetX * scaleX,
+      y: e.nativeEvent.offsetY * scaleY,
     });
   }, []);
 
@@ -731,12 +732,13 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     if (!d || d <= 0) { toast.error("Enter a valid distance in feet."); return; }
     const pxDist = normDist(scalePoints[0], scalePoints[1]);
     if (pxDist < 2) { toast.error("Points too close. Try again."); return; }
-    const pxPerFtAtZoom1 = (pxDist / d) / renderZoom;
+    // pxDist is in canvas pixels at RENDER_BASE_ZOOM; divide by RENDER_BASE_ZOOM to get px/ft at zoom=1
+    const pxPerFtAtZoom1 = (pxDist / d) / RENDER_BASE_ZOOM;
     setScaleRatio(pxPerFtAtZoom1);
     setMode("none");
     modeRef.current = "none";
     toast.success(`Scale set ✓  1 ft = ${(pxDist / d).toFixed(2)} px at current zoom.`);
-  }, [scalePoints, knownDistance, normDist, renderZoom, setScaleRatio]);
+  }, [scalePoints, knownDistance, normDist, setScaleRatio]);
 
   // ── Undo ───────────────────────────────────────────────────────────────────
   const handleUndo = useCallback(() => {
