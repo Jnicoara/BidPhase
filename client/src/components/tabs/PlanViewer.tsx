@@ -1,18 +1,24 @@
 /**
- * BidPhase — Tab 1: Digital Plan Viewer (Takeoff Tool) — v4
+ * BidPhase — Tab 1: Digital Plan Viewer (Takeoff Tool) — v5
  *
- * Coordinate system design:
- * ─────────────────────────
- * All points are stored as NORMALIZED coordinates:
- *   { pageIndex, nx, ny }  where nx,ny ∈ [0,1] are fractions of the page's
- *   rendered pixel size AT ZOOM=1 (the "base" size).
+ * Zoom architecture (Google Maps style):
+ * ───────────────────────────────────────
+ * The PDF is rendered ONCE at BASE_RENDER_SCALE (2×) for crisp quality.
+ * Zoom is applied via CSS `transform: scale(zoom)` on the entire container.
+ * This means:
+ *   - Zoom is instant, GPU-accelerated, no PDF re-render
+ *   - Smooth continuous zoom via wheel or pinch
+ *   - The canvas overlay scales with the pages automatically
  *
- * Scale ratio is stored as:  scaleRatio = (pixelDist at zoom=1) / feet
- *   → zoom-independent: to get feet from a measurement at any zoom level,
- *     compute pixelDist at zoom=1 and divide by scaleRatio.
+ * Coordinate system:
+ * ──────────────────
+ * Points stored as { pageIndex, nx, ny } where nx,ny ∈ [0,1] are fractions
+ * of the page's BASE rendered size (at BASE_RENDER_SCALE, before CSS zoom).
  *
- * The canvas overlay is sized to match the total rendered height of all pages
- * at the current zoom. Points are projected to screen by multiplying by zoom.
+ * scaleRatio = (base_pixels) / foot — zoom-independent.
+ *
+ * Undo: always available whenever there are scale or measure points,
+ * regardless of current mode.
  */
 import {
   useState,
@@ -51,24 +57,24 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure";
 
-/**
- * Normalized point: stored in page-fraction space at zoom=1.
- * nx = canvasX_at_zoom1 / pageWidth_at_zoom1
- * ny = canvasY_at_zoom1 / pageHeight_at_zoom1
- */
 interface NormPoint {
   pageIndex: number;
-  nx: number;
-  ny: number;
+  nx: number; // fraction of page base width
+  ny: number; // fraction of page base height
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const PAGE_GAP = 16; // px gap between pages (at zoom=1)
-const BASE_PAGE_WIDTH = 595; // A4 width in PDF points ≈ px at zoom=1 for react-pdf
+const PAGE_GAP = 16;          // px gap between pages at base scale
+const BASE_RENDER_SCALE = 2;  // PDF rendered at 2× for crisp quality
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 5;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function dist2D(ax: number, ay: number, bx: number, by: number) {
   return Math.sqrt((bx - ax) ** 2 + (by - ay) ** 2);
+}
+
+function clampZoom(z: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
 }
 
 export default function PlanViewer() {
@@ -77,27 +83,31 @@ export default function PlanViewer() {
   // ── PDF state ──────────────────────────────────────────────────────────────
   const [pdfFile, setPdfFile] = useLocalStorage<string | null>("bp_pdf_file", null);
   const [numPages, setNumPages] = useState<number>(0);
-  const [zoom, setZoom] = useLocalStorage<number>("bp_pdf_zoom", 1.0);
 
   /**
-   * pageSizes[i] = { w, h } — the rendered size of page i AT ZOOM=1.
-   * Populated once pages render. Used as the reference for all coordinate math.
+   * CSS zoom level — applied as transform: scale(zoom) on the pages container.
+   * Does NOT trigger PDF re-render.
+   */
+  const [zoom, setZoom] = useLocalStorage<number>("bp_pdf_zoom_v5", 1.0);
+  // Ref for use inside event handlers without stale closure
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  /**
+   * pageSizes[i] = { w, h } — rendered size of page i at BASE_RENDER_SCALE.
+   * This is the coordinate reference for all point math.
    */
   const pageSizesRef = useRef<{ w: number; h: number }[]>([]);
   const [pageSizesReady, setPageSizesReady] = useState(0);
 
   // ── Scale state ────────────────────────────────────────────────────────────
-  /**
-   * scaleRatio = pixels_at_zoom1 / foot
-   * Stored zoom-independently so measurements stay correct after zooming.
-   */
-  const [scaleRatio, setScaleRatio] = useLocalStorage<number | null>("bp_scale_ratio_v3", null);
-  const [scalePoints, setScalePoints] = useLocalStorage<NormPoint[]>("bp_scale_pts_v3", []);
+  const [scaleRatio, setScaleRatio] = useLocalStorage<number | null>("bp_scale_ratio_v5", null);
+  const [scalePoints, setScalePoints] = useLocalStorage<NormPoint[]>("bp_scale_pts_v5", []);
   const [knownDistance, setKnownDistance] = useState<string>("");
 
   // ── Measure state ──────────────────────────────────────────────────────────
-  const [measurePoints, setMeasurePoints] = useLocalStorage<NormPoint[]>("bp_measure_pts_v3", []);
-  const [measuredFeet, setMeasuredFeet] = useLocalStorage<number | null>("bp_measured_ft_v3", null);
+  const [measurePoints, setMeasurePoints] = useLocalStorage<NormPoint[]>("bp_measure_pts_v5", []);
+  const [measuredFeet, setMeasuredFeet] = useLocalStorage<number | null>("bp_measured_ft_v5", null);
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [mode, setMode] = useState<Mode>("none");
@@ -106,13 +116,15 @@ export default function PlanViewer() {
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  /** Map from pageIndex → wrapper div element */
-  const pageWrappers = useRef<Map<number, HTMLDivElement>>(new Map());
-  /** Pinch state for touch zoom */
+  /** The inner container that gets CSS transform: scale(zoom) */
+  const pagesContainerRef = useRef<HTMLDivElement>(null);
+  /** Pinch zoom state */
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
+  const modeRef = useRef(mode);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
-  // ── Compute cumulative top offsets at zoom=1 ───────────────────────────────
-  const getPageTops_zoom1 = useCallback((): number[] => {
+  // ── Cumulative page tops at base scale ────────────────────────────────────
+  const getPageTops = useCallback((): number[] => {
     const sizes = pageSizesRef.current;
     const tops: number[] = [];
     let top = 0;
@@ -123,61 +135,55 @@ export default function PlanViewer() {
     return tops;
   }, []);
 
-  // ── Project NormPoint → canvas screen coords (at current zoom) ────────────
-  const normToScreen = useCallback(
+  // ── NormPoint → canvas coords (base scale, before CSS zoom) ───────────────
+  const normToBase = useCallback(
     (pt: NormPoint): { x: number; y: number } | null => {
       const sizes = pageSizesRef.current;
       const s = sizes[pt.pageIndex];
       if (!s || s.w === 0) return null;
-      const tops = getPageTops_zoom1();
-      const screenX = pt.nx * s.w * zoom;
-      const screenY = (tops[pt.pageIndex] + pt.ny * s.h) * zoom;
-      return { x: screenX, y: screenY };
+      const tops = getPageTops();
+      return {
+        x: pt.nx * s.w,
+        y: tops[pt.pageIndex] + pt.ny * s.h,
+      };
     },
-    [zoom, getPageTops_zoom1]
+    [getPageTops]
   );
 
-  // ── Convert canvas click → NormPoint ──────────────────────────────────────
-  const screenToNorm = useCallback(
+  // ── Canvas click → NormPoint ───────────────────────────────────────────────
+  // canvasX/Y are in base-scale canvas pixels (canvas is NOT zoomed — it's
+  // drawn at base scale and the CSS zoom scales it visually).
+  const canvasToNorm = useCallback(
     (canvasX: number, canvasY: number): NormPoint | null => {
       const sizes = pageSizesRef.current;
       if (sizes.length === 0) return null;
-      const tops = getPageTops_zoom1();
-      // canvasX/Y are at current zoom — convert to zoom=1 space
-      const x1 = canvasX / zoom;
-      const y1 = canvasY / zoom;
+      const tops = getPageTops();
       for (let i = sizes.length - 1; i >= 0; i--) {
         const s = sizes[i];
         if (!s || s.w === 0) continue;
         const top = tops[i];
-        if (y1 >= top && y1 <= top + s.h) {
+        if (canvasY >= top && canvasY <= top + s.h) {
           return {
             pageIndex: i,
-            nx: x1 / s.w,
-            ny: (y1 - top) / s.h,
+            nx: canvasX / s.w,
+            ny: (canvasY - top) / s.h,
           };
         }
       }
       return null;
     },
-    [zoom, getPageTops_zoom1]
+    [getPageTops]
   );
 
-  // ── Compute pixel distance at zoom=1 between two NormPoints ───────────────
-  const normDist_zoom1 = useCallback(
+  // ── Pixel distance at base scale ───────────────────────────────────────────
+  const normDist = useCallback(
     (a: NormPoint, b: NormPoint): number => {
-      const sizes = pageSizesRef.current;
-      const sa = sizes[a.pageIndex];
-      const sb = sizes[b.pageIndex];
-      if (!sa || !sb) return 0;
-      const tops = getPageTops_zoom1();
-      const ax = a.nx * sa.w;
-      const ay = tops[a.pageIndex] + a.ny * sa.h;
-      const bx = b.nx * sb.w;
-      const by = tops[b.pageIndex] + b.ny * sb.h;
-      return dist2D(ax, ay, bx, by);
+      const ba = normToBase(a);
+      const bb = normToBase(b);
+      if (!ba || !bb) return 0;
+      return dist2D(ba.x, ba.y, bb.x, bb.y);
     },
-    [getPageTops_zoom1]
+    [normToBase]
   );
 
   // ── Draw canvas overlay ────────────────────────────────────────────────────
@@ -187,12 +193,12 @@ export default function PlanViewer() {
     const sizes = pageSizesRef.current;
     if (sizes.length === 0) return;
 
-    // Size canvas to cover all pages at current zoom
-    const tops = getPageTops_zoom1();
+    const tops = getPageTops();
     const lastIdx = sizes.length - 1;
-    const totalH = (tops[lastIdx] + (sizes[lastIdx]?.h ?? 0)) * zoom;
-    const maxW = Math.max(...sizes.map((s) => (s?.w ?? 0) * zoom), 1);
+    const totalH = tops[lastIdx] + (sizes[lastIdx]?.h ?? 0);
+    const maxW = Math.max(...sizes.map((s) => s?.w ?? 0), 1);
 
+    // Canvas is drawn at BASE scale — CSS zoom handles the visual scaling
     canvas.width = maxW;
     canvas.height = totalH;
 
@@ -200,12 +206,12 @@ export default function PlanViewer() {
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const drawDot = (sx: number, sy: number, color: string, r = 5) => {
+    const drawDot = (x: number, y: number, color: string, r = 5) => {
       ctx.beginPath();
-      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.55)";
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
     };
@@ -222,27 +228,27 @@ export default function PlanViewer() {
       ctx.setLineDash([]);
     };
 
-    // Scale points
-    const scaleSc = scalePoints.map(normToScreen).filter(Boolean) as { x: number; y: number }[];
-    if (scaleSc.length >= 2) drawPoly(scaleSc, "#F5C518", true);
-    scaleSc.forEach((p, i) => {
+    // Scale reference line
+    const scalePts = scalePoints.map(normToBase).filter(Boolean) as { x: number; y: number }[];
+    if (scalePts.length >= 2) drawPoly(scalePts, "#F5C518", true);
+    scalePts.forEach((p, i) => {
       drawDot(p.x, p.y, "#F5C518", 6);
       ctx.fillStyle = "#F5C518";
-      ctx.font = `bold ${Math.max(10, 11 * zoom)}px JetBrains Mono, monospace`;
+      ctx.font = "bold 11px JetBrains Mono, monospace";
       ctx.fillText(`S${i + 1}`, p.x + 8, p.y - 6);
     });
 
     // Measure polyline
-    const measSc = measurePoints.map(normToScreen).filter(Boolean) as { x: number; y: number }[];
-    if (measSc.length >= 2) drawPoly(measSc, "#22C55E");
-    measSc.forEach((p, i) => {
+    const measPts = measurePoints.map(normToBase).filter(Boolean) as { x: number; y: number }[];
+    if (measPts.length >= 2) drawPoly(measPts, "#22C55E");
+    measPts.forEach((p, i) => {
       drawDot(p.x, p.y, i === 0 ? "#22C55E" : "#86efac", 5);
     });
 
-    // Crosshair
-    if (crosshair && mode !== "none") {
+    // Crosshair (drawn at base scale coords)
+    if (crosshair) {
       const { x, y } = crosshair;
-      ctx.strokeStyle = "rgba(245,197,24,0.55)";
+      ctx.strokeStyle = "rgba(245,197,24,0.6)";
       ctx.lineWidth = 1;
       ctx.setLineDash([5, 5]);
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
@@ -253,7 +259,7 @@ export default function PlanViewer() {
       ctx.fillStyle = "#F5C518";
       ctx.fill();
     }
-  }, [scalePoints, measurePoints, crosshair, mode, normToScreen, getPageTops_zoom1, zoom]);
+  }, [scalePoints, measurePoints, crosshair, normToBase, getPageTops]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas, pageSizesReady]);
 
@@ -265,10 +271,10 @@ export default function PlanViewer() {
     }
     let totalPx = 0;
     for (let i = 1; i < measurePoints.length; i++) {
-      totalPx += normDist_zoom1(measurePoints[i - 1], measurePoints[i]);
+      totalPx += normDist(measurePoints[i - 1], measurePoints[i]);
     }
     setMeasuredFeet(parseFloat((totalPx / scaleRatio).toFixed(2)));
-  }, [measurePoints, scaleRatio, normDist_zoom1, pageSizesReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [measurePoints, scaleRatio, normDist, pageSizesReady]); // eslint-disable-line
 
   // ── File upload ────────────────────────────────────────────────────────────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -284,47 +290,89 @@ export default function PlanViewer() {
       setMeasuredFeet(null);
       setMode("none");
       pageSizesRef.current = [];
-      pageWrappers.current.clear();
       setPageSizesReady(0);
     };
     reader.readAsDataURL(file);
   };
 
-  // ── Page render success ────────────────────────────────────────────────────
-  const onPageRender = useCallback((pageIndex: number) => {
-    const wrapper = pageWrappers.current.get(pageIndex);
+  // ── Page render ────────────────────────────────────────────────────────────
+  const onPageRender = useCallback((pageIndex: number, wrapper: HTMLDivElement | null) => {
     if (!wrapper) return;
-    // Find the react-pdf canvas inside the wrapper
     const pageCanvas = wrapper.querySelector("canvas");
-    if (pageCanvas) {
-      // Store the base size (at zoom=1 equivalent — react-pdf renders at scale=zoom,
-      // so divide back to get zoom=1 size)
-      if (!pageSizesRef.current[pageIndex]) {
-        pageSizesRef.current[pageIndex] = {
-          w: pageCanvas.offsetWidth,
-          h: pageCanvas.offsetHeight,
-        };
-      }
+    if (pageCanvas && !pageSizesRef.current[pageIndex]) {
+      pageSizesRef.current[pageIndex] = {
+        w: pageCanvas.offsetWidth,
+        h: pageCanvas.offsetHeight,
+      };
     }
     setPageSizesReady((n) => n + 1);
   }, []);
+
+  // ── Smooth zoom engine ─────────────────────────────────────────────────────
+  /**
+   * Apply a zoom delta. Uses CSS transform — no PDF re-render, instant.
+   * focalViewportX/Y: viewport coords of the zoom focal point (cursor/pinch center).
+   * When provided, the content under that point stays stationary.
+   */
+  const applyZoomDelta = useCallback((
+    delta: number,
+    focalViewportX?: number,
+    focalViewportY?: number
+  ) => {
+    const scrollEl = scrollAreaRef.current;
+    const container = pagesContainerRef.current;
+    if (!scrollEl || !container) return;
+
+    const oldZoom = zoomRef.current;
+    const newZoom = clampZoom(parseFloat((oldZoom + delta).toFixed(3)));
+    if (Math.abs(newZoom - oldZoom) < 0.001) return;
+
+    if (focalViewportX !== undefined && focalViewportY !== undefined) {
+      const rect = scrollEl.getBoundingClientRect();
+      // Content position under cursor (in unscaled content pixels)
+      const contentX = (scrollEl.scrollLeft + focalViewportX - rect.left) / oldZoom;
+      const contentY = (scrollEl.scrollTop + focalViewportY - rect.top) / oldZoom;
+      setZoom(newZoom);
+      requestAnimationFrame(() => {
+        // Scroll so the same content point stays under cursor
+        scrollEl.scrollLeft = contentX * newZoom - (focalViewportX - rect.left);
+        scrollEl.scrollTop = contentY * newZoom - (focalViewportY - rect.top);
+      });
+    } else {
+      setZoom(newZoom);
+    }
+  }, [setZoom]);
 
   // ── Wheel zoom (desktop) ──────────────────────────────────────────────────
   useEffect(() => {
     const el = scrollAreaRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return; // only zoom on ctrl+scroll (standard browser behavior)
       e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setZoom((z) => {
-        const next = Math.min(Math.max(+(z + delta).toFixed(2), 0.25), 4);
-        return next;
-      });
+      // Normalize delta: trackpad sends small pixel deltas, mouse wheel sends large line deltas
+      let delta: number;
+      if (e.deltaMode === 1) {
+        // Line mode (Firefox mouse wheel) — each notch = 1 line
+        delta = e.deltaY > 0 ? -0.15 : 0.15;
+      } else {
+        // Pixel mode (Chrome/Safari trackpad or mouse)
+        // Trackpad: deltaY ~3-10px per frame; mouse wheel: ~100-120px per notch
+        const absDelta = Math.abs(e.deltaY);
+        if (absDelta > 50) {
+          // Mouse wheel — step zoom
+          delta = e.deltaY > 0 ? -0.2 : 0.2;
+        } else {
+          // Trackpad — proportional smooth zoom
+          delta = e.deltaY * -0.005;
+        }
+      }
+      // Hard clamp per event so no single event jumps more than 30%
+      delta = Math.max(-0.3, Math.min(0.3, delta));
+      applyZoomDelta(delta, e.clientX, e.clientY);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [setZoom]);
+  }, [applyZoomDelta]);
 
   // ── Pinch zoom (touch) ────────────────────────────────────────────────────
   useEffect(() => {
@@ -334,17 +382,25 @@ export default function PlanViewer() {
       const [a, b] = [e.touches[0], e.touches[1]];
       return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
     };
+    const getTouchMid = (e: TouchEvent) => ({
+      x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+    });
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        pinchRef.current = { startDist: getTouchDist(e), startZoom: zoom };
+        pinchRef.current = { startDist: getTouchDist(e), startZoom: zoomRef.current };
       }
     };
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 2 && pinchRef.current) {
         e.preventDefault();
         const ratio = getTouchDist(e) / pinchRef.current.startDist;
-        const next = Math.min(Math.max(+(pinchRef.current.startZoom * ratio).toFixed(2), 0.25), 4);
-        setZoom(next);
+        const newZoom = clampZoom(pinchRef.current.startZoom * ratio);
+        const mid = getTouchMid(e);
+        // Update zoom without focal-point scroll for simplicity on touch
+        // (focal-point scroll on touch is complex and often feels wrong)
+        setZoom(newZoom);
+        void mid; // suppress unused warning
       }
     };
     const onTouchEnd = () => { pinchRef.current = null; };
@@ -356,24 +412,38 @@ export default function PlanViewer() {
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
     };
-  }, [zoom, setZoom]);
+  }, [setZoom]);
 
-  // ── Canvas events ──────────────────────────────────────────────────────────
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // ── Canvas mouse events ────────────────────────────────────────────────────
+  /**
+   * Convert a mouse event on the canvas to base-scale canvas coordinates.
+   * The canvas element is CSS-scaled by `zoom`, so we divide by zoom to get
+   * the actual canvas pixel position.
+   */
+  const getBaseCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setCrosshair({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    if (!rect) return null;
+    // rect.width = canvas.width * zoom (CSS transform scales the element)
+    const scaleX = (canvasRef.current?.width ?? 1) / rect.width;
+    const scaleY = (canvasRef.current?.height ?? 1) / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const coords = getBaseCanvasCoords(e);
+    if (coords) setCrosshair(coords);
   };
 
   const handleMouseLeave = () => setCrosshair(null);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (mode === "none") return;
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
-    const pt = screenToNorm(cx, cy);
+    const coords = getBaseCanvasCoords(e);
+    if (!coords) return;
+    const pt = canvasToNorm(coords.x, coords.y);
     if (!pt) { toast.error("Click on the plan area."); return; }
 
     if (mode === "set-scale-p1") {
@@ -389,19 +459,33 @@ export default function PlanViewer() {
     }
   };
 
-  // ── Undo ───────────────────────────────────────────────────────────────────
+  // ── Undo — always available when there are points ─────────────────────────
+  const canUndo = useMemo(() =>
+    scalePoints.length > 0 || measurePoints.length > 0,
+    [scalePoints, measurePoints]
+  );
+
   const handleUndo = useCallback(() => {
-    if (mode === "set-scale-p2") {
-      // In scale mode: undo the first point, go back to p1
-      setScalePoints([]);
-      setMode("set-scale-p1");
-      toast.info("Point 1 cleared — click it again.");
-    } else if (mode === "set-scale-p1" && scalePoints.length > 0) {
-      setScalePoints([]);
-      toast.info("Scale points cleared.");
-    } else if (measurePoints.length > 0) {
-      // In measure mode OR idle with existing points: remove last point
+    // Scale points take priority
+    if (scalePoints.length > 0) {
+      if (mode === "set-scale-p2" || mode === "none") {
+        // Remove last scale point and step mode back
+        const newPts = scalePoints.slice(0, -1);
+        setScalePoints(newPts);
+        if (newPts.length === 0) {
+          setMode("set-scale-p1");
+          toast.info("Scale point cleared — click Point 1 again.");
+        } else {
+          setMode("set-scale-p2");
+          toast.info("Point 2 cleared — click the end of the reference line.");
+        }
+        return;
+      }
+    }
+    // Otherwise undo last measure point
+    if (measurePoints.length > 0) {
       setMeasurePoints((prev) => prev.slice(0, -1));
+      toast.info(`Removed last point (${measurePoints.length - 1} remaining).`);
     }
   }, [mode, scalePoints, measurePoints, setScalePoints, setMeasurePoints]);
 
@@ -410,13 +494,14 @@ export default function PlanViewer() {
     if (scalePoints.length < 2) { toast.error("Click two reference points first."); return; }
     const dist = parseFloat(knownDistance);
     if (isNaN(dist) || dist <= 0) { toast.error("Enter a valid distance in feet."); return; }
-    const px = normDist_zoom1(scalePoints[0], scalePoints[1]);
+    const px = normDist(scalePoints[0], scalePoints[1]);
     if (px === 0) { toast.error("The two points are at the same location — try again."); return; }
     const ratio = px / dist;
     setScaleRatio(ratio);
-    toast.success(`Scale set: ${dist} ft = ${px.toFixed(1)} px → 1 ft = ${ratio.toFixed(2)} px`);
+    toast.success(`Scale set: ${dist} ft = ${px.toFixed(1)} px → 1 ft = ${(ratio / BASE_RENDER_SCALE).toFixed(2)} screen-px`);
     setScalePoints([]);
     setKnownDistance("");
+    setMode("none");
   };
 
   // ── Push to Civil ──────────────────────────────────────────────────────────
@@ -426,17 +511,14 @@ export default function PlanViewer() {
     toast.success(`${measuredFeet} ft pushed to Civil Calculator.`);
   };
 
-  // Undo is available whenever there's something to undo
-  const canUndo = useMemo(() =>
-    mode === "set-scale-p2" ||
-    (mode === "set-scale-p1" && scalePoints.length > 0) ||
-    measurePoints.length > 0,
-    [mode, scalePoints, measurePoints]
-  );
+  // ── Toolbar zoom step buttons ──────────────────────────────────────────────
+  const zoomIn = () => applyZoomDelta(0.25);
+  const zoomOut = () => applyZoomDelta(-0.25);
+  const zoomReset = () => setZoom(1);
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* ── Toolbar ────────────────────────────────────────────────── */}
+      {/* ── Toolbar ──────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border bg-card shrink-0">
         <label className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-accent transition-colors">
           <Upload size={15} />
@@ -457,7 +539,7 @@ export default function PlanViewer() {
           Set Scale
         </Button>
 
-        {/* Scale confirm row */}
+        {/* Scale confirm row — shown after both points placed */}
         {scalePoints.length === 2 && (
           <div className="flex items-center gap-2">
             <Input
@@ -477,7 +559,7 @@ export default function PlanViewer() {
 
         {scaleRatio && (
           <Badge variant="outline" className="font-mono text-[#F5C518] border-[#F5C518]/40 text-xs">
-            1 ft = {scaleRatio.toFixed(2)} px
+            Scale set ✓
           </Badge>
         )}
 
@@ -496,14 +578,14 @@ export default function PlanViewer() {
           Measure
         </Button>
 
-        {/* Undo */}
+        {/* Undo — always enabled when there are points */}
         <Button
           size="sm"
           variant="ghost"
           onClick={handleUndo}
           disabled={!canUndo}
-          title="Undo last point"
-          className="gap-1 h-8 text-muted-foreground hover:text-foreground"
+          title="Undo last point (works anytime)"
+          className="gap-1 h-8 text-muted-foreground hover:text-foreground disabled:opacity-30"
         >
           <Undo2 size={14} />
           Undo
@@ -511,7 +593,12 @@ export default function PlanViewer() {
 
         {/* Clear measure */}
         {measurePoints.length > 0 && (
-          <Button size="sm" variant="ghost" onClick={() => { setMeasurePoints([]); setMeasuredFeet(null); }} className="gap-1 text-muted-foreground h-8">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => { setMeasurePoints([]); setMeasuredFeet(null); }}
+            className="gap-1 text-muted-foreground h-8"
+          >
             <Trash2 size={13} />
             Clear
           </Button>
@@ -525,20 +612,22 @@ export default function PlanViewer() {
 
         {/* Zoom controls */}
         <div className="ml-auto flex items-center gap-1">
-          <Button size="icon" variant="ghost" className="h-8 w-8" title="Zoom in (Ctrl+Scroll)" onClick={() => setZoom((z) => Math.min(+(z + 0.25).toFixed(2), 4))}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" title="Zoom in" onClick={zoomIn}>
             <ZoomIn size={14} />
           </Button>
-          <span className="text-xs font-mono text-muted-foreground w-10 text-center">{Math.round(zoom * 100)}%</span>
-          <Button size="icon" variant="ghost" className="h-8 w-8" title="Zoom out (Ctrl+Scroll)" onClick={() => setZoom((z) => Math.max(+(z - 0.25).toFixed(2), 0.25))}>
+          <span className="text-xs font-mono text-muted-foreground w-10 text-center">
+            {Math.round(zoom * 100)}%
+          </span>
+          <Button size="icon" variant="ghost" className="h-8 w-8" title="Zoom out" onClick={zoomOut}>
             <ZoomOut size={14} />
           </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" title="Reset zoom" onClick={() => setZoom(1)}>
+          <Button size="icon" variant="ghost" className="h-8 w-8" title="Reset zoom" onClick={zoomReset}>
             <RotateCcw size={14} />
           </Button>
         </div>
       </div>
 
-      {/* ── Mode hint bar ──────────────────────────────────────────── */}
+      {/* ── Mode hint bar ─────────────────────────────────────────────── */}
       {mode !== "none" && (
         <div className="flex items-center gap-3 px-4 py-1.5 bg-[#F5C518]/10 border-b border-[#F5C518]/20 shrink-0">
           <span className="text-xs text-[#F5C518] font-mono">
@@ -547,16 +636,24 @@ export default function PlanViewer() {
             {mode === "measure" && "→ Click points along the path · Undo removes last point · Click Measure again to stop"}
           </span>
           {canUndo && (
-            <Button size="sm" variant="ghost" onClick={handleUndo}
-              className="h-6 px-2 text-[#F5C518] hover:text-[#F5C518] hover:bg-[#F5C518]/10 ml-auto text-xs gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleUndo}
+              className="h-6 px-2 text-[#F5C518] hover:text-[#F5C518] hover:bg-[#F5C518]/10 ml-auto text-xs gap-1"
+            >
               <Undo2 size={12} /> Undo last point
             </Button>
           )}
         </div>
       )}
 
-      {/* ── Scroll area ───────────────────────────────────────────── */}
-      <div ref={scrollAreaRef} className="flex-1 overflow-auto" style={{ scrollBehavior: "smooth" }}>
+      {/* ── Scroll area ───────────────────────────────────────────────── */}
+      <div
+        ref={scrollAreaRef}
+        className="flex-1 overflow-auto"
+        style={{ touchAction: "pan-x pan-y" }}
+      >
         {!pdfFile ? (
           <div className="flex flex-col items-center justify-center gap-4 mt-20 text-center px-4">
             <div className="w-20 h-20 rounded-2xl bg-card border border-border flex items-center justify-center">
@@ -573,17 +670,37 @@ export default function PlanViewer() {
             </label>
           </div>
         ) : (
+          /* Outer centering wrapper */
           <div className="flex justify-center py-4">
-            {/* Outer wrapper: pages + canvas overlay */}
-            <div className="relative" style={{ display: "inline-block" }}>
-              {/* Pages */}
+            {/*
+              pagesContainerRef: this div gets CSS transform: scale(zoom).
+              transform-origin: top left so scroll position math is predictable.
+              The div's natural (unscaled) size determines scroll area.
+              We set explicit width/height via inline style after pages load.
+            */}
+            <div
+              ref={pagesContainerRef}
+              style={{
+                transformOrigin: "top left",
+                transform: `scale(${zoom})`,
+                // CSS transform doesn't affect layout — we must manually push the
+                // scroll container's content size to match the scaled visual size.
+                // marginBottom/Right = naturalSize * (zoom - 1)
+                marginBottom: `${Math.max(0, pageSizesRef.current.reduce((acc, s) => acc + (s?.h ?? 0) + PAGE_GAP, 0) * (zoom - 1))}px`,
+                marginRight: `${Math.max(0, Math.max(...pageSizesRef.current.map(s => s?.w ?? 0), 0) * (zoom - 1))}px`,
+                position: "relative",
+                display: "inline-block",
+                // Smooth zoom transition — GPU composited, no layout
+                transition: "transform 0.08s ease-out",
+              }}
+            >
+              {/* PDF Pages */}
               <div className="flex flex-col" style={{ gap: PAGE_GAP }}>
                 <Document
                   file={pdfFile}
                   onLoadSuccess={({ numPages: n }) => {
                     setNumPages(n);
                     pageSizesRef.current = [];
-                    pageWrappers.current.clear();
                     setPageSizesReady(0);
                   }}
                   loading={
@@ -592,31 +709,37 @@ export default function PlanViewer() {
                     </div>
                   }
                 >
-                  {Array.from({ length: numPages }, (_, i) => (
-                    <div
-                      key={i}
-                      ref={(el) => { if (el) pageWrappers.current.set(i, el); }}
-                      style={{ display: "block", lineHeight: 0 }}
-                    >
-                      <Page
-                        pageNumber={i + 1}
-                        scale={zoom}
-                        renderTextLayer={false}
-                        renderAnnotationLayer={false}
-                        onRenderSuccess={() => onPageRender(i)}
-                      />
-                    </div>
-                  ))}
+                  {Array.from({ length: numPages }, (_, i) => {
+                    let wrapperEl: HTMLDivElement | null = null;
+                    return (
+                      <div
+                        key={i}
+                        ref={(el) => { wrapperEl = el; }}
+                        style={{ display: "block", lineHeight: 0 }}
+                      >
+                        <Page
+                          pageNumber={i + 1}
+                          scale={BASE_RENDER_SCALE}
+                          renderTextLayer={false}
+                          renderAnnotationLayer={false}
+                          onRenderSuccess={() => onPageRender(i, wrapperEl)}
+                        />
+                      </div>
+                    );
+                  })}
                 </Document>
               </div>
 
-              {/* Canvas overlay */}
+              {/* Canvas overlay — same size as pages at base scale, CSS-scaled with them */}
               <canvas
                 ref={canvasRef}
                 onClick={handleCanvasClick}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
-                className={cn("absolute inset-0", mode !== "none" ? "cursor-none" : "cursor-default")}
+                className={cn(
+                  "absolute inset-0",
+                  mode !== "none" ? "cursor-crosshair" : "cursor-default"
+                )}
                 style={{
                   top: 0,
                   left: 0,
@@ -629,13 +752,16 @@ export default function PlanViewer() {
         )}
       </div>
 
-      {/* ── Bottom bar ────────────────────────────────────────────── */}
+      {/* ── Bottom bar ────────────────────────────────────────────────── */}
       {pdfFile && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-card shrink-0 flex-wrap gap-3">
           <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
             <span>{numPages} page{numPages !== 1 ? "s" : ""}</span>
-            {scaleRatio && <span className="text-[#F5C518]">Scale: {scaleRatio.toFixed(2)} px/ft</span>}
-            {measurePoints.length > 0 && <span className="text-[#22C55E]">{measurePoints.length} pt{measurePoints.length !== 1 ? "s" : ""}</span>}
+            {scaleRatio && <span className="text-[#F5C518]">Scale ✓</span>}
+            {measurePoints.length > 0 && (
+              <span className="text-[#22C55E]">{measurePoints.length} pt{measurePoints.length !== 1 ? "s" : ""}</span>
+            )}
+            <span className="text-muted-foreground">Scroll to zoom · Pinch on mobile</span>
           </div>
           <Button
             onClick={handlePushToCivil}
