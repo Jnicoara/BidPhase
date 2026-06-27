@@ -83,7 +83,10 @@ type PageActiveRunMap = Record<number, string>;
 const BASE_DPI = 1.5;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 5.0;
-const ZOOM_STEPS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0];
+// 5% increments from 25% → 500%
+const ZOOM_STEPS = Array.from({ length: Math.round((MAX_ZOOM - MIN_ZOOM) / 0.05) + 1 }, (_, i) =>
+  parseFloat((MIN_ZOOM + i * 0.05).toFixed(2))
+);
 
 // Run colors — cycles through these for each named run
 const RUN_COLORS = [
@@ -183,6 +186,23 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
   const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
+
+  // ── Fit-to-page max zoom ──────────────────────────────────────────────────
+  // Computed after page renders: the zoom level where the page just fills the viewport
+  const fitZoomRef = useRef<number>(MAX_ZOOM);
+  useEffect(() => {
+    if (!pageReady || !pageSizeRef.current) return;
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const vpW = el.clientWidth;
+    const vpH = el.clientHeight;
+    const pageW = pageSizeRef.current.w / (BASE_DPI * zoomRef.current) * BASE_DPI; // page px at zoom=1
+    const pageH = pageSizeRef.current.h / (BASE_DPI * zoomRef.current) * BASE_DPI;
+    // Fit = zoom where page width fills viewport (with a tiny 8px margin each side)
+    const fitW = (vpW - 16) / (pageW / BASE_DPI);
+    const fitH = (vpH - 16) / (pageH / BASE_DPI);
+    fitZoomRef.current = parseFloat(Math.min(fitW, fitH, MAX_ZOOM).toFixed(4));
+  }, [pageReady]);
 
   // Reset page render state when page changes
   useEffect(() => {
@@ -426,7 +446,9 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     if (!scrollEl) return;
 
     const oldZoom = zoomRef.current;
-    const newZoom = clamp(parseFloat(newZoomRaw.toFixed(4)), MIN_ZOOM, MAX_ZOOM);
+    // Cap at fit-to-page zoom (page fills viewport) — never zoom out past that
+    const effectiveMax = Math.max(fitZoomRef.current, MIN_ZOOM);
+    const newZoom = clamp(parseFloat(newZoomRaw.toFixed(4)), MIN_ZOOM, effectiveMax);
     if (Math.abs(newZoom - oldZoom) < 0.001) return;
 
     const rect = scrollEl.getBoundingClientRect();
@@ -452,13 +474,13 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
 
   const zoomIn = useCallback(() => {
     const cur = zoomRef.current;
-    const next = ZOOM_STEPS.find(s => s > cur + 0.01) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    const next = ZOOM_STEPS.find(s => s > cur + 0.005) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
     applyZoom(next);
   }, [applyZoom]);
 
   const zoomOut = useCallback(() => {
     const cur = zoomRef.current;
-    const prev = [...ZOOM_STEPS].reverse().find(s => s < cur - 0.01) ?? ZOOM_STEPS[0];
+    const prev = [...ZOOM_STEPS].reverse().find(s => s < cur - 0.005) ?? ZOOM_STEPS[0];
     applyZoom(prev);
   }, [applyZoom]);
 
@@ -704,8 +726,8 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
               <X size={16} />
             </button>
           </div>
-          <div className="flex-1 overflow-auto p-4">
-            <div className="grid grid-cols-3 gap-3">
+          <div className="flex-1 overflow-auto p-3">
+            <div className="flex flex-col gap-2">
               {Array.from({ length: numPages }, (_, i) => {
                 const pNum = i + 1;
                 const runCount = getPageRunCount(i);
@@ -715,39 +737,39 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
                     key={i}
                     onClick={() => { goToPage(pNum); setShowPageOverview(false); }}
                     className={cn(
-                      "relative flex flex-col rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60",
-                      isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border"
+                      "relative flex gap-3 rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60 text-left",
+                      isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30 bg-[#F5C518]/5" : "border-border bg-card hover:bg-muted/20"
                     )}
                   >
-                    {/* Mini PDF thumbnail */}
-                    <div className="bg-muted/30 aspect-[8.5/11] flex items-center justify-center overflow-hidden">
+                    {/* PDF thumbnail — fixed width column */}
+                    <div className="w-28 shrink-0 bg-muted/30 flex items-center justify-center overflow-hidden">
                       <Document file={pdfFile} loading={null}>
                         <Page
                           pageNumber={pNum}
-                          scale={0.15}
+                          scale={0.25}
                           renderAnnotationLayer={false}
                           renderTextLayer={false}
                         />
                       </Document>
                     </div>
-                    {/* Page label */}
-                    <div className={cn(
-                      "px-2 py-1.5 text-left",
-                      isActive ? "bg-[#F5C518]/10" : "bg-card"
-                    )}>
-                      <div className="flex items-center justify-between">
-                        <span className={cn(
-                          "text-[11px] font-semibold",
-                          isActive ? "text-[#F5C518]" : "text-foreground"
-                        )}>
-                          Page {pNum}
+                    {/* Page info */}
+                    <div className="flex flex-col justify-center py-3 pr-3 gap-1">
+                      <span className={cn(
+                        "text-sm font-bold",
+                        isActive ? "text-[#F5C518]" : "text-foreground"
+                      )} style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        Page {pNum}
+                      </span>
+                      {runCount > 0 ? (
+                        <span className="text-xs font-mono text-[#F5C518] bg-[#F5C518]/10 px-2 py-0.5 rounded w-fit">
+                          {runCount} measured run{runCount !== 1 ? "s" : ""}
                         </span>
-                        {runCount > 0 && (
-                          <span className="text-[9px] font-mono bg-[#F5C518]/20 text-[#F5C518] px-1 rounded">
-                            {runCount} run{runCount !== 1 ? "s" : ""}
-                          </span>
-                        )}
-                      </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">No runs yet</span>
+                      )}
+                      {isActive && (
+                        <span className="text-[10px] text-[#F5C518]/70 font-mono">← current page</span>
+                      )}
                     </div>
                   </button>
                 );
@@ -1055,15 +1077,24 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       <div
         ref={scrollAreaRef}
         className="flex-1 overflow-auto relative"
-        style={{ cursor: mode !== "none" ? "none" : isPanning ? "grabbing" : "grab" }}
+        style={{ cursor: isPanning ? "grabbing" : mode !== "none" ? "none" : "grab" }}
+        onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => {
-          if (mode !== "none") return;
-          if (e.button !== 0) return;
           const el = scrollAreaRef.current;
           if (!el) return;
-          panRef.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
-          setIsPanning(true);
-          e.preventDefault();
+          // Right-click (button=2) always pans regardless of mode
+          if (e.button === 2) {
+            panRef.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+            setIsPanning(true);
+            e.preventDefault();
+            return;
+          }
+          // Left-click pans only when in "none" mode
+          if (e.button === 0 && mode === "none") {
+            panRef.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
+            setIsPanning(true);
+            e.preventDefault();
+          }
         }}
         onMouseMove={(e) => {
           if (!panRef.current) return;
