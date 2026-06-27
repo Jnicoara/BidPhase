@@ -237,8 +237,8 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
         requestAnimationFrame(() => {
           const scrollEl = scrollAreaRef.current;
           if (!scrollEl) return;
-          scrollEl.scrollLeft = (scrollEl.scrollWidth - scrollEl.clientWidth) / 2;
-          scrollEl.scrollTop  = (scrollEl.scrollHeight - scrollEl.clientHeight) / 2;
+          scrollEl.scrollLeft = Math.max(0, scrollEl.scrollWidth - scrollEl.clientWidth) / 2;
+          scrollEl.scrollTop  = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight) / 2;
         });
       });
     }
@@ -250,27 +250,26 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   }, [currentPage, pdfFile]);
 
   // ── Re-center page when the scroll area is resized (panel drag) ──────────
-  // Tracks the last scroll position as a fraction of total scrollable range,
-  // so when the pane width changes the page stays visually centered.
-  const scrollFractionRef = useRef({ x: 0.5, y: 0.5 });
+  // The user wants the PDF to stay centered between the left edge and the right panel
+  // as the divider moves, so horizontal resize always recenters the page box.
+  const scrollFractionRef = useRef({ y: 0.5 });
 
-  // Keep scroll fraction up-to-date as the user pans
+  // Keep only the vertical scroll fraction up-to-date as the user pans
   useEffect(() => {
     const el = scrollAreaRef.current;
     if (!el) return;
     const onScroll = () => {
-      const maxLeft = el.scrollWidth  - el.clientWidth;
-      const maxTop  = el.scrollHeight - el.clientHeight;
+      const maxTop = el.scrollHeight - el.clientHeight;
       scrollFractionRef.current = {
-        x: maxLeft  > 0 ? el.scrollLeft / maxLeft  : 0.5,
-        y: maxTop   > 0 ? el.scrollTop  / maxTop   : 0.5,
+        y: maxTop > 0 ? el.scrollTop / maxTop : 0.5,
       };
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // ResizeObserver: when the pane width changes, restore scroll fraction so page stays centered
+  // ResizeObserver: when the pane width changes, always center the PDF horizontally.
+  // Keep vertical position proportional so the current row on the sheet does not jump.
   useEffect(() => {
     const el = scrollAreaRef.current;
     if (!el) return;
@@ -282,12 +281,11 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       if (newW === lastW && newH === lastH) return;
       lastW = newW;
       lastH = newH;
-      // Re-apply the stored scroll fraction so the page stays centered
       requestAnimationFrame(() => {
-        const maxLeft = el.scrollWidth  - el.clientWidth;
-        const maxTop  = el.scrollHeight - el.clientHeight;
-        el.scrollLeft = maxLeft  * scrollFractionRef.current.x;
-        el.scrollTop  = maxTop   * scrollFractionRef.current.y;
+        const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+        const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+        el.scrollLeft = maxLeft / 2;
+        el.scrollTop = maxTop * scrollFractionRef.current.y;
       });
     });
     ro.observe(el);
@@ -598,8 +596,8 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       requestAnimationFrame(() => {
         const el = scrollAreaRef.current;
         if (!el) return;
-        el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
-        el.scrollTop  = (el.scrollHeight - el.clientHeight) / 2;
+        el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth) / 2;
+        el.scrollTop  = Math.max(0, el.scrollHeight - el.clientHeight) / 2;
       });
     });
   }, [applyZoom]);
@@ -1264,56 +1262,61 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
           </div>
         ) : (
           <div
-            ref={pagesContainerRef}
-            style={{
-              display: "inline-block",
-              position: "relative",
-              // Extra gutter so the page can be panned past its edges when zoomed in
-              padding: `${PAGE_GUTTER * zoom}px`,
-            }}
+            className="min-w-full min-h-full flex justify-center items-start"
+            style={{ paddingInline: 12 }}
           >
-            <Document
-              file={pdfFile}
-              onLoadSuccess={({ numPages: n }) => {
-                setNumPages(n);
-                pageSizeRef.current = null;
-                setPageReady(false);
+            <div
+              ref={pagesContainerRef}
+              style={{
+                display: "inline-block",
+                position: "relative",
+                // Extra gutter so the page can be panned past its edges when zoomed in
+                padding: `${PAGE_GUTTER * zoom}px`,
               }}
-              loading={
-                <div className="flex items-center justify-center p-8 text-muted-foreground text-sm">
-                  Loading PDF…
-                </div>
-              }
             >
-              {/* Single page view — only render currentPage */}
-              <Page
-                pageNumber={currentPage}
-                scale={BASE_DPI * renderZoom}
-                renderAnnotationLayer={false}
-                renderTextLayer={false}
-                onRenderSuccess={(page) =>
-                  onPageRenderSuccess({ width: page.width, height: page.height })
-                }
-              />
-            </Document>
-
-            {/* Overlay canvas */}
-            {pageReady && (
-              <canvas
-                ref={canvasRef}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  pointerEvents: mode !== "none" ? "auto" : "none",
-                  zIndex: 10,
-                  cursor: "none",
+              <Document
+                file={pdfFile}
+                onLoadSuccess={({ numPages: n }) => {
+                  setNumPages(n);
+                  pageSizeRef.current = null;
+                  setPageReady(false);
                 }}
-                onClick={handleCanvasClick}
-                onMouseMove={handleCanvasMouseMove}
-                onMouseLeave={() => setCrosshair(null)}
-              />
-            )}
+                loading={
+                  <div className="flex items-center justify-center p-8 text-muted-foreground text-sm">
+                    Loading PDF…
+                  </div>
+                }
+              >
+                {/* Single page view — only render currentPage */}
+                <Page
+                  pageNumber={currentPage}
+                  scale={BASE_DPI * renderZoom}
+                  renderAnnotationLayer={false}
+                  renderTextLayer={false}
+                  onRenderSuccess={(page) =>
+                    onPageRenderSuccess({ width: page.width, height: page.height })
+                  }
+                />
+              </Document>
+
+              {/* Overlay canvas */}
+              {pageReady && (
+                <canvas
+                  ref={canvasRef}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    pointerEvents: mode !== "none" ? "auto" : "none",
+                    zIndex: 10,
+                    cursor: "none",
+                  }}
+                  onClick={handleCanvasClick}
+                  onMouseMove={handleCanvasMouseMove}
+                  onMouseLeave={() => setCrosshair(null)}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>
