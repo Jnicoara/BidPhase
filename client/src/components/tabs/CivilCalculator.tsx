@@ -71,6 +71,7 @@ interface FittingCounts {
 interface RunItem {
   id: string;
   name: string;
+  pageNumber?: number;  // which PDF page this run came from
   feet: number;
   conduitSize: string;
   conduitType: ConduitType;
@@ -166,6 +167,11 @@ function RunCard({
           <span className="text-[10px] font-mono text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
             {run.conduitType ?? "EMT"} {run.conduitSize}"
           </span>
+          {run.pageNumber !== undefined && (
+            <span className="text-[10px] font-mono text-muted-foreground/60 bg-muted/20 px-1.5 py-0.5 rounded">
+              pg {run.pageNumber}
+            </span>
+          )}
         </div>
         <button
           onClick={() => onRemove(run.id)}
@@ -306,6 +312,105 @@ function RunCard({
 }
 
 // ─── Editor view ─────────────────────────────────────────────────────────────
+
+// ─── Cross-page totals ────────────────────────────────────────────────────────
+function CrossPageTotals({ runs }: { runs: RunItem[] }) {
+  if (runs.length === 0) return null;
+
+  const totalFeet = runs.reduce((a, r) => a + r.feet, 0);
+  const totalSticks = runs.reduce((a, r) => a + calcSticks(r.feet), 0);
+  const totalWire = runs.reduce((a, r) => a + calcWire(r.feet, r.conductors), 0);
+
+  const totalFittings: FittingCounts = runs.reduce(
+    (acc, r) => {
+      const f = r.fittings;
+      return {
+        connector: acc.connector + f.connector,
+        coupling:  acc.coupling  + f.coupling,
+        lb:        acc.lb        + f.lb,
+        elbow90:   acc.elbow90   + f.elbow90,
+        elbow45:   acc.elbow45   + f.elbow45,
+        sweep:     acc.sweep     + f.sweep,
+        offset:    acc.offset    + f.offset,
+      };
+    },
+    defaultFittings()
+  );
+
+  const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
+
+  return (
+    <div className="bp-card p-4 border-[#F5C518]/30 bg-[#F5C518]/5">
+      <h3
+        className="text-xs font-semibold text-[#F5C518] uppercase tracking-wider mb-3 flex items-center gap-2"
+        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+      >
+        ∑ Project Totals
+        {pages.length > 0 && (
+          <span className="text-[10px] font-mono text-muted-foreground normal-case tracking-normal">
+            across {pages.length} page{pages.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </h3>
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Total Footage</div>
+          <div className="text-xl font-bold font-mono text-[#F5C518]">{totalFeet.toFixed(1)}</div>
+          <div className="text-[10px] text-muted-foreground font-mono">ft</div>
+        </div>
+        <div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Pipe Sticks</div>
+          <div className="text-xl font-bold font-mono text-[#F5C518]">{totalSticks}</div>
+          <div className="text-[10px] text-muted-foreground font-mono">10-ft sticks</div>
+        </div>
+        <div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Total Wire</div>
+          <div className="text-xl font-bold font-mono text-[#F5C518]">{totalWire.toFixed(1)}</div>
+          <div className="text-[10px] text-muted-foreground font-mono">ft w/ 10% slack</div>
+        </div>
+      </div>
+
+      {FITTING_TYPES.some((ft) => totalFittings[ft.id] > 0) && (
+        <div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">Total Fittings</div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {FITTING_TYPES.filter((ft) => totalFittings[ft.id] > 0).map((ft) => (
+              <div key={ft.id} className="bg-muted/20 rounded p-2 text-center">
+                <div className="text-base font-bold font-mono text-foreground">{totalFittings[ft.id]}</div>
+                <div className="text-[9px] text-muted-foreground font-mono">{ft.short}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {pages.length > 1 && (
+        <div className="mt-3 pt-3 border-t border-border/40">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">Per-Page Breakdown</div>
+          <div className="space-y-1">
+            {pages.map((pg) => {
+              const pgRuns = runs.filter((r) => r.pageNumber === pg);
+              const pgFeet = pgRuns.reduce((a, r) => a + r.feet, 0);
+              const pgSticks = pgRuns.reduce((a, r) => a + calcSticks(r.feet), 0);
+              return (
+                <div key={pg} className="flex items-center justify-between text-[11px] py-0.5">
+                  <span className="text-muted-foreground font-mono">Page {pg}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-foreground">{pgFeet.toFixed(1)} ft</span>
+                    <span className="font-mono text-muted-foreground">{pgSticks} sticks</span>
+                    <span className="text-muted-foreground">{pgRuns.length} run{pgRuns.length !== 1 ? "s" : ""}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CivilEditor({
   projectId,
   projectName,
@@ -336,30 +441,31 @@ function CivilEditor({
   );
 
   const handlePush = useCallback(
-    (ft: number, runName: string, conduitSize?: string) => {
-      const existingIdx = runs.findIndex((r) => r.name === runName);
+    (ft: number, runName: string, conduitSize?: string, pageNumber?: number) => {
+      const existingIdx = runs.findIndex((r) => r.name === runName && r.pageNumber === pageNumber);
       if (existingIdx !== -1) {
-        // Replace existing run — update footage + conduit size, keep other settings
         const updated = runs.map((r) =>
-          r.name === runName
+          (r.name === runName && r.pageNumber === pageNumber)
             ? { ...r, feet: ft, conduitSize: conduitSize ?? r.conduitSize }
             : r
         );
         syncRuns(updated);
-        toast.success(`"${runName}" updated — ${ft} ft.`);
+        const pageLabel = pageNumber ? ` (pg ${pageNumber})` : "";
+        toast.success(`"${runName}"${pageLabel} updated — ${ft} ft.`);
       } else {
         const newRun: RunItem = {
           id: `run-${Date.now()}`,
           name: runName,
+          pageNumber,
           feet: ft,
           conduitSize: conduitSize ?? "3/4",
           conduitType: "EMT",
           conductors: 2,
           fittings: defaultFittings(),
         };
-        // Newest first — prepend
         syncRuns([newRun, ...runs]);
-        toast.success(`"${runName}" pushed — ${ft} ft added as a new run.`);
+        const pageLabel = pageNumber ? ` from page ${pageNumber}` : "";
+        toast.success(`"${runName}"${pageLabel} — ${ft} ft added.`);
       }
     },
     [runs, syncRuns]
@@ -403,7 +509,7 @@ function CivilEditor({
         <ResizablePanel defaultSize={50} minSize={25} maxSize={75}>
           <PlanPanel
             tabKey={`civil_${projectId}`}
-            onPushDistance={(ft, runName, conduitSize) => handlePush(ft, runName, conduitSize)}
+            onPushDistance={(ft: number, runName: string, conduitSize?: string, pageNumber?: number) => handlePush(ft, runName, conduitSize, pageNumber)}
             onDeleteRun={handleDeleteRun}
           />
         </ResizablePanel>
@@ -458,25 +564,8 @@ function CivilEditor({
                     />
                   ))}
 
-                  {/* Totals summary */}
-                  <div className="bp-card p-4 border-[#F5C518]/20">
-                    <h3
-                      className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3"
-                      style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                    >
-                      Project Totals
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Pipe Sticks</div>
-                        <div className="text-2xl font-bold font-mono text-[#F5C518]">{totalSticks}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Total Wire</div>
-                        <div className="text-2xl font-bold font-mono text-[#F5C518]">{totalWire.toFixed(1)} ft</div>
-                      </div>
-                    </div>
-                  </div>
+                  {/* Cross-page totals summary */}
+                  <CrossPageTotals runs={runs} />
                 </>
               )}
             </div>
