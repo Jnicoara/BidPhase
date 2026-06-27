@@ -46,7 +46,6 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
-  PanelTop,
   X,
   Lock,
 } from "lucide-react";
@@ -484,6 +483,9 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   }, []);
 
   // ── Zoom helpers ──────────────────────────────────────────────────────────
+  // Debounce timer for PDF re-render after zoom settles
+  const zoomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const applyZoom = useCallback((
     newZoomRaw: number,
     focalClientX?: number,
@@ -498,25 +500,37 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     const newZoom = clamp(parseFloat(newZoomRaw.toFixed(4)), effectiveMin, MAX_ZOOM);
     if (Math.abs(newZoom - oldZoom) < 0.001) return;
 
+    // Preserve focal point in scroll space
     const rect = scrollEl.getBoundingClientRect();
     const vpX = focalClientX !== undefined ? focalClientX - rect.left : rect.width / 2;
     const vpY = focalClientY !== undefined ? focalClientY - rect.top  : rect.height / 2;
-    const contentX = (scrollEl.scrollLeft + vpX) / oldZoom;
-    const contentY = (scrollEl.scrollTop  + vpY) / oldZoom;
+    // Content coords are relative to the page natural size (zoom=1)
+    // We account for the gutter padding that scales with zoom
+    const gutterOld = PAGE_GUTTER * oldZoom;
+    const contentX = (scrollEl.scrollLeft + vpX - gutterOld) / oldZoom;
+    const contentY = (scrollEl.scrollTop  + vpY - gutterOld) / oldZoom;
 
+    // Update zoom immediately — PDF re-renders at new scale
     setZoom(newZoom);
     zoomRef.current = newZoom;
-    pageSizeRef.current = null;
-    setPageReady(false);
 
+    // Reposition scroll after React re-renders the page at new scale
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (scrollEl) {
-          scrollEl.scrollLeft = contentX * newZoom - vpX;
-          scrollEl.scrollTop  = contentY * newZoom - vpY;
+          const gutterNew = PAGE_GUTTER * newZoom;
+          scrollEl.scrollLeft = contentX * newZoom + gutterNew - vpX;
+          scrollEl.scrollTop  = contentY * newZoom + gutterNew - vpY;
         }
       });
     });
+
+    // Debounce: only trigger pageSizeRef reset after zoom settles (avoids feedback loop)
+    if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
+    zoomDebounceRef.current = setTimeout(() => {
+      pageSizeRef.current = null;
+      setPageReady(false);
+    }, 150);
   }, [setZoom]);
 
   const zoomIn = useCallback(() => {
@@ -784,50 +798,42 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
               <X size={16} />
             </button>
           </div>
-          <div className="flex-1 overflow-auto p-3">
+          <div className="flex-1 overflow-auto p-3" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
             <div className="flex flex-col gap-2">
               {Array.from({ length: numPages }, (_, i) => {
                 const pNum = i + 1;
-                const runCount = getPageRunCount(i);
                 const isActive = pNum === currentPage;
                 return (
                   <button
                     key={i}
                     onClick={() => { goToPage(pNum); setShowPageOverview(false); }}
                     className={cn(
-                      "relative flex gap-3 rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60 text-left",
-                      isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30 bg-[#F5C518]/5" : "border-border bg-card hover:bg-muted/20"
+                      "relative flex flex-col rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60",
+                      isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border bg-card hover:bg-muted/20"
                     )}
                   >
-                    {/* PDF thumbnail — fixed width column */}
-                    <div className="w-28 shrink-0 bg-muted/30 flex items-center justify-center overflow-hidden">
-                      <Document file={pdfFile} loading={null}>
+                    {/* PDF thumbnail — full width */}
+                    <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden">
+                      <Document file={pdfFile} loading={<div className="h-32 w-full" />}>
                         <Page
                           pageNumber={pNum}
-                          scale={0.25}
+                          width={220}
                           renderAnnotationLayer={false}
                           renderTextLayer={false}
                         />
                       </Document>
                     </div>
-                    {/* Page info */}
-                    <div className="flex flex-col justify-center py-3 pr-3 gap-1">
+                    {/* Page number only */}
+                    <div className={cn(
+                      "px-3 py-1.5 text-center",
+                      isActive ? "bg-[#F5C518]/10" : "bg-card"
+                    )}>
                       <span className={cn(
-                        "text-sm font-bold",
-                        isActive ? "text-[#F5C518]" : "text-foreground"
-                      )} style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                        Page {pNum}
+                        "text-xs font-semibold font-mono",
+                        isActive ? "text-[#F5C518]" : "text-muted-foreground"
+                      )}>
+                        {isActive ? "▶ " : ""}Page {pNum}
                       </span>
-                      {runCount > 0 ? (
-                        <span className="text-xs font-mono text-[#F5C518] bg-[#F5C518]/10 px-2 py-0.5 rounded w-fit">
-                          {runCount} measured run{runCount !== 1 ? "s" : ""}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground/50">No runs yet</span>
-                      )}
-                      {isActive && (
-                        <span className="text-[10px] text-[#F5C518]/70 font-mono">← current page</span>
-                      )}
                     </div>
                   </button>
                 );
@@ -977,7 +983,12 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
             className="flex items-center justify-center w-7 h-7 rounded border border-border text-muted-foreground hover:text-foreground hover:border-[#F5C518]/50 transition-all shrink-0"
             title="Page overview"
           >
-            <PanelTop size={12} />
+            {/* Three stacked horizontal rectangles icon */}
+            <svg width="14" height="12" viewBox="0 0 14 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1" y="0.5" width="12" height="2.5" rx="0.5" fill="currentColor" opacity="0.9"/>
+              <rect x="1" y="4.75" width="12" height="2.5" rx="0.5" fill="currentColor" opacity="0.9"/>
+              <rect x="1" y="9" width="12" height="2.5" rx="0.5" fill="currentColor" opacity="0.9"/>
+            </svg>
           </button>
 
           <div className="w-px h-4 bg-border shrink-0" />
@@ -1154,7 +1165,11 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       <div
         ref={scrollAreaRef}
         className="flex-1 overflow-auto relative"
-        style={{ cursor: isPanning ? "grabbing" : mode !== "none" ? "none" : "grab" }}
+        style={{
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+          cursor: isPanning ? "grabbing" : mode !== "none" ? "none" : "grab",
+        } as React.CSSProperties}
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => {
           const el = scrollAreaRef.current;
