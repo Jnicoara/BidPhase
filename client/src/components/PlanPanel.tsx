@@ -289,9 +289,10 @@ interface PlanPanelProps {
   tabKey: string;
   onPushDistance?: (ft: number, runName: string, conduitSize?: string, pageNumber?: number) => void;
   onDeleteRun?: (runName: string, pageNumber?: number) => void;
+  onCurrentPageChange?: (page: number) => void;
 }
 
-export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanPanelProps) {
+export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun, onCurrentPageChange }: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
   const [pdfHash, setPdfHash] = useLocalStorage<string | null>(`bp_pdfhash_${tabKey}`, null);
@@ -1099,10 +1100,11 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const goToPage = useCallback((p: number) => {
     const clamped = clamp(p, 1, numPages || 1);
     setCurrentPage(clamped);
+    onCurrentPageChange?.(clamped);
     setMode("none");
     modeRef.current = "none";
     setCrosshair(null);
-  }, [numPages, setCurrentPage]);
+  }, [numPages, setCurrentPage, onCurrentPageChange]);
 
   // ── Compute run count per page for page selector badges ───────────────────
   const getPageRunCount = useCallback((pIdx: number) => {

@@ -598,6 +598,12 @@ function CivilEditor({
     return stored ?? [];
   });
 
+  // Track which PDF page is currently active in PlanPanel
+  const [activePage, setActivePage] = useState<number>(1);
+
+  // Runs visible in the right panel = only those belonging to the current page
+  const pageRuns = runs.filter((r) => (r.pageNumber ?? 1) === activePage);
+
   const syncRuns = useCallback(
     (next: RunItem[]) => {
       setRuns(next);
@@ -681,6 +687,7 @@ function CivilEditor({
             tabKey={`civil_${projectId}`}
             onPushDistance={(ft: number, runName: string, conduitSize?: string, pageNumber?: number) => handlePush(ft, runName, conduitSize, pageNumber)}
             onDeleteRun={(name, page) => handleDeleteRun(name, page)}
+            onCurrentPageChange={(page) => setActivePage(page)}
           />
         </ResizablePanel>
 
@@ -695,7 +702,7 @@ function CivilEditor({
                 <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
                   <CivilIcon size={16} className="text-[#F5C518]" />
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <h1
                     className="text-base font-bold text-foreground"
                     style={{ fontFamily: "'Space Grotesk', sans-serif" }}
@@ -704,27 +711,30 @@ function CivilEditor({
                   </h1>
                   <p className="text-xs text-muted-foreground">{projectName}</p>
                 </div>
+                <span className="shrink-0 text-xs font-mono px-2 py-0.5 rounded bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30">
+                  Page {activePage}
+                </span>
               </div>
             </div>
 
             {/* Runs list */}
             <div className="flex-1 overflow-auto p-4 pb-24 space-y-4">
-              {runs.length === 0 ? (
+              {pageRuns.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
                     <Link2 size={20} className="text-muted-foreground" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground">No runs yet</p>
+                    <p className="text-sm font-medium text-muted-foreground">No runs on page {activePage}</p>
                     <p className="text-xs text-muted-foreground/60 mt-1">
-                      Load a PDF, measure a conduit run, then push it here.
+                      Measure a conduit run on this page, then push it here.
                     </p>
                   </div>
                 </div>
               ) : (
                 <>
                   {/* Newest first — already prepended on push */}
-                  {runs.map((run, i) => (
+                  {pageRuns.map((run, i) => (
                     <RunCard
                       key={run.id}
                       run={run}
@@ -734,7 +744,7 @@ function CivilEditor({
                     />
                   ))}
 
-                  {/* Cross-page totals summary */}
+                  {/* Cross-page totals summary (always shows all pages) */}
                   <CrossPageTotals runs={runs} />
                 </>
               )}
