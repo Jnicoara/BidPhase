@@ -308,6 +308,17 @@ export default function PlanViewer() {
     setPageSizesReady((n) => n + 1);
   }, []);
 
+  // ── Natural (unscaled) page dimensions ───────────────────────────────────
+  const naturalWidth = useMemo(() => {
+    const sizes = pageSizesRef.current;
+    return Math.max(...sizes.map(s => s?.w ?? 0), 0);
+  }, [pageSizesReady]); // eslint-disable-line
+
+  const naturalHeight = useMemo(() => {
+    const sizes = pageSizesRef.current;
+    return sizes.reduce((acc, s) => acc + (s?.h ?? 0) + PAGE_GAP, 0);
+  }, [pageSizesReady]); // eslint-disable-line
+
   // ── Smooth zoom engine ─────────────────────────────────────────────────────
   /**
    * Apply a zoom delta. Uses CSS transform — no PDF re-render, instant.
@@ -320,8 +331,7 @@ export default function PlanViewer() {
     focalViewportY?: number
   ) => {
     const scrollEl = scrollAreaRef.current;
-    const container = pagesContainerRef.current;
-    if (!scrollEl || !container) return;
+    if (!scrollEl) return;
 
     const oldZoom = zoomRef.current;
     const newZoom = clampZoom(parseFloat((oldZoom + delta).toFixed(3)));
@@ -670,28 +680,25 @@ export default function PlanViewer() {
             </label>
           </div>
         ) : (
-          /* Outer centering wrapper */
-          <div className="flex justify-center py-4">
-            {/*
-              pagesContainerRef: this div gets CSS transform: scale(zoom).
-              transform-origin: top left so scroll position math is predictable.
-              The div's natural (unscaled) size determines scroll area.
-              We set explicit width/height via inline style after pages load.
-            */}
+          <div
+            style={{
+              width: naturalWidth > 0 ? naturalWidth * zoom : "100%",
+              height: naturalHeight > 0 ? naturalHeight * zoom + 32 : "auto",
+              minWidth: naturalWidth > 0 ? naturalWidth * zoom : "100%",
+              position: "relative",
+              flexShrink: 0,
+            }}
+          >
             <div
               ref={pagesContainerRef}
               style={{
                 transformOrigin: "top left",
                 transform: `scale(${zoom})`,
-                // CSS transform doesn't affect layout — we must manually push the
-                // scroll container's content size to match the scaled visual size.
-                // marginBottom/Right = naturalSize * (zoom - 1)
-                marginBottom: `${Math.max(0, pageSizesRef.current.reduce((acc, s) => acc + (s?.h ?? 0) + PAGE_GAP, 0) * (zoom - 1))}px`,
-                marginRight: `${Math.max(0, Math.max(...pageSizesRef.current.map(s => s?.w ?? 0), 0) * (zoom - 1))}px`,
-                position: "relative",
-                display: "inline-block",
+                position: "absolute",
+                top: 0,
+                left: 0,
                 // Smooth zoom transition — GPU composited, no layout
-                transition: "transform 0.08s ease-out",
+                transition: "transform 0.08s cubic-bezier(0.23, 1, 0.32, 1)",
               }}
             >
               {/* PDF Pages */}
