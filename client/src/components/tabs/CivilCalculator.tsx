@@ -27,7 +27,7 @@ import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
-  Zap, Package, Cable, Plus, Minus, ChevronLeft,
+  Shovel, Package, Cable, Plus, Minus, ChevronLeft,
   Wrench, Link2
 } from "lucide-react";
 import { toast } from "sonner";
@@ -674,7 +674,7 @@ function CivilEditor({
             <div className="px-5 pt-4 pb-3 border-b border-border bg-card shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
-                  <Zap size={16} className="text-[#F5C518]" />
+                  <Shovel size={16} className="text-[#F5C518]" />
                 </div>
                 <div>
                   <h1
@@ -777,7 +777,7 @@ export default function CivilCalculator() {
     return (
       <ProjectHomepage
         title="Civil & Underground"
-        icon={<Zap size={18} className="text-[#F5C518]" />}
+        icon={<Shovel size={18} className="text-[#F5C518]" />}
         projects={projectCards}
         activeId={activeCivilId}
         onOpen={handleOpen}

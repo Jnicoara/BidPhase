@@ -17,42 +17,16 @@ import {
   Home,
   ChevronRight,
   Settings,
+  Shovel,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Civil & Underground icon — conduit pipes entering ground, Lucide-style
-function ConduitIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      {/* Ground surface line */}
-      <line x1="1" y1="12" x2="23" y2="12" />
-      {/* Left pipe — rectangle cap above ground, line below */}
-      <rect x="3" y="5" width="4" height="7" rx="1" />
-      <line x1="5" y1="12" x2="5" y2="19" />
-      {/* Center pipe */}
-      <rect x="10" y="5" width="4" height="7" rx="1" />
-      <line x1="12" y1="12" x2="12" y2="19" />
-      {/* Right pipe */}
-      <rect x="17" y="5" width="4" height="7" rx="1" />
-      <line x1="19" y1="12" x2="19" y2="19" />
-    </svg>
-  );
-}
+
 
 const TABS = [
   { id: "residential", label: "Residential",      icon: Home,         short: "Res."  },
   { id: "commercial",  label: "Commercial",        icon: Building2,    short: "Comm." },
-  { id: "civil",       label: "Civil / UG",        icon: ConduitIcon,  short: "Civil" },
+  { id: "civil",       label: "Civil / UG",        icon: Shovel,       short: "Civil" },
   { id: "settings",    label: "Settings",          icon: Settings,     short: "Set."  },
 ] as const;
 
