@@ -46,8 +46,9 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
-  LayoutGrid,
+  PanelTop,
   X,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CONDUIT_SIZES, type ConduitSize } from "@/contexts/AppContext";
@@ -81,12 +82,14 @@ type PageActiveRunMap = Record<number, string>;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const BASE_DPI = 1.5;
-const MIN_ZOOM = 0.25;
-const MAX_ZOOM = 5.0;
-// 5% increments from 25% → 500%
+const MIN_ZOOM = 0.10; // absolute floor — fit-to-page will be the effective min
+const MAX_ZOOM = 10.0; // 1000%
+// 5% increments from 10% → 1000%
 const ZOOM_STEPS = Array.from({ length: Math.round((MAX_ZOOM - MIN_ZOOM) / 0.05) + 1 }, (_, i) =>
   parseFloat((MIN_ZOOM + i * 0.05).toFixed(2))
 );
+// Extra padding (px at zoom=1) around the page so you can pan past edges when zoomed in
+const PAGE_GUTTER = 400;
 
 // Run colors — cycles through these for each named run
 const RUN_COLORS = [
@@ -125,10 +128,6 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   // ── Current page (1-indexed) ───────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useLocalStorage<number>(`bp_page_${tabKey}`, 1);
 
-  // ── Scale persistence keyed by PDF hash ────────────────────────────────────
-  const scaleStorageKey = pdfHash ? `bp_scale_${tabKey}_${pdfHash}` : `bp_scale_${tabKey}_nohash`;
-  const scalePointsKey  = pdfHash ? `bp_scalepts_${tabKey}_${pdfHash}` : `bp_scalepts_${tabKey}_nohash`;
-
   // ── Zoom state ─────────────────────────────────────────────────────────────
   const [zoom, setZoom] = useLocalStorage<number>(`bp_zoom_${tabKey}`, 1.0);
   const zoomRef = useRef(zoom);
@@ -138,17 +137,38 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const displayZoom = zoom;
   const displayZoomRef = zoomRef;
 
-  // ── Scale state (persisted per PDF hash) ─────────────────────────────────
-  const [scaleRatio, setScaleRatio] = useLocalStorage<number | null>(scaleStorageKey, null);
-  const [scalePoints, setScalePoints] = useLocalStorage<NormPoint[]>(scalePointsKey, []);
-  const [knownDistance, setKnownDistance] = useState<string>("");
-
   // ── Per-page runs ──────────────────────────────────────────────────────────
   // pageRunsMap[pageIndex] = MeasureRun[]  (pageIndex is 0-based internally)
   const [pageRunsMap, setPageRunsMap] = useLocalStorage<PageRunsMap>(`bp_pageruns_${tabKey}`, {});
   const [pageActiveRunMap, setPageActiveRunMap] = useLocalStorage<PageActiveRunMap>(`bp_pageactive_${tabKey}`, {});
 
   const pageIdx = currentPage - 1; // 0-based
+
+  // ── Scale persistence keyed by PDF hash + page index ────────────────────
+  // Per-page scale map: pageIdx → { ratio: number | null, points: NormPoint[] }
+  type PageScaleEntry = { ratio: number | null; points: NormPoint[] };
+  const pageScaleKey = pdfHash ? `bp_pagescale_${tabKey}_${pdfHash}` : `bp_pagescale_${tabKey}_nohash`;
+  const [pageScaleMap, setPageScaleMap] = useLocalStorage<Record<number, PageScaleEntry>>(pageScaleKey, {});
+
+  const scaleRatio: number | null = pageScaleMap[pageIdx]?.ratio ?? null;
+  const scalePoints: NormPoint[] = pageScaleMap[pageIdx]?.points ?? [];
+
+  const setScaleRatio = useCallback((ratio: number | null) => {
+    setPageScaleMap((prev) => ({
+      ...prev,
+      [pageIdx]: { ratio, points: prev[pageIdx]?.points ?? [] },
+    }));
+  }, [pageIdx, setPageScaleMap]);
+
+  const setScalePoints = useCallback((pts: NormPoint[] | ((p: NormPoint[]) => NormPoint[])) => {
+    setPageScaleMap((prev) => {
+      const existing = prev[pageIdx]?.points ?? [];
+      const next = typeof pts === "function" ? pts(existing) : pts;
+      return { ...prev, [pageIdx]: { ratio: prev[pageIdx]?.ratio ?? null, points: next } };
+    });
+  }, [pageIdx, setPageScaleMap]);
+
+  const [knownDistance, setKnownDistance] = useState<string>("");
 
   // Get runs for current page (lazy-init with one default run)
   const currentRuns: MeasureRun[] = pageRunsMap[pageIdx] ?? [defaultRun(0)];
@@ -187,28 +207,55 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
 
-  // ── Fit-to-page max zoom ──────────────────────────────────────────────────
-  // Computed after page renders: the zoom level where the page just fills the viewport
-  const fitZoomRef = useRef<number>(MAX_ZOOM);
+  // ── Fit-to-page zoom ─────────────────────────────────────────────────────
+  // Computed after page renders. Used as the MINIMUM zoom (50% of fit = smallest allowed).
+  const fitZoomRef = useRef<number>(1.0);
+  const [fitZoom, setFitZoom] = useState<number>(1.0); // reactive copy for display
+  const autoFittedRef = useRef<boolean>(false); // only auto-fit once per page load
+
   useEffect(() => {
     if (!pageReady || !pageSizeRef.current) return;
     const el = scrollAreaRef.current;
     if (!el) return;
     const vpW = el.clientWidth;
     const vpH = el.clientHeight;
-    const pageW = pageSizeRef.current.w / (BASE_DPI * zoomRef.current) * BASE_DPI; // page px at zoom=1
-    const pageH = pageSizeRef.current.h / (BASE_DPI * zoomRef.current) * BASE_DPI;
-    // Fit = zoom where page width fills viewport (with a tiny 8px margin each side)
-    const fitW = (vpW - 16) / (pageW / BASE_DPI);
-    const fitH = (vpH - 16) / (pageH / BASE_DPI);
-    fitZoomRef.current = parseFloat(Math.min(fitW, fitH, MAX_ZOOM).toFixed(4));
-  }, [pageReady]);
+    // Compute page natural size at zoom=1 from current rendered size
+    const curZoom = zoomRef.current;
+    const pageNatW = pageSizeRef.current.w / curZoom; // natural px width at zoom=1
+    const pageNatH = pageSizeRef.current.h / curZoom;
+    const fitW = (vpW - 16) / pageNatW;
+    const fitH = (vpH - 16) / pageNatH;
+    const fit = parseFloat(Math.min(fitW, fitH, MAX_ZOOM).toFixed(4));
+    fitZoomRef.current = fit;
+    setFitZoom(fit);
+    // Auto-fit the page on first render of each page
+    if (!autoFittedRef.current) {
+      autoFittedRef.current = true;
+      applyZoom(fit);
+      // Center the page in the viewport after fit
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const scrollEl = scrollAreaRef.current;
+          if (!scrollEl) return;
+          scrollEl.scrollLeft = (scrollEl.scrollWidth - scrollEl.clientWidth) / 2;
+          scrollEl.scrollTop  = (scrollEl.scrollHeight - scrollEl.clientHeight) / 2;
+        });
+      });
+    }
+  }, [pageReady]); // eslint-disable-line
+
+  // Reset auto-fit flag when page changes so each new page auto-fits
+  useEffect(() => {
+    autoFittedRef.current = false;
+  }, [currentPage, pdfFile]);
 
   // Reset page render state when page changes
   useEffect(() => {
     pageSizeRef.current = null;
     setPageReady(false);
     setCrosshair(null);
+    setMode("none");
+    modeRef.current = "none";
   }, [currentPage, pdfFile]);
 
   // ── NormPoint → canvas pixel coords (single-page: pageIndex always 0) ─────
@@ -446,9 +493,9 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     if (!scrollEl) return;
 
     const oldZoom = zoomRef.current;
-    // Cap at fit-to-page zoom (page fills viewport) — never zoom out past that
-    const effectiveMax = Math.max(fitZoomRef.current, MIN_ZOOM);
-    const newZoom = clamp(parseFloat(newZoomRaw.toFixed(4)), MIN_ZOOM, effectiveMax);
+    // Min = 50% of fit-to-page (so you can always see the whole page with some margin)
+    const effectiveMin = Math.max(fitZoomRef.current * 0.50, MIN_ZOOM);
+    const newZoom = clamp(parseFloat(newZoomRaw.toFixed(4)), effectiveMin, MAX_ZOOM);
     if (Math.abs(newZoom - oldZoom) < 0.001) return;
 
     const rect = scrollEl.getBoundingClientRect();
@@ -484,7 +531,18 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     applyZoom(prev);
   }, [applyZoom]);
 
-  const zoomReset = useCallback(() => applyZoom(1.0), [applyZoom]);
+  // Reset zoom = fit-to-page
+  const zoomReset = useCallback(() => {
+    applyZoom(fitZoomRef.current);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = scrollAreaRef.current;
+        if (!el) return;
+        el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+        el.scrollTop  = (el.scrollHeight - el.clientHeight) / 2;
+      });
+    });
+  }, [applyZoom]);
 
   // ── Wheel zoom ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -860,19 +918,38 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
           className="h-7 text-xs px-2.5"
           variant="outline"
           onClick={() => {
+            // Clear only run points — scale is preserved
             setCurrentRuns((prev) => prev.map((r) => r.id === currentActiveRunId ? { ...r, points: [], totalFeet: null } : r));
-            setScalePoints([]);
-            setScaleRatio(null);
             setMode("none");
             modeRef.current = "none";
-            toast.info("Cleared.");
+            toast.info("Run points cleared. Scale preserved.");
           }}
           disabled={!pdfFile}
-          title="Clear canvas"
+          title="Clear run points (scale preserved)"
         >
           <Trash2 size={12} className="mr-1" />
           Clear
         </Button>
+
+        {scaleRatio && (
+          <Button
+            size="sm"
+            className="h-7 text-xs px-2.5"
+            variant="outline"
+            onClick={() => {
+              setScalePoints([]);
+              setScaleRatio(null);
+              setMode("none");
+              modeRef.current = "none";
+              toast.info("Scale reset for this page.");
+            }}
+            disabled={!pdfFile}
+            title="Reset scale for this page"
+          >
+            <Lock size={11} className="mr-1" />
+            Reset Scale
+          </Button>
+        )}
 
         {/* Zoom */}
         <div className="ml-auto flex items-center gap-0.5">
@@ -900,7 +977,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
             className="flex items-center justify-center w-7 h-7 rounded border border-border text-muted-foreground hover:text-foreground hover:border-[#F5C518]/50 transition-all shrink-0"
             title="Page overview"
           >
-            <LayoutGrid size={12} />
+            <PanelTop size={12} />
           </button>
 
           <div className="w-px h-4 bg-border shrink-0" />
@@ -1130,6 +1207,8 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
             style={{
               display: "inline-block",
               position: "relative",
+              // Extra gutter so the page can be panned past its edges when zoomed in
+              padding: `${PAGE_GUTTER * zoom}px`,
             }}
           >
             <Document
