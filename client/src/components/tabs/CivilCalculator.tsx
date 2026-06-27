@@ -27,9 +27,73 @@ import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
-  Package, Cable, Plus, Minus, ChevronLeft,
-  Wrench, Link2
+  Plus, Minus, ChevronLeft,
+  Link2
 } from "lucide-react";
+
+// ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ──
+function ConduitPipeIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
+  // A horizontal conduit pipe: two parallel lines (walls) with end caps
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      {/* Pipe body — two horizontal walls */}
+      <line x1="2" y1="9" x2="22" y2="9" />
+      <line x1="2" y1="15" x2="22" y2="15" />
+      {/* Left end cap */}
+      <line x1="2" y1="9" x2="2" y2="15" />
+      {/* Right end cap */}
+      <line x1="22" y1="9" x2="22" y2="15" />
+      {/* Center stripe (pipe seam) */}
+      <line x1="2" y1="12" x2="22" y2="12" strokeDasharray="3 3" strokeOpacity="0.5" />
+    </svg>
+  );
+}
+
+function MaleAdapterIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
+  // Male conduit adapter: pipe body on left, threaded male end (narrowing) on right
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      {/* Pipe body (wider section) */}
+      <line x1="2" y1="8" x2="14" y2="8" />
+      <line x1="2" y1="16" x2="14" y2="16" />
+      <line x1="2" y1="8" x2="2" y2="16" />
+      {/* Shoulder taper */}
+      <line x1="14" y1="8" x2="17" y2="10" />
+      <line x1="14" y1="16" x2="17" y2="14" />
+      {/* Male threaded end (narrower) */}
+      <line x1="17" y1="10" x2="22" y2="10" />
+      <line x1="17" y1="14" x2="22" y2="14" />
+      <line x1="22" y1="10" x2="22" y2="14" />
+      {/* Thread marks */}
+      <line x1="18.5" y1="10" x2="18.5" y2="14" strokeOpacity="0.5" />
+      <line x1="20" y1="10" x2="20" y2="14" strokeOpacity="0.5" />
+    </svg>
+  );
+}
+
+function StrippedWireIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
+  // Single wire: insulated section (thick) on left, stripped bare conductor on right
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      {/* Insulation jacket (tube) */}
+      <line x1="2" y1="9" x2="15" y2="9" />
+      <line x1="2" y1="15" x2="15" y2="15" />
+      <line x1="2" y1="9" x2="2" y2="15" />
+      {/* Insulation end cut */}
+      <line x1="15" y1="9" x2="15" y2="15" />
+      {/* Bare conductor extending right */}
+      <line x1="15" y1="12" x2="22" y2="12" strokeWidth="2" />
+      {/* Conductor tip */}
+      <circle cx="22" cy="12" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 import { toast } from "sonner";
 
 // ─── Civil & Underground icon (shared with BidPhaseShell) ─────────────────────
@@ -342,14 +406,14 @@ function RunCard({
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-muted/20 rounded-lg p-2.5">
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-              <Package size={10} /> Pipe Sticks
+              <ConduitPipeIcon size={10} /> Pipe Sticks
             </div>
             <div className="text-xl font-bold font-mono text-foreground">{sticks}</div>
             <div className="text-[10px] text-muted-foreground font-mono">10-ft sticks</div>
           </div>
           <div className="bg-muted/20 rounded-lg p-2.5">
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-              <Cable size={10} /> Wire Length
+              <StrippedWireIcon size={10} /> Wire Length
             </div>
             <div className="text-xl font-bold font-mono text-foreground">{wire}</div>
             <div className="text-[10px] text-muted-foreground font-mono">ft w/ 10% slack</div>
@@ -367,7 +431,7 @@ function RunCard({
           )}
         >
           <div className="flex items-center gap-2">
-            <Wrench size={12} />
+            <MaleAdapterIcon size={12} />
             <span>Fittings</span>
             {totalFittings > 0 && (
               <span className="px-1.5 py-0.5 rounded-full bg-[#F5C518]/20 text-[#F5C518] text-[10px] font-bold">
@@ -501,7 +565,7 @@ function CrossPageTotals({ runs }: { runs: RunItem[] }) {
       </div>
 
       {/* ── Conduit ── */}
-      <SectionHeader icon={<Package size={11} />} title="Conduit" />
+      <SectionHeader icon={<ConduitPipeIcon size={11} />} title="Conduit" />
       <div className="space-y-1">
         {conduitRows.map(([key, row]) => (
           <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
@@ -517,7 +581,7 @@ function CrossPageTotals({ runs }: { runs: RunItem[] }) {
       {/* ── Fittings ── */}
       {fittingRows.length > 0 && (
         <>
-          <SectionHeader icon={<Wrench size={11} />} title="Fittings" />
+          <SectionHeader icon={<MaleAdapterIcon size={11} />} title="Fittings" />
           <div className="space-y-1">
             {fittingRows.map((row, i) => (
               <div key={i} className="flex items-center justify-between text-[11px] py-0.5">
@@ -536,7 +600,7 @@ function CrossPageTotals({ runs }: { runs: RunItem[] }) {
       {/* ── Wire / Conductors ── */}
       {wireRows.length > 0 && (
         <>
-          <SectionHeader icon={<Cable size={11} />} title="Conductors" />
+          <SectionHeader icon={<StrippedWireIcon size={11} />} title="Conductors" />
           <div className="space-y-1">
             {wireRows.map(([key, row]) => (
               <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
