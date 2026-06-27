@@ -249,6 +249,51 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
     autoFittedRef.current = false;
   }, [currentPage, pdfFile]);
 
+  // ── Re-center page when the scroll area is resized (panel drag) ──────────
+  // Tracks the last scroll position as a fraction of total scrollable range,
+  // so when the pane width changes the page stays visually centered.
+  const scrollFractionRef = useRef({ x: 0.5, y: 0.5 });
+
+  // Keep scroll fraction up-to-date as the user pans
+  useEffect(() => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const maxLeft = el.scrollWidth  - el.clientWidth;
+      const maxTop  = el.scrollHeight - el.clientHeight;
+      scrollFractionRef.current = {
+        x: maxLeft  > 0 ? el.scrollLeft / maxLeft  : 0.5,
+        y: maxTop   > 0 ? el.scrollTop  / maxTop   : 0.5,
+      };
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // ResizeObserver: when the pane width changes, restore scroll fraction so page stays centered
+  useEffect(() => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    let lastW = el.clientWidth;
+    let lastH = el.clientHeight;
+    const ro = new ResizeObserver(() => {
+      const newW = el.clientWidth;
+      const newH = el.clientHeight;
+      if (newW === lastW && newH === lastH) return;
+      lastW = newW;
+      lastH = newH;
+      // Re-apply the stored scroll fraction so the page stays centered
+      requestAnimationFrame(() => {
+        const maxLeft = el.scrollWidth  - el.clientWidth;
+        const maxTop  = el.scrollHeight - el.clientHeight;
+        el.scrollLeft = maxLeft  * scrollFractionRef.current.x;
+        el.scrollTop  = maxTop   * scrollFractionRef.current.y;
+      });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Reset page render state when page changes
   useEffect(() => {
     pageSizeRef.current = null;
