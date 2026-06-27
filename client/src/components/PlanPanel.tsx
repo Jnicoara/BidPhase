@@ -155,7 +155,7 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
   return (
     <div
       className={cn(
-        "flex items-center gap-0.5 rounded border transition-all",
+        "flex items-center gap-1 rounded border transition-all",
         isActive
           ? "bg-[#F5C518]/10 border-[#F5C518]/50 shadow-sm"
           : "border-transparent opacity-60 hover:opacity-90"
@@ -165,7 +165,7 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
       <Popover>
         <PopoverTrigger asChild>
           <button
-            className="w-4 h-4 rounded-full ml-1.5 shrink-0 border border-white/20 hover:scale-110 transition-transform"
+            className="w-5 h-5 rounded-full ml-2 shrink-0 border border-white/20 hover:scale-110 transition-transform"
             style={{ background: runColor }}
             title="Change run color"
             onClick={(e) => e.stopPropagation()}
@@ -234,7 +234,7 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
           onChange={(e) => setNameVal(e.target.value)}
           onBlur={commitName}
           onKeyDown={(e) => { if (e.key === "Enter") commitName(); if (e.key === "Escape") { setEditing(false); setNameVal(run.name); } }}
-          className="w-20 text-[10px] bg-background border border-border rounded px-1 py-0 font-mono outline-none"
+          className="w-24 text-xs bg-background border border-border rounded px-1.5 py-0.5 font-mono outline-none"
           autoFocus
           onClick={(e) => e.stopPropagation()}
         />
@@ -242,7 +242,7 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
         <button
           onClick={onActivate}
           className={cn(
-            "flex items-center gap-1 px-1.5 py-0.5 text-[10px] whitespace-nowrap transition-all",
+            "flex items-center gap-1.5 px-2 py-1 text-xs whitespace-nowrap transition-all",
             isActive ? "font-bold text-foreground" : "font-medium text-muted-foreground hover:text-foreground"
           )}
         >
@@ -257,19 +257,19 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
       {isActive && !editing && (
         <button
           onClick={(e) => { e.stopPropagation(); setEditing(true); setTimeout(() => inputRef.current?.select(), 10); }}
-          className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+          className="p-1 text-muted-foreground hover:text-foreground transition-colors"
           title="Rename run"
         >
-          <Pencil size={9} />
+          <Pencil size={11} />
         </button>
       )}
       {isActive && editing && (
         <button
           onClick={(e) => { e.stopPropagation(); commitName(); }}
-          className="p-0.5 text-[#00FF88] hover:text-[#00FF88]/80 transition-colors"
+          className="p-1 text-[#00FF88] hover:text-[#00FF88]/80 transition-colors"
           title="Confirm rename"
         >
-          <Check size={9} />
+          <Check size={11} />
         </button>
       )}
 
@@ -277,7 +277,7 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
       {canDelete && isActive && (
         <button
           onClick={onDelete}
-          className="px-1 py-0.5 text-[9px] text-muted-foreground hover:text-destructive transition-colors"
+          className="px-1.5 py-1 text-[11px] text-muted-foreground hover:text-destructive transition-colors"
           title="Delete this run"
         >✕</button>
       )}
@@ -287,8 +287,8 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
 
 interface PlanPanelProps {
   tabKey: string;
-  onPushDistance?: (ft: number, runName: string, conduitSize?: string) => void;
-  onDeleteRun?: (runName: string) => void;
+  onPushDistance?: (ft: number, runName: string, conduitSize?: string, pageNumber?: number) => void;
+  onDeleteRun?: (runName: string, pageNumber?: number) => void;
 }
 
 export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanPanelProps) {
@@ -1079,7 +1079,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const deleteRun = useCallback((runId: string) => {
     setCurrentRuns((prev) => {
       const target = prev.find((r) => r.id === runId);
-      if (target) onDeleteRun?.(target.name);
+      if (target) onDeleteRun?.(target.name, currentPage);
       const next = prev.filter((r) => r.id !== runId);
       const safe = next.length > 0 ? next : [defaultRun(0)];
       if (currentActiveRunId === runId) setCurrentActiveRunId(safe[0].id);
@@ -1091,7 +1091,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const handlePush = () => {
     const ft = activeRun?.totalFeet;
     if (!ft || ft <= 0) { toast.error("No measurement on active run."); return; }
-    onPushDistance?.(ft, activeRun.name, activeRun.conduitSize);
+    onPushDistance?.(ft, activeRun.name, activeRun.conduitSize, currentPage);
     toast.success(`${ft} ft pushed from "${activeRun.name}" (page ${currentPage}).`);
   };
 
@@ -1382,7 +1382,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
 
       {/* ── Named Runs Bar ────────────────────────────────────────────── */}
       {pdfFile && (
-        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border bg-muted/30 shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border bg-muted/30 shrink-0 overflow-x-auto">
           {currentRuns.map((run) => {
             const isActive = run.id === currentActiveRunId;
             const runColor = run.color ?? BASE_PALETTE[0];
@@ -1404,24 +1404,24 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
           })}
           <button
             onClick={addRun}
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-muted-foreground hover:text-foreground transition-colors"
             title="Add new measurement run"
           >
-            <Plus size={10} />
+            <Plus size={12} />
             New Run
           </button>
           {/* Hide unselected runs toggle */}
           <button
             onClick={() => setHideUnselected((v) => !v)}
             className={cn(
-              "ml-auto flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] transition-all",
+              "ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs transition-all",
               hideUnselected
                 ? "border-[#F5C518]/50 bg-[#F5C518]/10 text-[#F5C518]"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
             title={hideUnselected ? "Show all runs" : "Hide other runs"}
           >
-            {hideUnselected ? <EyeOff size={11} /> : <Eye size={11} />}
+            {hideUnselected ? <EyeOff size={13} /> : <Eye size={13} />}
             <span>{hideUnselected ? "Solo" : "All"}</span>
           </button>
         </div>

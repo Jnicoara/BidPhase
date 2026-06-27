@@ -631,8 +631,9 @@ function CivilEditor({
 
   // Called when a run is deleted from PlanPanel's run strip
   const handleDeleteRun = useCallback(
-    (runName: string) => {
-      syncRuns(runs.filter((r) => r.name !== runName));
+    (runName: string, pageNumber?: number) => {
+      // If pageNumber is provided, only delete the run on that specific page
+      syncRuns(runs.filter((r) => !(r.name === runName && (pageNumber == null || r.pageNumber === pageNumber))));
     },
     [runs, syncRuns]
   );
@@ -660,7 +661,7 @@ function CivilEditor({
           <PlanPanel
             tabKey={`civil_${projectId}`}
             onPushDistance={(ft: number, runName: string, conduitSize?: string, pageNumber?: number) => handlePush(ft, runName, conduitSize, pageNumber)}
-            onDeleteRun={handleDeleteRun}
+            onDeleteRun={(name, page) => handleDeleteRun(name, page)}
           />
         </ResizablePanel>
 
