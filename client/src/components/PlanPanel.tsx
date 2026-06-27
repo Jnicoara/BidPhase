@@ -48,10 +48,13 @@ import {
   ChevronRight,
   X,
   Lock,
+  Pencil,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CONDUIT_SIZES, type ConduitSize } from "@/contexts/AppContext";
 import { Eye, EyeOff } from "lucide-react";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -70,6 +73,7 @@ interface NormPoint {
 interface MeasureRun {
   id: string;
   name: string;
+  color: string;
   points: NormPoint[];
   totalFeet: number | null;
   conduitSize: ConduitSize;
@@ -90,8 +94,8 @@ const ZOOM_STEPS = Array.from({ length: Math.round((MAX_ZOOM - MIN_ZOOM) / 0.05)
 // Extra padding (px at zoom=1) around the page so you can pan past edges when zoomed in
 const PAGE_GUTTER = 400;
 
-// Run colors — cycles through these for each named run
-const RUN_COLORS = [
+// 10 vibrant base colors for the color picker palette
+const BASE_PALETTE = [
   "#00FF88", // neon green
   "#00CFFF", // electric cyan
   "#FF6B00", // vivid orange
@@ -100,7 +104,11 @@ const RUN_COLORS = [
   "#BF5FFF", // vivid violet
   "#FF4444", // neon red
   "#00FFD1", // aqua mint
+  "#FF9900", // amber
+  "#39FF14", // electric lime
 ];
+// Legacy alias so any remaining RUN_COLORS refs still compile
+const RUN_COLORS = BASE_PALETTE;
 
 function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)); }
 function dist2D(ax: number, ay: number, bx: number, by: number) {
@@ -111,7 +119,170 @@ function nanoid6() {
 }
 
 function defaultRun(idx: number): MeasureRun {
-  return { id: nanoid6(), name: `Run ${idx + 1}`, points: [], totalFeet: null, conduitSize: "3/4" };
+  return { id: nanoid6(), name: `Run ${idx + 1}`, color: BASE_PALETTE[idx % BASE_PALETTE.length], points: [], totalFeet: null, conduitSize: "3/4" };
+}
+
+// ── RunChip: per-run color picker + rename + delete ──────────────────────────
+interface RunChipProps {
+  run: MeasureRun;
+  isActive: boolean;
+  runColor: string;
+  canDelete: boolean;
+  savedColors: string[];
+  onActivate: () => void;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+  onColorChange: (color: string) => void;
+  onSaveColor: (color: string) => void;
+}
+
+function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, onRename, onDelete, onColorChange, onSaveColor }: RunChipProps) {
+  const [editing, setEditing] = useState(false);
+  const [nameVal, setNameVal] = useState(run.name);
+  const [customColor, setCustomColor] = useState(runColor);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Sync name when run.name changes externally
+  useEffect(() => { if (!editing) setNameVal(run.name); }, [run.name, editing]);
+
+  const commitName = () => {
+    setEditing(false);
+    const v = nameVal.trim();
+    if (v && v !== run.name) onRename(v);
+    else setNameVal(run.name);
+  };
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-0.5 rounded border transition-all",
+        isActive
+          ? "bg-[#F5C518]/10 border-[#F5C518]/50 shadow-sm"
+          : "border-transparent opacity-60 hover:opacity-90"
+      )}
+    >
+      {/* Color dot — click to open picker */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            className="w-4 h-4 rounded-full ml-1.5 shrink-0 border border-white/20 hover:scale-110 transition-transform"
+            style={{ background: runColor }}
+            title="Change run color"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-3 space-y-3" align="start" sideOffset={6}>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Base Colors</p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {BASE_PALETTE.map((c) => (
+              <button
+                key={c}
+                className={cn(
+                  "w-7 h-7 rounded-full border-2 transition-transform hover:scale-110",
+                  runColor === c ? "border-white scale-110" : "border-transparent"
+                )}
+                style={{ background: c }}
+                onClick={() => onColorChange(c)}
+              />
+            ))}
+          </div>
+          {savedColors.length > 0 && (
+            <>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Saved</p>
+              <div className="flex flex-wrap gap-1.5">
+                {savedColors.map((c) => (
+                  <button
+                    key={c}
+                    className={cn(
+                      "w-6 h-6 rounded-full border-2 transition-transform hover:scale-110",
+                      runColor === c ? "border-white scale-110" : "border-transparent"
+                    )}
+                    style={{ background: c }}
+                    onClick={() => onColorChange(c)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Custom</p>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={customColor}
+                onChange={(e) => { setCustomColor(e.target.value); onColorChange(e.target.value); }}
+                className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent p-0"
+              />
+              <span className="text-[11px] font-mono text-muted-foreground">{customColor.toUpperCase()}</span>
+              <button
+                className="ml-auto text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground transition-colors"
+                onClick={() => onSaveColor(customColor)}
+                title="Save this color to favorites"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+
+      {/* Run name — click to activate, click pencil to rename */}
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={nameVal}
+          onChange={(e) => setNameVal(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => { if (e.key === "Enter") commitName(); if (e.key === "Escape") { setEditing(false); setNameVal(run.name); } }}
+          className="w-20 text-[10px] bg-background border border-border rounded px-1 py-0 font-mono outline-none"
+          autoFocus
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <button
+          onClick={onActivate}
+          className={cn(
+            "flex items-center gap-1 px-1.5 py-0.5 text-[10px] whitespace-nowrap transition-all",
+            isActive ? "font-bold text-foreground" : "font-medium text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <span>{run.name}</span>
+          {run.totalFeet !== null && (
+            <span className="font-mono" style={{ color: runColor }}>{run.totalFeet}'</span>
+          )}
+        </button>
+      )}
+
+      {/* Rename button (active run only) */}
+      {isActive && !editing && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setEditing(true); setTimeout(() => inputRef.current?.select(), 10); }}
+          className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+          title="Rename run"
+        >
+          <Pencil size={9} />
+        </button>
+      )}
+      {isActive && editing && (
+        <button
+          onClick={(e) => { e.stopPropagation(); commitName(); }}
+          className="p-0.5 text-[#00FF88] hover:text-[#00FF88]/80 transition-colors"
+          title="Confirm rename"
+        >
+          <Check size={9} />
+        </button>
+      )}
+
+      {/* Delete button (active run only, if more than 1 run) */}
+      {canDelete && isActive && (
+        <button
+          onClick={onDelete}
+          className="px-1 py-0.5 text-[9px] text-muted-foreground hover:text-destructive transition-colors"
+          title="Delete this run"
+        >✕</button>
+      )}
+    </div>
+  );
 }
 
 interface PlanPanelProps {
@@ -193,7 +364,7 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   }, [pageIdx, setPageActiveRunMap]);
 
   const activeRun = currentRuns.find((r) => r.id === currentActiveRunId) ?? currentRuns[0];
-  const activeRunColor = RUN_COLORS[currentRuns.findIndex((r) => r.id === currentActiveRunId) % RUN_COLORS.length];
+  const activeRunColor = activeRun?.color ?? BASE_PALETTE[0];
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [mode, setMode] = useState<Mode>("none");
@@ -202,6 +373,8 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
   const [hideUnselected, setHideUnselected] = useState(false);
   const [showPageOverview, setShowPageOverview] = useState(false);
+  // Saved/favorite custom colors (persisted in localStorage)
+  const [savedColors, setSavedColors] = useLocalStorage<string[]>("bp_saved_colors", []);
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -535,14 +708,14 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
 
     // Draw all inactive runs first, then active on top
     if (!hideUnselected) {
-      currentRuns.forEach((run, idx) => {
+      currentRuns.forEach((run) => {
         if (run.id !== currentActiveRunId) {
-          drawRun(run, RUN_COLORS[idx % RUN_COLORS.length], false);
+          drawRun(run, run.color ?? BASE_PALETTE[0], false);
         }
       });
     }
     const activeIdx = currentRuns.findIndex((r) => r.id === currentActiveRunId);
-    if (activeIdx >= 0) drawRun(currentRuns[activeIdx], RUN_COLORS[activeIdx % RUN_COLORS.length], true);
+    if (activeIdx >= 0) drawRun(currentRuns[activeIdx], currentRuns[activeIdx].color ?? BASE_PALETTE[0], true);
 
     // ── Scale reference line ───────────────────────────────────────────────────
     const scalePts = scalePoints.map(normToCanvas).filter(Boolean) as { x: number; y: number }[];
@@ -888,11 +1061,16 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
   const addRun = useCallback(() => {
     const id = nanoid6();
     const name = `Run ${currentRuns.length + 1}`;
-    const newRun: MeasureRun = { id, name, points: [], totalFeet: null, conduitSize: "3/4" };
+    const color = BASE_PALETTE[currentRuns.length % BASE_PALETTE.length];
+    const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "3/4" };
     setCurrentRuns((prev) => [...prev, newRun]);
     setCurrentActiveRunId(id);
     toast.info(`New run "${name}" created on page ${currentPage}.`);
   }, [currentRuns.length, setCurrentRuns, setCurrentActiveRunId, currentPage]);
+
+  const setRunColor = useCallback((runId: string, color: string) => {
+    setCurrentRuns((prev) => prev.map((r) => r.id === runId ? { ...r, color } : r));
+  }, [setCurrentRuns]);
 
   const renameRun = useCallback((runId: string, name: string) => {
     setCurrentRuns((prev) => prev.map((r) => r.id === runId ? { ...r, name } : r));
@@ -1205,67 +1383,23 @@ export default function PlanPanel({ tabKey, onPushDistance, onDeleteRun }: PlanP
       {/* ── Named Runs Bar ────────────────────────────────────────────── */}
       {pdfFile && (
         <div className="flex items-center gap-1 px-3 py-1.5 border-b border-border bg-muted/30 shrink-0 overflow-x-auto">
-          {currentRuns.map((run, idx) => {
+          {currentRuns.map((run) => {
             const isActive = run.id === currentActiveRunId;
+            const runColor = run.color ?? BASE_PALETTE[0];
             return (
-              <div
+              <RunChip
                 key={run.id}
-                className={cn(
-                  "flex items-center gap-1 rounded border transition-all",
-                  isActive
-                    ? "bg-[#F5C518]/10 border-[#F5C518]/50 shadow-sm"
-                    : "border-transparent opacity-60 hover:opacity-90"
-                )}
-              >
-                <button
-                  onClick={() => setCurrentActiveRunId(run.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 pl-2 pr-1.5 py-0.5 text-[10px] whitespace-nowrap transition-all",
-                    isActive ? "font-bold text-foreground" : "font-medium text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <span
-                    className={cn("w-2 h-2 rounded-full shrink-0", isActive && "ring-2 ring-offset-1 ring-offset-background")}
-                    style={{ background: RUN_COLORS[idx % RUN_COLORS.length] }}
-                  />
-                  <span
-                    onDoubleClick={(e) => {
-                      const span = e.currentTarget;
-                      span.contentEditable = "true";
-                      span.focus();
-                      const range = document.createRange();
-                      range.selectNodeContents(span);
-                      window.getSelection()?.removeAllRanges();
-                      window.getSelection()?.addRange(range);
-                    }}
-                    onBlur={(e) => {
-                      const val = e.currentTarget.textContent?.trim();
-                      e.currentTarget.contentEditable = "false";
-                      if (val) renameRun(run.id, val);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLElement).blur(); }
-                      if (e.key === "Escape") { (e.target as HTMLElement).contentEditable = "false"; }
-                    }}
-                    suppressContentEditableWarning
-                  >
-                    {run.name}
-                  </span>
-                  {run.totalFeet !== null && (
-                    <span className="font-mono" style={{ color: RUN_COLORS[idx % RUN_COLORS.length] }}>
-                      {run.totalFeet}'
-                    </span>
-                  )}
-                </button>
-                {/* Delete run button (only if more than 1 run) */}
-                {currentRuns.length > 1 && isActive && (
-                  <button
-                    onClick={() => deleteRun(run.id)}
-                    className="px-1 py-0.5 text-[9px] text-muted-foreground hover:text-destructive transition-colors"
-                    title="Delete this run"
-                  >✕</button>
-                )}
-              </div>
+                run={run}
+                isActive={isActive}
+                runColor={runColor}
+                canDelete={currentRuns.length > 1}
+                savedColors={savedColors}
+                onActivate={() => setCurrentActiveRunId(run.id)}
+                onRename={(name) => renameRun(run.id, name)}
+                onDelete={() => deleteRun(run.id)}
+                onColorChange={(c) => setRunColor(run.id, c)}
+                onSaveColor={(c) => setSavedColors((prev) => prev.includes(c) ? prev : [...prev.slice(-9), c])}
+              />
             );
           })}
           <button
