@@ -1259,6 +1259,7 @@ export default function PlanPanel({
   const handlePush = () => {
     const ft = activeRun?.totalFeet;
     if (!ft || ft <= 0) { toast.error("No measurement on active run."); return; }
+    if (!activeRun) return;
     onPushDistance?.(ft, activeRun.name, activeRun.conduitSize, currentPage);
     toast.success(`${ft} ft pushed from "${activeRun.name}" (page ${currentPage}).`);
   };
@@ -1657,7 +1658,7 @@ export default function PlanPanel({
           {mode === "count" && `Unit Count · Click=place pin · Right-click=remove · U=undo · ${activeCountSession ? activeCountSession.pins.length + " total" : "No session selected"}`}
           {mode === "none" && `Page ${currentPage}/${numPages || "–"} · Scroll=zoom · ←/→=page · M=measure`}
         </span>
-        {activeRun?.totalFeet !== null && activeRun.totalFeet !== undefined && activeRun.totalFeet > 0 && (
+        {activeRun != null && activeRun.totalFeet != null && activeRun.totalFeet > 0 && (
           <Button
             size="sm"
             className="h-6 text-[10px] gap-1 bg-yellow-400 text-black hover:bg-yellow-300 px-2"
