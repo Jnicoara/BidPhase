@@ -124,20 +124,12 @@ function ResIconSelector({
                 ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground"
                 : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground")}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
-              {icon.path.split("|||").map((seg, pi) => {
-                const t = seg.trim();
-                if (t.startsWith("TEXT:")) {
-                  const [cx, cy, fs, ...rest] = t.slice(5).split(",");
-                  return (
-                    <text key={pi} x={cx} y={cy} fontSize={fs} textAnchor="middle" dominantBaseline="middle" fill={activeColor} fontWeight="bold" fontFamily="sans-serif">
-                      {rest.join(",")}
-                    </text>
-                  );
-                }
-                return (
-                  <path key={pi} d={t} fill={icon.render === "stroke" ? "none" : activeColor} stroke={activeColor} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-                );
-              })}
+              {icon.paths.map((seg, pi) => (
+                <path key={pi} d={seg.d}
+                  fill={seg.strokeOnly ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
+                  stroke={activeIconId === icon.id ? activeColor : "currentColor"}
+                  strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+              ))}
             </svg>
             <span className="leading-tight text-center">{icon.label}</span>
           </button>
@@ -329,20 +321,9 @@ function ResidentialEditor({
                             )}
                           >
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                              {icon.path.split("|||").map((seg, pi) => {
-                                const t = seg.trim();
-                                if (t.startsWith("TEXT:")) {
-                                  const [cx, cy, fs, ...rest] = t.slice(5).split(",");
-                                  return (
-                                    <text key={pi} x={cx} y={cy} fontSize={fs} textAnchor="middle" dominantBaseline="middle" fill={cs.color} fontWeight="bold" fontFamily="sans-serif">
-                                      {rest.join(",")}
-                                    </text>
-                                  );
-                                }
-                                return (
-                                  <path key={pi} d={t} fill={icon.render === "stroke" ? "none" : cs.color} stroke={cs.color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-                                );
-                              })}
+                              {icon.paths.map((seg, pi) => (
+                                <path key={pi} d={seg.d} fill={seg.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                              ))}
                             </svg>
                             {isEditing ? (
                               <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}

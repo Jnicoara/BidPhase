@@ -299,20 +299,17 @@ function CommercialEditor({
                           >
                             {/* Icon swatch */}
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                              {icon.path.split("|||").map((seg, pi) => {
-                                const t = seg.trim();
-                                if (t.startsWith("TEXT:")) {
-                                  const [cx, cy, fs, ...rest] = t.slice(5).split(",");
-                                  return (
-                                    <text key={pi} x={cx} y={cy} fontSize={fs} textAnchor="middle" dominantBaseline="middle" fill={cs.color} fontWeight="bold" fontFamily="sans-serif">
-                                      {rest.join(",")}
-                                    </text>
-                                  );
-                                }
-                                return (
-                                  <path key={pi} d={t} fill={icon.render === "stroke" ? "none" : cs.color} stroke={cs.color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-                                );
-                              })}
+                              {icon.paths.map((seg, pi) => (
+                                <path
+                                  key={pi}
+                                  d={seg.d}
+                                  fill={seg.strokeOnly ? "none" : cs.color}
+                                  stroke={cs.color}
+                                  strokeWidth={seg.strokeWidth ?? 1.5}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              ))}
                             </svg>
 
                             {/* Name / edit input */}
@@ -546,20 +543,9 @@ function CommercialEditor({
                               <td className="px-4 py-2 text-foreground">
                                 <div className="flex items-center gap-1.5">
                                   <svg viewBox="0 0 24 24" width="12" height="12" fill="none" className="shrink-0">
-                                    {icon.path.split("|||").map((seg, pi) => {
-                                      const t = seg.trim();
-                                      if (t.startsWith("TEXT:")) {
-                                        const [cx, cy, fs, ...rest] = t.slice(5).split(",");
-                                        return (
-                                          <text key={pi} x={cx} y={cy} fontSize={fs} textAnchor="middle" dominantBaseline="middle" fill={cs.color} fontWeight="bold" fontFamily="sans-serif">
-                                            {rest.join(",")}
-                                          </text>
-                                        );
-                                      }
-                                      return (
-                                        <path key={pi} d={t} fill={icon.render === "stroke" ? "none" : cs.color} stroke={cs.color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-                                      );
-                                    })}
+                                    {icon.paths.map((seg, pi) => (
+                                      <path key={pi} d={seg.d} fill={seg.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                                    ))}
                                   </svg>
                                   {cs.name}
                                 </div>
@@ -642,20 +628,17 @@ function IconSelector({
             )}
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
-              {icon.path.split("|||").map((seg, pi) => {
-                const t = seg.trim();
-                if (t.startsWith("TEXT:")) {
-                  const [cx, cy, fs, ...rest] = t.slice(5).split(",");
-                  return (
-                    <text key={pi} x={cx} y={cy} fontSize={fs} textAnchor="middle" dominantBaseline="middle" fill={activeColor} fontWeight="bold" fontFamily="sans-serif">
-                      {rest.join(",")}
-                    </text>
-                  );
-                }
-                return (
-                  <path key={pi} d={t} fill={icon.render === "stroke" ? "none" : activeColor} stroke={activeColor} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-                );
-              })}
+              {icon.paths.map((seg, pi) => (
+                <path
+                  key={pi}
+                  d={seg.d}
+                  fill={seg.strokeOnly ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
+                  stroke={activeIconId === icon.id ? activeColor : "currentColor"}
+                  strokeWidth={seg.strokeWidth ?? 1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))}
             </svg>
             <span className="leading-tight text-center">{icon.label}</span>
           </button>

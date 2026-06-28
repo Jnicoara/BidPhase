@@ -772,29 +772,14 @@ export default function PlanPanel({
       ctx.fillStyle = pin.color;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      iconDef.path.split("|||").forEach((segment) => {
-        const trimmed = segment.trim();
-        if (trimmed.startsWith("TEXT:")) {
-          // Format: TEXT:cx,cy,fontSize,content  (coords in 24×24 viewBox)
-          const [, cx, cy, fs, ...rest] = trimmed.split(",");
-          const textContent = rest.join(","); // rejoin in case label has commas
-          ctx.save();
-          ctx.font = `bold ${fs}px sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillStyle = pin.color;
-          ctx.fillText(textContent, Number(cx), Number(cy));
-          ctx.restore();
+      iconDef.paths.forEach((seg) => {
+        const p2d = new Path2D(seg.d);
+        ctx.lineWidth = (seg.strokeWidth ?? 1.5) / svgScale;
+        if (seg.strokeOnly) {
+          ctx.stroke(p2d);
         } else {
-          const p2d = new Path2D(trimmed);
-          if (iconDef.render === "stroke") {
-            ctx.stroke(p2d);
-          } else if (iconDef.render === "fill") {
-            ctx.fill(p2d);
-          } else {
-            ctx.fill(p2d);
-            ctx.stroke(p2d);
-          }
+          ctx.fill(p2d);
+          ctx.stroke(p2d);
         }
       });
 
