@@ -233,7 +233,7 @@ export function defaultCommercialProject(name = "Job 1"): CommercialProject {
     id: nanoid(8),
     name,
     createdAt: Date.now(),
-    state: { assemblyId: "receptacle-20a", quantity: 1, materials: [], totalLaborHours: 0, iconId: "outlet-duplex", pinColor: "#39FF14" },
+    state: { assemblyId: "receptacle-20a", quantity: 1, materials: [], totalLaborHours: 0, iconId: "dot", pinColor: "#39FF14" },
   };
 }
 

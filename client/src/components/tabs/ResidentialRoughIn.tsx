@@ -22,7 +22,7 @@ import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import { Home, ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Pencil, Check, X } from "lucide-react";
-import { COUNT_ICONS, ICON_CATEGORIES, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR } from "@/lib/CountIcons";
+import { COUNT_ICONS, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR, type PinShape } from "@/lib/CountIcons";
 import { toast } from "sonner";
 
 // ── Room data ─────────────────────────────────────────────────────────────────
@@ -90,36 +90,39 @@ const ROOM_TEMPLATES: RoomTemplate[] = [
   },
 ];
 
-// ─── Grouped icon selector ────────────────────────────────────────────────────
-function ResIconSelector({
+// ─── Pin shape swatch (inline SVG preview) ──────────────────────────────────
+function PinShapeSwatch({ shape, color, size = 16 }: { shape: PinShape; color: string; size?: number }) {
+  const icon = COUNT_ICONS.find((ic) => ic.id === shape) ?? COUNT_ICONS[0];
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" className="shrink-0">
+      {icon.paths.map((seg, pi) => (
+        <path key={pi} d={seg.d}
+          fill={seg.strokeOnly ? "none" : color}
+          stroke={color}
+          strokeWidth={seg.strokeWidth ?? 1.5}
+          strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+    </svg>
+  );
+}
+
+// ─── Simple 4-shape picker ───────────────────────────────────────────────────
+function ResShapeSelector({
   activeIconId,
   activeColor,
   onSelect,
 }: {
   activeIconId: string;
   activeColor: string;
-  onSelect: (id: string) => void;
+  onSelect: (id: PinShape) => void;
 }) {
-  const [activeCategory, setActiveCategory] = useState<string>(ICON_CATEGORIES[0]);
-  const filtered = COUNT_ICONS.filter((ic) => ic.category === activeCategory);
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-medium text-muted-foreground">Pin Icon</Label>
-      <div className="flex flex-wrap gap-1">
-        {ICON_CATEGORIES.map((cat) => (
-          <button key={cat} onClick={() => setActiveCategory(cat)}
-            className={cn("px-2 py-0.5 rounded text-[9px] font-medium transition-colors",
-              activeCategory === cat
-                ? "bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/40"
-                : "bg-muted/10 text-muted-foreground border border-border hover:text-foreground")}>
-            {cat}
-          </button>
-        ))}
-      </div>
-      <div className="grid grid-cols-4 gap-1.5">
-        {filtered.map((icon) => (
+      <Label className="text-xs font-medium text-muted-foreground">Pin Shape</Label>
+      <div className="flex gap-2">
+        {COUNT_ICONS.map((icon) => (
           <button key={icon.id} title={icon.label} onClick={() => onSelect(icon.id)}
-            className={cn("flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all",
+            className={cn("flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all flex-1",
               activeIconId === icon.id
                 ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground"
                 : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground")}>
@@ -320,7 +323,6 @@ function ResidentialEditor({
                   ) : (
                     <div className="space-y-1.5">
                       {countSessions.map((cs) => {
-                        const icon = COUNT_ICONS.find((ic) => ic.id === cs.iconId) ?? COUNT_ICONS[0];
                         const isActive = cs.id === activeCountSessionId;
                         const isEditing = editingSessionId === cs.id;
                         return (
@@ -332,11 +334,7 @@ function ResidentialEditor({
                               isActive ? "border-[#F5C518] bg-[#F5C518]/8" : "border-border bg-muted/5 hover:border-border/80"
                             )}
                           >
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                              {icon.paths.map((seg, pi) => (
-                                <path key={pi} d={seg.d} fill={seg.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
-                              ))}
-                            </svg>
+                            <PinShapeSwatch shape={cs.iconId as PinShape} color={cs.color} size={16} />
                             {isEditing ? (
                               <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleRenameSession(cs.id); if (e.key === "Escape") setEditingSessionId(null); }}
@@ -415,8 +413,8 @@ function ResidentialEditor({
                           <span className="font-mono text-[10px] text-muted-foreground ml-1">{activeCountSession.color}</span>
                         </div>
                       </div>
-                      {/* Icon selector */}
-                      <ResIconSelector
+                      {/* Shape picker */}
+                      <ResShapeSelector
                         activeIconId={activeCountSession.iconId}
                         activeColor={activeCountSession.color}
                         onSelect={(id) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, iconId: id } : cs))}
@@ -469,16 +467,11 @@ function ResidentialEditor({
                     ))}
                     {/* Count session rows — auto-appended below baseline materials */}
                     {countSessions.filter((cs) => cs.pins.length > 0).map((cs) => {
-                      const icon = COUNT_ICONS.find((ic) => ic.id === cs.iconId) ?? COUNT_ICONS[0];
                       const extCost = cs.unitCost != null ? cs.unitCost * cs.pins.length : null;
                       return (
                         <div key={cs.id} className="flex items-center gap-3 px-4 py-2.5 bg-[#F5C518]/5 hover:bg-[#F5C518]/10 transition-colors">
                           <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" className="shrink-0">
-                              {icon.paths.map((seg, pi) => (
-                                <path key={pi} d={seg.d} fill={seg.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
-                              ))}
-                            </svg>
+                            <PinShapeSwatch shape={cs.iconId as PinShape} color={cs.color} size={13} />
                             <div>
                               <p className="text-xs text-foreground truncate">{cs.name}</p>
                               <p className="text-[10px] text-muted-foreground font-mono mt-0.5">Count Session · EA</p>

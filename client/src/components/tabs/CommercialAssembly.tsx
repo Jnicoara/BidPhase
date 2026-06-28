@@ -22,7 +22,7 @@ import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import { Building2, Clock, DollarSign, ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Pencil, Check, X } from "lucide-react";
-import { COUNT_ICONS, ICON_CATEGORIES, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR } from "@/lib/CountIcons";
+import { COUNT_ICONS, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR, type PinShape } from "@/lib/CountIcons";
 import { toast } from "sonner";
 
 // ── Assembly data ─────────────────────────────────────────────────────────────
@@ -295,7 +295,6 @@ function CommercialEditor({
                   ) : (
                     <div className="space-y-1.5">
                       {countSessions.map((cs) => {
-                        const icon = COUNT_ICONS.find((ic) => ic.id === cs.iconId) ?? COUNT_ICONS[0];
                         const isActive = cs.id === activeCountSessionId;
                         const isEditing = editingSessionId === cs.id;
                         return (
@@ -309,20 +308,8 @@ function CommercialEditor({
                                 : "border-border bg-muted/5 hover:border-border/80"
                             )}
                           >
-                            {/* Icon swatch */}
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                              {icon.paths.map((seg, pi) => (
-                                <path
-                                  key={pi}
-                                  d={seg.d}
-                                  fill={seg.strokeOnly ? "none" : cs.color}
-                                  stroke={cs.color}
-                                  strokeWidth={seg.strokeWidth ?? 1.5}
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              ))}
-                            </svg>
+                            {/* Shape swatch */}
+                            <PinShapeSwatch shape={cs.iconId as PinShape} color={cs.color} size={16} />
 
                             {/* Name / edit input */}
                             {isEditing ? (
@@ -453,8 +440,8 @@ function CommercialEditor({
                         </div>
                       </div>
 
-                      {/* Icon selector — grouped by category */}
-                      <IconSelector
+                      {/* Shape picker — 4 simple shapes */}
+                      <ShapeSelector
                         activeIconId={activeSession.iconId}
                         activeColor={activeSession.color}
                         onSelect={(id) => {
@@ -550,17 +537,12 @@ function CommercialEditor({
                         ))}
                         {/* Unit Count lines — one row per session with its total pin count */}
                         {countSessions.filter((cs) => cs.pins.length > 0).map((cs) => {
-                          const icon = COUNT_ICONS.find((ic) => ic.id === cs.iconId) ?? COUNT_ICONS[0];
                           const extCost = cs.unitCost != null ? cs.unitCost * cs.pins.length : null;
                           return (
                             <tr key={cs.id} className="border-b border-border/50 bg-[#F5C518]/3 hover:bg-[#F5C518]/6 transition-colors">
                               <td className="px-4 py-2 text-foreground">
                                 <div className="flex items-center gap-1.5">
-                                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" className="shrink-0">
-                                    {icon.paths.map((seg, pi) => (
-                                      <path key={pi} d={seg.d} fill={seg.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
-                                    ))}
-                                  </svg>
+                                  <PinShapeSwatch shape={cs.iconId as PinShape} color={cs.color} size={12} />
                                   {cs.name}
                                 </div>
                               </td>
@@ -594,48 +576,47 @@ function CommercialEditor({
   );
 }
 
-// ─── Grouped icon selector ──────────────────────────────────────────────────
-function IconSelector({
+// ─── Pin shape swatch (inline SVG preview) ──────────────────────────────────
+function PinShapeSwatch({ shape, color, size = 16 }: { shape: PinShape; color: string; size?: number }) {
+  const icon = COUNT_ICONS.find((ic) => ic.id === shape) ?? COUNT_ICONS[0];
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" className="shrink-0">
+      {icon.paths.map((seg, pi) => (
+        <path
+          key={pi}
+          d={seg.d}
+          fill={seg.strokeOnly ? "none" : color}
+          stroke={color}
+          strokeWidth={seg.strokeWidth ?? 1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </svg>
+  );
+}
+
+// ─── Simple 4-shape picker ───────────────────────────────────────────────────
+function ShapeSelector({
   activeIconId,
   activeColor,
   onSelect,
 }: {
   activeIconId: string;
   activeColor: string;
-  onSelect: (id: string) => void;
+  onSelect: (id: PinShape) => void;
 }) {
-  const [activeCategory, setActiveCategory] = useState<string>(ICON_CATEGORIES[0]);
-  const filtered = COUNT_ICONS.filter((ic) => ic.category === activeCategory);
-
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-medium text-muted-foreground">Pin Icon</Label>
-      {/* Category tabs */}
-      <div className="flex flex-wrap gap-1">
-        {ICON_CATEGORIES.map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setActiveCategory(cat)}
-            className={cn(
-              "px-2 py-0.5 rounded text-[9px] font-medium transition-colors",
-              activeCategory === cat
-                ? "bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/40"
-                : "bg-muted/10 text-muted-foreground border border-border hover:text-foreground"
-            )}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-      {/* Icons grid */}
-      <div className="grid grid-cols-4 gap-1.5">
-        {filtered.map((icon) => (
+      <Label className="text-xs font-medium text-muted-foreground">Pin Shape</Label>
+      <div className="flex gap-2">
+        {COUNT_ICONS.map((icon) => (
           <button
             key={icon.id}
             title={icon.label}
             onClick={() => onSelect(icon.id)}
             className={cn(
-              "flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all",
+              "flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all flex-1",
               activeIconId === icon.id
                 ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground"
                 : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground"

@@ -57,7 +57,7 @@ import { cn } from "@/lib/utils";
 import { CONDUIT_SIZES, type ConduitSize, type CountPin, type CountSession } from "@/contexts/AppContext";
 import { Eye, EyeOff } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { COUNT_ICONS, DEFAULT_ICON_ID } from "@/lib/CountIcons";
+import { DEFAULT_ICON_ID } from "@/lib/CountIcons";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -763,40 +763,60 @@ export default function PlanPanel({
       const px = normToCanvas({ pageIndex: 0, nx: pin.nx, ny: pin.ny });
       if (!px) return;
 
-      // Icon size: ~24px at 100% zoom, scales with S
-      const iconSize = Math.max(16, 24 * S);
-      const svgScale = iconSize / 24; // SVG viewBox is 24×24
+      const shape = (pin.iconId ?? DEFAULT_ICON_ID) as string;
+      const color = pin.color;
 
-      // Translate + scale canvas so the 24×24 viewBox is centred on px
+      // Base radius / half-size in screen pixels (constant visual size regardless of zoom)
+      const R = 8 * S;   // dot radius
+      const RC = 10 * S; // circle radius
+      const RL = 14 * S; // large-circle radius
+      const SQ = 12 * S; // square half-side
+
       ctx.save();
-      ctx.translate(px.x - iconSize / 2, px.y - iconSize / 2);
-      ctx.scale(svgScale, svgScale);
-
-      const iconDef = COUNT_ICONS.find((ic) => ic.id === (pin.iconId ?? DEFAULT_ICON_ID)) ?? COUNT_ICONS[0];
-      ctx.lineWidth = 1.5 / svgScale;
-      ctx.strokeStyle = pin.color;
-      ctx.fillStyle = pin.color;
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2 * S;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      iconDef.paths.forEach((seg) => {
-        const p2d = new Path2D(seg.d);
-        ctx.lineWidth = (seg.strokeWidth ?? 1.5) / svgScale;
-        if (seg.strokeOnly) {
-          ctx.stroke(p2d);
-        } else {
-          ctx.fill(p2d);
-          ctx.stroke(p2d);
-        }
-      });
+      ctx.setLineDash([]);
 
+      // Drop shadow for visibility against any background
+      ctx.shadowColor = "rgba(0,0,0,0.70)";
+      ctx.shadowBlur = 4 * S;
+
+      if (shape === "dot") {
+        ctx.beginPath();
+        ctx.arc(px.x, px.y, R, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (shape === "circle") {
+        ctx.beginPath();
+        ctx.arc(px.x, px.y, RC, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (shape === "large-circle") {
+        ctx.beginPath();
+        ctx.arc(px.x, px.y, RL, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (shape === "square") {
+        ctx.beginPath();
+        ctx.strokeRect(px.x - SQ, px.y - SQ, SQ * 2, SQ * 2);
+      } else {
+        // Fallback: filled dot
+        ctx.beginPath();
+        ctx.arc(px.x, px.y, R, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
       ctx.restore();
 
-      // Small index badge below the icon
+      // Small index badge below the pin
+      const iconSize = Math.max(16, 24 * S);
       const badgeSize = Math.max(7, Math.round(8 * S));
       ctx.font = `bold ${badgeSize}px 'JetBrains Mono', monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillStyle = pin.color;
+      ctx.fillStyle = color;
       ctx.fillText(String(idx + 1), px.x, px.y + iconSize / 2 + 2 * S);
     });
 
