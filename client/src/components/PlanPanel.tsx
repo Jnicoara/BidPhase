@@ -278,13 +278,15 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
         </button>
       )}
 
-      {/* Delete button (active run only, if more than 1 run) */}
-      {canDelete && isActive && (
+      {/* Delete button — always visible, confirm on click */}
+      {canDelete && (
         <button
-          onClick={onDelete}
-          className="px-1.5 py-1 text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="p-1 mr-1 text-muted-foreground/50 hover:text-destructive transition-colors rounded hover:bg-destructive/10"
           title="Delete this run"
-        >✕</button>
+        >
+          <X size={11} />
+        </button>
       )}
     </div>
   );
