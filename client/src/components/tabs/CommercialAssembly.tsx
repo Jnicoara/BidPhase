@@ -215,6 +215,17 @@ function CommercialEditor({
     setAssemblyState({ ...s, countSessions: updated, quantity: Math.max(1, totalPins), activeCountSessionId });
   }, [activeCountSessionId, countSessions, s, setAssemblyState]);
 
+  const handleClearPagePins = useCallback((pageNumber: number) => {
+    if (!activeCountSessionId) return;
+    const updated = countSessions.map((cs) =>
+      cs.id === activeCountSessionId
+        ? { ...cs, pins: cs.pins.filter((p) => p.pageNumber !== pageNumber) }
+        : cs
+    );
+    const totalPins = updated.reduce((sum, cs) => sum + cs.pins.length, 0);
+    setAssemblyState({ ...s, countSessions: updated, quantity: Math.max(1, totalPins), activeCountSessionId });
+  }, [activeCountSessionId, countSessions, s, setAssemblyState]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Back bar */}
@@ -237,6 +248,7 @@ function CommercialEditor({
             allCountSessions={countSessions}
             onPinAdded={handlePinAdded}
             onPinRemoved={handlePinRemoved}
+            onClearPagePins={handleClearPagePins}
           />
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -316,6 +328,26 @@ function CommercialEditor({
                             ) : (
                               <span className="flex-1 text-xs text-foreground font-medium truncate">{cs.name}</span>
                             )}
+
+                            {/* Unit cost input */}
+                            <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <span className="text-[9px] text-muted-foreground font-mono">$</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.01}
+                                placeholder="0.00"
+                                value={cs.unitCost ?? ""}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value);
+                                  const updated = countSessions.map((x) =>
+                                    x.id === cs.id ? { ...x, unitCost: isNaN(val) ? undefined : val } : x
+                                  );
+                                  setAssemblyState({ ...s, countSessions: updated });
+                                }}
+                                className="w-14 bg-transparent border-b border-border text-[10px] font-mono text-foreground outline-none focus:border-[#F5C518]/60 text-right"
+                              />
+                            </div>
 
                             {/* Pin count badge */}
                             <span className="font-mono text-[10px] text-muted-foreground shrink-0">
@@ -533,20 +565,27 @@ function CommercialEditor({
                         {/* Count session lines — one row per session with its total pin count */}
                         {countSessions.filter((cs) => cs.pins.length > 0).map((cs) => {
                           const icon = COUNT_ICONS.find((ic) => ic.id === cs.iconId) ?? COUNT_ICONS[0];
+                          const extCost = cs.unitCost != null ? cs.unitCost * cs.pins.length : null;
                           return (
                             <tr key={cs.id} className="border-b border-border/50 bg-[#F5C518]/3 hover:bg-[#F5C518]/6 transition-colors">
-                              <td className="px-4 py-2 text-foreground flex items-center gap-1.5">
-                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" className="shrink-0">
-                                  {icon.paths.map((p, pi) => (
-                                    <path key={pi} d={p.d} fill={p.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={p.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
-                                  ))}
-                                </svg>
-                                {cs.name}
+                              <td className="px-4 py-2 text-foreground">
+                                <div className="flex items-center gap-1.5">
+                                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" className="shrink-0">
+                                    {icon.paths.map((p, pi) => (
+                                      <path key={pi} d={p.d} fill={p.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={p.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                                    ))}
+                                  </svg>
+                                  {cs.name}
+                                </div>
                               </td>
                               <td className="px-3 py-2 text-center font-mono text-muted-foreground">EA</td>
                               <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">{cs.pins.length}</td>
-                              <td className="px-3 py-2 text-right font-mono text-muted-foreground">—</td>
-                              <td className="px-4 py-2 text-right font-mono text-muted-foreground">—</td>
+                              <td className="px-3 py-2 text-right font-mono text-muted-foreground">
+                                {cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "—"}
+                              </td>
+                              <td className="px-4 py-2 text-right font-mono font-semibold text-[#F5C518]">
+                                {extCost != null ? `$${extCost.toFixed(2)}` : "—"}
+                              </td>
                             </tr>
                           );
                         })}

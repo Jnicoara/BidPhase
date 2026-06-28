@@ -366,6 +366,85 @@ function buildPDF(
     y += 20;
   }
 
+  // ── Section 2b: Count Summary ─────────────────────────────────────────────
+  const countSessions = assemblyState.countSessions ?? [];
+  const activeSessions = countSessions.filter((cs) => cs.pins.length > 0);
+  if (activeSessions.length > 0) {
+    checkY(60);
+    sectionHeader("Count Summary", commercialName);
+
+    const countCols = [
+      { label: "Session Name",  width: CW - 200 },
+      { label: "Icon",          width: 60 },
+      { label: "Count",         width: 50,  align: "right" as const },
+      { label: "Unit Cost",     width: 60,  align: "right" as const },
+      { label: "Ext. Cost",     width: 60,  align: "right" as const },
+    ];
+
+    tableHeader(countCols);
+
+    let countExtTotal = 0;
+    activeSessions.forEach((cs, i) => {
+      const ext = cs.unitCost != null ? cs.unitCost * cs.pins.length : null;
+      if (ext != null) countExtTotal += ext;
+
+      // Draw color swatch dot before the session name
+      const rowY = y + 8;
+      const dotX = ML + 4;
+      const r = parseInt(cs.color.slice(1, 3), 16);
+      const g = parseInt(cs.color.slice(3, 5), 16);
+      const b = parseInt(cs.color.slice(5, 7), 16);
+
+      if (i % 2 === 1) {
+        doc.setFillColor(...ROWALT as [number, number, number]);
+        doc.rect(ML, y, CW, 18, "F");
+      }
+
+      // Color swatch circle
+      doc.setFillColor(r, g, b);
+      doc.circle(dotX + 4, rowY + 2, 4, "F");
+
+      // Session name (offset to clear the dot)
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...DARK as [number, number, number]);
+      doc.text(cs.name, dotX + 12, rowY + 4);
+
+      // Icon label (abbreviated)
+      doc.setTextColor(...MID as [number, number, number]);
+      let xOff = ML + (CW - 200);
+      doc.text(cs.iconId.replace(/-/g, " "), xOff + 4, rowY + 4);
+      xOff += 60;
+
+      // Count
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...DARK as [number, number, number]);
+      doc.text(String(cs.pins.length), xOff + 46, rowY + 4, { align: "right" });
+      xOff += 50;
+
+      // Unit cost
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...MID as [number, number, number]);
+      doc.text(cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "—", xOff + 56, rowY + 4, { align: "right" });
+      xOff += 60;
+
+      // Ext cost
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(ext != null ? DARK[0] : LIGHT[0], ext != null ? DARK[1] : LIGHT[1], ext != null ? DARK[2] : LIGHT[2]);
+      doc.text(ext != null ? `$${ext.toFixed(2)}` : "—", xOff + 56, rowY + 4, { align: "right" });
+
+      y += 18;
+      checkY(18);
+    });
+
+    if (countExtTotal > 0) {
+      totalsRow("TOTAL COUNTED", [`$${countExtTotal.toFixed(2)}`], [
+        { width: CW - 200 }, { width: 60 }, { width: 50 }, { width: 60 }, { width: 60 },
+      ]);
+    }
+    y += 8;
+  }
+
   // ── Section 3: Residential ───────────────────────────────────────────────
   if (roomState.materials.length > 0) {
     checkY(60);

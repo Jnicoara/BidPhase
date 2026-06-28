@@ -303,6 +303,8 @@ interface PlanPanelProps {
   onPinRemoved?: (pinId: string) => void;
   /** All sessions (for rendering pins from all sessions on canvas) */
   allCountSessions?: CountSession[];
+  /** Called when user clears all pins on the current page for the active session */
+  onClearPagePins?: (pageNumber: number) => void;
 }
 
 export default function PlanPanel({
@@ -314,6 +316,7 @@ export default function PlanPanel({
   onPinAdded,
   onPinRemoved,
   allCountSessions = [],
+  onClearPagePins,
 }: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
@@ -1401,6 +1404,24 @@ export default function PlanPanel({
             </span>
           )}
         </Button>
+
+        {/* Clear Page Pins — only visible in Count Mode when there are pins on this page */}
+        {mode === "count" && currentPins.length > 0 && (
+          <Button
+            size="sm"
+            className="h-7 text-xs px-2.5"
+            variant="outline"
+            onClick={() => {
+              if (!activeCountSession) return;
+              onClearPagePins?.(currentPage);
+              toast.info(`Cleared ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}.`);
+            }}
+            title={`Clear all pins on page ${currentPage} for the active session`}
+          >
+            <X size={12} className="mr-1" />
+            Clear Page
+          </Button>
+        )}
 
         <Button
           size="sm"

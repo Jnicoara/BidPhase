@@ -165,6 +165,8 @@ export interface CountSession {
   iconId: string;   // SVG icon id from COUNT_ICONS
   color: string;    // hex pin color
   pins: CountPin[];
+  /** Optional unit cost per pin — used to calculate extended cost in the BOM */
+  unitCost?: number;
 }
 
 export interface AssemblyState {
