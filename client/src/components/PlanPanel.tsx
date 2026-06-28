@@ -399,12 +399,12 @@ export default function PlanPanel({
   useEffect(() => { allPagePinsRef.current = allPagePins; }, [allPagePins]);
 
   // Get runs for current page (lazy-init with one default run)
-  const currentRuns: MeasureRun[] = pageRunsMap[pageIdx] ?? [defaultRun(0)];
+  const currentRuns: MeasureRun[] = pageRunsMap[pageIdx] ?? [];
   const currentActiveRunId: string = pageActiveRunMap[pageIdx] ?? currentRuns[0]?.id ?? "";
 
   const setCurrentRuns = useCallback((updater: MeasureRun[] | ((prev: MeasureRun[]) => MeasureRun[])) => {
     setPageRunsMap((prev) => {
-      const existing = prev[pageIdx] ?? [defaultRun(0)];
+      const existing = prev[pageIdx] ?? [];
       const next = typeof updater === "function" ? updater(existing) : updater;
       return { ...prev, [pageIdx]: next };
     });
@@ -414,7 +414,7 @@ export default function PlanPanel({
     setPageActiveRunMap((prev) => ({ ...prev, [pageIdx]: id }));
   }, [pageIdx, setPageActiveRunMap]);
 
-  const activeRun = currentRuns.find((r) => r.id === currentActiveRunId) ?? currentRuns[0];
+  const activeRun = currentRuns.find((r) => r.id === currentActiveRunId) ?? currentRuns[0] ?? null;
   const activeRunColor = activeRun?.color ?? BASE_PALETTE[0];
 
   // ── UI state ───────────────────────────────────────────────────────────────
@@ -1250,9 +1250,8 @@ export default function PlanPanel({
       const target = prev.find((r) => r.id === runId);
       if (target) onDeleteRun?.(target.name, currentPage);
       const next = prev.filter((r) => r.id !== runId);
-      const safe = next.length > 0 ? next : [defaultRun(0)];
-      if (currentActiveRunId === runId) setCurrentActiveRunId(safe[0].id);
-      return safe;
+      if (currentActiveRunId === runId) setCurrentActiveRunId(next[0]?.id ?? "");
+      return next;
     });
   }, [currentActiveRunId, setCurrentRuns, setCurrentActiveRunId, onDeleteRun]);
 

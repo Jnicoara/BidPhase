@@ -46,7 +46,7 @@ import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
   Plus, Minus, ChevronLeft, ChevronDown, ChevronUp,
-  Link2, Trash2, Pencil, Check, X,
+  Link2, Trash2, Pencil, Check, X, Undo2,
 } from "lucide-react";
 
 // ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ─
@@ -440,7 +440,6 @@ function RunCard({
  * the whole-project picture, not just the current page.
  */
 function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countSessions?: CountSession[] }) {
-  if (runs.length === 0 && countSessions.filter(cs => cs.pins.length > 0).length === 0) return null;
 
   const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
 
@@ -544,7 +543,9 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
       {/* ── Conduit ── */}
       <SectionHeader icon={<ConduitPipeIcon size={11} />} title="Conduit" />
       <div className="space-y-1">
-        {conduitRows.map(([key, row]) => (
+        {conduitRows.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground/50 italic font-mono">No runs yet — push measurements to populate</p>
+        ) : conduitRows.map(([key, row]) => (
           <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
             <span className="font-mono text-foreground font-semibold">{row.type} {row.size}"</span>
             <div className="flex items-center gap-3">
@@ -740,6 +741,22 @@ function CivilEditor({
     );
     setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
   }, [activeCountSessionId, countSessions, s, runs, setCivilState]);
+
+  const handleUndoLastPin = useCallback(() => {
+    if (!activeCountSessionId) return;
+    const session = countSessions.find((cs) => cs.id === activeCountSessionId);
+    if (!session) return;
+    const pagePins = session.pins.filter((p) => (p.pageNumber ?? 1) === activePage);
+    if (pagePins.length === 0) { toast.info("No pins to undo on this page."); return; }
+    const lastPin = pagePins[pagePins.length - 1];
+    const updated = countSessions.map((cs) =>
+      cs.id === activeCountSessionId
+        ? { ...cs, pins: cs.pins.filter((p) => p.id !== lastPin.id) }
+        : cs
+    );
+    setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
+    toast.info("Last pin removed.");
+  }, [activeCountSessionId, countSessions, activePage, s, runs, setCivilState]);
 
   // Runs visible in the right panel = only those belonging to the current page
   const pageRuns = runs.filter((r) => (r.pageNumber ?? 1) === activePage);
@@ -981,6 +998,23 @@ function CivilEditor({
                       activeColor={activeCountSession.color}
                       onSelect={(id) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, iconId: id } : cs))}
                     />
+                    {/* Undo last pin on current page */}
+                    <div className="pt-1 border-t border-border/50">
+                      <button
+                        onClick={handleUndoLastPin}
+                        disabled={!activeCountSession || activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length === 0}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        title="Remove last dropped pin on this page (U key also works)"
+                      >
+                        <Undo2 size={12} />
+                        Undo last pin
+                        {activeCountSession && activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length > 0 && (
+                          <span className="ml-auto font-mono text-[10px] text-[#F5C518]">
+                            {activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length} on pg {activePage}
+                          </span>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
                 </div>}
@@ -989,7 +1023,7 @@ function CivilEditor({
             {/* Runs list */}
             <div className="flex-1 overflow-auto p-4 pb-24 space-y-4">
               {pageRuns.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
+                <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
                     <Link2 size={20} className="text-muted-foreground" />
                   </div>
@@ -1012,11 +1046,11 @@ function CivilEditor({
                       onRemove={removeRun}
                     />
                   ))}
-
-                  {/* Cross-page totals summary (always shows all pages) */}
-                  <CrossPageTotals runs={runs} countSessions={countSessions} />
                 </>
               )}
+
+              {/* Cross-page totals — always visible, shows zeros until runs are added */}
+              <CrossPageTotals runs={runs} countSessions={countSessions} />
 
             </div>
           </div>

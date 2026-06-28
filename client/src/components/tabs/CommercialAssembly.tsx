@@ -21,7 +21,7 @@ import {
 import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
-import { Building2, Clock, DollarSign, ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { Building2, Clock, DollarSign, ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Pencil, Check, X, Undo2 } from "lucide-react";
 import { COUNT_ICONS, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR, type PinShape } from "@/lib/CountIcons";
 import { toast } from "sonner";
 
@@ -147,6 +147,7 @@ function CommercialEditor({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [countSessionsOpen, setCountSessionsOpen] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Sync assembly state to project whenever assemblyId or qty changes
   useEffect(() => {
@@ -216,6 +217,23 @@ function CommercialEditor({
     setAssemblyState({ ...s, countSessions: updated, quantity: Math.max(1, totalPins), activeCountSessionId });
   }, [activeCountSessionId, countSessions, s, setAssemblyState]);
 
+  const handleUndoLastPin = useCallback(() => {
+    if (!activeCountSessionId) return;
+    const session = countSessions.find((cs) => cs.id === activeCountSessionId);
+    if (!session) return;
+    const pagePins = session.pins.filter((p) => (p.pageNumber ?? 1) === currentPage);
+    if (pagePins.length === 0) { toast.info("No pins to undo on this page."); return; }
+    const lastPin = pagePins[pagePins.length - 1];
+    const updated = countSessions.map((cs) =>
+      cs.id === activeCountSessionId
+        ? { ...cs, pins: cs.pins.filter((p) => p.id !== lastPin.id) }
+        : cs
+    );
+    const totalPins = updated.reduce((sum, cs) => sum + cs.pins.length, 0);
+    setAssemblyState({ ...s, countSessions: updated, quantity: Math.max(1, totalPins), activeCountSessionId });
+    toast.info("Last pin removed.");
+  }, [activeCountSessionId, countSessions, currentPage, s, setAssemblyState]);
+
   const handleClearPagePins = useCallback((pageNumber: number) => {
     if (!activeCountSessionId) return;
     const updated = countSessions.map((cs) =>
@@ -251,6 +269,7 @@ function CommercialEditor({
             onPinRemoved={handlePinRemoved}
             onClearPagePins={handleClearPagePins}
             onUnitCountToggle={(open) => setCountSessionsOpen(open)}
+            onCurrentPageChange={(page) => setCurrentPage(page)}
           />
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -451,6 +470,23 @@ function CommercialEditor({
                           setAssemblyState({ ...s, countSessions: updated, iconId: id });
                         }}
                       />
+                      {/* Undo last pin on current page */}
+                      <div className="pt-1 border-t border-border/50">
+                        <button
+                          onClick={handleUndoLastPin}
+                          disabled={!activeSession || activeSession.pins.filter((p) => (p.pageNumber ?? 1) === currentPage).length === 0}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                          title="Remove last dropped pin on this page (U key also works)"
+                        >
+                          <Undo2 size={12} />
+                          Undo last pin
+                          {activeSession && activeSession.pins.filter((p) => (p.pageNumber ?? 1) === currentPage).length > 0 && (
+                            <span className="ml-auto font-mono text-[10px] text-[#F5C518]">
+                              {activeSession.pins.filter((p) => (p.pageNumber ?? 1) === currentPage).length} on pg {currentPage}
+                            </span>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   )}
                   </div>}
