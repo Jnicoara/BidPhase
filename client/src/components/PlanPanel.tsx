@@ -56,6 +56,7 @@ import { cn } from "@/lib/utils";
 import { CONDUIT_SIZES, type ConduitSize } from "@/contexts/AppContext";
 import { Eye, EyeOff } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { COUNT_ICONS, DEFAULT_ICON_ID } from "@/lib/CountIcons";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -72,6 +73,7 @@ interface CountPin {
   ny: number;   // normalised y ∈ [0,1] relative to page height at RENDER_BASE_ZOOM
   color: string;
   assemblyId: string; // which assembly this pin belongs to
+  iconId?: string;    // SVG icon id from COUNT_ICONS (e.g. "outlet", "switch")
 }
 
 // Per-page pin storage: pageIndex → CountPin[]
@@ -307,6 +309,8 @@ interface PlanPanelProps {
   activeAssemblyId?: string;
   /** Color matching the active assembly (used to colour each dropped pin) */
   activeAssemblyColor?: string;
+  /** SVG icon id from COUNT_ICONS assigned to the active assembly */
+  activeAssemblyIconId?: string;
   /** Called when a pin is added — parent should increment assembly quantity */
   onPinAdded?: () => void;
   /** Called when a pin is removed — parent should decrement assembly quantity */
@@ -320,6 +324,7 @@ export default function PlanPanel({
   onCurrentPageChange,
   activeAssemblyId = "",
   activeAssemblyColor = "#F5C518",
+  activeAssemblyIconId = "outlet",
   onPinAdded,
   onPinRemoved,
 }: PlanPanelProps) {
@@ -759,31 +764,48 @@ export default function PlanPanel({
     pinsToRender.forEach((pin, idx) => {
       const px = normToCanvas({ pageIndex: 0, nx: pin.nx, ny: pin.ny });
       if (!px) return;
-      const r = 8 * S;
-      // Outer glow
+
+      // Icon size: ~24px at 100% zoom, scales with S
+      const iconSize = Math.max(16, 24 * S);
+      const svgScale = iconSize / 24; // SVG viewBox is 24×24
+
+      // Outer glow halo
       ctx.beginPath();
-      ctx.arc(px.x, px.y, r * 1.8, 0, Math.PI * 2);
+      ctx.arc(px.x, px.y, iconSize * 0.8, 0, Math.PI * 2);
       ctx.fillStyle = pin.color;
-      ctx.globalAlpha = 0.18;
+      ctx.globalAlpha = 0.15;
       ctx.fill();
       ctx.globalAlpha = 1;
-      // Dark shadow ring
-      ctx.beginPath();
-      ctx.arc(px.x, px.y, r + 1.5 * S, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fill();
-      // Filled circle
-      ctx.beginPath();
-      ctx.arc(px.x, px.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = pin.color;
-      ctx.fill();
-      // Number label inside pin
-      const labelSize = Math.max(7, Math.round(9 * S));
-      ctx.font = `bold ${labelSize}px 'JetBrains Mono', monospace`;
+
+      // Translate + scale canvas so the 24×24 viewBox is centred on px
+      ctx.save();
+      ctx.translate(px.x - iconSize / 2, px.y - iconSize / 2);
+      ctx.scale(svgScale, svgScale);
+
+      const iconDef = COUNT_ICONS.find((ic) => ic.id === (pin.iconId ?? DEFAULT_ICON_ID)) ?? COUNT_ICONS[0];
+      iconDef.paths.forEach((pathDef) => {
+        const p2d = new Path2D(pathDef.d);
+        ctx.lineWidth = (pathDef.strokeWidth ?? 1.5) / svgScale;
+        ctx.strokeStyle = pin.color;
+        ctx.fillStyle = pin.color;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        if (pathDef.strokeOnly) {
+          ctx.stroke(p2d);
+        } else {
+          ctx.fill(p2d);
+        }
+      });
+
+      ctx.restore();
+
+      // Small index badge below the icon
+      const badgeSize = Math.max(7, Math.round(8 * S));
+      ctx.font = `bold ${badgeSize}px 'JetBrains Mono', monospace`;
       ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#000";
-      ctx.fillText(String(idx + 1), px.x, px.y);
+      ctx.textBaseline = "top";
+      ctx.fillStyle = pin.color;
+      ctx.fillText(String(idx + 1), px.x, px.y + iconSize / 2 + 2 * S);
     });
 
     // Draw all inactive runs first, then active on top
@@ -1083,12 +1105,13 @@ export default function PlanPanel({
         ny: pt.ny,
         color: activeAssemblyColor,
         assemblyId: activeAssemblyId,
+        iconId: activeAssemblyIconId,
       };
       setCurrentPins((prev) => [...prev, newPin]);
       onPinAdded?.();
       toast.success(`Pin ${currentPinsRef.current.length + 1} placed.`);
     }
-  }, [canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId, activeAssemblyColor, activeAssemblyId, setCurrentPins, onPinAdded]);
+  }, [canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId, activeAssemblyColor, activeAssemblyId, activeAssemblyIconId, setCurrentPins, onPinAdded]);
 
   // ── Canvas right-click: delete nearest count pin ────────────────────────
   const handleCanvasContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {

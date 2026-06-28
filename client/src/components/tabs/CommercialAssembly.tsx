@@ -21,6 +21,7 @@ import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import { Building2, Clock, DollarSign, ChevronLeft } from "lucide-react";
+import { COUNT_ICONS, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR } from "@/lib/CountIcons";
 
 // ── Assembly data ─────────────────────────────────────────────────────────────
 interface AssemblyMaterial { description: string; unit: string; unitCost: number; qtyPerAssembly: number; }
@@ -116,15 +117,7 @@ function CommercialEditor({
 }) {
   const { activeCommercialProject, setAssemblyState } = useApp();
   const s = activeCommercialProject.state;
-  const { assemblyId, quantity } = s;
-
-  // Assign a stable color per assembly id so pins match the active assembly
-  const ASSEMBLY_PALETTE = [
-    "#00FF88", "#00CFFF", "#FF6B00", "#FF3FD4", "#FFE600",
-    "#BF5FFF", "#FF4444", "#00FFD1", "#FF9900", "#39FF14",
-  ];
-  const assemblyColorIndex = ASSEMBLIES.findIndex((a) => a.id === assemblyId);
-  const activeAssemblyColor = ASSEMBLY_PALETTE[assemblyColorIndex >= 0 ? assemblyColorIndex % ASSEMBLY_PALETTE.length : 0];
+  const { assemblyId, quantity, iconId = DEFAULT_ICON_ID, pinColor = DEFAULT_PIN_COLOR } = s;
 
   const selectedAssembly = ASSEMBLIES.find((a) => a.id === assemblyId) ?? ASSEMBLIES[0];
   const qty = Math.max(1, quantity || 1);
@@ -156,7 +149,8 @@ function CommercialEditor({
           <PlanPanel
             tabKey={`commercial_${projectId}`}
             activeAssemblyId={assemblyId}
-            activeAssemblyColor={activeAssemblyColor}
+            activeAssemblyColor={pinColor}
+            activeAssemblyIconId={iconId}
             onPinAdded={() => setAssemblyState({ ...s, quantity: qty + 1 })}
             onPinRemoved={() => setAssemblyState({ ...s, quantity: Math.max(1, qty - 1) })}
           />
@@ -207,6 +201,82 @@ function CommercialEditor({
                   <div className="flex items-center gap-4 pt-1 border-t border-border text-[10px] text-muted-foreground font-mono">
                     <span>Labor: <span className="text-foreground">{selectedAssembly.blendedLaborHours} hrs/unit</span></span>
                     <span>Items: <span className="text-foreground">{selectedAssembly.materials.length}</span></span>
+                  </div>
+
+                  {/* ── Count Mode: Pin Color + Icon ─────────────────── */}
+                  <div className="pt-2 border-t border-border space-y-3">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Count Mode Pin</p>
+
+                    {/* Color picker row */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Pin Color</Label>
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        {PIN_COLORS.map((c) => (
+                          <button
+                            key={c.hex}
+                            title={c.label}
+                            onClick={() => setAssemblyState({ ...s, pinColor: c.hex })}
+                            className={cn(
+                              "w-6 h-6 rounded-full border-2 transition-all",
+                              pinColor === c.hex ? "border-white scale-110" : "border-transparent hover:border-white/50"
+                            )}
+                            style={{ backgroundColor: c.hex }}
+                          />
+                        ))}
+                        {/* Custom hex input */}
+                        <label className="relative w-6 h-6 rounded-full overflow-hidden border-2 border-dashed border-border hover:border-white/50 cursor-pointer" title="Custom color">
+                          <input
+                            type="color"
+                            value={pinColor}
+                            onChange={(e) => setAssemblyState({ ...s, pinColor: e.target.value })}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                          <span className="flex items-center justify-center w-full h-full text-[8px] text-muted-foreground">+</span>
+                        </label>
+                        <span className="font-mono text-[10px] text-muted-foreground ml-1">{pinColor}</span>
+                      </div>
+                    </div>
+
+                    {/* Icon selector grid */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Pin Icon</Label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {COUNT_ICONS.map((icon) => (
+                          <button
+                            key={icon.id}
+                            title={icon.label}
+                            onClick={() => setAssemblyState({ ...s, iconId: icon.id })}
+                            className={cn(
+                              "flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all",
+                              iconId === icon.id
+                                ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground"
+                                : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground"
+                            )}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              width="20"
+                              height="20"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              {icon.paths.map((p, pi) => (
+                                <path
+                                  key={pi}
+                                  d={p.d}
+                                  fill={p.strokeOnly ? "none" : (iconId === icon.id ? pinColor : "currentColor")}
+                                  stroke={iconId === icon.id ? pinColor : "currentColor"}
+                                  strokeWidth={p.strokeWidth ?? 1.5}
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              ))}
+                            </svg>
+                            <span className="leading-tight text-center">{icon.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

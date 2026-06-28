@@ -151,6 +151,10 @@ export interface AssemblyState {
   quantity: number;
   materials: AssemblyMaterialLine[];
   totalLaborHours: number;
+  /** SVG icon id from COUNT_ICONS (used in Count Mode canvas rendering) */
+  iconId?: string;
+  /** Hex color for count pins (high-visibility, chosen by user) */
+  pinColor?: string;
 }
 
 export interface CommercialProject {
@@ -194,7 +198,7 @@ export function defaultCommercialProject(name = "Job 1"): CommercialProject {
     id: nanoid(8),
     name,
     createdAt: Date.now(),
-    state: { assemblyId: "receptacle-20a", quantity: 1, materials: [], totalLaborHours: 0 },
+    state: { assemblyId: "receptacle-20a", quantity: 1, materials: [], totalLaborHours: 0, iconId: "outlet", pinColor: "#39FF14" },
   };
 }
 
@@ -260,6 +264,25 @@ interface AppContextValue {
   // This remains in the context shape so any external code that still imports
   // it does not break at the TypeScript level.
   pushDistanceToCivil: (ft: number) => void;
+
+  // ── Master project totals (read-only aggregate across all commercial projects) ─
+  // Automatically re-computed whenever any commercial project state changes.
+  // Used by the global master list view and PDF export.
+  masterTotals: MasterTotals;
+}
+
+/** Aggregated totals across all commercial projects. */
+export interface MasterTotals {
+  totalLaborHours: number;
+  totalMaterialCost: number;
+  /** Per-assembly line items summed across all projects */
+  lineItems: Array<{
+    description: string;
+    unit: string;
+    totalQty: number;
+    unitCost: number;
+    extCost: number;
+  }>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -394,6 +417,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [activeCivilProject.state, civilStore]
   );
 
+
+  // ── Master totals ──────────────────────────────────────────────────────────
+  // Aggregates BOM materials + labor hours across ALL commercial projects.
+  // Re-computed on every render where safeCmP changes (cheap — just array reduce).
+  const masterTotals: MasterTotals = (() => {
+    const lineMap = new Map<string, { description: string; unit: string; totalQty: number; unitCost: number; extCost: number }>();
+    let totalLaborHours = 0;
+    let totalMaterialCost = 0;
+    for (const proj of safeCmP) {
+      const { materials, totalLaborHours: lh } = proj.state;
+      totalLaborHours += lh ?? 0;
+      for (const m of materials ?? []) {
+        const key = `${m.description}||${m.unit}||${m.unitCost}`;
+        const existing = lineMap.get(key);
+        if (existing) {
+          existing.totalQty += m.quantity;
+          existing.extCost  += m.unitCost * m.quantity;
+        } else {
+          lineMap.set(key, {
+            description: m.description,
+            unit: m.unit,
+            totalQty: m.quantity,
+            unitCost: m.unitCost,
+            extCost: m.unitCost * m.quantity,
+          });
+        }
+        totalMaterialCost += m.unitCost * m.quantity;
+      }
+    }
+    return {
+      totalLaborHours: parseFloat(totalLaborHours.toFixed(2)),
+      totalMaterialCost: parseFloat(totalMaterialCost.toFixed(2)),
+      lineItems: Array.from(lineMap.values()),
+    };
+  })();
+
   return (
     <AppContext.Provider
       value={{
@@ -429,6 +488,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         renameResidentialProject:  residentialStore().rename,
         deleteResidentialProject:  residentialStore().remove,
         switchResidentialProject:  residentialStore().switchTo,
+
+        // Master totals (aggregate across all commercial projects)
+        masterTotals,
 
         // Legacy helpers
         pushDistanceToCivil,
