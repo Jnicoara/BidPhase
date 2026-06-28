@@ -440,6 +440,7 @@ function RunCard({
  * the whole-project picture, not just the current page.
  */
 function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countSessions?: CountSession[] }) {
+  const { setShowMaterialList } = useApp();
 
   const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
 
@@ -522,6 +523,13 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
             {runs.length} run{runs.length !== 1 ? "s" : ""} · {pages.length} page{pages.length !== 1 ? "s" : ""}
           </span>
         )}
+        <button
+          onClick={() => setShowMaterialList(true)}
+          className="ml-auto text-[10px] font-mono text-[#F5C518]/70 hover:text-[#F5C518] transition-colors flex items-center gap-1 normal-case tracking-normal"
+          title="Open full-screen material list"
+        >
+          Full View →
+        </button>
       </h3>
 
       {/* Summary strip */}

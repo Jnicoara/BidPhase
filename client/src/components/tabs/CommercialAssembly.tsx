@@ -122,7 +122,7 @@ function CommercialEditor({
   projectName: string;
   onBack: () => void;
 }) {
-  const { activeCommercialProject, setAssemblyState } = useApp();
+  const { activeCommercialProject, setAssemblyState, setShowMaterialList } = useApp();
   const s = activeCommercialProject.state;
   const {
     assemblyId,
@@ -564,10 +564,17 @@ function CommercialEditor({
 
                 {/* BOM Table — includes a line per count session */}
                 <div className="bp-card overflow-hidden">
-                  <div className="px-4 py-3 border-b border-border">
-                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                       Bill of Materials
                     </h2>
+                    <button
+                      onClick={() => setShowMaterialList(true)}
+                      className="text-[10px] font-mono text-[#F5C518]/70 hover:text-[#F5C518] transition-colors"
+                      title="Open full-screen material list"
+                    >
+                      Full View →
+                    </button>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">

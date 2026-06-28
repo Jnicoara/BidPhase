@@ -153,7 +153,7 @@ function ResidentialEditor({
   projectName: string;
   onBack: () => void;
 }) {
-  const { activeResidentialProject, setRoomState } = useApp();
+  const { activeResidentialProject, setRoomState, setShowMaterialList } = useApp();
   const s = activeResidentialProject.state;
   const { roomId, materials } = s;
 
@@ -498,10 +498,17 @@ function ResidentialEditor({
 
                 {/* Material list */}
                 <div className="bp-card overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-border bg-secondary/30">
-                    <h2 className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <div className="px-4 py-2.5 border-b border-border bg-secondary/30 flex items-center gap-2">
+                    <h2 className="text-xs font-semibold text-foreground flex-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                       {template.name} — Rough-In Materials
                     </h2>
+                    <button
+                      onClick={() => setShowMaterialList(true)}
+                      className="text-[10px] font-mono text-[#F5C518]/70 hover:text-[#F5C518] transition-colors"
+                      title="Open full-screen material list"
+                    >
+                      Full View →
+                    </button>
                   </div>
                   <div className="divide-y divide-border/50">
                     {(materials.length > 0 ? materials : template.materials).map((mat, i) => (

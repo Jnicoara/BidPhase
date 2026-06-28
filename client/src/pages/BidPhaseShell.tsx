@@ -6,7 +6,6 @@
  *
  * Each tab now embeds a PlanPanel on the left side — no standalone Plan Viewer tab.
  */
-import { useState } from "react";
 import { useApp } from "@/contexts/AppContext";
 import CivilCalculator, { CivilIcon } from "@/components/tabs/CivilCalculator";
 import CommercialAssembly from "@/components/tabs/CommercialAssembly";
@@ -34,8 +33,7 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 export default function BidPhaseShell() {
-  const { activeTab, setActiveTab, uiFontScale } = useApp();
-  const [showMaterialList, setShowMaterialList] = useState(false);
+  const { activeTab, setActiveTab, uiFontScale, showMaterialList, setShowMaterialList } = useApp();
 
   const renderTab = () => {
     switch (activeTab as TabId) {

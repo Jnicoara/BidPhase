@@ -20,7 +20,7 @@
  *   times, we use a `makeProjectStore` factory that closes over the per-tab
  *   localStorage setters and returns the five callbacks.
  */
-import React, { createContext, useContext, useCallback } from "react";
+import React, { createContext, useContext, useCallback, useState } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { nanoid } from "nanoid";
 
@@ -292,6 +292,10 @@ interface AppContextValue {
   uiFontScale: number;           // 0.8 – 1.4, default 1.1
   setUiFontScale: (v: number) => void;
 
+  // ── Material List page toggle ───────────────────────────────────────────────
+  showMaterialList: boolean;
+  setShowMaterialList: (v: boolean) => void;
+
   // ── Legacy single-state accessors (used by ExportButton) ───────────────────
   // These are convenience aliases for activeCivilProject.state etc.
   // They exist so ExportButton can destructure a flat object without knowing
@@ -393,6 +397,7 @@ function makeProjectStore<TProject extends { id: string; name: string; state: TS
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useLocalStorage<string>("bp_active_tab", "residential");
   const [uiFontScale, setUiFontScale] = useLocalStorage<number>("bp_ui_font_scale", 1.1);
+  const [showMaterialList, setShowMaterialList] = useState(false);
 
   // ── Civil ─────────────────────────────────────────────────────────────────
   const [civilProjects, setCivilProjects] = useLocalStorage<CivilProject[]>(
@@ -539,6 +544,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // UI settings
         uiFontScale,
         setUiFontScale,
+
+        // Material List page toggle
+        showMaterialList,
+        setShowMaterialList,
 
         // Legacy single-state accessors for ExportButton
         civilState:      activeCivilProject.state,
