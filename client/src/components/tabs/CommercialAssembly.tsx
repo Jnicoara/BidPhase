@@ -250,6 +250,7 @@ function CommercialEditor({
             onPinAdded={handlePinAdded}
             onPinRemoved={handlePinRemoved}
             onClearPagePins={handleClearPagePins}
+            onUnitCountToggle={(open) => setCountSessionsOpen(open)}
           />
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -272,14 +273,14 @@ function CommercialEditor({
             <div className="flex-1 overflow-auto p-4 pb-24">
               <div className="max-w-2xl mx-auto space-y-5">
 
-                {/* ── Count Sessions ────────────────────────────────────── */}
+                {/* ── Unit Count ─────────────────────────────────────────── */}
                 <div className="bp-card overflow-hidden">
                   <button
                     onClick={() => setCountSessionsOpen((v) => !v)}
                     className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
                   >
                     <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                      Count Sessions
+                      Unit Count
                       {countSessions.length > 0 && (
                         <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{countSessions.length} session{countSessions.length !== 1 ? 's' : ''} · {countSessions.reduce((a, cs) => a + cs.pins.length, 0)} pins</span>
                       )}
@@ -547,7 +548,7 @@ function CommercialEditor({
                             </td>
                           </tr>
                         ))}
-                        {/* Count session lines — one row per session with its total pin count */}
+                        {/* Unit Count lines — one row per session with its total pin count */}
                         {countSessions.filter((cs) => cs.pins.length > 0).map((cs) => {
                           const icon = COUNT_ICONS.find((ic) => ic.id === cs.iconId) ?? COUNT_ICONS[0];
                           const extCost = cs.unitCost != null ? cs.unitCost * cs.pins.length : null;

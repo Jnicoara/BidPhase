@@ -276,6 +276,7 @@ function ResidentialEditor({
             onPinAdded={handlePinAdded}
             onPinRemoved={handlePinRemoved}
             onClearPagePins={handleClearPagePins}
+            onUnitCountToggle={(open) => setCountSessionsOpen(open)}
           />
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -305,7 +306,7 @@ function ResidentialEditor({
                     className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
                   >
                     <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                      Count Sessions
+                      Unit Count
                       {countSessions.length > 0 && (
                         <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{countSessions.length} session{countSessions.length !== 1 ? 's' : ''} · {countSessions.reduce((a, cs) => a + cs.pins.length, 0)} pins</span>
                       )}
@@ -344,6 +345,21 @@ function ResidentialEditor({
                             ) : (
                               <span className="flex-1 text-xs text-foreground font-medium truncate">{cs.name}</span>
                             )}
+                            {/* Unit cost input */}
+                            <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <span className="text-[9px] text-muted-foreground font-mono">$</span>
+                              <input
+                                type="number" min={0} step={0.01} placeholder="0.00"
+                                value={cs.unitCost ?? ""}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value);
+                                  updateSessions(countSessions.map((x) =>
+                                    x.id === cs.id ? { ...x, unitCost: isNaN(val) ? undefined : val } : x
+                                  ));
+                                }}
+                                className="w-14 bg-transparent border-b border-border text-[10px] font-mono text-foreground outline-none focus:border-[#F5C518]/60 text-right"
+                              />
+                            </div>
                             <span className="font-mono text-[10px] text-muted-foreground shrink-0">{cs.pins.length} pin{cs.pins.length !== 1 ? "s" : ""}</span>
                             {isEditing ? (
                               <>

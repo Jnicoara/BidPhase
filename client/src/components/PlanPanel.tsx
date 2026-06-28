@@ -51,6 +51,7 @@ import {
   Pencil,
   Check,
   MapPin,
+  Hash,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CONDUIT_SIZES, type ConduitSize, type CountPin, type CountSession } from "@/contexts/AppContext";
@@ -307,6 +308,8 @@ interface PlanPanelProps {
   allCountSessions?: CountSession[];
   /** Called when user clears all pins on the current page for the active session */
   onClearPagePins?: (pageNumber: number) => void;
+  /** Called when the Unit Count toolbar button is toggled — passes the new open state */
+  onUnitCountToggle?: (open: boolean) => void;
 }
 
 export default function PlanPanel({
@@ -319,6 +322,7 @@ export default function PlanPanel({
   onPinRemoved,
   allCountSessions = [],
   onClearPagePins,
+  onUnitCountToggle,
 }: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
@@ -1388,7 +1392,7 @@ export default function PlanPanel({
           Measure
         </Button>
 
-        {/* Count Mode toggle */}
+        {/* Unit Count toggle */}
         <Button
           size="sm"
           className="h-7 text-xs px-2 shrink-0"
@@ -1397,18 +1401,20 @@ export default function PlanPanel({
             if (mode === "count") {
               setMode("none");
               modeRef.current = "none";
-              toast.info("Count Mode off.");
+              onUnitCountToggle?.(false);
+              toast.info("Unit Count off.");
             } else {
               setMode("count");
               modeRef.current = "count";
-              toast.info("Count Mode: click to place a pin · right-click to remove.");
+              onUnitCountToggle?.(true);
+              toast.info("Unit Count: click to place a pin · right-click to remove.");
             }
           }}
           disabled={!pdfFile}
-          title="Count Mode — click to place a pin, right-click to remove"
+          title="Unit Count — click to place a pin, right-click to remove"
         >
-          <MapPin size={12} className="mr-1" />
-          Count
+          <Hash size={12} className="mr-1" />
+          Unit Count
           {currentPins.length > 0 && (
             <span className="ml-1 px-1 rounded-full text-[9px] font-mono bg-[#F5C518] text-black">
               {currentPins.length}
@@ -1447,7 +1453,7 @@ export default function PlanPanel({
           <Trash2 size={13} />
         </Button>
 
-        {/* Clear Page Pins — only visible in Count Mode when there are pins on this page */}
+        {/* Clear Page Pins — only visible in Unit Count mode when there are pins on this page */}
         {mode === "count" && currentPins.length > 0 && (
           <Button
             size="icon"
@@ -1629,7 +1635,7 @@ export default function PlanPanel({
           {mode === "set-scale-p2" && scalePoints.length < 2 && "Click the END of the reference line."}
           {mode === "set-scale-p2" && scalePoints.length >= 2 && "Enter real-world distance (ft) → Confirm."}
           {mode === "measure" && `Measuring: ${activeRun?.name} · Click to add points · U=undo · Esc=done`}
-          {mode === "count" && `Count Mode · Click=place pin · Right-click=remove · U=undo · ${activeCountSession ? activeCountSession.pins.length + " total" : "No session selected"}`}
+          {mode === "count" && `Unit Count · Click=place pin · Right-click=remove · U=undo · ${activeCountSession ? activeCountSession.pins.length + " total" : "No session selected"}`}
           {mode === "none" && `Page ${currentPage}/${numPages || "–"} · Scroll=zoom · ←/→=page · M=measure`}
         </span>
         {activeRun?.totalFeet !== null && activeRun.totalFeet !== undefined && activeRun.totalFeet > 0 && (

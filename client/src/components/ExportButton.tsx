@@ -392,7 +392,7 @@ function buildPDF(
   const activeSessions = countSessions.filter((cs) => cs.pins.length > 0);
   if (activeSessions.length > 0) {
     checkY(60);
-    sectionHeader("Count Summary", commercialName);
+    sectionHeader("Unit Count", commercialName);
 
     const countCols = [
       { label: "Session Name",  width: CW - 200 },
@@ -488,9 +488,9 @@ function buildPDF(
     resAllRows.forEach((m, i) => {
       tableRow(resCols, [m.description, m.unit, String(m.quantity)], i % 2 === 1);
     });
-    // Count sessions appended as extra rows
+    // Unit Count sessions appended as extra rows
     roomCountSessions.filter(cs => cs.pins.length > 0).forEach((cs, i) => {
-      tableRow(resCols, [cs.name + " (Count)", "EA", String(cs.pins.length)], (resAllRows.length + i) % 2 === 1);
+      tableRow(resCols, [cs.name + " (Unit Count)", "EA", String(cs.pins.length)], (resAllRows.length + i) % 2 === 1);
     });
     y += 10;
   }
@@ -570,6 +570,15 @@ function exportCSV(
     const totalSticks = runs.reduce((a, r) => a + calcSticks(r.feet), 0);
     const totalWire   = runs.reduce((a, r) => a + calcWire(r.feet, r.conductors), 0);
     rows.push(["TOTAL", "", "", "", "", String(totalSticks), String(parseFloat(totalWire.toFixed(1))), "", ""]);
+    // Unit Count sessions for Civil
+    const csvCivilActiveSessions = civilCountSessions.filter((cs) => cs.pins.length > 0);
+    if (csvCivilActiveSessions.length > 0) {
+      rows.push(["Unit Count", "", "", "", "", "", "", "", ""]);
+      for (const cs of csvCivilActiveSessions) {
+        const ext = cs.unitCost != null ? `$${(cs.unitCost * cs.pins.length).toFixed(2)}` : "";
+        rows.push([cs.name, "EA", String(cs.pins.length), cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "", ext, "", "", "", ""]);
+      }
+    }
     rows.push([]);
   }
 
@@ -581,6 +590,15 @@ function exportCSV(
       rows.push([m.description, m.unit, String(m.quantity), `$${m.unitCost.toFixed(2)}`, `$${(m.unitCost * m.quantity).toFixed(2)}`, "", "", "", ""]);
     }
     rows.push(["Total Labor Hours", "HRS", String(assemblyState.totalLaborHours), "", "", "", "", "", ""]);
+    // Unit Count sessions for Commercial
+    const csvCommercialActiveSessions = (assemblyState.countSessions ?? []).filter((cs) => cs.pins.length > 0);
+    if (csvCommercialActiveSessions.length > 0) {
+      rows.push(["Unit Count", "", "", "", "", "", "", "", ""]);
+      for (const cs of csvCommercialActiveSessions) {
+        const ext = cs.unitCost != null ? `$${(cs.unitCost * cs.pins.length).toFixed(2)}` : "";
+        rows.push([cs.name, "EA", String(cs.pins.length), cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "", ext, "", "", "", ""]);
+      }
+    }
     rows.push([]);
   }
 
@@ -590,6 +608,15 @@ function exportCSV(
     rows.push(["Description", "Unit", "Quantity", "", "", "", "", "", ""]);
     for (const m of roomState.materials) {
       rows.push([m.description, m.unit, String(m.quantity), "", "", "", "", "", ""]);
+    }
+    // Unit Count sessions for Residential
+    const csvResActiveSessions = roomCountSessions.filter((cs) => cs.pins.length > 0);
+    if (csvResActiveSessions.length > 0) {
+      rows.push(["Unit Count", "", "", "", "", "", "", "", ""]);
+      for (const cs of csvResActiveSessions) {
+        const ext = cs.unitCost != null ? `$${(cs.unitCost * cs.pins.length).toFixed(2)}` : "";
+        rows.push([cs.name, "EA", String(cs.pins.length), cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "", ext, "", "", "", ""]);
+      }
     }
     rows.push([]);
   }
