@@ -1167,6 +1167,16 @@ export default function PlanPanel({
       setMode("set-scale-p1");
       modeRef.current = "set-scale-p1";
       toast.info("Scale point removed. Re-click to place.");
+    } else if (m === "count") {
+      // Undo last dropped pin on this page for the active session
+      const pins = currentPinsRef.current;
+      if (pins.length > 0) {
+        const lastPin = pins[pins.length - 1];
+        onPinRemoved?.(lastPin.id);
+        toast.info("Last pin removed.");
+      } else {
+        toast.info("No pins to undo on this page.");
+      }
     } else if (activeRun && activeRun.points.length > 0) {
       setCurrentRuns((prev) =>
         prev.map((r) =>
@@ -1183,10 +1193,11 @@ export default function PlanPanel({
     } else {
       toast.info("Nothing to undo.");
     }
-  }, [scalePoints, activeRun, currentActiveRunId, setScalePoints, setCurrentRuns]);
+  }, [scalePoints, activeRun, currentActiveRunId, setScalePoints, setCurrentRuns, onPinRemoved]);
 
   const canUndo =
     (mode === "set-scale-p2" && scalePoints.length > 0) ||
+    (mode === "count" && currentPins.length > 0) ||
     (activeRun?.points?.length ?? 0) > 0;
 
   // ── Add new run ────────────────────────────────────────────────────────────
@@ -1308,18 +1319,20 @@ export default function PlanPanel({
       )}
 
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-border bg-card shrink-0">
-        <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-secondary text-secondary-foreground text-xs font-medium cursor-pointer hover:bg-accent transition-colors">
-          <Upload size={13} />
-          <span>Load PDF</span>
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-card shrink-0 overflow-x-auto">
+        {/* Load PDF */}
+        <label className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium cursor-pointer bg-secondary text-secondary-foreground hover:bg-accent transition-colors shrink-0" title="Load PDF">
+          <Upload size={12} />
+          <span>PDF</span>
           <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
         </label>
 
-        <div className="w-px h-5 bg-border" />
+        <div className="w-px h-4 bg-border shrink-0" />
 
+        {/* Scale group */}
         <Button
           size="sm"
-          className="h-7 text-xs px-2.5"
+          className="h-7 text-xs px-2 shrink-0"
           variant={mode === "set-scale-p1" || mode === "set-scale-p2" ? "default" : "outline"}
           onClick={() => {
             setScalePoints([]);
@@ -1328,35 +1341,37 @@ export default function PlanPanel({
             toast.info("Click the START of your known-distance reference line.");
           }}
           disabled={!pdfFile}
+          title="Set scale"
         >
           Set Scale
         </Button>
 
         {scaleRatio && mode === "none" && (
-          <span className="text-[10px] font-mono text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded border border-yellow-400/30">
-            Scale ✓
+          <span className="text-[10px] font-mono text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded border border-yellow-400/30 shrink-0">
+            ✓ Scale
           </span>
         )}
 
         {mode === "set-scale-p2" && scalePoints.length >= 2 && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 shrink-0">
             <Input
               type="number"
               placeholder="ft"
               value={knownDistance}
               onChange={(e) => setKnownDistance(e.target.value)}
-              className="w-20 h-7 text-xs"
+              className="w-16 h-7 text-xs"
               onKeyDown={(e) => { if (e.key === "Enter") confirmScale(); }}
             />
-            <Button size="sm" className="h-7 text-xs px-2.5" onClick={confirmScale}>Confirm</Button>
+            <Button size="sm" className="h-7 text-xs px-2" onClick={confirmScale}>OK</Button>
           </div>
         )}
 
-        <div className="w-px h-5 bg-border" />
+        <div className="w-px h-4 bg-border shrink-0" />
 
+        {/* Measure */}
         <Button
           size="sm"
-          className="h-7 text-xs px-2.5"
+          className="h-7 text-xs px-2 shrink-0"
           variant={mode === "measure" ? "default" : "outline"}
           onClick={() => {
             if (!scaleRatio) { toast.error("Set scale first."); return; }
@@ -1374,7 +1389,7 @@ export default function PlanPanel({
         {/* Count Mode toggle */}
         <Button
           size="sm"
-          className="h-7 text-xs px-2.5"
+          className="h-7 text-xs px-2 shrink-0"
           variant={mode === "count" ? "default" : "outline"}
           onClick={() => {
             if (mode === "count") {
@@ -1399,42 +1414,26 @@ export default function PlanPanel({
           )}
         </Button>
 
-        {/* Clear Page Pins — only visible in Count Mode when there are pins on this page */}
-        {mode === "count" && currentPins.length > 0 && (
-          <Button
-            size="sm"
-            className="h-7 text-xs px-2.5"
-            variant="outline"
-            onClick={() => {
-              if (!activeCountSession) return;
-              onClearPagePins?.(currentPage);
-              toast.info(`Cleared ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}.`);
-            }}
-            title={`Clear all pins on page ${currentPage} for the active session`}
-          >
-            <X size={12} className="mr-1" />
-            Clear Page
-          </Button>
-        )}
+        <div className="w-px h-4 bg-border shrink-0" />
 
+        {/* Undo — icon only with tooltip */}
         <Button
-          size="sm"
-          className="h-7 text-xs px-2.5"
-          variant="outline"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          variant="ghost"
           onClick={handleUndo}
           disabled={!canUndo}
-          title="Undo last point (U)"
+          title="Undo (U)"
         >
-          <Undo2 size={12} className="mr-1" />
-          Undo
+          <Undo2 size={13} />
         </Button>
 
+        {/* Clear run points */}
         <Button
-          size="sm"
-          className="h-7 text-xs px-2.5"
-          variant="outline"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          variant="ghost"
           onClick={() => {
-            // Clear only run points — scale is preserved
             setCurrentRuns((prev) => prev.map((r) => r.id === currentActiveRunId ? { ...r, points: [], totalFeet: null } : r));
             setMode("none");
             modeRef.current = "none";
@@ -1443,15 +1442,31 @@ export default function PlanPanel({
           disabled={!pdfFile}
           title="Clear run points (scale preserved)"
         >
-          <Trash2 size={12} className="mr-1" />
-          Clear
+          <Trash2 size={13} />
         </Button>
+
+        {/* Clear Page Pins — only visible in Count Mode when there are pins on this page */}
+        {mode === "count" && currentPins.length > 0 && (
+          <Button
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            variant="ghost"
+            onClick={() => {
+              if (!activeCountSession) return;
+              onClearPagePins?.(currentPage);
+              toast.info(`Cleared ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}.`);
+            }}
+            title={`Clear all pins on page ${currentPage}`}
+          >
+            <X size={13} />
+          </Button>
+        )}
 
         {scaleRatio && (
           <Button
-            size="sm"
-            className="h-7 text-xs px-2.5"
-            variant="outline"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            variant="ghost"
             onClick={() => {
               setScalePoints([]);
               setScaleRatio(null);
@@ -1462,17 +1477,16 @@ export default function PlanPanel({
             disabled={!pdfFile}
             title="Reset scale for this page"
           >
-            <Lock size={11} className="mr-1" />
-            Reset Scale
+            <Lock size={11} />
           </Button>
         )}
 
-        {/* Zoom */}
-        <div className="ml-auto flex items-center gap-0.5">
+        {/* Zoom — right-aligned */}
+        <div className="ml-auto flex items-center gap-0 shrink-0">
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={zoomOut} title="Zoom out (-)">
             <ZoomOut size={13} />
           </Button>
-          <span className="text-[10px] font-mono w-10 text-center tabular-nums">
+          <span className="text-[10px] font-mono w-9 text-center tabular-nums">
             {Math.round(displayZoom * 100)}%
           </span>
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={zoomIn} title="Zoom in (+)">
@@ -1484,7 +1498,7 @@ export default function PlanPanel({
         </div>
       </div>
 
-      {/* ── Page Selector Bar ─────────────────────────────────────────── */}
+            {/* ── Page Selector Bar ─────────────────────────────────────────── */}
       {pdfFile && numPages > 0 && (
         <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-muted/20 shrink-0 overflow-x-auto">
           {/* Grid overview button */}
@@ -1571,7 +1585,7 @@ export default function PlanPanel({
                 run={run}
                 isActive={isActive}
                 runColor={runColor}
-                canDelete={currentRuns.length > 1}
+                canDelete={true}
                 savedColors={savedColors}
                 onActivate={() => setCurrentActiveRunId(run.id)}
                 onRename={(name) => renameRun(run.id, name)}
@@ -1613,7 +1627,7 @@ export default function PlanPanel({
           {mode === "set-scale-p2" && scalePoints.length < 2 && "Click the END of the reference line."}
           {mode === "set-scale-p2" && scalePoints.length >= 2 && "Enter real-world distance (ft) → Confirm."}
           {mode === "measure" && `Measuring: ${activeRun?.name} · Click to add points · U=undo · Esc=done`}
-          {mode === "count" && `Count Mode · Click=place pin · Right-click=remove · ${activeCountSession ? activeCountSession.pins.length + " total" : "No session selected"}`}
+          {mode === "count" && `Count Mode · Click=place pin · Right-click=remove · U=undo · ${activeCountSession ? activeCountSession.pins.length + " total" : "No session selected"}`}
           {mode === "none" && `Page ${currentPage}/${numPages || "–"} · Scroll=zoom · ←/→=page · M=measure`}
         </span>
         {activeRun?.totalFeet !== null && activeRun.totalFeet !== undefined && activeRun.totalFeet > 0 && (

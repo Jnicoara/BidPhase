@@ -21,7 +21,7 @@ import {
 import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
-import { Home, ChevronLeft, Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { Home, ChevronLeft, ChevronDown, ChevronUp, Plus, Trash2, Pencil, Check, X } from "lucide-react";
 import { COUNT_ICONS, ICON_CATEGORIES, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR } from "@/lib/CountIcons";
 import { toast } from "sonner";
 
@@ -185,6 +185,7 @@ function ResidentialEditor({
   const [newSessionName, setNewSessionName] = useState("");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [countSessionsOpen, setCountSessionsOpen] = useState(true);
 
   const updateSessions = useCallback(
     (sessions: CountSession[], activeId?: string) => {
@@ -298,10 +299,20 @@ function ResidentialEditor({
               <div className="max-w-lg mx-auto space-y-5">
 
                 {/* ── Count Sessions ──────────────────────────────────────── */}
-                <div className="bp-card p-4 space-y-3">
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Count Sessions
-                  </h2>
+                <div className="bp-card overflow-hidden">
+                  <button
+                    onClick={() => setCountSessionsOpen((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+                  >
+                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      Count Sessions
+                      {countSessions.length > 0 && (
+                        <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{countSessions.length} session{countSessions.length !== 1 ? 's' : ''} · {countSessions.reduce((a, cs) => a + cs.pins.length, 0)} pins</span>
+                      )}
+                    </h2>
+                    {countSessionsOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                  </button>
+                  {countSessionsOpen && <div className="px-4 pb-4 space-y-3">
 
                   {countSessions.length === 0 ? (
                     <p className="text-xs text-muted-foreground italic">No sessions yet. Create one below to start counting.</p>
@@ -396,6 +407,7 @@ function ResidentialEditor({
                       />
                     </div>
                   )}
+                  </div>}
                 </div>
 
                 {/* Room selector */}
