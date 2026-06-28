@@ -53,7 +53,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CONDUIT_SIZES, type ConduitSize } from "@/contexts/AppContext";
+import { CONDUIT_SIZES, type ConduitSize, type CountPin, type CountSession } from "@/contexts/AppContext";
 import { Eye, EyeOff } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { COUNT_ICONS, DEFAULT_ICON_ID } from "@/lib/CountIcons";
@@ -66,18 +66,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure" | "count";
 
-/** A single count pin dropped in Count Mode. Stored per-page, per-tabKey. */
-interface CountPin {
-  id: string;
-  nx: number;   // normalised x ∈ [0,1] relative to page width at RENDER_BASE_ZOOM
-  ny: number;   // normalised y ∈ [0,1] relative to page height at RENDER_BASE_ZOOM
-  color: string;
-  assemblyId: string; // which assembly this pin belongs to
-  iconId?: string;    // SVG icon id from COUNT_ICONS (e.g. "outlet", "switch")
-}
-
-// Per-page pin storage: pageIndex → CountPin[]
-type PagePinsMap = Record<number, CountPin[]>;
+// CountPin and CountSession types are imported from AppContext
+// (they live there so AssemblyState can reference them without circular imports)
 
 interface NormPoint {
   pageIndex: number; // always 0 in single-page mode (relative to current page)
@@ -305,16 +295,14 @@ interface PlanPanelProps {
   onPushDistance?: (ft: number, runName: string, conduitSize?: string, pageNumber?: number) => void;
   onDeleteRun?: (runName: string, pageNumber?: number) => void;
   onCurrentPageChange?: (page: number) => void;
-  /** ID of the currently active assembly (used to tag each dropped pin) */
-  activeAssemblyId?: string;
-  /** Color matching the active assembly (used to colour each dropped pin) */
-  activeAssemblyColor?: string;
-  /** SVG icon id from COUNT_ICONS assigned to the active assembly */
-  activeAssemblyIconId?: string;
-  /** Called when a pin is added — parent should increment assembly quantity */
-  onPinAdded?: () => void;
-  /** Called when a pin is removed — parent should decrement assembly quantity */
-  onPinRemoved?: () => void;
+  /** The currently active count session (passed from parent, owns all pins) */
+  activeCountSession?: CountSession | null;
+  /** Called when a pin is dropped — parent adds pin to active session */
+  onPinAdded?: (pin: CountPin) => void;
+  /** Called when a pin is removed — parent removes pin from active session */
+  onPinRemoved?: (pinId: string) => void;
+  /** All sessions (for rendering pins from all sessions on canvas) */
+  allCountSessions?: CountSession[];
 }
 
 export default function PlanPanel({
@@ -322,11 +310,10 @@ export default function PlanPanel({
   onPushDistance,
   onDeleteRun,
   onCurrentPageChange,
-  activeAssemblyId = "",
-  activeAssemblyColor = "#F5C518",
-  activeAssemblyIconId = "outlet",
+  activeCountSession = null,
   onPinAdded,
   onPinRemoved,
+  allCountSessions = [],
 }: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
@@ -383,22 +370,24 @@ export default function PlanPanel({
 
   const [knownDistance, setKnownDistance] = useState<string>("");
 
-  // ── Per-page count pins ────────────────────────────────────────────────────
-  // Stored as: bp_countpins_{tabKey}  →  PagePinsMap
-  const [pagePinsMap, setPagePinsMap] = useLocalStorage<PagePinsMap>(`bp_countpins_${tabKey}`, {});
-  const currentPins: CountPin[] = pagePinsMap[pageIdx] ?? [];
-
-  const setCurrentPins = useCallback((updater: CountPin[] | ((prev: CountPin[]) => CountPin[])) => {
-    setPagePinsMap((prev) => {
-      const existing = prev[pageIdx] ?? [];
-      const next = typeof updater === "function" ? updater(existing) : updater;
-      return { ...prev, [pageIdx]: next };
-    });
-  }, [pageIdx, setPagePinsMap]);
+  // ── Count pins (session-based, cross-page) ────────────────────────────────
+  // Pins live in the parent's CountSession state, not in a local PagePinsMap.
+  // currentPins = pins on this page from the active session (for display).
+  // allPagePins = all pins on this page from all sessions (for canvas rendering).
+  const currentPins: CountPin[] = (activeCountSession?.pins ?? []).filter(
+    (p) => p.pageNumber === currentPage
+  );
+  const allPagePins: Array<CountPin & { color: string; iconId: string }> = allCountSessions.flatMap((session) =>
+    session.pins
+      .filter((p) => p.pageNumber === currentPage)
+      .map((p) => ({ ...p, color: session.color, iconId: session.iconId }))
+  );
 
   // Ref so canvas handlers can read current pins without stale closure
   const currentPinsRef = useRef(currentPins);
   useEffect(() => { currentPinsRef.current = currentPins; }, [currentPins]);
+  const allPagePinsRef = useRef(allPagePins);
+  useEffect(() => { allPagePinsRef.current = allPagePins; }, [allPagePins]);
 
   // Get runs for current page (lazy-init with one default run)
   const currentRuns: MeasureRun[] = pageRunsMap[pageIdx] ?? [defaultRun(0)];
@@ -760,7 +749,7 @@ export default function PlanPanel({
     };
 
     // ── Count pins ──────────────────────────────────────────────────────────
-    const pinsToRender = currentPinsRef.current;
+    const pinsToRender = allPagePinsRef.current;
     pinsToRender.forEach((pin, idx) => {
       const px = normToCanvas({ pageIndex: 0, nx: pin.nx, ny: pin.ny });
       if (!px) return;
@@ -881,7 +870,7 @@ export default function PlanPanel({
       ctx.stroke();
       ctx.restore();
     }
-  }, [currentRuns, currentActiveRunId, scalePoints, crosshair, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins]);
+  }, [currentRuns, currentActiveRunId, scalePoints, crosshair, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
 
@@ -1098,20 +1087,22 @@ export default function PlanPanel({
         )
       );
     } else if (m === "count") {
-      // Drop a count pin at the clicked location
+      // Drop a count pin — session ownership lives in the parent (CommercialAssembly)
+      if (!activeCountSession) {
+        toast.warning("Create a count session first.");
+        return;
+      }
       const newPin: CountPin = {
         id: nanoid6(),
         nx: pt.nx,
         ny: pt.ny,
-        color: activeAssemblyColor,
-        assemblyId: activeAssemblyId,
-        iconId: activeAssemblyIconId,
+        pageNumber: currentPage,
       };
-      setCurrentPins((prev) => [...prev, newPin]);
-      onPinAdded?.();
-      toast.success(`Pin ${currentPinsRef.current.length + 1} placed.`);
+      onPinAdded?.(newPin);
+      const total = (activeCountSession.pins.length) + 1;
+      toast.success(`Pin ${total} placed (${activeCountSession.name}).`);
     }
-  }, [canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId, activeAssemblyColor, activeAssemblyId, activeAssemblyIconId, setCurrentPins, onPinAdded]);
+  }, [canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId, activeCountSession, currentPage, onPinAdded]);
 
   // ── Canvas right-click: delete nearest count pin ────────────────────────
   const handleCanvasContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1129,19 +1120,18 @@ export default function PlanPanel({
     // Find the nearest pin within a 20-screen-pixel hit radius
     const HIT_RADIUS = 20 * (canvas.width / (s.w * (displayZoomRef.current / RENDER_BASE_ZOOM)));
     const pins = currentPinsRef.current;
-    let closest: { idx: number; dist: number } | null = null;
-    pins.forEach((pin, idx) => {
+    let closest: { id: string; dist: number } | null = null;
+    pins.forEach((pin) => {
       const px = normToCanvas({ pageIndex: 0, nx: pin.nx, ny: pin.ny });
       if (!px) return;
       const d = dist2D(cx, cy, px.x, px.y);
-      if (d < HIT_RADIUS && (!closest || d < closest.dist)) closest = { idx, dist: d };
+      if (d < HIT_RADIUS && (!closest || d < closest.dist)) closest = { id: pin.id, dist: d };
     });
     if (closest !== null) {
-      setCurrentPins((prev) => prev.filter((_, i) => i !== (closest as { idx: number }).idx));
-      onPinRemoved?.();
+      onPinRemoved?.((closest as { id: string }).id);
       toast.info("Pin removed.");
     }
-  }, [normToCanvas, setCurrentPins, onPinRemoved]);
+  }, [normToCanvas, onPinRemoved]);
 
   // ── Canvas mouse move (thin crosshair) ────────────────────────────────────
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1608,7 +1598,7 @@ export default function PlanPanel({
           {mode === "set-scale-p2" && scalePoints.length < 2 && "Click the END of the reference line."}
           {mode === "set-scale-p2" && scalePoints.length >= 2 && "Enter real-world distance (ft) → Confirm."}
           {mode === "measure" && `Measuring: ${activeRun?.name} · Click to add points · U=undo · Esc=done`}
-          {mode === "count" && `Count Mode · Click=place pin · Right-click=remove · ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on this page`}
+          {mode === "count" && `Count Mode · Click=place pin · Right-click=remove · ${activeCountSession ? activeCountSession.pins.length + " total" : "No session selected"}`}
           {mode === "none" && `Page ${currentPage}/${numPages || "–"} · Scroll=zoom · ←/→=page · M=measure`}
         </span>
         {activeRun?.totalFeet !== null && activeRun.totalFeet !== undefined && activeRun.totalFeet > 0 && (

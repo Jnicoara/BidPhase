@@ -146,6 +146,27 @@ export interface AssemblyMaterialLine {
   quantity: number;
 }
 
+/** A single count pin dropped in Count Mode. Carries page number so totals span all pages. */
+export interface CountPin {
+  id: string;
+  nx: number;       // normalised x ∈ [0,1] relative to page width
+  ny: number;       // normalised y ∈ [0,1] relative to page height
+  pageNumber: number; // 1-indexed page where the pin was placed
+}
+
+/**
+ * A named counting session — groups pins under a user-defined label.
+ * Replaces the old per-page PagePinsMap. Sessions persist across pages so
+ * the total count is project-wide, not page-scoped.
+ */
+export interface CountSession {
+  id: string;
+  name: string;     // user-set label, e.g. "Outlets - Room 101"
+  iconId: string;   // SVG icon id from COUNT_ICONS
+  color: string;    // hex pin color
+  pins: CountPin[];
+}
+
 export interface AssemblyState {
   assemblyId: string;
   quantity: number;
@@ -155,6 +176,10 @@ export interface AssemblyState {
   iconId?: string;
   /** Hex color for count pins (high-visibility, chosen by user) */
   pinColor?: string;
+  /** Named count sessions for Count Mode — project-scoped, cross-page */
+  countSessions?: CountSession[];
+  /** ID of the currently active count session */
+  activeCountSessionId?: string;
 }
 
 export interface CommercialProject {
