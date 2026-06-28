@@ -837,38 +837,6 @@ function CivilEditor({
               </div>
             </div>
 
-            {/* Runs list + Count Sessions */}
-            <div className="flex-1 overflow-auto p-4 pb-24 space-y-4">
-              {pageRuns.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
-                    <Link2 size={20} className="text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">No runs on page {activePage}</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
-                      Measure a conduit run on this page, then push it here.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Newest first — already prepended on push */}
-                  {pageRuns.map((run, i) => (
-                    <RunCard
-                      key={run.id}
-                      run={run}
-                      index={i}
-                      onUpdate={updateRun}
-                      onRemove={removeRun}
-                    />
-                  ))}
-
-                  {/* Cross-page totals summary (always shows all pages) */}
-                  <CrossPageTotals runs={runs} />
-                </>
-              )}
-
               {/* ── Count Sessions ──────────────────────────────────────── */}
               <div className="bp-card p-4 space-y-3">
                 <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
@@ -893,8 +861,8 @@ function CivilEditor({
                           )}
                         >
                           <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                            {icon.paths.map((p, pi) => (
-                              <path key={pi} d={p.d} fill={p.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={p.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                            {icon.path.split("|||").map((d, pi) => (
+                              <path key={pi} d={d.trim()} fill={icon.render === "stroke" ? "none" : cs.color} stroke={cs.color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
                             ))}
                           </svg>
                           {isEditing ? (
@@ -969,6 +937,39 @@ function CivilEditor({
                   </div>
                 )}
               </div>
+
+            {/* Runs list */}
+            <div className="flex-1 overflow-auto p-4 pb-24 space-y-4">
+              {pageRuns.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
+                    <Link2 size={20} className="text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">No runs on page {activePage}</p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">
+                      Measure a conduit run on this page, then push it here.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Newest first — already prepended on push */}
+                  {pageRuns.map((run, i) => (
+                    <RunCard
+                      key={run.id}
+                      run={run}
+                      index={i}
+                      onUpdate={updateRun}
+                      onRemove={removeRun}
+                    />
+                  ))}
+
+                  {/* Cross-page totals summary (always shows all pages) */}
+                  <CrossPageTotals runs={runs} />
+                </>
+              )}
+
             </div>
           </div>
         </ResizablePanel>
@@ -1007,11 +1008,11 @@ function CivilIconSelector({
             className={cn("flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all",
               activeIconId === icon.id ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground" : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground")}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
-              {icon.paths.map((p, pi) => (
-                <path key={pi} d={p.d}
-                  fill={p.strokeOnly ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
+              {icon.path.split("|||").map((d, pi) => (
+                <path key={pi} d={d.trim()}
+                  fill={icon.render === "stroke" ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
                   stroke={activeIconId === icon.id ? activeColor : "currentColor"}
-                  strokeWidth={p.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                  strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
               ))}
             </svg>
             <span className="leading-tight text-center">{icon.label}</span>

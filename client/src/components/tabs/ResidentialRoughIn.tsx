@@ -124,11 +124,11 @@ function ResIconSelector({
                 ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground"
                 : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground")}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
-              {icon.paths.map((p, pi) => (
-                <path key={pi} d={p.d}
-                  fill={p.strokeOnly ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
+              {icon.path.split("|||").map((d, pi) => (
+                <path key={pi} d={d.trim()}
+                  fill={icon.render === "stroke" ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
                   stroke={activeIconId === icon.id ? activeColor : "currentColor"}
-                  strokeWidth={p.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                  strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
               ))}
             </svg>
             <span className="leading-tight text-center">{icon.label}</span>
@@ -321,8 +321,8 @@ function ResidentialEditor({
                             )}
                           >
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                              {icon.paths.map((p, pi) => (
-                                <path key={pi} d={p.d} fill={p.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={p.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                              {icon.path.split("|||").map((d, pi) => (
+                                <path key={pi} d={d.trim()} fill={icon.render === "stroke" ? "none" : cs.color} stroke={cs.color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
                               ))}
                             </svg>
                             {isEditing ? (

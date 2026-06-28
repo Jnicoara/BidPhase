@@ -767,17 +767,18 @@ export default function PlanPanel({
       ctx.scale(svgScale, svgScale);
 
       const iconDef = COUNT_ICONS.find((ic) => ic.id === (pin.iconId ?? DEFAULT_ICON_ID)) ?? COUNT_ICONS[0];
-      iconDef.paths.forEach((pathDef) => {
-        const p2d = new Path2D(pathDef.d);
-        ctx.lineWidth = (pathDef.strokeWidth ?? 1.5) / svgScale;
+      iconDef.path.split("|||").forEach((segment) => {
+        const p2d = new Path2D(segment.trim());
+        ctx.lineWidth = 1.5 / svgScale;
         ctx.strokeStyle = pin.color;
         ctx.fillStyle = pin.color;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
-        if (pathDef.strokeOnly) {
+        if (iconDef.render === "stroke") {
           ctx.stroke(p2d);
         } else {
           ctx.fill(p2d);
+          ctx.stroke(p2d);
         }
       });
 

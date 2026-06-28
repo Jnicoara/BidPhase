@@ -1,497 +1,544 @@
 /**
  * BidPhase — Electrical Symbol Library
- *
- * 35+ standard electrical symbols based on NFPA 70 / IEC 60617 conventions.
- * Each symbol is defined as SVG path segments rendered on a 24x24 viewBox.
- * Grouped by category for the icon selector UI.
- *
- * Path conventions:
- *   strokeOnly: true  -> path is stroked only (no fill)
- *   strokeOnly: false -> path is filled with the session color
- *   strokeWidth       -> override default 1.5 stroke width
+ * Based on NFPA 70 / NEC standard electrical plan symbols.
+ * Each icon is a 24×24 viewBox SVG path (or paths separated by "|||").
+ * Rendering: scale to desired size, fill/stroke with session color.
  */
 
-export interface CountIconDef {
+export interface CountIcon {
   id: string;
   label: string;
   category: string;
-  paths: Array<{
-    d: string;
-    strokeOnly?: boolean;
-    strokeWidth?: number;
-  }>;
+  /** SVG path data. Multiple paths separated by "|||". */
+  path: string;
+  /** "fill" | "stroke" | "both" — how to apply the session color */
+  render: "fill" | "stroke" | "both";
 }
 
-export const ICON_CATEGORIES = [
-  "Receptacles",
-  "Switches",
-  "Lighting",
-  "Power / Distribution",
-  "Safety / Alarm",
-  "Communications",
-  "Motors / HVAC",
-  "Misc",
-] as const;
-
-export type IconCategory = typeof ICON_CATEGORIES[number];
-
-export const COUNT_ICONS: CountIconDef[] = [
-  // ── Receptacles ──────────────────────────────────────────────────────────────
+// ─── Receptacles ──────────────────────────────────────────────────────────────
+const RECEPTACLES: CountIcon[] = [
   {
     id: "outlet-duplex",
-    label: "Duplex Outlet",
+    label: "Duplex Receptacle",
     category: "Receptacles",
-    paths: [
-      { d: "M12 12 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0", strokeOnly: true },
-      { d: "M10 9 L10 12", strokeOnly: true, strokeWidth: 2 },
-      { d: "M14 9 L14 12", strokeOnly: true, strokeWidth: 2 },
-    ],
+    // Circle with two vertical slots
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-2 6h1v4h-1V8zm3 0h1v4h-1V8z",
+    render: "both",
+  },
+  {
+    id: "outlet-quad",
+    label: "Quad Receptacle",
+    category: "Receptacles",
+    // Circle with four slots (2×2 grid)
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-3 5h1v3H9V7zm4 0h1v3h-1V7zM9 13h1v3H9v-3zm4 0h1v3h-1v-3z",
+    render: "both",
   },
   {
     id: "outlet-gfci",
-    label: "GFCI Outlet",
+    label: "GFCI Receptacle",
     category: "Receptacles",
-    paths: [
-      { d: "M12 12 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0", strokeOnly: true },
-      { d: "M10 9 L10 12", strokeOnly: true, strokeWidth: 2 },
-      { d: "M14 9 L14 12", strokeOnly: true, strokeWidth: 2 },
-      { d: "M9 14.5 L15 14.5", strokeOnly: true, strokeWidth: 1 },
-    ],
+    // Circle with two slots + horizontal bar (GFI indicator)
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-2 5h1v4h-1V7zm3 0h1v4h-1V7zm-4 6h6v1.5H9V13z",
+    render: "both",
   },
   {
-    id: "outlet-220",
-    label: "240V Outlet",
+    id: "outlet-afci",
+    label: "AFCI Receptacle",
     category: "Receptacles",
-    paths: [
-      { d: "M12 12 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0", strokeOnly: true },
-      { d: "M10 8.5 L10 11", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M14 8.5 L14 11", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 11 L12 14", strokeOnly: true, strokeWidth: 1.5 },
-    ],
+    // Circle with two slots + arc indicator
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-2 5h1v4h-1V7zm3 0h1v4h-1V7zM8.5 14.5 Q12 12 15.5 14.5",
+    render: "both",
+  },
+  {
+    id: "outlet-20a",
+    label: "20A Receptacle",
+    category: "Receptacles",
+    // Circle with T-slot (20A indicator)
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-2.5 6h1v4h-1V8zm0 0h-1.5v1.5h1.5zm3.5 0h1v4h-1V8z",
+    render: "both",
+  },
+  {
+    id: "outlet-30a",
+    label: "30A Receptacle",
+    category: "Receptacles",
+    // Circle with L-shaped slot (30A/dryer style)
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 5 l-3 3 h2 v4 h2 v-4 h2 z",
+    render: "both",
+  },
+  {
+    id: "outlet-50a",
+    label: "50A Receptacle",
+    category: "Receptacles",
+    // Circle with diamond slot (50A/range style)
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 6 l2 3 l-2 3 l-2-3 z",
+    render: "both",
+  },
+  {
+    id: "outlet-dryer",
+    label: "Dryer Outlet (240V)",
+    category: "Receptacles",
+    // Circle with three prong slots
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-3 6h1.5v3.5H9V8zm4.5 0H15v3.5h-1.5V8zM11 14h2v2h-2v-2z",
+    render: "both",
+  },
+  {
+    id: "outlet-range",
+    label: "Range Outlet (240V)",
+    category: "Receptacles",
+    // Circle with four prong slots
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-3.5 5.5H10v3H8.5v-3zm5 0H15v3h-1.5v-3zM11 13h2v1.5h-2V13zm0 3h2v1.5h-2V16z",
+    render: "both",
   },
   {
     id: "outlet-floor",
-    label: "Floor Outlet",
+    label: "Floor Receptacle",
     category: "Receptacles",
-    paths: [
-      { d: "M6 6 L18 6 L18 18 L6 18 Z", strokeOnly: true },
-      { d: "M10 9 L10 12", strokeOnly: true, strokeWidth: 2 },
-      { d: "M14 9 L14 12", strokeOnly: true, strokeWidth: 2 },
-    ],
+    // Circle with horizontal lines (floor mount indicator)
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-2 6h1v4h-1V8zm3 0h1v4h-1V8zM6 18h12v1.5H6V18z",
+    render: "both",
   },
   {
     id: "outlet-weatherproof",
-    label: "Weatherproof Outlet",
+    label: "Weatherproof Receptacle",
     category: "Receptacles",
-    paths: [
-      { d: "M12 12 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0", strokeOnly: true },
-      { d: "M10 9 L10 12", strokeOnly: true, strokeWidth: 2 },
-      { d: "M14 9 L14 12", strokeOnly: true, strokeWidth: 2 },
-      { d: "M7 12 Q12 6 17 12", strokeOnly: true, strokeWidth: 1 },
-    ],
+    // Circle with WP arc cover
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm-2 7h1v3h-1v-3zm3 0h1v3h-1v-3zM7 9 Q12 5 17 9",
+    render: "both",
   },
-  // ── Switches ─────────────────────────────────────────────────────────────────
   {
-    id: "switch-spst",
-    label: "Single-Pole Switch",
+    id: "outlet-usb",
+    label: "USB Receptacle",
+    category: "Receptacles",
+    // Circle with USB trident symbol
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 5v7m-3-5h6m-5 0v-1.5h1.5V7m3.5 0v1.5H13V7",
+    render: "both",
+  },
+];
+
+// ─── Switches ─────────────────────────────────────────────────────────────────
+const SWITCHES: CountIcon[] = [
+  {
+    id: "switch-single",
+    label: "Single Pole Switch",
     category: "Switches",
-    paths: [
-      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
-      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-    ],
+    // S with a line
+    path: "M8 18 L16 6 M16 6 L16 9",
+    render: "stroke",
   },
   {
     id: "switch-3way",
     label: "3-Way Switch",
     category: "Switches",
-    paths: [
-      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
-      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-      { d: "M17 12 Q19 11 19 13 Q19 15 17 15", strokeOnly: true, strokeWidth: 1 },
-    ],
+    // S3
+    path: "M8 18 L16 6 M16 6 L16 9 M14 7.5 L18 7.5",
+    render: "stroke",
   },
   {
     id: "switch-4way",
     label: "4-Way Switch",
     category: "Switches",
-    paths: [
-      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
-      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-      { d: "M17 11 L17 15 M15 13 L19 13", strokeOnly: true, strokeWidth: 1 },
-    ],
+    path: "M8 18 L16 6 M16 6 L16 9 M14 7.5 L18 7.5 M14 6 L18 9",
+    render: "stroke",
   },
   {
     id: "switch-dimmer",
     label: "Dimmer Switch",
     category: "Switches",
-    paths: [
-      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
-      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-      { d: "M15 12 Q16 10.5 17 12 Q18 13.5 19 12", strokeOnly: true, strokeWidth: 1 },
-    ],
+    // S with a rheostat arc
+    path: "M8 18 L16 6 M16 6 L16 9 M9 14 Q12 11 15 14",
+    render: "stroke",
   },
   {
     id: "switch-timer",
     label: "Timer Switch",
     category: "Switches",
-    paths: [
-      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
-      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-      { d: "M17 11 m-2 0 a2 2 0 1 0 4 0 a2 2 0 1 0 -4 0", strokeOnly: true, strokeWidth: 0.8 },
-      { d: "M17 10 L17 11 L18 12", strokeOnly: true, strokeWidth: 0.8 },
-    ],
+    // S with clock circle
+    path: "M8 18 L14 8 M17 7 a3 3 0 1 1 0 .01 M17 5.5 L17 7 L18.5 8",
+    render: "stroke",
   },
   {
     id: "switch-motion",
-    label: "Motion Sensor",
+    label: "Motion Sensor Switch",
     category: "Switches",
-    paths: [
-      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
-      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-      { d: "M16 9 Q19 7 19 11", strokeOnly: true, strokeWidth: 0.8 },
-      { d: "M16 7 Q21 6 21 12", strokeOnly: true, strokeWidth: 0.8 },
-    ],
+    // S with motion arcs
+    path: "M8 18 L14 8 M17 5 Q20 8 17 11 M15.5 6.5 Q17.5 8 15.5 9.5",
+    render: "stroke",
   },
-  // ── Lighting ──────────────────────────────────────────────────────────────────
+  {
+    id: "switch-keyed",
+    label: "Key Switch",
+    category: "Switches",
+    // S with key symbol
+    path: "M8 18 L16 6 M16 6 L16 9 M13 5 a2 2 0 1 1 0 .01 M14.4 6.4 L17 9 L16 10 L15 9",
+    render: "stroke",
+  },
+];
+
+// ─── Lighting ─────────────────────────────────────────────────────────────────
+const LIGHTING: CountIcon[] = [
   {
     id: "fixture-ceiling",
     label: "Ceiling Fixture",
     category: "Lighting",
-    paths: [
-      { d: "M12 12 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0", strokeOnly: true },
-      { d: "M12 6 L12 18", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M6 12 L18 12", strokeOnly: true, strokeWidth: 1.5 },
-    ],
+    // Circle with cross
+    path: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 4v12M6 12h12",
+    render: "both",
   },
   {
     id: "fixture-recessed",
-    label: "Recessed Light",
+    label: "Recessed Can Light",
     category: "Lighting",
-    paths: [
-      { d: "M12 12 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0", strokeOnly: true },
-      { d: "M12 12 m-3 0 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0", strokeOnly: false },
-    ],
+    // Filled circle
+    path: "M12 4a8 8 0 1 0 0 16A8 8 0 0 0 12 4z",
+    render: "fill",
+  },
+  {
+    id: "fixture-surface",
+    label: "Surface Mount Fixture",
+    category: "Lighting",
+    // Rectangle with center dot
+    path: "M4 9h16v6H4z M12 12 a1 1 0 1 1 0 .01",
+    render: "both",
   },
   {
     id: "fixture-pendant",
     label: "Pendant Light",
     category: "Lighting",
-    paths: [
-      { d: "M12 4 L12 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 12 m-4 0 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0", strokeOnly: true },
-      { d: "M12 8 L12 16", strokeOnly: true, strokeWidth: 1 },
-      { d: "M8 12 L16 12", strokeOnly: true, strokeWidth: 1 },
-    ],
-  },
-  {
-    id: "fixture-exit",
-    label: "Exit Sign",
-    category: "Lighting",
-    paths: [
-      { d: "M4 8 L20 8 L20 16 L4 16 Z", strokeOnly: true },
-      { d: "M8 10 L16 14 M16 10 L8 14", strokeOnly: true, strokeWidth: 1.5 },
-    ],
-  },
-  {
-    id: "fixture-emergency",
-    label: "Emergency Light",
-    category: "Lighting",
-    paths: [
-      { d: "M4 10 L20 10 L20 14 L4 14 Z", strokeOnly: true },
-      { d: "M7 10 L5 7", strokeOnly: true, strokeWidth: 2 },
-      { d: "M17 10 L19 7", strokeOnly: true, strokeWidth: 2 },
-      { d: "M4 6 L6 8 M8 5 L7 8", strokeOnly: true, strokeWidth: 1 },
-      { d: "M20 6 L18 8 M16 5 L17 8", strokeOnly: true, strokeWidth: 1 },
-    ],
-  },
-  {
-    id: "fixture-pole",
-    label: "Light Pole",
-    category: "Lighting",
-    paths: [
-      { d: "M12 20 L12 6", strokeOnly: true, strokeWidth: 2 },
-      { d: "M12 6 L18 6", strokeOnly: true, strokeWidth: 2 },
-      { d: "M15 4 L21 4 L21 8 L15 8 Z", strokeOnly: true },
-    ],
+    // Circle hanging from line
+    path: "M12 2 L12 7 M12 7 a5 5 0 1 0 0 .01",
+    render: "both",
   },
   {
     id: "fixture-track",
     label: "Track Lighting",
     category: "Lighting",
-    paths: [
-      { d: "M4 8 L20 8", strokeOnly: true, strokeWidth: 3 },
-      { d: "M8 8 L8 13", strokeOnly: true, strokeWidth: 1 },
-      { d: "M8 13 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: true, strokeWidth: 1 },
-      { d: "M12 8 L12 13", strokeOnly: true, strokeWidth: 1 },
-      { d: "M12 13 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: true, strokeWidth: 1 },
-      { d: "M16 8 L16 13", strokeOnly: true, strokeWidth: 1 },
-      { d: "M16 13 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: true, strokeWidth: 1 },
-    ],
+    // Horizontal bar with circles
+    path: "M3 12 h18 M7 12 a2 2 0 1 1 0 .01 M17 12 a2 2 0 1 1 0 .01",
+    render: "both",
   },
-  // ── Power / Distribution ──────────────────────────────────────────────────────
+  {
+    id: "fixture-exit",
+    label: "Exit Sign",
+    category: "Lighting",
+    // Rectangle with X
+    path: "M3 8 h18 v8 H3 z M8 10 L16 14 M16 10 L8 14",
+    render: "both",
+  },
+  {
+    id: "fixture-emergency",
+    label: "Emergency Light",
+    category: "Lighting",
+    // Rectangle with two beams
+    path: "M4 10 h16 v4 H4 z M2 12 L5 10 M2 12 L5 14 M22 12 L19 10 M22 12 L19 14",
+    render: "both",
+  },
+  {
+    id: "fixture-exterior",
+    label: "Exterior Wall Light",
+    category: "Lighting",
+    // Half circle on wall
+    path: "M12 4 a8 8 0 0 1 0 16 M12 4 L12 20 M4 12 h8",
+    render: "both",
+  },
+  {
+    id: "light-pole",
+    label: "Light Pole",
+    category: "Lighting",
+    // Tall vertical line with overhang and circle
+    path: "M12 22 L12 6 M12 6 L18 6 M18 6 a2 2 0 1 1 0 .01",
+    render: "both",
+  },
+  {
+    id: "fixture-under-cabinet",
+    label: "Under Cabinet Light",
+    category: "Lighting",
+    // Thin rectangle
+    path: "M4 14 h16 v2.5 H4 z",
+    render: "both",
+  },
+];
+
+// ─── Panels & Distribution ────────────────────────────────────────────────────
+const PANELS: CountIcon[] = [
   {
     id: "panel-main",
-    label: "Main Panel",
-    category: "Power / Distribution",
-    paths: [
-      { d: "M5 4 L19 4 L19 20 L5 20 Z", strokeOnly: true },
-      { d: "M8 8 L16 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M8 12 L16 12", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M8 16 L16 16", strokeOnly: true, strokeWidth: 1.5 },
-    ],
+    label: "Main Panel / Load Center",
+    category: "Panels",
+    // Rectangle with vertical lines (breakers)
+    path: "M4 3 h16 v18 H4 z M8 3 v18 M12 6 h4 M12 9 h4 M12 12 h4 M12 15 h4 M12 18 h4",
+    render: "both",
   },
   {
     id: "panel-sub",
-    label: "Sub-Panel",
-    category: "Power / Distribution",
-    paths: [
-      { d: "M7 5 L17 5 L17 19 L7 19 Z", strokeOnly: true },
-      { d: "M9 9 L15 9", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M9 13 L15 13", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M9 17 L15 17", strokeOnly: true, strokeWidth: 1.5 },
-    ],
+    label: "Sub Panel",
+    category: "Panels",
+    // Smaller rectangle with SP label lines
+    path: "M5 5 h14 v14 H5 z M9 5 v14 M12 8 h4 M12 11 h4 M12 14 h4",
+    render: "both",
   },
   {
-    id: "junction-box",
-    label: "Junction Box",
-    category: "Power / Distribution",
-    paths: [
-      { d: "M5 5 L19 5 L19 19 L5 19 Z", strokeOnly: true },
-      { d: "M9 8 L9 15 Q9 17 7 17", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M11 8 L11 16 M11 8 Q15 8 15 10 Q15 12 11 12 Q15 12 15 14 Q15 16 11 16", strokeOnly: true, strokeWidth: 1.5 },
-    ],
-  },
-  {
-    id: "transformer",
-    label: "Transformer",
-    category: "Power / Distribution",
-    paths: [
-      { d: "M4 12 Q5 9 6 12 Q7 15 8 12 Q9 9 10 12", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M14 12 Q15 9 16 12 Q17 15 18 12 Q19 9 20 12", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M11 8 L13 8 L13 16 L11 16 Z", strokeOnly: false },
-    ],
-  },
-  {
-    id: "disconnect",
+    id: "disconnect-switch",
     label: "Disconnect Switch",
-    category: "Power / Distribution",
-    paths: [
-      { d: "M6 6 L18 6 L18 18 L6 18 Z", strokeOnly: true },
-      { d: "M9 15 L9 12", strokeOnly: true, strokeWidth: 2 },
-      { d: "M9 12 L15 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M15 8 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-    ],
+    category: "Panels",
+    // Square with diagonal slash
+    path: "M4 4 h16 v16 H4 z M8 16 L16 8",
+    render: "both",
   },
   {
-    id: "meter",
-    label: "Electric Meter",
-    category: "Power / Distribution",
-    paths: [
-      { d: "M12 12 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0", strokeOnly: true },
-      { d: "M12 7 L12 9", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 15 L12 17", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M7 12 L9 12", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M15 12 L17 12", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 12 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-    ],
+    id: "meter-base",
+    label: "Meter Base",
+    category: "Panels",
+    // Circle with M
+    path: "M12 2 a10 10 0 1 0 0 20 A10 10 0 0 0 12 2 M8 16 L8 8 L12 13 L16 8 L16 16",
+    render: "both",
   },
-  // ── Safety / Alarm ────────────────────────────────────────────────────────────
   {
-    id: "smoke-detector",
-    label: "Smoke Detector",
-    category: "Safety / Alarm",
-    paths: [
-      { d: "M12 12 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0", strokeOnly: true },
-      { d: "M12 12 m-2 0 a2 2 0 1 0 4 0 a2 2 0 1 0 -4 0", strokeOnly: false },
-      { d: "M8 8 Q12 5 16 8", strokeOnly: true, strokeWidth: 1 },
-    ],
+    id: "transfer-switch",
+    label: "Transfer Switch",
+    category: "Panels",
+    // Two rectangles with arrow
+    path: "M3 6 h7 v5 H3 z M14 13 h7 v5 h-7 z M10 8.5 h4 M12 7 L14 8.5 L12 10 M14 15.5 h-4 M12 14 L10 15.5 L12 17",
+    render: "both",
+  },
+];
+
+// ─── Devices & Alarms ─────────────────────────────────────────────────────────
+const DEVICES: CountIcon[] = [
+  {
+    id: "smoke-alarm",
+    label: "Smoke Alarm",
+    category: "Devices",
+    // Circle with S and dots
+    path: "M12 2 a10 10 0 1 0 0 20 A10 10 0 0 0 12 2 M9 9 Q12 6 15 9 Q12 12 9 9 M12 14 a1 1 0 1 1 0 .01",
+    render: "both",
   },
   {
     id: "co-detector",
     label: "CO Detector",
-    category: "Safety / Alarm",
-    paths: [
-      { d: "M12 12 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0", strokeOnly: true },
-      { d: "M9 10 Q7 10 7 12 Q7 14 9 14 Q11 14 11 12 Q11 10 9 10", strokeOnly: true, strokeWidth: 1 },
-      { d: "M13 10 Q15 10 15 12 Q15 14 13 14 Q13 14 13 12 Q13 10 13 10", strokeOnly: true, strokeWidth: 1 },
-      { d: "M13 12 L15 12", strokeOnly: true, strokeWidth: 1 },
-    ],
-  },
-  {
-    id: "fire-alarm",
-    label: "Fire Alarm Pull",
-    category: "Safety / Alarm",
-    paths: [
-      { d: "M7 6 L17 6 L17 18 L7 18 Z", strokeOnly: true },
-      { d: "M9 14 L15 14", strokeOnly: true, strokeWidth: 2 },
-      { d: "M9 14 L9 17 L15 17 L15 14", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M9 8 L12 12 L15 8 M10.5 10.5 L13.5 10.5", strokeOnly: true, strokeWidth: 1 },
-    ],
-  },
-  {
-    id: "horn-strobe",
-    label: "Horn / Strobe",
-    category: "Safety / Alarm",
-    paths: [
-      { d: "M6 9 L6 15 L12 18 L12 6 Z", strokeOnly: true },
-      { d: "M14 9 Q17 12 14 15", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M16 7 Q20 12 16 17", strokeOnly: true, strokeWidth: 1 },
-    ],
-  },
-  {
-    id: "security-camera",
-    label: "Security Camera",
-    category: "Safety / Alarm",
-    paths: [
-      { d: "M4 9 L14 9 L14 15 L4 15 Z", strokeOnly: true },
-      { d: "M14 11 L20 8 L20 16 L14 13 Z", strokeOnly: true },
-    ],
-  },
-  // ── Communications ────────────────────────────────────────────────────────────
-  {
-    id: "data-outlet",
-    label: "Data Outlet",
-    category: "Communications",
-    paths: [
-      { d: "M6 6 L18 6 L18 18 L6 18 Z", strokeOnly: true },
-      { d: "M9 9 L9 15 Q15 15 15 12 Q15 9 9 9", strokeOnly: true, strokeWidth: 1.5 },
-    ],
-  },
-  {
-    id: "telephone",
-    label: "Telephone Outlet",
-    category: "Communications",
-    paths: [
-      { d: "M6 6 L18 6 L18 18 L6 18 Z", strokeOnly: true },
-      { d: "M9 9 L15 9 M12 9 L12 15", strokeOnly: true, strokeWidth: 1.5 },
-    ],
-  },
-  {
-    id: "tv-outlet",
-    label: "TV / Cable Outlet",
-    category: "Communications",
-    paths: [
-      { d: "M6 6 L18 6 L18 18 L6 18 Z", strokeOnly: true },
-      { d: "M8 9 L16 9 L16 14 L8 14 Z", strokeOnly: true, strokeWidth: 1 },
-      { d: "M10 14 L10 16 M14 14 L14 16 M9 16 L15 16", strokeOnly: true, strokeWidth: 1 },
-    ],
-  },
-  {
-    id: "intercom",
-    label: "Intercom",
-    category: "Communications",
-    paths: [
-      { d: "M6 6 L18 6 L18 18 L6 18 Z", strokeOnly: true },
-      { d: "M9 9 L15 9 M9 11 L15 11 M9 13 L15 13", strokeOnly: true, strokeWidth: 1 },
-      { d: "M12 15 m-1 0 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0", strokeOnly: false },
-    ],
-  },
-  // ── Motors / HVAC ─────────────────────────────────────────────────────────────
-  {
-    id: "motor",
-    label: "Motor",
-    category: "Motors / HVAC",
-    paths: [
-      { d: "M12 12 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0", strokeOnly: true },
-      { d: "M8 15 L8 9 L12 13 L16 9 L16 15", strokeOnly: true, strokeWidth: 1.5 },
-    ],
-  },
-  {
-    id: "hvac-unit",
-    label: "HVAC Unit",
-    category: "Motors / HVAC",
-    paths: [
-      { d: "M4 8 L20 8 L20 16 L4 16 Z", strokeOnly: true },
-      { d: "M8 10 L16 14 M16 10 L8 14", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 12 m-1 0 a1 1 0 1 0 2 0 a1 1 0 1 0 -2 0", strokeOnly: false },
-    ],
-  },
-  {
-    id: "exhaust-fan",
-    label: "Exhaust Fan",
-    category: "Motors / HVAC",
-    paths: [
-      { d: "M12 12 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0", strokeOnly: true },
-      { d: "M12 12 L12 7 Q14 9 12 12", strokeOnly: true, strokeWidth: 1 },
-      { d: "M12 12 L17 12 Q15 14 12 12", strokeOnly: true, strokeWidth: 1 },
-      { d: "M12 12 L12 17 Q10 15 12 12", strokeOnly: true, strokeWidth: 1 },
-      { d: "M12 12 L7 12 Q9 10 12 12", strokeOnly: true, strokeWidth: 1 },
-    ],
+    category: "Devices",
+    // Circle with CO text lines
+    path: "M12 2 a10 10 0 1 0 0 20 A10 10 0 0 0 12 2 M8 10 Q8 8 10 8 Q12 8 12 10 Q12 12 10 12 Q8 12 8 10 M13 8 h3 M13 12 h3 M15 8 v4",
+    render: "both",
   },
   {
     id: "thermostat",
     label: "Thermostat",
-    category: "Motors / HVAC",
-    paths: [
-      { d: "M12 12 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0", strokeOnly: true },
-      { d: "M12 7 L12 13", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 14 m-2 0 a2 2 0 1 0 4 0 a2 2 0 1 0 -4 0", strokeOnly: false },
-    ],
+    category: "Devices",
+    // Square with T
+    path: "M4 4 h16 v16 H4 z M8 8 h8 M12 8 v8",
+    render: "both",
   },
-  // ── Misc ──────────────────────────────────────────────────────────────────────
   {
     id: "doorbell",
-    label: "Doorbell",
-    category: "Misc",
-    paths: [
-      { d: "M8 16 L16 16 Q16 10 12 8 Q8 10 8 16 Z", strokeOnly: true },
-      { d: "M12 16 L12 18", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 18 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-    ],
+    label: "Doorbell / Chime",
+    category: "Devices",
+    // Bell shape
+    path: "M12 3 Q7 3 7 9 L7 15 H17 L17 9 Q17 3 12 3 M10 15 Q10 18 12 18 Q14 18 14 15 M9 3 Q12 1 15 3",
+    render: "both",
   },
   {
-    id: "ceiling-fan",
+    id: "fan-ceiling",
     label: "Ceiling Fan",
-    category: "Misc",
-    paths: [
-      { d: "M12 12 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
-      { d: "M12 10.5 L10 5 L14 5 Z", strokeOnly: true, strokeWidth: 1 },
-      { d: "M13.5 12 L19 10 L19 14 Z", strokeOnly: true, strokeWidth: 1 },
-      { d: "M12 13.5 L14 19 L10 19 Z", strokeOnly: true, strokeWidth: 1 },
-      { d: "M10.5 12 L5 14 L5 10 Z", strokeOnly: true, strokeWidth: 1 },
-    ],
+    category: "Devices",
+    // Circle with 4 blades
+    path: "M12 12 a1.5 1.5 0 1 0 0 .01 M12 10.5 Q14 7 17 8 Q14 10 12 10.5 M13.5 12 Q17 14 16 17 Q14 14 13.5 12 M12 13.5 Q10 17 7 16 Q10 14 12 13.5 M10.5 12 Q7 10 8 7 Q10 10 10.5 12",
+    render: "both",
   },
   {
-    id: "ev-charger",
-    label: "EV Charger",
-    category: "Misc",
-    paths: [
-      { d: "M8 4 L16 4 L16 20 L8 20 Z", strokeOnly: true },
-      { d: "M13 8 L10 13 L13 13 L11 18 L14 11 L11 11 Z", strokeOnly: false },
-    ],
+    id: "junction-box",
+    label: "Junction Box",
+    category: "Devices",
+    // Square with JB
+    path: "M4 4 h16 v16 H4 z M8 8 v5 Q8 13 10 13 Q12 13 12 11 M13 8 h3 M14.5 8 v8",
+    render: "both",
+  },
+  {
+    id: "junction-box-inground",
+    label: "In-Ground Junction Box",
+    category: "Devices",
+    // Square with dashed bottom
+    path: "M4 4 h16 v12 H4 z M4 16 L4 20 M20 16 L20 20 M7 20 h10 M8 8 v5 Q8 13 10 13 Q12 13 12 11 M13 8 h3 M14.5 8 v5",
+    render: "both",
+  },
+  {
+    id: "gfci-breaker",
+    label: "GFCI Breaker",
+    category: "Devices",
+    // Rectangle with GFI lines
+    path: "M5 6 h14 v12 H5 z M8 9 h3 M8 12 h5 M8 15 h3 M15 9 v6",
+    render: "both",
+  },
+];
+
+// ─── Motors & Equipment ───────────────────────────────────────────────────────
+const MOTORS: CountIcon[] = [
+  {
+    id: "motor",
+    label: "Motor",
+    category: "Motors",
+    // Circle with M
+    path: "M12 2 a10 10 0 1 0 0 20 A10 10 0 0 0 12 2 M7 16 L7 8 L12 13 L17 8 L17 16",
+    render: "both",
+  },
+  {
+    id: "transformer",
+    label: "Transformer",
+    category: "Motors",
+    // Two circles linked
+    path: "M5 12 a4 4 0 1 0 0 .01 M15 12 a4 4 0 1 0 0 .01 M9 12 h2 M13 12 h2",
+    render: "both",
   },
   {
     id: "generator",
     label: "Generator",
-    category: "Misc",
-    paths: [
-      { d: "M4 8 L20 8 L20 16 L4 16 Z", strokeOnly: true },
-      { d: "M16 10 Q12 8 9 10 Q7 12 9 14 Q12 16 16 14 L16 12 L13 12", strokeOnly: true, strokeWidth: 1.5 },
-    ],
+    category: "Motors",
+    // Circle with G
+    path: "M12 2 a10 10 0 1 0 0 20 A10 10 0 0 0 12 2 M15 9 Q13 7 10 9 Q8 11 10 13 Q12 15 14 14 L14 12 h-2",
+    render: "both",
+  },
+  {
+    id: "hvac-unit",
+    label: "HVAC Unit",
+    category: "Motors",
+    // Rectangle with fan circle
+    path: "M3 5 h18 v14 H3 z M12 12 a4 4 0 1 0 0 .01 M12 8 v2 M12 14 v2 M8 12 h2 M14 12 h2",
+    render: "both",
   },
 ];
 
-/** Default high-visibility pin colors for the color picker */
-export const PIN_COLORS = [
-  { label: "Neon Green",   hex: "#39FF14" },
-  { label: "Cyan",         hex: "#00CFFF" },
-  { label: "Magenta",      hex: "#FF3FD4" },
-  { label: "Yellow",       hex: "#FFE600" },
-  { label: "Orange",       hex: "#FF6B00" },
-  { label: "Purple",       hex: "#BF5FFF" },
-  { label: "Red",          hex: "#FF4444" },
-  { label: "Teal",         hex: "#00FFD1" },
-  { label: "White",        hex: "#FFFFFF" },
-  { label: "Gold",         hex: "#F5C518" },
+// ─── Telecom & Low Voltage ────────────────────────────────────────────────────
+const TELECOM: CountIcon[] = [
+  {
+    id: "data-outlet",
+    label: "Data / Network Outlet",
+    category: "Telecom",
+    // Square with D
+    path: "M4 4 h16 v16 H4 z M8 8 h3 Q14 8 14 12 Q14 16 11 16 H8 z",
+    render: "both",
+  },
+  {
+    id: "phone-outlet",
+    label: "Telephone Outlet",
+    category: "Telecom",
+    // Square with T
+    path: "M4 4 h16 v16 H4 z M8 8 h8 M12 8 v8",
+    render: "both",
+  },
+  {
+    id: "tv-outlet",
+    label: "TV / Cable Outlet",
+    category: "Telecom",
+    // Square with antenna
+    path: "M4 6 h16 v12 H4 z M12 6 L9 3 M12 6 L15 3 M12 6 v3",
+    render: "both",
+  },
+  {
+    id: "speaker",
+    label: "Speaker / Intercom",
+    category: "Telecom",
+    // Speaker cone
+    path: "M5 9 h4 L13 5 v14 L9 15 H5 z M15 8 Q18 12 15 16",
+    render: "both",
+  },
+  {
+    id: "camera",
+    label: "Security Camera",
+    category: "Telecom",
+    // Camera body with lens
+    path: "M3 8 h12 v8 H3 z M15 10 L21 7 v10 L15 14 M7 12 a3 3 0 1 1 0 .01",
+    render: "both",
+  },
+  {
+    id: "access-control",
+    label: "Access Control / Card Reader",
+    category: "Telecom",
+    // Rectangle with key card
+    path: "M6 4 h12 v16 H6 z M9 9 h6 M9 12 h6 M9 15 h3",
+    render: "both",
+  },
 ];
 
-/** Fallback icon id when none is set */
+// ─── Civil / Site ─────────────────────────────────────────────────────────────
+const CIVIL: CountIcon[] = [
+  {
+    id: "handhole",
+    label: "Handhole",
+    category: "Civil",
+    // Square with H
+    path: "M3 3 h18 v18 H3 z M8 7 v10 M16 7 v10 M8 12 h8",
+    render: "both",
+  },
+  {
+    id: "manhole",
+    label: "Manhole",
+    category: "Civil",
+    // Circle with MH
+    path: "M12 2 a10 10 0 1 0 0 20 A10 10 0 0 0 12 2 M7 16 L7 8 L10 13 L13 8 L13 16 M15 8 h2 M16 8 v8 M15 16 h2",
+    render: "both",
+  },
+  {
+    id: "pull-box",
+    label: "Pull Box",
+    category: "Civil",
+    // Rectangle with PB
+    path: "M3 6 h18 v12 H3 z M7 9 h2 Q11 9 11 11 Q11 13 9 13 H7 M13 9 h2 Q16 9 16 10 Q16 11 14 11 h-1 M13 11 h2 Q16 11 16 13 h-3",
+    render: "both",
+  },
+  {
+    id: "conduit-stub",
+    label: "Conduit Stub-Up",
+    category: "Civil",
+    // Vertical line with circle at top
+    path: "M12 20 L12 8 M12 8 a4 4 0 1 0 0 .01",
+    render: "both",
+  },
+  {
+    id: "ground-rod",
+    label: "Ground Rod",
+    category: "Civil",
+    // Vertical line with horizontal bars (ground symbol)
+    path: "M12 2 L12 16 M8 16 h8 M9 18.5 h6 M10.5 21 h3",
+    render: "both",
+  },
+];
+
+// ─── Master list & helpers ────────────────────────────────────────────────────
+export const COUNT_ICONS: CountIcon[] = [
+  ...RECEPTACLES,
+  ...SWITCHES,
+  ...LIGHTING,
+  ...PANELS,
+  ...DEVICES,
+  ...MOTORS,
+  ...TELECOM,
+  ...CIVIL,
+];
+
+export const ICON_CATEGORIES = [
+  "Receptacles",
+  "Switches",
+  "Lighting",
+  "Panels",
+  "Devices",
+  "Motors",
+  "Telecom",
+  "Civil",
+] as const;
+
+export type IconCategory = (typeof ICON_CATEGORIES)[number];
+
+export const PIN_COLORS: { hex: string; label: string }[] = [
+  { hex: "#39FF14", label: "Neon Green" },
+  { hex: "#FF00FF", label: "Magenta" },
+  { hex: "#00FFFF", label: "Cyan" },
+  { hex: "#FFE600", label: "Yellow" },
+  { hex: "#FF6600", label: "Orange" },
+  { hex: "#BF00FF", label: "Purple" },
+  { hex: "#FF2222", label: "Red" },
+  { hex: "#00CCAA", label: "Teal" },
+  { hex: "#FFFFFF", label: "White" },
+  { hex: "#FFD700", label: "Gold" },
+];
+
 export const DEFAULT_ICON_ID = "outlet-duplex";
-/** Fallback pin color when none is set */
 export const DEFAULT_PIN_COLOR = "#39FF14";
