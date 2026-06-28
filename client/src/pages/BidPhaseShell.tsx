@@ -6,12 +6,14 @@
  *
  * Each tab now embeds a PlanPanel on the left side — no standalone Plan Viewer tab.
  */
+import { useState } from "react";
 import { useApp } from "@/contexts/AppContext";
 import CivilCalculator, { CivilIcon } from "@/components/tabs/CivilCalculator";
 import CommercialAssembly from "@/components/tabs/CommercialAssembly";
 import ResidentialRoughIn from "@/components/tabs/ResidentialRoughIn";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import ExportButton from "@/components/ExportButton";
+import MaterialListPage from "@/pages/MaterialListPage";
 import {
   Building2,
   Home,
@@ -33,6 +35,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 export default function BidPhaseShell() {
   const { activeTab, setActiveTab, uiFontScale } = useApp();
+  const [showMaterialList, setShowMaterialList] = useState(false);
 
   const renderTab = () => {
     switch (activeTab as TabId) {
@@ -133,10 +136,13 @@ export default function BidPhaseShell() {
         {/* Tab content — font scale applied here so all em-based text scales */}
         <div
           className="flex-1 overflow-hidden tab-enter"
-          key={activeTab}
+          key={showMaterialList ? "material-list" : activeTab}
           style={{ fontSize: `${uiFontScale}rem` }}
         >
-          {renderTab()}
+          {showMaterialList
+            ? <MaterialListPage onBack={() => setShowMaterialList(false)} />
+            : renderTab()
+          }
         </div>
       </main>
 
@@ -164,7 +170,7 @@ export default function BidPhaseShell() {
       </nav>
 
       {/* ── Floating Export Button ───────────────────────────────── */}
-      <ExportButton />
+      {!showMaterialList && <ExportButton onOpenMaterialList={() => setShowMaterialList(true)} />}
     </div>
   );
 }

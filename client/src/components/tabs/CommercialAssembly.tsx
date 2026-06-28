@@ -137,7 +137,13 @@ function CommercialEditor({
   const qty = Math.max(1, quantity || 1);
   const bom = buildBOM(selectedAssembly, qty);
   const totalLaborHours = parseFloat((selectedAssembly.blendedLaborHours * qty).toFixed(2));
-  const totalMaterialCost = parseFloat(bom.reduce((sum, m) => sum + m.unitCost * m.quantity, 0).toFixed(2));
+  const totalMaterialCost = parseFloat((
+    bom.reduce((sum, m) => sum + m.unitCost * m.quantity, 0) +
+    countSessions.reduce((sum, cs) => {
+      if (cs.unitCost == null || cs.pins.length === 0) return sum;
+      return sum + (cs.priceMode === "total" ? cs.unitCost : cs.unitCost * cs.pins.length);
+    }, 0)
+  ).toFixed(2));
 
   // The currently active count session object
   const activeSession = countSessions.find((cs) => cs.id === activeCountSessionId) ?? null;
@@ -148,6 +154,7 @@ function CommercialEditor({
   const [editingName, setEditingName] = useState("");
   const [countSessionsOpen, setCountSessionsOpen] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
   // Sync assembly state to project whenever assemblyId or qty changes
   useEffect(() => {
@@ -180,9 +187,14 @@ function CommercialEditor({
   };
 
   const handleDeleteSession = (id: string) => {
+    setDeletingSessionId(id);
+  };
+  const confirmDeleteSession = (id: string) => {
     const updated = countSessions.filter((cs) => cs.id !== id);
     const newActive = activeCountSessionId === id ? (updated[0]?.id ?? undefined) : activeCountSessionId;
     updateSessions(updated, newActive);
+    setDeletingSessionId(null);
+    toast.success("Session deleted.");
   };
 
   const handleRenameSession = (id: string) => {
@@ -344,11 +356,26 @@ function CommercialEditor({
                                 className="flex-1 bg-transparent border-b border-[#F5C518] text-xs text-foreground outline-none font-mono"
                               />
                             ) : (
-                              <span className="flex-1 text-xs text-foreground font-medium truncate">{cs.name}</span>
+                              <span
+                                className="flex-1 text-xs text-foreground font-medium truncate cursor-text hover:text-[#F5C518] transition-colors"
+                                title="Click to rename"
+                                onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }}
+                              >{cs.name}</span>
                             )}
 
-                            {/* Unit cost input */}
-                            <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {/* Price mode toggle + cost input */}
+                            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                title={cs.priceMode === "total" ? "Switch to per-unit price" : "Switch to total cost"}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const updated = countSessions.map((x) =>
+                                    x.id === cs.id ? { ...x, priceMode: (x.priceMode === "total" ? "per-unit" : "total") as "per-unit" | "total" } : x
+                                  );
+                                  setAssemblyState({ ...s, countSessions: updated });
+                                }}
+                                className="text-[9px] font-mono text-muted-foreground hover:text-[#F5C518] transition-colors border border-border rounded px-1 py-0.5 leading-none"
+                              >{cs.priceMode === "total" ? "total" : "$/ea"}</button>
                               <span className="text-[9px] text-muted-foreground font-mono">$</span>
                               <input
                                 type="number"
@@ -372,23 +399,17 @@ function CommercialEditor({
                               {cs.pins.length} pin{cs.pins.length !== 1 ? "s" : ""}
                             </span>
 
-                            {/* Actions */}
+                            {/* Delete only — rename via click on name */}
                             {isEditing ? (
                               <>
                                 <button onClick={(e) => { e.stopPropagation(); handleRenameSession(cs.id); }} className="text-[#F5C518] hover:opacity-70 transition-opacity"><Check size={12} /></button>
                                 <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(null); }} className="text-muted-foreground hover:text-foreground transition-colors"><X size={12} /></button>
                               </>
                             ) : (
-                              <>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }}
-                                  className="text-muted-foreground hover:text-foreground transition-colors"
-                                ><Pencil size={11} /></button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteSession(cs.id); }}
-                                  className="text-muted-foreground hover:text-destructive transition-colors"
-                                ><Trash2 size={11} /></button>
-                              </>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteSession(cs.id); }}
+                                className="text-muted-foreground hover:text-destructive transition-colors"
+                              ><Trash2 size={11} /></button>
                             )}
                           </div>
                         );
@@ -573,7 +594,9 @@ function CommercialEditor({
                         ))}
                         {/* Unit Count lines — one row per session with its total pin count */}
                         {countSessions.filter((cs) => cs.pins.length > 0).map((cs) => {
-                          const extCost = cs.unitCost != null ? cs.unitCost * cs.pins.length : null;
+                          const isTotal = cs.priceMode === "total";
+                          const extCost = cs.unitCost != null ? (isTotal ? cs.unitCost : cs.unitCost * cs.pins.length) : null;
+                          const displayUnitCost = cs.unitCost != null ? (isTotal && cs.pins.length > 0 ? cs.unitCost / cs.pins.length : cs.unitCost) : null;
                           return (
                             <tr key={cs.id} className="border-b border-border/50 bg-[#F5C518]/3 hover:bg-[#F5C518]/6 transition-colors">
                               <td className="px-4 py-2 text-foreground">
@@ -585,7 +608,7 @@ function CommercialEditor({
                               <td className="px-3 py-2 text-center font-mono text-muted-foreground">EA</td>
                               <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">{cs.pins.length}</td>
                               <td className="px-3 py-2 text-right font-mono text-muted-foreground">
-                                {cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "—"}
+                                {displayUnitCost != null ? `$${displayUnitCost.toFixed(2)}` : "—"}
                               </td>
                               <td className="px-4 py-2 text-right font-mono font-semibold text-[#F5C518]">
                                 {extCost != null ? `$${extCost.toFixed(2)}` : "—"}
@@ -608,6 +631,25 @@ function CommercialEditor({
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {/* Delete session confirmation dialog */}
+      {deletingSessionId && (() => {
+        const sess = countSessions.find((cs) => cs.id === deletingSessionId);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
+              <h3 className="font-semibold text-foreground mb-2">Delete Session?</h3>
+              <p className="text-sm text-muted-foreground mb-5">
+                Delete <span className="font-medium text-foreground">"{sess?.name}"</span> and its {sess?.pins.length ?? 0} pin{(sess?.pins.length ?? 0) !== 1 ? "s" : ""}? This cannot be undone.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setDeletingSessionId(null)} className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+                <button onClick={() => confirmDeleteSession(deletingSessionId)} className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium">Delete</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

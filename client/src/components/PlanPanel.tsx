@@ -766,11 +766,12 @@ export default function PlanPanel({
       const shape = (pin.iconId ?? DEFAULT_ICON_ID) as string;
       const color = pin.color;
 
-      // Base radius / half-size in screen pixels (constant visual size regardless of zoom)
-      const R = 8 * S;   // dot radius
-      const RC = 10 * S; // circle radius
-      const RL = 14 * S; // large-circle radius
-      const SQ = 12 * S; // square half-side
+      // Pin sizes are FIXED in canvas pixels regardless of zoom.
+      // S = RENDER_BASE_ZOOM / displayZoom, so dividing by S gives constant screen size.
+      const R = 8 * S;   // dot radius  (8 screen px)
+      const RC = 10 * S; // circle radius (10 screen px)
+      const RL = 14 * S; // large-circle radius (14 screen px)
+      const SQ = 12 * S; // square half-side (12 screen px)
 
       ctx.save();
       ctx.strokeStyle = color;
@@ -810,9 +811,9 @@ export default function PlanPanel({
       ctx.shadowBlur = 0;
       ctx.restore();
 
-      // Small index badge below the pin
-      const iconSize = Math.max(16, 24 * S);
-      const badgeSize = Math.max(7, Math.round(8 * S));
+      // Small index badge below the pin — fixed 8px font regardless of zoom
+      const iconSize = 24 * S; // constant offset from pin center
+      const badgeSize = Math.round(8 * S); // 8 screen px font
       ctx.font = `bold ${badgeSize}px 'JetBrains Mono', monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";

@@ -922,8 +922,18 @@ function CivilEditor({
                           ) : (
                             <span className="flex-1 text-xs text-foreground font-medium truncate">{cs.name}</span>
                           )}
-                          {/* Unit cost input */}
-                          <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          {/* Price mode toggle + cost input */}
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              title={cs.priceMode === "total" ? "Switch to per-unit price" : "Switch to total cost"}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateSessions(countSessions.map((x) =>
+                                  x.id === cs.id ? { ...x, priceMode: (x.priceMode === "total" ? "per-unit" : "total") as "per-unit" | "total" } : x
+                                ));
+                              }}
+                              className="text-[9px] font-mono text-muted-foreground hover:text-[#F5C518] transition-colors border border-border rounded px-1 py-0.5 leading-none"
+                            >{cs.priceMode === "total" ? "total" : "$/ea"}</button>
                             <span className="text-[9px] text-muted-foreground font-mono">$</span>
                             <input
                               type="number" min={0} step={0.01} placeholder="0.00"

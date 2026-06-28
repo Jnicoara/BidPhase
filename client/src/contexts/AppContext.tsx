@@ -171,6 +171,12 @@ export interface CountSession {
   pins: CountPin[];
   /** Optional unit cost per pin — used to calculate extended cost in the BOM */
   unitCost?: number;
+  /**
+   * Price entry mode:
+   * - "per-unit" (default): unitCost is price per pin; extCost = unitCost * pins.length
+   * - "total": unitCost is the total cost; unitPrice = unitCost / pins.length
+   */
+  priceMode?: "per-unit" | "total";
 }
 
 export interface AssemblyState {

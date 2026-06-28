@@ -53,6 +53,7 @@ export default function ProjectHomepage({
   const [editName, setEditName] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const commitEdit = (id: string) => {
     const t = editName.trim();
@@ -68,13 +69,18 @@ export default function ProjectHomepage({
     toast.success(`"${name}" created — load a PDF to get started.`);
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = (id: string) => {
     if (projects.length <= 1) {
       toast.error("Can't delete the last project.");
       return;
     }
+    setConfirmDeleteId(id);
+  };
+  const confirmDelete = (id: string) => {
+    const proj = projects.find((p) => p.id === id);
     onDelete(id);
-    toast.info(`Deleted "${name}".`);
+    setConfirmDeleteId(null);
+    toast.info(`Deleted "${proj?.name ?? "project"}".`);
   };
 
   const formatDate = (ts: number) => {
@@ -204,7 +210,7 @@ export default function ProjectHomepage({
                       <Pencil size={12} />
                     </button>
                     <button
-                      onClick={() => handleDelete(proj.id, proj.name)}
+                      onClick={() => handleDelete(proj.id)}
                       className="text-muted-foreground hover:text-destructive transition-colors"
                       title="Delete"
                     >
@@ -266,6 +272,24 @@ export default function ProjectHomepage({
           )}
         </div>
       </div>
+      {/* Delete project confirmation dialog */}
+      {confirmDeleteId && (() => {
+        const proj = projects.find((p) => p.id === confirmDeleteId);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
+              <h3 className="font-semibold text-foreground mb-2">Delete Project?</h3>
+              <p className="text-sm text-muted-foreground mb-5">
+                Delete <span className="font-medium text-foreground">"{proj?.name}"</span>? All runs, pins, and sessions will be lost. This cannot be undone.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setConfirmDeleteId(null)} className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+                <button onClick={() => confirmDelete(confirmDeleteId)} className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium">Delete</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

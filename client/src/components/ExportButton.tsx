@@ -826,7 +826,11 @@ function PrintPreviewModal({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ExportButton() {
+interface ExportButtonProps {
+  onOpenMaterialList?: () => void;
+}
+
+export default function ExportButton({ onOpenMaterialList }: ExportButtonProps = {}) {
   const {
     civilState,
     assemblyState,
@@ -923,6 +927,21 @@ export default function ExportButton() {
               <FileSpreadsheet size={15} className="text-[#F5C518]" />
               Export CSV
             </button>
+            {onOpenMaterialList && (
+              <>
+                <div className="h-px mx-3" style={{ background: 'var(--bp-panel-divider)' }} />
+                <button
+                  onClick={() => { setOpen(false); onOpenMaterialList(); }}
+                  className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors duration-100 text-left"
+                  style={{ fontFamily: "'Space Grotesk', sans-serif", color: 'var(--bp-panel-text)' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bp-panel-hover)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <FileText size={15} className="text-blue-400" />
+                  View Material List
+                </button>
+              </>
+            )}
           </div>
         )}
 
