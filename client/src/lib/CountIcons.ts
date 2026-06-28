@@ -33,104 +33,68 @@ export type IconCategory = typeof ICON_CATEGORIES[number];
 
 export const COUNT_ICONS: CountIconDef[] = [
 
-  // ── Receptacles ───────────────────────────────────────────────────────────────
-  // Design language: clean rectangular wall-plate silhouette with slot details.
-  // No NFPA circles — these read clearly at small pin sizes.
+  // ── Receptacles ─────────────────────────────────────────────────────────────
+  // NFPA-style: circle body with slot details. Clean and readable at small sizes.
   {
-    // Duplex: wall plate + two slot pairs (hot + neutral)
+    // Duplex: circle + two vertical slots
     id: "outlet-duplex",
     label: "Duplex Outlet",
     category: "Receptacles",
     paths: [
-      // Wall plate
-      { d: "M7 3 L17 3 L17 21 L7 21 Z", strokeOnly: true, strokeWidth: 1.8 },
-      // Upper left slot (hot)
-      { d: "M10 7 L10 10", strokeOnly: true, strokeWidth: 1.8 },
-      // Upper right slot (neutral, slightly taller)
-      { d: "M14 6.5 L14 10", strokeOnly: true, strokeWidth: 1.8 },
-      // Lower left slot
-      { d: "M10 14 L10 17", strokeOnly: true, strokeWidth: 1.8 },
-      // Lower right slot
-      { d: "M14 13.5 L14 17", strokeOnly: true, strokeWidth: 1.8 },
-      // Upper ground arc
-      { d: "M10.5 10.5 Q12 11.5 13.5 10.5", strokeOnly: true, strokeWidth: 1.5 },
-      // Lower ground arc
-      { d: "M10.5 17.5 Q12 18.5 13.5 17.5", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 12 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0", strokeOnly: true },
+      { d: "M10 9 L10 12", strokeOnly: true, strokeWidth: 2 },
+      { d: "M14 9 L14 12", strokeOnly: true, strokeWidth: 2 },
     ],
   },
   {
-    // Quad: wall plate + four slot pairs in 2×2 grid
+    // Quad: circle + four slots (2×2)
     id: "outlet-quad",
     label: "Quad Outlet",
     category: "Receptacles",
     paths: [
-      { d: "M5 3 L19 3 L19 21 L5 21 Z", strokeOnly: true, strokeWidth: 1.8 },
-      // Top-left pair
-      { d: "M8 6 L8 9", strokeOnly: true, strokeWidth: 1.8 },
-      { d: "M10.5 5.5 L10.5 9", strokeOnly: true, strokeWidth: 1.8 },
-      // Top-right pair
-      { d: "M13.5 6 L13.5 9", strokeOnly: true, strokeWidth: 1.8 },
-      { d: "M16 5.5 L16 9", strokeOnly: true, strokeWidth: 1.8 },
-      // Bottom-left pair
-      { d: "M8 15 L8 18", strokeOnly: true, strokeWidth: 1.8 },
-      { d: "M10.5 14.5 L10.5 18", strokeOnly: true, strokeWidth: 1.8 },
-      // Bottom-right pair
-      { d: "M13.5 15 L13.5 18", strokeOnly: true, strokeWidth: 1.8 },
-      { d: "M16 14.5 L16 18", strokeOnly: true, strokeWidth: 1.8 },
-      // Center divider lines
-      { d: "M5 12 L19 12", strokeOnly: true, strokeWidth: 0.8 },
-      { d: "M12 3 L12 21", strokeOnly: true, strokeWidth: 0.8 },
+      { d: "M12 12 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0", strokeOnly: true },
+      { d: "M9.5 8.5 L9.5 10.5", strokeOnly: true, strokeWidth: 1.8 },
+      { d: "M12.5 8.5 L12.5 10.5", strokeOnly: true, strokeWidth: 1.8 },
+      { d: "M9.5 13 L9.5 15", strokeOnly: true, strokeWidth: 1.8 },
+      { d: "M12.5 13 L12.5 15", strokeOnly: true, strokeWidth: 1.8 },
+      { d: "M8 12 L16 12", strokeOnly: true, strokeWidth: 0.7 },
+      { d: "M11 7 L11 17", strokeOnly: true, strokeWidth: 0.7 },
     ],
   },
   {
-    // 240V: wider plate + two L-shaped slots + round ground pin (NEMA 6-20 / 14-30 style)
+    // 240V: circle + two vertical slots + ground pin
     id: "outlet-220",
     label: "240V Outlet",
     category: "Receptacles",
     paths: [
-      { d: "M6 4 L18 4 L18 20 L6 20 Z", strokeOnly: true, strokeWidth: 1.8 },
-      // Left L-slot (hot)
-      { d: "M9 8 L9 12 L10.5 12", strokeOnly: true, strokeWidth: 2 },
-      // Right L-slot (hot, mirrored)
-      { d: "M15 8 L15 12 L13.5 12", strokeOnly: true, strokeWidth: 2 },
-      // Round ground pin (filled circle at bottom center)
-      { d: "M12 15.5 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
+      { d: "M12 12 m-7 0 a7 7 0 1 0 14 0 a7 7 0 1 0 -14 0", strokeOnly: true },
+      { d: "M10 8.5 L10 11", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M14 8.5 L14 11", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 11 L12 14", strokeOnly: true, strokeWidth: 1.5 },
     ],
   },
   {
-    // Floor outlet: round cover plate (circle) with two slots + ground arc
+    // Floor outlet: square plate + two slots
     id: "outlet-floor",
     label: "Floor Outlet",
     category: "Receptacles",
     paths: [
-      // Round cover plate
-      { d: "M12 12 m-8 0 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0", strokeOnly: true, strokeWidth: 1.8 },
-      // Left slot
-      { d: "M9.5 9 L9.5 13", strokeOnly: true, strokeWidth: 2 },
-      // Right slot
-      { d: "M14.5 8.5 L14.5 13", strokeOnly: true, strokeWidth: 2 },
-      // Ground arc at bottom
-      { d: "M10 13.5 Q12 15 14 13.5", strokeOnly: true, strokeWidth: 1.5 },
-      // Small "F" indicator at top (floor)
-      { d: "M11 5.5 L11 7.5 M11 5.5 L13 5.5 M11 6.5 L12.5 6.5", strokeOnly: true, strokeWidth: 1 },
+      { d: "M6 6 L18 6 L18 18 L6 18 Z", strokeOnly: true },
+      { d: "M10 9 L10 12", strokeOnly: true, strokeWidth: 2 },
+      { d: "M14 9 L14 12", strokeOnly: true, strokeWidth: 2 },
     ],
   },
 
-  // ── Switches ──────────────────────────────────────────────────────────────────
-  // Design language: clean geometric "S" constructed from two offset semicircles
-  // (like a proper typographic letterform), with tight subscript numerals/letters
-  // drawn with the same stroke weight for a consistent, professional look.
+  // ── Switches ─────────────────────────────────────────────────────────────────
+  // Original blade-style: angled line + filled pivot dot + subscript indicator.
   {
     id: "switch-spst",
     label: "Single-Pole Switch",
     category: "Switches",
     paths: [
-      // Upper arc of S (top bump, left-opening)
-      { d: "M15.5 6.5 Q15.5 4 12 4 Q8.5 4 8.5 7 Q8.5 10 12 10.5", strokeOnly: true, strokeWidth: 2.2 },
-      // Lower arc of S (bottom bump, right-opening)
-      { d: "M8.5 17.5 Q8.5 20 12 20 Q15.5 20 15.5 17 Q15.5 14 12 13.5", strokeOnly: true, strokeWidth: 2.2 },
-      // Connecting diagonal
-      { d: "M12 10.5 L12 13.5", strokeOnly: true, strokeWidth: 2.2 },
+      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
+      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
     ],
   },
   {
@@ -138,13 +102,12 @@ export const COUNT_ICONS: CountIconDef[] = [
     label: "3-Way Switch",
     category: "Switches",
     paths: [
-      // S (shifted left to make room for subscript)
-      { d: "M13.5 6.5 Q13.5 4 10.5 4 Q7.5 4 7.5 7 Q7.5 10 10.5 10.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M7.5 17.5 Q7.5 20 10.5 20 Q13.5 20 13.5 17 Q13.5 14 10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M10.5 10.5 L10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      // Subscript "3": upper bump + lower bump
-      { d: "M15.5 8 Q18.5 8 18.5 10 Q18.5 12 15.5 12", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M15.5 12 Q18.5 12 18.5 14.5 Q18.5 17 15.5 17", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
+      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
+      // "3" subscript: two right-opening bumps
+      { d: "M17 12 Q19 11 19 13 Q19 15 17 15", strokeOnly: true, strokeWidth: 1.2 },
+      { d: "M17 8.5 Q20 8.5 20 10.5 Q20 12 17 12", strokeOnly: true, strokeWidth: 1.2 },
     ],
   },
   {
@@ -152,14 +115,13 @@ export const COUNT_ICONS: CountIconDef[] = [
     label: "4-Way Switch",
     category: "Switches",
     paths: [
-      // S
-      { d: "M13.5 6.5 Q13.5 4 10.5 4 Q7.5 4 7.5 7 Q7.5 10 10.5 10.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M7.5 17.5 Q7.5 20 10.5 20 Q13.5 20 13.5 17 Q13.5 14 10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M10.5 10.5 L10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      // Subscript "4": diagonal + vertical + crossbar
-      { d: "M15.5 8 L15.5 17", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M15.5 8 L18.5 13", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M15.5 13 L18.5 13", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
+      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
+      // "4" subscript: diagonal + vertical + crossbar
+      { d: "M17 8.5 L17 15.5", strokeOnly: true, strokeWidth: 1.2 },
+      { d: "M17 8.5 L20 12", strokeOnly: true, strokeWidth: 1.2 },
+      { d: "M17 12 L20 12", strokeOnly: true, strokeWidth: 1.2 },
     ],
   },
   {
@@ -167,13 +129,12 @@ export const COUNT_ICONS: CountIconDef[] = [
     label: "Timer Switch",
     category: "Switches",
     paths: [
-      // S
-      { d: "M13.5 6.5 Q13.5 4 10.5 4 Q7.5 4 7.5 7 Q7.5 10 10.5 10.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M7.5 17.5 Q7.5 20 10.5 20 Q13.5 20 13.5 17 Q13.5 14 10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M10.5 10.5 L10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      // Subscript "T": crossbar + stem
-      { d: "M15 8 L19 8", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M17 8 L17 17", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
+      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
+      // "T" subscript: crossbar + stem
+      { d: "M16.5 8.5 L20.5 8.5", strokeOnly: true, strokeWidth: 1.2 },
+      { d: "M18.5 8.5 L18.5 15.5", strokeOnly: true, strokeWidth: 1.2 },
     ],
   },
   {
@@ -181,13 +142,12 @@ export const COUNT_ICONS: CountIconDef[] = [
     label: "Dimmer Switch",
     category: "Switches",
     paths: [
-      // S
-      { d: "M13.5 6.5 Q13.5 4 10.5 4 Q7.5 4 7.5 7 Q7.5 10 10.5 10.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M7.5 17.5 Q7.5 20 10.5 20 Q13.5 20 13.5 17 Q13.5 14 10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M10.5 10.5 L10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      // Subscript "D": vertical + right-side arc
-      { d: "M15.5 8 L15.5 17", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M15.5 8 Q19.5 8 19.5 12.5 Q19.5 17 15.5 17", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
+      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
+      // "D" subscript: vertical + right arc
+      { d: "M17 8.5 L17 15.5", strokeOnly: true, strokeWidth: 1.2 },
+      { d: "M17 8.5 Q21 8.5 21 12 Q21 15.5 17 15.5", strokeOnly: true, strokeWidth: 1.2 },
     ],
   },
   {
@@ -195,12 +155,12 @@ export const COUNT_ICONS: CountIconDef[] = [
     label: "Motion Sensor",
     category: "Switches",
     paths: [
-      // S
-      { d: "M13.5 6.5 Q13.5 4 10.5 4 Q7.5 4 7.5 7 Q7.5 10 10.5 10.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M7.5 17.5 Q7.5 20 10.5 20 Q13.5 20 13.5 17 Q13.5 14 10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      { d: "M10.5 10.5 L10.5 13.5", strokeOnly: true, strokeWidth: 2 },
-      // Subscript "M": two outer verticals + two inner diagonals meeting at center
-      { d: "M15 8 L15 17 M15 8 L17 13 L19 8 L19 17", strokeOnly: true, strokeWidth: 1.3 },
+      { d: "M12 18 L12 14", strokeOnly: true, strokeWidth: 2 },
+      { d: "M12 14 L18 8", strokeOnly: true, strokeWidth: 1.5 },
+      { d: "M12 14 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
+      // Motion arc waves
+      { d: "M16 9 Q19 7 19 11", strokeOnly: true, strokeWidth: 0.9 },
+      { d: "M16 7 Q21 6 21 12", strokeOnly: true, strokeWidth: 0.9 },
     ],
   },
 
@@ -328,22 +288,25 @@ export const COUNT_ICONS: CountIconDef[] = [
     ],
   },
   {
-    // Exterior floodlight: rectangular housing + wide beam spread lines
+    // Exterior floodlight: wall-mount arm + tilted housing + focused beam cone
     id: "fixture-floodlight",
     label: "Exterior Floodlight",
     category: "Lighting",
     paths: [
-      // Housing body
-      { d: "M7 9 L17 9 L17 15 L7 15 Z", strokeOnly: true, strokeWidth: 1.5 },
-      // Mounting bracket at top
-      { d: "M11 6 L13 6 L13 9 L11 9 Z", strokeOnly: false },
-      // Wide beam spread (three diverging rays downward)
-      { d: "M7 15 L3 21", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M12 15 L12 22", strokeOnly: true, strokeWidth: 1.5 },
-      { d: "M17 15 L21 21", strokeOnly: true, strokeWidth: 1.5 },
-      // Beam fill lines
-      { d: "M5 18 L19 18", strokeOnly: true, strokeWidth: 0.7 },
-      { d: "M4 20 L20 20", strokeOnly: true, strokeWidth: 0.7 },
+      // Wall plate (left edge)
+      { d: "M3 5 L3 19", strokeOnly: true, strokeWidth: 3 },
+      // Mounting arm
+      { d: "M3 10 L8 10", strokeOnly: true, strokeWidth: 1.8 },
+      // Tilted housing (parallelogram, angled downward-right)
+      { d: "M8 7 L16 9 L14 13 L6 11 Z", strokeOnly: true, strokeWidth: 1.5 },
+      // Lens circle inside housing
+      { d: "M10 10 m-1.5 0 a1.5 1.5 0 1 0 3 0 a1.5 1.5 0 1 0 -3 0", strokeOnly: false },
+      // Focused beam (two diverging lines from front face)
+      { d: "M14 9 L22 5", strokeOnly: true, strokeWidth: 1.3 },
+      { d: "M14 13 L22 19", strokeOnly: true, strokeWidth: 1.3 },
+      // Beam fill line at midpoint
+      { d: "M17 8 L17 16", strokeOnly: true, strokeWidth: 0.7 },
+      { d: "M20 6.5 L20 17.5", strokeOnly: true, strokeWidth: 0.7 },
     ],
   },
   {
@@ -465,15 +428,15 @@ export const COUNT_ICONS: CountIconDef[] = [
     ],
   },
   {
-    // Generator: standard IEC/ANSI symbol — circle with sine wave inside
+    // Generator: circle with bold "G" letterform inside
     id: "generator",
     label: "Generator",
     category: "Power / Distribution",
     paths: [
       // Outer circle
       { d: "M12 12 m-8 0 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0", strokeOnly: true, strokeWidth: 1.8 },
-      // Sine wave inside (one full cycle, centered vertically)
-      { d: "M5 12 Q6.5 8 8 12 Q9.5 16 11 12 Q12.5 8 14 12 Q15.5 16 17 12 Q18 9.5 19 12", strokeOnly: true, strokeWidth: 1.8 },
+      // "G": open arc (left side + top + bottom) — C-shape
+      { d: "M16 9 Q16 5 12 5 Q7 5 7 12 Q7 19 12 19 Q16 19 16 15 L12 15", strokeOnly: true, strokeWidth: 2 },
     ],
   },
   {
@@ -534,24 +497,33 @@ export const COUNT_ICONS: CountIconDef[] = [
 
   // ── Safety / Alarm ────────────────────────────────────────────────────────────
   {
+    // Smoke detector: outer circle + bold "S" letterform inside
     id: "smoke-detector",
     label: "Smoke Detector",
     category: "Safety / Alarm",
     paths: [
-      { d: "M12 12 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0", strokeOnly: true },
-      { d: "M12 12 m-2 0 a2 2 0 1 0 4 0 a2 2 0 1 0 -4 0", strokeOnly: false },
-      { d: "M8 8 Q12 5 16 8", strokeOnly: true, strokeWidth: 1 },
+      // Outer circle
+      { d: "M12 12 m-8 0 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0", strokeOnly: true, strokeWidth: 1.5 },
+      // "S": upper arc (left-opening)
+      { d: "M15 8.5 Q15 6 12 6 Q9 6 9 8.5 Q9 11 12 11.5", strokeOnly: true, strokeWidth: 2 },
+      // "S": lower arc (right-opening)
+      { d: "M9 15.5 Q9 18 12 18 Q15 18 15 15.5 Q15 13 12 12.5", strokeOnly: true, strokeWidth: 2 },
+      // "S": connecting bridge
+      { d: "M12 11.5 L12 12.5", strokeOnly: true, strokeWidth: 2 },
     ],
   },
   {
+    // CO detector: outer circle + "CO" letterforms inside
     id: "co-detector",
     label: "CO Detector",
     category: "Safety / Alarm",
     paths: [
-      { d: "M12 12 m-6 0 a6 6 0 1 0 12 0 a6 6 0 1 0 -12 0", strokeOnly: true },
-      { d: "M9 10 Q7 10 7 12 Q7 14 9 14 Q11 14 11 12 Q11 10 9 10", strokeOnly: true, strokeWidth: 1 },
-      { d: "M13 10 Q15 10 15 12 Q15 14 13 14 Q13 14 13 12 Q13 10 13 10", strokeOnly: true, strokeWidth: 1 },
-      { d: "M13 12 L15 12", strokeOnly: true, strokeWidth: 1 },
+      // Outer circle
+      { d: "M12 12 m-8 0 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0", strokeOnly: true, strokeWidth: 1.5 },
+      // "C": open arc (left side of circle)
+      { d: "M13.5 8 Q8 8 8 12 Q8 16 13.5 16", strokeOnly: true, strokeWidth: 1.8 },
+      // "O": small circle on right
+      { d: "M17 12 m-2.5 0 a2.5 2.5 0 1 0 5 0 a2.5 2.5 0 1 0 -5 0", strokeOnly: true, strokeWidth: 1.5 },
     ],
   },
   {
