@@ -296,6 +296,14 @@ interface AppContextValue {
   showMaterialList: boolean;
   setShowMaterialList: (v: boolean) => void;
 
+  // ── Material List labor + markup (persisted across sessions) ────────────────
+  laborHours: number;
+  setLaborHours: (v: number) => void;
+  laborRate: number;
+  setLaborRate: (v: number) => void;
+  markupPct: number;
+  setMarkupPct: (v: number) => void;
+
   // ── Legacy single-state accessors (used by ExportButton) ───────────────────
   // These are convenience aliases for activeCivilProject.state etc.
   // They exist so ExportButton can destructure a flat object without knowing
@@ -398,6 +406,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useLocalStorage<string>("bp_active_tab", "residential");
   const [uiFontScale, setUiFontScale] = useLocalStorage<number>("bp_ui_font_scale", 1.1);
   const [showMaterialList, setShowMaterialList] = useState(false);
+  const [laborHours, setLaborHours] = useLocalStorage<number>("bp_labor_hours", 0);
+  const [laborRate, setLaborRate] = useLocalStorage<number>("bp_labor_rate", 85);
+  const [markupPct, setMarkupPct] = useLocalStorage<number>("bp_markup_pct", 0);
 
   // ── Civil ─────────────────────────────────────────────────────────────────
   const [civilProjects, setCivilProjects] = useLocalStorage<CivilProject[]>(
@@ -548,6 +559,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Material List page toggle
         showMaterialList,
         setShowMaterialList,
+
+        // Labor + markup (persisted)
+        laborHours,
+        setLaborHours,
+        laborRate,
+        setLaborRate,
+        markupPct,
+        setMarkupPct,
 
         // Legacy single-state accessors for ExportButton
         civilState:      activeCivilProject.state,
