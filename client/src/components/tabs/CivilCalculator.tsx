@@ -439,8 +439,8 @@ function RunCard({
  * when the right panel is filtered to a single page — it intentionally shows
  * the whole-project picture, not just the current page.
  */
-function CrossPageTotals({ runs }: { runs: RunItem[] }) {
-  if (runs.length === 0) return null;
+function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countSessions?: CountSession[] }) {
+  if (runs.length === 0 && countSessions.filter(cs => cs.pins.length > 0).length === 0) return null;
 
   const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
 
@@ -608,6 +608,36 @@ function CrossPageTotals({ runs }: { runs: RunItem[] }) {
                     <span className="font-mono text-foreground">{pgFeet.toFixed(1)} ft</span>
                     <span className="font-mono text-muted-foreground">{pgSticks} sticks</span>
                     <span className="text-muted-foreground">{pgRuns.length} run{pgRuns.length !== 1 ? "s" : ""}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      {/* ── Count Sessions ── */}
+      {countSessions.filter((cs) => cs.pins.length > 0).length > 0 && (
+        <>
+          <SectionHeader icon={<span className="text-[10px]">⊕</span>} title="Count Sessions" />
+          <div className="space-y-1">
+            {countSessions.filter((cs) => cs.pins.length > 0).map((cs) => {
+              const icon = COUNT_ICONS.find((ic) => ic.id === cs.iconId) ?? COUNT_ICONS[0];
+              const extCost = cs.unitCost != null ? cs.unitCost * cs.pins.length : null;
+              return (
+                <div key={cs.id} className="flex items-center justify-between text-[11px] py-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" className="shrink-0">
+                      {icon.paths.map((seg, pi) => (
+                        <path key={pi} d={seg.d} fill={seg.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                      ))}
+                    </svg>
+                    <span className="font-mono text-foreground">{cs.name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-[#F5C518] font-bold">{cs.pins.length} EA</span>
+                    {extCost != null && (
+                      <span className="font-mono text-muted-foreground">${extCost.toFixed(2)}</span>
+                    )}
                   </div>
                 </div>
               );
@@ -978,7 +1008,7 @@ function CivilEditor({
                   ))}
 
                   {/* Cross-page totals summary (always shows all pages) */}
-                  <CrossPageTotals runs={runs} />
+                  <CrossPageTotals runs={runs} countSessions={countSessions} />
                 </>
               )}
 

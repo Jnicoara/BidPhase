@@ -19,7 +19,7 @@
  */
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useApp } from "@/contexts/AppContext";
-import type { RunItem } from "@/contexts/AppContext";
+import type { RunItem, CountSession } from "@/contexts/AppContext";
 import { toast } from "sonner";
 import { Download, FileText, FileSpreadsheet, ChevronUp, X, Printer } from "lucide-react";
 import { jsPDF } from "jspdf";
@@ -71,6 +71,8 @@ function buildPDF(
   commercialName: string,
   residentialName: string,
   jobInfo: JobInfo,
+  civilCountSessions: CountSession[] = [],
+  roomCountSessions: CountSession[] = [],
 ): jsPDF {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const PW = doc.internal.pageSize.getWidth();   // 612
@@ -314,13 +316,32 @@ function buildPDF(
       }
     }
 
-    totalsRow("TOTAL", [String(totalSticks), totalWire.toFixed(1)], [
+        totalsRow("TOTAL", [String(totalSticks), totalWire.toFixed(1)], [
       { width: 110 }, { width: 24 }, { width: 38 }, { width: 38 },
       { width: 56 }, { width: 44 }, { width: 56 },
     ]);
     y += 16;
+    // Civil count sessions appended after run totals
+    const civilActiveSessions = civilCountSessions.filter(cs => cs.pins.length > 0);
+    if (civilActiveSessions.length > 0) {
+      checkY(40);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...MID);
+      doc.text("Count Sessions:", ML + 4, y + 10);
+      y += 16;
+      const csCols = [
+        { label: "Session", width: CW - 120 },
+        { label: "Unit", width: 60 },
+        { label: "Qty", width: 60, align: "right" as const },
+      ];
+      tableHeader(csCols);
+      civilActiveSessions.forEach((cs, i) => {
+        tableRow(csCols, [cs.name, "EA", String(cs.pins.length)], i % 2 === 1);
+      });
+      y += 10;
+    }
   }
-
   // ── Section 2: Commercial Assembly ──────────────────────────────────────
   if (assemblyState.materials.length > 0) {
     checkY(60);
@@ -463,12 +484,32 @@ function buildPDF(
     ];
 
     tableHeader(resCols);
-    roomState.materials.forEach((m, i) => {
+        const resAllRows = [...roomState.materials];
+    resAllRows.forEach((m, i) => {
       tableRow(resCols, [m.description, m.unit, String(m.quantity)], i % 2 === 1);
+    });
+    // Count sessions appended as extra rows
+    roomCountSessions.filter(cs => cs.pins.length > 0).forEach((cs, i) => {
+      tableRow(resCols, [cs.name + " (Count)", "EA", String(cs.pins.length)], (resAllRows.length + i) % 2 === 1);
     });
     y += 10;
   }
-
+  // ── Civil count sessions (if any, even without runs) ─────────────────────
+  const activeCivilSessions = civilCountSessions.filter(cs => cs.pins.length > 0);
+  if (runs.length === 0 && activeCivilSessions.length > 0) {
+    checkY(60);
+    sectionHeader("Civil — Count Sessions", civilName);
+    const csCols = [
+      { label: "Session", width: CW - 120 },
+      { label: "Unit", width: 60 },
+      { label: "Qty", width: 60, align: "right" as const },
+    ];
+    tableHeader(csCols);
+    activeCivilSessions.forEach((cs, i) => {
+      tableRow(csCols, [cs.name, "EA", String(cs.pins.length)], i % 2 === 1);
+    });
+    y += 10;
+  }
   drawFooter();
   return doc;
 }
@@ -494,6 +535,8 @@ function exportCSV(
   civilName: string,
   commercialName: string,
   residentialName: string,
+  civilCountSessions: CountSession[] = [],
+  roomCountSessions: CountSession[] = [],
 ): void {
   const rows: string[][] = [];
 
@@ -584,6 +627,8 @@ function PrintPreviewModal({
   civilName,
   commercialName,
   residentialName,
+  civilCountSessions = [],
+  roomCountSessions = [],
   onClose,
 }: {
   runs: RunItem[];
@@ -592,6 +637,8 @@ function PrintPreviewModal({
   civilName: string;
   commercialName: string;
   residentialName: string;
+  civilCountSessions?: CountSession[];
+  roomCountSessions?: CountSession[];
   onClose: () => void;
 }) {
   const [jobInfo, setJobInfo] = useState<JobInfo>({
@@ -606,11 +653,11 @@ function PrintPreviewModal({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const regeneratePreview = useCallback(() => {
-    const doc = buildPDF(runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo);
+    const doc = buildPDF(runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo, civilCountSessions, roomCountSessions);
     // jsPDF can output the first page as a data URI for <img> preview
     const dataUri = doc.output("datauristring");
     setPreviewSrc(dataUri);
-  }, [runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo]);
+  }, [runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo, civilCountSessions, roomCountSessions]);
 
   // Initial render + debounced re-render on form change
   useEffect(() => {
@@ -627,7 +674,7 @@ function PrintPreviewModal({
   }, [onClose]);
 
   const handleDownload = () => {
-    const doc = buildPDF(runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo);
+    const doc = buildPDF(runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo, civilCountSessions, roomCountSessions);
     const jobSlug = jobInfo.jobName
       ? `_${jobInfo.jobName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "")}`
       : "";
@@ -787,7 +834,7 @@ export default function ExportButton() {
 
   const handleCSV = () => {
     setOpen(false);
-    exportCSV(runs, assemblyState, roomState, activeCivilProject.name, activeCommercialProject.name, activeResidentialProject.name);
+    exportCSV(runs, assemblyState, roomState, activeCivilProject.name, activeCommercialProject.name, activeResidentialProject.name, civilState.countSessions ?? [], roomState.countSessions ?? []);
   };
 
   const handlePDFClick = () => {
@@ -810,6 +857,8 @@ export default function ExportButton() {
           civilName={activeCivilProject.name}
           commercialName={activeCommercialProject.name}
           residentialName={activeResidentialProject.name}
+          civilCountSessions={civilState.countSessions ?? []}
+          roomCountSessions={roomState.countSessions ?? []}
           onClose={() => setShowPreview(false)}
         />
       )}

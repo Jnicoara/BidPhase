@@ -451,9 +451,41 @@ function ResidentialEditor({
                         </div>
                       </div>
                     ))}
+                    {/* Count session rows — auto-appended below baseline materials */}
+                    {countSessions.filter((cs) => cs.pins.length > 0).map((cs) => {
+                      const icon = COUNT_ICONS.find((ic) => ic.id === cs.iconId) ?? COUNT_ICONS[0];
+                      const extCost = cs.unitCost != null ? cs.unitCost * cs.pins.length : null;
+                      return (
+                        <div key={cs.id} className="flex items-center gap-3 px-4 py-2.5 bg-[#F5C518]/5 hover:bg-[#F5C518]/10 transition-colors">
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" className="shrink-0">
+                              {icon.paths.map((seg, pi) => (
+                                <path key={pi} d={seg.d} fill={seg.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                              ))}
+                            </svg>
+                            <div>
+                              <p className="text-xs text-foreground truncate">{cs.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono mt-0.5">Count Session · EA</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="w-18 h-8 flex items-center justify-end font-mono text-xs font-semibold text-foreground pr-1">{cs.pins.length}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono w-5">EA</span>
+                            {extCost != null && (
+                              <span className="text-[10px] font-mono text-[#F5C518] ml-1">${extCost.toFixed(2)}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="px-4 py-2.5 border-t border-border bg-secondary/20 flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground font-mono">{materials.length} line items</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {materials.length} line items
+                      {countSessions.filter(cs => cs.pins.length > 0).length > 0 && (
+                        <span className="text-[#F5C518]"> + {countSessions.filter(cs => cs.pins.length > 0).length} count session{countSessions.filter(cs => cs.pins.length > 0).length !== 1 ? 's' : ''}</span>
+                      )}
+                    </span>
                     <span className="text-[10px] text-[#F5C518] font-mono">Changes saved automatically</span>
                   </div>
                 </div>
