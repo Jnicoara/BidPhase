@@ -22,7 +22,7 @@ import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import { Building2, Clock, DollarSign, ChevronLeft, Plus, Trash2, Pencil, Check, X } from "lucide-react";
-import { COUNT_ICONS, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR } from "@/lib/CountIcons";
+import { COUNT_ICONS, ICON_CATEGORIES, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR } from "@/lib/CountIcons";
 import { toast } from "sonner";
 
 // ── Assembly data ─────────────────────────────────────────────────────────────
@@ -441,45 +441,17 @@ function CommercialEditor({
                         </div>
                       </div>
 
-                      {/* Icon selector */}
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium text-muted-foreground">Pin Icon</Label>
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {COUNT_ICONS.map((icon) => (
-                            <button
-                              key={icon.id}
-                              title={icon.label}
-                              onClick={() => {
-                                const updated = countSessions.map((cs) =>
-                                  cs.id === activeSession.id ? { ...cs, iconId: icon.id } : cs
-                                );
-                                setAssemblyState({ ...s, countSessions: updated, iconId: icon.id });
-                              }}
-                              className={cn(
-                                "flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all",
-                                activeSession.iconId === icon.id
-                                  ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground"
-                                  : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground"
-                              )}
-                            >
-                              <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
-                                {icon.paths.map((p, pi) => (
-                                  <path
-                                    key={pi}
-                                    d={p.d}
-                                    fill={p.strokeOnly ? "none" : (activeSession.iconId === icon.id ? activeSession.color : "currentColor")}
-                                    stroke={activeSession.iconId === icon.id ? activeSession.color : "currentColor"}
-                                    strokeWidth={p.strokeWidth ?? 1.5}
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                ))}
-                              </svg>
-                              <span className="leading-tight text-center">{icon.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                      {/* Icon selector — grouped by category */}
+                      <IconSelector
+                        activeIconId={activeSession.iconId}
+                        activeColor={activeSession.color}
+                        onSelect={(id) => {
+                          const updated = countSessions.map((cs) =>
+                            cs.id === activeSession.id ? { ...cs, iconId: id } : cs
+                          );
+                          setAssemblyState({ ...s, countSessions: updated, iconId: id });
+                        }}
+                      />
                     </div>
                   )}
                 </div>
@@ -604,6 +576,74 @@ function CommercialEditor({
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+    </div>
+  );
+}
+
+// ─── Grouped icon selector ──────────────────────────────────────────────────
+function IconSelector({
+  activeIconId,
+  activeColor,
+  onSelect,
+}: {
+  activeIconId: string;
+  activeColor: string;
+  onSelect: (id: string) => void;
+}) {
+  const [activeCategory, setActiveCategory] = useState<string>(ICON_CATEGORIES[0]);
+  const filtered = COUNT_ICONS.filter((ic) => ic.category === activeCategory);
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs font-medium text-muted-foreground">Pin Icon</Label>
+      {/* Category tabs */}
+      <div className="flex flex-wrap gap-1">
+        {ICON_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className={cn(
+              "px-2 py-0.5 rounded text-[9px] font-medium transition-colors",
+              activeCategory === cat
+                ? "bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/40"
+                : "bg-muted/10 text-muted-foreground border border-border hover:text-foreground"
+            )}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+      {/* Icons grid */}
+      <div className="grid grid-cols-4 gap-1.5">
+        {filtered.map((icon) => (
+          <button
+            key={icon.id}
+            title={icon.label}
+            onClick={() => onSelect(icon.id)}
+            className={cn(
+              "flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all",
+              activeIconId === icon.id
+                ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground"
+                : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground"
+            )}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+              {icon.paths.map((p, pi) => (
+                <path
+                  key={pi}
+                  d={p.d}
+                  fill={p.strokeOnly ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
+                  stroke={activeIconId === icon.id ? activeColor : "currentColor"}
+                  strokeWidth={p.strokeWidth ?? 1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              ))}
+            </svg>
+            <span className="leading-tight text-center">{icon.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -129,6 +129,10 @@ export interface CivilState {
    * correctly — CivilEditor defaults to [] when this is undefined.
    */
   runs?: RunItem[];
+  /** Named count sessions for Count Mode — project-scoped, cross-page */
+  countSessions?: CountSession[];
+  /** ID of the currently active count session */
+  activeCountSessionId?: string;
 }
 
 export interface CivilProject {
@@ -201,6 +205,10 @@ export interface RoomMaterialLine {
 export interface RoomState {
   roomId: string;
   materials: RoomMaterialLine[];
+  /** Named count sessions for Count Mode — project-scoped, cross-page */
+  countSessions?: CountSession[];
+  /** ID of the currently active count session */
+  activeCountSessionId?: string;
 }
 
 export interface ResidentialProject {
@@ -225,7 +233,7 @@ export function defaultCommercialProject(name = "Job 1"): CommercialProject {
     id: nanoid(8),
     name,
     createdAt: Date.now(),
-    state: { assemblyId: "receptacle-20a", quantity: 1, materials: [], totalLaborHours: 0, iconId: "outlet", pinColor: "#39FF14" },
+    state: { assemblyId: "receptacle-20a", quantity: 1, materials: [], totalLaborHours: 0, iconId: "outlet-duplex", pinColor: "#39FF14" },
   };
 }
 

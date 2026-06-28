@@ -28,7 +28,11 @@ import type {
   ConductorMaterial,
   ConductorSize,
   CivilConduitType as ConduitType,
+  CountPin,
+  CountSession,
 } from "@/contexts/AppContext";
+import { COUNT_ICONS, ICON_CATEGORIES, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR } from "@/lib/CountIcons";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -42,7 +46,7 @@ import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
   Plus, Minus, ChevronLeft,
-  Link2
+  Link2, Trash2, Pencil, Check, X,
 } from "lucide-react";
 
 // ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ─
@@ -102,7 +106,6 @@ function StrippedWireIcon({ size = 16, className = "" }: { size?: number; classN
     </svg>
   );
 }
-import { toast } from "sonner";
 
 // ─── Civil & Underground icon ────────────────────────────────────────────────
 // Exported so BidPhaseShell can import it directly instead of duplicating the
@@ -636,6 +639,82 @@ function CivilEditor({
   // Track which PDF page is currently active in PlanPanel
   const [activePage, setActivePage] = useState<number>(1);
 
+  // ── Count session state ─────────────────────────────────────────────────────
+  const countSessions: CountSession[] = s.countSessions ?? [];
+  const activeCountSessionId = s.activeCountSessionId;
+  const activeCountSession = countSessions.find((cs) => cs.id === activeCountSessionId) ?? null;
+
+  const [newSessionName, setNewSessionName] = useState("");
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+
+  const updateSessions = useCallback(
+    (sessions: CountSession[], activeId?: string) => {
+      setCivilState({
+        ...s,
+        runs,
+        countSessions: sessions,
+        activeCountSessionId: activeId !== undefined ? activeId : activeCountSessionId,
+      });
+    },
+    [s, runs, setCivilState, activeCountSessionId]
+  );
+
+  const handleAddCountSession = () => {
+    const name = newSessionName.trim() || `Count ${countSessions.length + 1}`;
+    const newSession: CountSession = {
+      id: `cs-${Date.now().toString(36)}`,
+      name,
+      iconId: DEFAULT_ICON_ID,
+      color: DEFAULT_PIN_COLOR,
+      pins: [],
+    };
+    updateSessions([...countSessions, newSession], newSession.id);
+    setNewSessionName("");
+    toast.success(`Session "${name}" created.`);
+  };
+
+  const handleDeleteCountSession = (id: string) => {
+    const updated = countSessions.filter((cs) => cs.id !== id);
+    const newActive = activeCountSessionId === id ? (updated[0]?.id ?? undefined) : activeCountSessionId;
+    updateSessions(updated, newActive);
+  };
+
+  const handleRenameCountSession = (id: string) => {
+    const name = editingName.trim();
+    if (!name) { setEditingSessionId(null); return; }
+    updateSessions(countSessions.map((cs) => cs.id === id ? { ...cs, name } : cs));
+    setEditingSessionId(null);
+  };
+
+  const handleCountPinAdded = useCallback((pin: CountPin) => {
+    if (!activeCountSessionId) return;
+    const updated = countSessions.map((cs) =>
+      cs.id === activeCountSessionId ? { ...cs, pins: [...cs.pins, pin] } : cs
+    );
+    setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
+  }, [activeCountSessionId, countSessions, s, runs, setCivilState]);
+
+  const handleCountPinRemoved = useCallback((pinId: string) => {
+    if (!activeCountSessionId) return;
+    const updated = countSessions.map((cs) =>
+      cs.id === activeCountSessionId
+        ? { ...cs, pins: cs.pins.filter((p) => p.id !== pinId) }
+        : cs
+    );
+    setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
+  }, [activeCountSessionId, countSessions, s, runs, setCivilState]);
+
+  const handleClearPageCountPins = useCallback((pageNumber: number) => {
+    if (!activeCountSessionId) return;
+    const updated = countSessions.map((cs) =>
+      cs.id === activeCountSessionId
+        ? { ...cs, pins: cs.pins.filter((p) => p.pageNumber !== pageNumber) }
+        : cs
+    );
+    setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
+  }, [activeCountSessionId, countSessions, s, runs, setCivilState]);
+
   // Runs visible in the right panel = only those belonging to the current page
   const pageRuns = runs.filter((r) => (r.pageNumber ?? 1) === activePage);
 
@@ -724,6 +803,11 @@ function CivilEditor({
             onPushDistance={(ft: number, runName: string, conduitSize?: string, pageNumber?: number) => handlePush(ft, runName, conduitSize, pageNumber)}
             onDeleteRun={(name, page) => handleDeleteRun(name, page)}
             onCurrentPageChange={(page) => setActivePage(page)}
+            activeCountSession={activeCountSession}
+            allCountSessions={countSessions}
+            onPinAdded={handleCountPinAdded}
+            onPinRemoved={handleCountPinRemoved}
+            onClearPagePins={handleClearPageCountPins}
           />
         </ResizablePanel>
 
@@ -753,7 +837,7 @@ function CivilEditor({
               </div>
             </div>
 
-            {/* Runs list */}
+            {/* Runs list + Count Sessions */}
             <div className="flex-1 overflow-auto p-4 pb-24 space-y-4">
               {pageRuns.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
@@ -784,10 +868,156 @@ function CivilEditor({
                   <CrossPageTotals runs={runs} />
                 </>
               )}
+
+              {/* ── Count Sessions ──────────────────────────────────────── */}
+              <div className="bp-card p-4 space-y-3">
+                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  Count Sessions
+                </h2>
+
+                {countSessions.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No sessions yet. Create one below to start counting.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {countSessions.map((cs) => {
+                      const icon = COUNT_ICONS.find((ic) => ic.id === cs.iconId) ?? COUNT_ICONS[0];
+                      const isActive = cs.id === activeCountSessionId;
+                      const isEditing = editingSessionId === cs.id;
+                      return (
+                        <div
+                          key={cs.id}
+                          onClick={() => !isEditing && updateSessions(countSessions, cs.id)}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-all",
+                            isActive ? "border-[#F5C518] bg-[#F5C518]/8" : "border-border bg-muted/5 hover:border-border/80"
+                          )}
+                        >
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                            {icon.paths.map((p, pi) => (
+                              <path key={pi} d={p.d} fill={p.strokeOnly ? "none" : cs.color} stroke={cs.color} strokeWidth={p.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                            ))}
+                          </svg>
+                          {isEditing ? (
+                            <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") handleRenameCountSession(cs.id); if (e.key === "Escape") setEditingSessionId(null); }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex-1 bg-transparent border-b border-[#F5C518] text-xs text-foreground outline-none font-mono" />
+                          ) : (
+                            <span className="flex-1 text-xs text-foreground font-medium truncate">{cs.name}</span>
+                          )}
+                          <span className="font-mono text-[10px] text-muted-foreground shrink-0">{cs.pins.length} pin{cs.pins.length !== 1 ? "s" : ""}</span>
+                          {isEditing ? (
+                            <>
+                              <button onClick={(e) => { e.stopPropagation(); handleRenameCountSession(cs.id); }} className="text-[#F5C518] hover:opacity-70"><Check size={12} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(null); }} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive"><Trash2 size={11} /></button>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* New session row */}
+                <div className="flex gap-2 pt-1">
+                  <input value={newSessionName} onChange={(e) => setNewSessionName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddCountSession()}
+                    placeholder="Session name (e.g. Handholes)"
+                    className="flex-1 bg-input border border-border rounded-md px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-[#F5C518]/60 transition-colors font-mono" />
+                  <button onClick={handleAddCountSession}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#F5C518]/15 text-[#F5C518] text-xs font-medium hover:bg-[#F5C518]/25 transition-colors shrink-0">
+                    <Plus size={12} /> New
+                  </button>
+                </div>
+
+                {/* Active session config */}
+                {activeCountSession && (
+                  <div className="pt-2 border-t border-border space-y-3">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Active: <span className="text-foreground">{activeCountSession.name}</span>
+                    </p>
+                    {/* Color picker */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-muted-foreground">Pin Color</Label>
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        {PIN_COLORS.map((c) => (
+                          <button key={c.hex} title={c.label}
+                            onClick={() => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: c.hex } : cs))}
+                            className={cn("w-6 h-6 rounded-full border-2 transition-all", activeCountSession.color === c.hex ? "border-white scale-110" : "border-transparent hover:border-white/50")}
+                            style={{ backgroundColor: c.hex }} />
+                        ))}
+                        <label className="relative w-6 h-6 rounded-full overflow-hidden border-2 border-dashed border-border hover:border-white/50 cursor-pointer" title="Custom color">
+                          <input type="color" value={activeCountSession.color}
+                            onChange={(e) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: e.target.value } : cs))}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                          <span className="flex items-center justify-center w-full h-full text-[8px] text-muted-foreground">+</span>
+                        </label>
+                        <span className="font-mono text-[10px] text-muted-foreground ml-1">{activeCountSession.color}</span>
+                      </div>
+                    </div>
+                    {/* Icon selector */}
+                    <CivilIconSelector
+                      activeIconId={activeCountSession.iconId}
+                      activeColor={activeCountSession.color}
+                      onSelect={(id) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, iconId: id } : cs))}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+    </div>
+  );
+}
+
+// ─── Grouped icon selector (reused from CommercialAssembly pattern) ─────────────────
+function CivilIconSelector({
+  activeIconId,
+  activeColor,
+  onSelect,
+}: {
+  activeIconId: string;
+  activeColor: string;
+  onSelect: (id: string) => void;
+}) {
+  const [activeCategory, setActiveCategory] = useState<string>(ICON_CATEGORIES[0]);
+  const filtered = COUNT_ICONS.filter((ic) => ic.category === activeCategory);
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs font-medium text-muted-foreground">Pin Icon</Label>
+      <div className="flex flex-wrap gap-1">
+        {ICON_CATEGORIES.map((cat) => (
+          <button key={cat} onClick={() => setActiveCategory(cat)}
+            className={cn("px-2 py-0.5 rounded text-[9px] font-medium transition-colors",
+              activeCategory === cat ? "bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/40" : "bg-muted/10 text-muted-foreground border border-border hover:text-foreground")}>
+            {cat}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {filtered.map((icon) => (
+          <button key={icon.id} title={icon.label} onClick={() => onSelect(icon.id)}
+            className={cn("flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all",
+              activeIconId === icon.id ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground" : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground")}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+              {icon.paths.map((p, pi) => (
+                <path key={pi} d={p.d}
+                  fill={p.strokeOnly ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
+                  stroke={activeIconId === icon.id ? activeColor : "currentColor"}
+                  strokeWidth={p.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+              ))}
+            </svg>
+            <span className="leading-tight text-center">{icon.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

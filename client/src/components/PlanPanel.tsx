@@ -761,14 +761,6 @@ export default function PlanPanel({
       const iconSize = Math.max(16, 24 * S);
       const svgScale = iconSize / 24; // SVG viewBox is 24×24
 
-      // Outer glow halo
-      ctx.beginPath();
-      ctx.arc(px.x, px.y, iconSize * 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = pin.color;
-      ctx.globalAlpha = 0.15;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
       // Translate + scale canvas so the 24×24 viewBox is centred on px
       ctx.save();
       ctx.translate(px.x - iconSize / 2, px.y - iconSize / 2);
