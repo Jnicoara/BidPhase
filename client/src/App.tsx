@@ -7,20 +7,22 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AppProvider } from "./contexts/AppContext";
 import BidPhaseShell from "./pages/BidPhaseShell";
 import { useTheme } from "./contexts/ThemeContext";
+import AuthGuard from "./components/AuthGuard";
 
 // Toaster that follows the active theme
 function ToasterWithTheme() {
   const { theme } = useTheme();
   return <Toaster theme={theme} />;
 }
-
 function Router() {
   return (
-    <Switch>
-      <Route path={"/"} component={BidPhaseShell} />
-      <Route path={"/404"} component={NotFound} />
-      <Route component={NotFound} />
-    </Switch>
+    <AuthGuard>
+      <Switch>
+        <Route path={"/"} component={BidPhaseShell} />
+        <Route path={"/404"} component={NotFound} />
+        <Route component={NotFound} />
+      </Switch>
+    </AuthGuard>
   );
 }
 

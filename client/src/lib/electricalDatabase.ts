@@ -1,20 +1,28 @@
 /**
  * BidPhase — Electrical Estimating Database
  *
- * Single source of truth for:
- *  - item_id:         unique identifier
- *  - description:     human-readable item name (used for fuzzy matching)
- *  - category:        phase/trade grouping
- *  - unit:            EA / FT / LF / BOX / etc.
- *  - base_labor_hours: NECA Column 1 standard hours per unit
- *  - mock_unit_price:  Contractor net price (mock — replace with Platt API)
+ * COPYRIGHT NOTICE:
+ *   All item descriptions use standard industry terminology (not copyrightable).
+ *   All base_labor_hours values are ORIGINAL ESTIMATES authored for this software.
+ *   They are NOT copied from NECA, RSMeans, Gordian, or any other publication.
+ *   Users may override these values with their own licensed data via the
+ *   Labor Standards connector in Settings.
+ *
+ * Fields:
+ *  - item_id:          unique identifier
+ *  - description:      human-readable item name (standard trade terminology)
+ *  - category:         phase/trade grouping
+ *  - unit:             EA / FT / LF / BOX / etc.
+ *  - base_labor_hours: original estimated hours per unit (not from any publication)
+ *  - mock_unit_price:  placeholder price (replace with live API or user upload)
  *  - platt_sku:        Platt SKU placeholder (populated when Platt API is live)
  *  - keywords:         additional search terms for fuzzy matching
  *
  * Category multipliers (applied in the Estimate Engine):
  *   Residential:        × 0.90
  *   Commercial:         × 1.05
- *   Infrastructure:× 1.30
+ *   Industrial:         × 1.20
+ *   Infrastructure:     × 1.30
  *
  * Platt API stub:
  *   When VITE_PLATT_API_KEY is set, fetchPlattPrice(platt_sku) replaces mock_unit_price.
@@ -38,7 +46,7 @@ export interface ElectricalItem {
   description: string;
   phase: ElectricalPhase;
   unit: string;
-  base_labor_hours: number;   // NECA Column 1
+  base_labor_hours: number;   // original estimate (hrs/unit)
   mock_unit_price: number;    // contractor net (mock)
   platt_sku?: string;
   keywords?: string[];
@@ -247,7 +255,7 @@ export interface AssemblyComponent {
   description: string;      // human-readable child item name
   unit: string;             // EA, FT, LF, etc.
   qty_per_unit: number;     // quantity of this component per 1 unit of the assembly
-  base_labor_hrs: number;   // NECA Column 1 for this component
+  base_labor_hrs: number;   // original estimate (hrs/unit)
   mock_unit_cost: number;   // contractor net price (mock)
 }
 

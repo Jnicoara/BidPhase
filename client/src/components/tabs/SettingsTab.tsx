@@ -7,7 +7,9 @@ import { useApp } from "@/contexts/AppContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { cn } from "@/lib/utils";
-import { Sun, Moon, Upload, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Sun, Moon, Upload, Trash2, CheckCircle2, AlertCircle, LogOut, User } from "lucide-react";
+import DataConnectorsPanel from "@/components/DataConnectorsPanel";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 
 // ── Material DB types ──────────────────────────────────────────────────────────
@@ -157,6 +159,32 @@ function MaterialDbSection() {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+// ── AccountSection ────────────────────────────────────────────────────────────
+function AccountSection() {
+  const { user, logout } = useAuth();
+  return (
+    <section className="space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-foreground mb-0.5">Account</h3>
+        <p className="text-xs text-muted-foreground">Signed in as <span className="text-foreground font-medium">{user?.email ?? user?.name ?? "Unknown"}</span></p>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/30 border border-border/40">
+          <User size={14} className="text-muted-foreground" />
+          <span className="text-sm text-foreground">{user?.name ?? "User"}</span>
+        </div>
+        <button
+          onClick={logout}
+          className="flex items-center gap-2 px-3 py-2 rounded-md border border-border/40 text-sm text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors"
+        >
+          <LogOut size={14} />
+          Sign Out
+        </button>
+      </div>
     </section>
   );
 }
@@ -343,9 +371,14 @@ export default function SettingsTab({ onBack }: { onBack?: () => void }) {
         </div>
       </section>
 
-      {/* ── Material Database (CSV Importer) ─────────────────────────────── */}
+      {/* ── Material Database (CSV Importer) — legacy local storage ─── */}
       <MaterialDbSection />
 
+      {/* ── Data Connectors (server-side, per-user) ─────────────────── */}
+      <DataConnectorsPanel />
+
+      {/* ── Account ──────────────────────────────────────────────── */}
+      <AccountSection />
 
       {/* ── Future settings placeholder ───────────────────────────── */}
       <section className="space-y-3 opacity-40 pointer-events-none select-none">
