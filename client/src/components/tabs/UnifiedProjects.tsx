@@ -103,7 +103,7 @@ function StrippedWireIcon({ size = 16, className = "" }: { size?: number; classN
   );
 }
 
-// ─── Civil & Underground icon ────────────────────────────────────────────────
+// ─── Infrastructure icon ────────────────────────────────────────────────
 // Exported so BidPhaseShell can import it directly instead of duplicating the
 // SVG definition. Both the sidebar nav and the editor header use this icon.
 export function CivilIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
@@ -748,8 +748,8 @@ function CivilEditor({
     activeResidentialCatProject,
     setResidentialCatState,
   } = useApp();
-  const activeCivilProject = categoryLabel === "Civil & Underground" ? activeCivilCatProject : categoryLabel === "Commercial Assembly" ? activeCommercialCatProject : activeResidentialCatProject;
-  const setCivilState = categoryLabel === "Civil & Underground" ? setCivilCatState : categoryLabel === "Commercial Assembly" ? setCommercialCatState : setResidentialCatState;
+  const activeCivilProject = categoryLabel === "Infrastructure" ? activeCivilCatProject : categoryLabel === "Commercial Assembly" ? activeCommercialCatProject : activeResidentialCatProject;
+  const setCivilState = categoryLabel === "Infrastructure" ? setCivilCatState : categoryLabel === "Commercial Assembly" ? setCommercialCatState : setResidentialCatState;
   const s = activeCivilProject.state;
 
   // Per-run items — stored in component state (persisted via AppContext civilState.runs)
@@ -1027,7 +1027,26 @@ function CivilEditor({
                   </h2>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={(e) => { e.stopPropagation(); setCountModeRequest((v) => v + 1); setCountSessionsOpen(true); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // If no sessions exist, auto-create a default one so counting works immediately
+                        if (countSessions.length === 0) {
+                          const defaultSession: CountSession = {
+                            id: `cs-${Date.now().toString(36)}`,
+                            name: "Count 1",
+                            iconId: DEFAULT_ICON_ID,
+                            color: DEFAULT_PIN_COLOR,
+                            pins: [],
+                          };
+                          updateSessions([defaultSession], defaultSession.id);
+                          toast.success('Session "Count 1" created — click to place pins.');
+                        } else if (!activeCountSessionId && countSessions.length > 0) {
+                          // Sessions exist but none is active — activate the first one
+                          updateSessions(countSessions, countSessions[0].id);
+                        }
+                        setCountModeRequest((v) => v + 1);
+                        setCountSessionsOpen(true);
+                      }}
                       className="text-[10px] px-2 py-0.5 rounded bg-[#F5C518]/20 text-[#F5C518] hover:bg-[#F5C518]/30 border border-[#F5C518]/30 transition-colors font-mono"
                       title="Activate count mode on the plan"
                     >
@@ -1097,10 +1116,10 @@ function CivilEditor({
                           ) : (
                             <>
                               <button
-                                title="Save this count as a line item in Labor & Material"
+                                title="Save to Labor & Material"
                                 onClick={(e) => { e.stopPropagation(); handleSaveCountToLM(cs); }}
-                                className="text-muted-foreground hover:text-[#F5C518] transition-colors"
-                              ><Save size={11} /></button>
+                                className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#F5C518] text-black text-[10px] font-bold hover:bg-[#F5C518]/80 active:scale-95 transition-all shrink-0"
+                              ><Save size={10} /><span>Save to L&amp;M</span></button>
                               <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
                               <button onClick={(e) => { e.stopPropagation(); handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive"><Trash2 size={11} /></button>
                             </>
@@ -1283,7 +1302,7 @@ function CivilShapeSelector({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const CATEGORY_LABELS: Record<string, string> = {
-  civil: "Civil & Underground",
+  civil: "Infrastructure",
   commercial: "Commercial Assembly",
   residential: "Residential Rough-In",
   industrial: "Industrial",

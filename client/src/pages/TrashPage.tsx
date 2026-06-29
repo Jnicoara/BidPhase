@@ -10,7 +10,7 @@ import { useState } from "react";
 const MS_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
 const CATEGORY_LABELS: Record<string, string> = {
-  civil: "Civil & Underground",
+  civil: "Infrastructure",
   commercial: "Commercial",
   residential: "Residential",
   industrial: "Industrial",

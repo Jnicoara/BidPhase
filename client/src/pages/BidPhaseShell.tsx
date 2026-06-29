@@ -8,7 +8,7 @@
  *   /           → landing page
  *   /residential→ Residential projects
  *   /commercial → Commercial projects
- *   /civil      → Civil & Underground projects
+ *   /civil      → Infrastructure projects
  *   /material   → Labor & Material page (navigable, back/forward works)
  *   /estimate   → Estimate Engine
  *   /settings   → Settings
@@ -68,12 +68,12 @@ const CATEGORY_ICONS = {
 const CATEGORY_LABELS = {
   residential: "Residential",
   commercial:  "Commercial",
-  civil:       "Civil & Underground",
+  civil:       "Infrastructure",
   industrial:  "Industrial",
 } as const;
 
-// Ordered: Residential first, Commercial, Civil, Industrial
-const CATEGORY_ORDER = ["residential", "commercial", "civil", "industrial"] as const;
+// Ordered: Residential, Commercial, Industrial, Infrastructure (civil last)
+const CATEGORY_ORDER = ["residential", "commercial", "industrial", "civil"] as const;
 
 export default function BidPhaseShell() {
   const {
@@ -85,17 +85,30 @@ export default function BidPhaseShell() {
 
   // ── URL-based routing using pushState ──────────────────────────────────────
   const [route, setRoute] = useState<Route>(() => getCurrentRoute());
+  const [previousRoute, setPreviousRoute] = useState<Route>("landing");
 
   const navigate = useCallback((r: Route) => {
-    const path = routeToPath(r);
     // Use hash routing for compatibility with static hosting
     window.location.hash = r === "landing" ? "/" : `/${r}`;
   }, []);
 
+  // Go back using browser history (works with browser back button too)
+  const goBack = useCallback(() => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      navigate(previousRoute);
+    }
+  }, [navigate, previousRoute]);
+
   useEffect(() => {
     const onHashChange = () => {
       const r = getCurrentRoute();
-      setRoute(r);
+      setRoute((prev) => {
+        // Track previous route before updating
+        setPreviousRoute(prev);
+        return r;
+      });
       // Sync AppContext state
       if (r === "civil" || r === "commercial" || r === "residential" || r === "industrial") {
         setActiveCategory(r);
@@ -151,9 +164,9 @@ export default function BidPhaseShell() {
         navigate(cat);
       }} />
     );
-    if (isInTrash)     return <TrashPage onBack={() => navigate("landing")} />;
-    if (isInSettings)  return <SettingsTab />;
-    if (isInEstimate)  return <EstimateEnginePage onBack={() => navigate("landing")} />;
+    if (isInTrash)     return <TrashPage onBack={goBack} />;
+    if (isInSettings)  return <SettingsTab onBack={goBack} />;
+    if (isInEstimate)  return <EstimateEnginePage onBack={goBack} />;
     // In a category
     return <UnifiedProjects category={currentCategory} />;
   };
@@ -218,7 +231,7 @@ export default function BidPhaseShell() {
 
         {/* Nav items — top section */}
         <nav className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
-          {/* Categories: Residential → Commercial → Civil */}
+          {/* Categories: Residential → Commercial → Industrial → Infrastructure */}
           {CATEGORY_ORDER.map((cat) => {
             const Icon = CATEGORY_ICONS[cat];
             return (

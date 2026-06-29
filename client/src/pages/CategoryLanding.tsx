@@ -5,7 +5,7 @@
  * - Text-only logo (no B icon)
  * - No icons on category cards — clean text-only cards
  * - No descriptions under card names
- * - Shortened names: "Civil & Underground", "Commercial", "Residential"
+ * - Shortened names: "Infrastructure", "Commercial", "Residential"
  * - Expanded layout to fill the screen
  */
 import { useApp } from "@/contexts/AppContext";
@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 const CATEGORIES = [
   { id: "residential" as const, label: "Residential" },
   { id: "commercial" as const, label: "Commercial" },
-  { id: "civil" as const, label: "Civil & Underground" },
   { id: "industrial" as const, label: "Industrial" },
+  { id: "civil" as const, label: "Infrastructure" },
 ] as const;
 
 // ─── Component ────────────────────────────────────────────────────────────────

@@ -145,24 +145,26 @@ export default function CatalogPicker({
         )}
       </div>
 
-      {/* Category chips (only shown when no query) */}
+      {/* Category chips (only shown when no query) — 2-column stacked grid */}
       {!query && (
-        <div className="flex gap-1.5 px-3 py-2 border-b border-border/50 overflow-x-auto shrink-0 scrollbar-none">
-          <button
-            onClick={() => setActiveCategory(null)}
-            className={cn("shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors border",
-              !activeCategory ? "bg-[#F5C518] text-black border-[#F5C518]" : "bg-transparent text-muted-foreground border-border hover:border-[#F5C518]/40"
-            )}
-          >All</button>
-          {CATALOG_CATEGORIES.map((cat) => (
+        <div className="px-3 py-2 border-b border-border/50 shrink-0">
+          <div className="grid grid-cols-2 gap-1">
             <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={cn("shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors border whitespace-nowrap",
-                activeCategory === cat ? "bg-[#F5C518] text-black border-[#F5C518]" : "bg-transparent text-muted-foreground border-border hover:border-[#F5C518]/40"
+              onClick={() => setActiveCategory(null)}
+              className={cn("px-2 py-1 rounded text-[10px] font-medium transition-colors border text-center",
+                !activeCategory ? "bg-[#F5C518] text-black border-[#F5C518]" : "bg-transparent text-muted-foreground border-border hover:border-[#F5C518]/40"
               )}
-            >{cat}</button>
-          ))}
+            >All</button>
+            {CATALOG_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={cn("px-2 py-1 rounded text-[10px] font-medium transition-colors border text-center leading-tight",
+                  activeCategory === cat ? "bg-[#F5C518] text-black border-[#F5C518]" : "bg-transparent text-muted-foreground border-border hover:border-[#F5C518]/40"
+                )}
+              >{cat}</button>
+            ))}
+          </div>
         </div>
       )}
 

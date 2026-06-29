@@ -1,5 +1,5 @@
 /**
- * BidPhase — Civil & Underground Conduit Calculator
+ * BidPhase — Infrastructure Conduit Calculator
  * Design: Tactical Dark Mode SaaS · Space Grotesk headers · JetBrains Mono outputs
  *
  * Features:
@@ -107,7 +107,7 @@ function StrippedWireIcon({ size = 16, className = "" }: { size?: number; classN
   );
 }
 
-// ─── Civil & Underground icon ────────────────────────────────────────────────
+// ─── Infrastructure icon ────────────────────────────────────────────────
 // Exported so BidPhaseShell can import it directly instead of duplicating the
 // SVG definition. Both the sidebar nav and the editor header use this icon.
 export function CivilIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
@@ -879,7 +879,7 @@ function CivilEditor({
                     className="text-base font-bold text-foreground"
                     style={{ fontFamily: "'Space Grotesk', sans-serif" }}
                   >
-                    Civil & Underground
+                    Infrastructure
                   </h1>
                   <p className="text-xs text-muted-foreground">{projectName}</p>
                 </div>

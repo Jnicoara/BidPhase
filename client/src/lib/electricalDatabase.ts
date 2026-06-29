@@ -14,7 +14,7 @@
  * Category multipliers (applied in the Estimate Engine):
  *   Residential:        × 0.90
  *   Commercial:         × 1.05
- *   Civil & Underground:× 1.30
+ *   Infrastructure:× 1.30
  *
  * Platt API stub:
  *   When VITE_PLATT_API_KEY is set, fetchPlattPrice(platt_sku) replaces mock_unit_price.
@@ -31,7 +31,7 @@ export type ElectricalPhase =
   | "Low Voltage"
   | "Grounding"
   | "Fittings & Hardware"
-  | "Civil & Underground";
+  | "Infrastructure";
 
 export interface ElectricalItem {
   item_id: string;
@@ -222,21 +222,21 @@ export const ELECTRICAL_DB: ElectricalItem[] = [
   { item_id: "FH-014", description: 'Electrical Tape (3M Super 33+)', phase: "Fittings & Hardware", unit: "ROLL", base_labor_hours: 0.02, mock_unit_price: 3.50, keywords: ["tape", "electrical tape", "3m", "vinyl"] },
   { item_id: "FH-015", description: 'Cable Tie / Zip Tie (100-pack, 8")', phase: "Fittings & Hardware", unit: "PKG", base_labor_hours: 0.10, mock_unit_price: 4.50, keywords: ["zip tie", "cable tie", "nylon tie"] },
 
-  // ── Civil & Underground ────────────────────────────────────────────────────
-  { item_id: "CU-001", description: '2" PVC Schedule 80 Conduit (Direct Burial)', phase: "Civil & Underground", unit: "FT", base_labor_hours: 0.060, mock_unit_price: 1.85, keywords: ["pvc", "schedule 80", "direct burial", "underground", "2 inch"] },
-  { item_id: "CU-002", description: '3" PVC Schedule 80 Conduit (Direct Burial)', phase: "Civil & Underground", unit: "FT", base_labor_hours: 0.080, mock_unit_price: 3.20, keywords: ["pvc", "schedule 80", "direct burial", "underground", "3 inch"] },
-  { item_id: "CU-003", description: '4" PVC Schedule 80 Conduit (Direct Burial)', phase: "Civil & Underground", unit: "FT", base_labor_hours: 0.100, mock_unit_price: 5.50, keywords: ["pvc", "schedule 80", "direct burial", "underground", "4 inch"] },
-  { item_id: "CU-004", description: '6" PVC Schedule 80 Conduit (Direct Burial)', phase: "Civil & Underground", unit: "FT", base_labor_hours: 0.140, mock_unit_price: 11.00, keywords: ["pvc", "schedule 80", "direct burial", "underground", "6 inch"] },
-  { item_id: "CU-005", description: 'Precast Concrete Handhole (17"x30")', phase: "Civil & Underground", unit: "EA", base_labor_hours: 4.00, mock_unit_price: 320.00, keywords: ["handhole", "pull box", "precast", "concrete", "underground"] },
-  { item_id: "CU-006", description: 'Precast Concrete Manhole (36"x48")', phase: "Civil & Underground", unit: "EA", base_labor_hours: 12.00, mock_unit_price: 1200.00, keywords: ["manhole", "precast", "concrete", "underground"] },
-  { item_id: "CU-007", description: 'Duct Seal Compound (1 lb)', phase: "Civil & Underground", unit: "EA", base_labor_hours: 0.20, mock_unit_price: 4.50, keywords: ["duct seal", "sealant", "underground"] },
-  { item_id: "CU-008", description: 'Underground Warning Tape (Red, 1000ft)', phase: "Civil & Underground", unit: "ROLL", base_labor_hours: 0.50, mock_unit_price: 22.00, keywords: ["warning tape", "caution tape", "underground", "red"] },
-  { item_id: "CU-009", description: 'Conduit Spacer / Separator (4-way)', phase: "Civil & Underground", unit: "EA", base_labor_hours: 0.10, mock_unit_price: 1.80, keywords: ["spacer", "separator", "conduit", "underground"] },
-  { item_id: "CU-010", description: 'Concrete Encasement (per CY)', phase: "Civil & Underground", unit: "CY", base_labor_hours: 2.00, mock_unit_price: 180.00, keywords: ["concrete", "encasement", "underground", "duct bank"] },
-  { item_id: "CU-011", description: 'Transformer Pad (Precast, 4\'x4\')', phase: "Civil & Underground", unit: "EA", base_labor_hours: 3.00, mock_unit_price: 450.00, keywords: ["transformer pad", "precast", "concrete pad"] },
-  { item_id: "CU-012", description: 'Utility Pole (35ft, Class 4)', phase: "Civil & Underground", unit: "EA", base_labor_hours: 8.00, mock_unit_price: 380.00, keywords: ["pole", "utility pole", "wood pole", "35 foot"] },
-  { item_id: "CU-013", description: 'Ground Rod (5/8" x 10ft, Copper-Clad)', phase: "Civil & Underground", unit: "EA", base_labor_hours: 1.00, mock_unit_price: 28.00, keywords: ["ground rod", "copper clad", "10 foot", "underground"] },
-  { item_id: "CU-014", description: 'Pulling Lubricant (1 gallon)', phase: "Civil & Underground", unit: "EA", base_labor_hours: 0.10, mock_unit_price: 18.00, keywords: ["pulling lube", "lubricant", "wire pulling", "conduit"] },
+  // ── Infrastructure ────────────────────────────────────────────────────
+  { item_id: "CU-001", description: '2" PVC Schedule 80 Conduit (Direct Burial)', phase: "Infrastructure", unit: "FT", base_labor_hours: 0.060, mock_unit_price: 1.85, keywords: ["pvc", "schedule 80", "direct burial", "underground", "2 inch"] },
+  { item_id: "CU-002", description: '3" PVC Schedule 80 Conduit (Direct Burial)', phase: "Infrastructure", unit: "FT", base_labor_hours: 0.080, mock_unit_price: 3.20, keywords: ["pvc", "schedule 80", "direct burial", "underground", "3 inch"] },
+  { item_id: "CU-003", description: '4" PVC Schedule 80 Conduit (Direct Burial)', phase: "Infrastructure", unit: "FT", base_labor_hours: 0.100, mock_unit_price: 5.50, keywords: ["pvc", "schedule 80", "direct burial", "underground", "4 inch"] },
+  { item_id: "CU-004", description: '6" PVC Schedule 80 Conduit (Direct Burial)', phase: "Infrastructure", unit: "FT", base_labor_hours: 0.140, mock_unit_price: 11.00, keywords: ["pvc", "schedule 80", "direct burial", "underground", "6 inch"] },
+  { item_id: "CU-005", description: 'Precast Concrete Handhole (17"x30")', phase: "Infrastructure", unit: "EA", base_labor_hours: 4.00, mock_unit_price: 320.00, keywords: ["handhole", "pull box", "precast", "concrete", "underground"] },
+  { item_id: "CU-006", description: 'Precast Concrete Manhole (36"x48")', phase: "Infrastructure", unit: "EA", base_labor_hours: 12.00, mock_unit_price: 1200.00, keywords: ["manhole", "precast", "concrete", "underground"] },
+  { item_id: "CU-007", description: 'Duct Seal Compound (1 lb)', phase: "Infrastructure", unit: "EA", base_labor_hours: 0.20, mock_unit_price: 4.50, keywords: ["duct seal", "sealant", "underground"] },
+  { item_id: "CU-008", description: 'Underground Warning Tape (Red, 1000ft)', phase: "Infrastructure", unit: "ROLL", base_labor_hours: 0.50, mock_unit_price: 22.00, keywords: ["warning tape", "caution tape", "underground", "red"] },
+  { item_id: "CU-009", description: 'Conduit Spacer / Separator (4-way)', phase: "Infrastructure", unit: "EA", base_labor_hours: 0.10, mock_unit_price: 1.80, keywords: ["spacer", "separator", "conduit", "underground"] },
+  { item_id: "CU-010", description: 'Concrete Encasement (per CY)', phase: "Infrastructure", unit: "CY", base_labor_hours: 2.00, mock_unit_price: 180.00, keywords: ["concrete", "encasement", "underground", "duct bank"] },
+  { item_id: "CU-011", description: 'Transformer Pad (Precast, 4\'x4\')', phase: "Infrastructure", unit: "EA", base_labor_hours: 3.00, mock_unit_price: 450.00, keywords: ["transformer pad", "precast", "concrete pad"] },
+  { item_id: "CU-012", description: 'Utility Pole (35ft, Class 4)', phase: "Infrastructure", unit: "EA", base_labor_hours: 8.00, mock_unit_price: 380.00, keywords: ["pole", "utility pole", "wood pole", "35 foot"] },
+  { item_id: "CU-013", description: 'Ground Rod (5/8" x 10ft, Copper-Clad)', phase: "Infrastructure", unit: "EA", base_labor_hours: 1.00, mock_unit_price: 28.00, keywords: ["ground rod", "copper clad", "10 foot", "underground"] },
+  { item_id: "CU-014", description: 'Pulling Lubricant (1 gallon)', phase: "Infrastructure", unit: "EA", base_labor_hours: 0.10, mock_unit_price: 18.00, keywords: ["pulling lube", "lubricant", "wire pulling", "conduit"] },
 ];
 
 // ─── Lookup helpers ────────────────────────────────────────────────────────────
@@ -291,14 +291,14 @@ export const DB_PHASES: ElectricalPhase[] = [
   "Low Voltage",
   "Grounding",
   "Fittings & Hardware",
-  "Civil & Underground",
+  "Infrastructure",
 ];
 
 // ─── Category multipliers ──────────────────────────────────────────────────────
 export const CATEGORY_MULTIPLIERS: Record<string, number> = {
   "Residential": 0.90,
   "Commercial": 1.05,
-  "Civil & Underground": 1.30,
+  "Infrastructure": 1.30,
 };
 
 // ─── Platt API stub ────────────────────────────────────────────────────────────

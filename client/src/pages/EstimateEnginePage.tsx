@@ -45,7 +45,7 @@ interface EstimateRow {
       dbItem?: ElectricalItem | null;
 }
 
-type ProjectCategory = "Residential" | "Commercial" | "Civil & Underground";
+type ProjectCategory = "Residential" | "Commercial" | "Infrastructure";
 type InputMode = "sessions" | "paste";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ const PHASE_COLORS: Record<string, string> = {
   "Low Voltage": "text-cyan-400",
   "Grounding": "text-lime-400",
   "Fittings & Hardware": "text-slate-400",
-  "Civil & Underground": "text-amber-500",
+  "Infrastructure": "text-amber-500",
   "Unmatched": "text-rose-400",
 };
 
@@ -275,7 +275,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
             <div className="bp-card p-4 space-y-2">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Project Category</label>
               <div className="space-y-1.5">
-                {(["Residential", "Commercial", "Civil & Underground"] as ProjectCategory[]).map((cat) => (
+                {(["Residential", "Commercial", "Infrastructure"] as ProjectCategory[]).map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setCategory(cat)}

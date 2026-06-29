@@ -258,9 +258,9 @@ function buildPDF(
     y += 16;
   }
 
-  // ── Section 1: Civil & Underground ──────────────────────────────────────
+  // ── Section 1: Infrastructure ──────────────────────────────────────
   if (runs.length > 0) {
-    sectionHeader("Civil & Underground", civilName);
+    sectionHeader("Infrastructure", civilName);
 
     const civilCols = [
       { label: "Run Name",       width: 110 },
@@ -545,7 +545,7 @@ function exportCSV(
   rows.push([]);
 
   if (runs.length > 0) {
-    rows.push([`SECTION: Civil & Underground — ${civilName}`, "", "", "", "", "", "", "", ""]);
+    rows.push([`SECTION: Infrastructure — ${civilName}`, "", "", "", "", "", "", "", ""]);
     rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft w/ 10% slack)", "Conductors", "Conductor Spec"]);
     for (const run of runs) {
       rows.push([

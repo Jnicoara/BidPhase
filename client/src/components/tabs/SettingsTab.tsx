@@ -161,7 +161,7 @@ function MaterialDbSection() {
   );
 }
 
-export default function SettingsTab() {
+export default function SettingsTab({ onBack }: { onBack?: () => void }) {
   const { uiFontScale, setUiFontScale } = useApp();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
@@ -169,6 +169,15 @@ export default function SettingsTab() {
   return (
     <div className="h-full overflow-y-auto p-6 space-y-8 max-w-lg mx-auto">
       <div>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-4 group"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:-translate-x-0.5 transition-transform"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+            Back
+          </button>
+        )}
         <h2
           className="text-lg font-bold text-foreground mb-1"
           style={{ fontFamily: "'Space Grotesk', sans-serif" }}
