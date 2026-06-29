@@ -310,6 +310,8 @@ interface PlanPanelProps {
   onClearPagePins?: (pageNumber: number) => void;
   /** Called when the Unit Count toolbar button is toggled — passes the new open state */
   onUnitCountToggle?: (open: boolean) => void;
+  /** Increment this to programmatically activate count mode from the right panel */
+  countModeRequest?: number;
 }
 
 export default function PlanPanel({
@@ -323,6 +325,7 @@ export default function PlanPanel({
   allCountSessions = [],
   onClearPagePins,
   onUnitCountToggle,
+  countModeRequest = 0,
 }: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
@@ -421,6 +424,15 @@ export default function PlanPanel({
   const [mode, setMode] = useState<Mode>("none");
   const modeRef = useRef(mode);
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  // Activate count mode when right panel Unit Count button is pressed
+  useEffect(() => {
+    if (countModeRequest > 0) {
+      setMode("count");
+      modeRef.current = "count";
+      onUnitCountToggle?.(true);
+      toast.info("Unit Count: click to place a pin · right-click to remove.");
+    }
+  }, [countModeRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
   const [hideUnselected, setHideUnselected] = useState(false);
   const [showPageOverview, setShowPageOverview] = useState(false);

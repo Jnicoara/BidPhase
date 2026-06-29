@@ -198,7 +198,10 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
     traineeRate, setTraineeRate,
   } = useApp();
 
-  const goBack = onBack ?? (() => setShowMaterialList(false));
+  const goBack = onBack ?? (() => {
+    // Navigate back via hash so browser back/forward history is preserved
+    window.history.back();
+  });
 
   // ── Build initial material rows from all three active projects ──────────────
   const buildRows = useCallback((): MaterialRow[] => {
@@ -378,7 +381,7 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-background overflow-hidden">
       {/* Header */}
       <header className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-border bg-card/80 backdrop-blur-sm">
         <button onClick={goBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -403,7 +406,7 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
 
         {/* Materials */}
-        <section className="bg-card border border-border rounded-xl overflow-hidden">
+        <section className="bg-card border border-border rounded-xl">
           <button onClick={() => setShowMaterials((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
             <div className="flex items-center gap-2">
               <Tag size={14} className="text-[#F5C518]" />
@@ -497,7 +500,7 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
         </section>
 
         {/* Journeyman Labor */}
-        <section className="bg-card border border-border rounded-xl overflow-hidden">
+        <section className="bg-card border border-border rounded-xl">
           <button onClick={() => setShowJourneyman((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
             <div className="flex items-center gap-2">
               <HardHat size={14} className="text-[#F5C518]" />
@@ -538,7 +541,7 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
         </section>
 
         {/* Trainee Labor */}
-        <section className="bg-card border border-border rounded-xl overflow-hidden">
+        <section className="bg-card border border-border rounded-xl">
           <button onClick={() => setShowTrainee((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
             <div className="flex items-center gap-2">
               <Wrench size={14} className="text-[#F5C518]" />
@@ -579,7 +582,7 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
         </section>
 
         {/* Totals */}
-        <section className="bg-card border border-border rounded-xl overflow-hidden">
+        <section className="bg-card border border-border rounded-xl">
           <div className="px-4 py-3 border-b border-border flex items-center gap-2">
             <DollarSign size={14} className="text-[#F5C518]" />
             <span className="text-sm font-semibold">Project Totals</span>

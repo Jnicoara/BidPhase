@@ -604,8 +604,8 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
         </div>
       )}
 
-      {/* ── Conduit ── */}
-      <SectionHeader icon={<span />} title="Conduit" />
+      {/* ── Labor & Material Summary ── */}
+      <SectionHeader icon={<span />} title="Labor & Material Summary" />
       <div className="space-y-1">
         {conduitRows.length === 0 ? (
           <p className="text-[10px] text-muted-foreground/50 italic font-mono">No runs yet — push measurements to populate</p>
@@ -750,6 +750,7 @@ function CivilEditor({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [countSessionsOpen, setCountSessionsOpen] = useState(true);
+  const [countModeRequest, setCountModeRequest] = useState(0);
 
   const updateSessions = useCallback(
     (sessions: CountSession[], activeId?: string) => {
@@ -963,6 +964,7 @@ function CivilEditor({
             onPinRemoved={handleCountPinRemoved}
             onClearPagePins={handleClearPageCountPins}
             onUnitCountToggle={(open) => setCountSessionsOpen(open)}
+            countModeRequest={countModeRequest}
           />
         </ResizablePanel>
 
@@ -1004,7 +1006,16 @@ function CivilEditor({
                       <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{countSessions.length} session{countSessions.length !== 1 ? 's' : ''} · {countSessions.reduce((a, cs) => a + cs.pins.length, 0)} pins</span>
                     )}
                   </h2>
-                  {countSessionsOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setCountModeRequest((v) => v + 1); setCountSessionsOpen(true); }}
+                      className="text-[10px] px-2 py-0.5 rounded bg-[#F5C518]/20 text-[#F5C518] hover:bg-[#F5C518]/30 border border-[#F5C518]/30 transition-colors font-mono"
+                      title="Activate count mode on the plan"
+                    >
+                      Start Counting
+                    </button>
+                    {countSessionsOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                  </div>
                 </button>
                 {countSessionsOpen && <div className="px-4 pb-4 space-y-3">
 

@@ -490,7 +490,21 @@ function makeProjectStore<TProject extends { id: string; name: string; state: TS
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useLocalStorage<string>("bp_active_tab", "residential");
   const [uiFontScale, setUiFontScale] = useLocalStorage<number>("bp_ui_font_scale", 1.0);
-  const [showMaterialList, setShowMaterialList] = useState(false);
+  const [showMaterialList, _setShowMaterialList] = useState(false);
+  // Intercept setShowMaterialList(true) to also push the #/material hash so
+  // BidPhaseShell's hashchange listener picks it up and the sidebar stays
+  // navigable + browser back/forward works correctly.
+  const setShowMaterialList = (v: boolean) => {
+    _setShowMaterialList(v);
+    if (v) {
+      window.location.hash = "/material";
+    } else {
+      // Only pop back if we are currently on the material hash
+      if (window.location.hash === "#/material") {
+        window.history.back();
+      }
+    }
+  };
   const [laborHours, setLaborHours] = useLocalStorage<number>("bp_labor_hours", 0);
   const [laborRate, setLaborRate] = useLocalStorage<number>("bp_labor_rate", 85);
   const [markupPct, setMarkupPct] = useLocalStorage<number>("bp_markup_pct", 0);

@@ -13,9 +13,9 @@ import { cn } from "@/lib/utils";
 
 // ─── Category definitions ─────────────────────────────────────────────────────
 const CATEGORIES = [
-  { id: "civil" as const, label: "Civil & Underground" },
-  { id: "commercial" as const, label: "Commercial" },
   { id: "residential" as const, label: "Residential" },
+  { id: "commercial" as const, label: "Commercial" },
+  { id: "civil" as const, label: "Civil & Underground" },
 ] as const;
 
 // ─── Component ────────────────────────────────────────────────────────────────
