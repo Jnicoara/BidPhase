@@ -67,3 +67,12 @@
 - [x] Labor/material tab: entire tab row is tappable (not just the text label)
 - [x] Empty state copy: update "No runs yet" message to mention materials broadly
 - [x] Right panel: auto-expand when a run is pushed so the new run is visible
+
+## v4.3 — Crosshair, Pin Shapes, App Audit
+
+- [ ] Remove floating crosshair from run/measure mode (revert to default cursor behavior)
+- [ ] Add XL size to all 4 pin shape families (dot, square, circle, triangle)
+- [ ] Standardize pin shape names and sizes across CountIcons.ts and canvas draw code
+- [ ] App audit: verify all toolbar buttons interact correctly with each other
+- [ ] App audit: verify all delete/trash tools work as expected
+- [ ] App audit: document any issues or suggestions found

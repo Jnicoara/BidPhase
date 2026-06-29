@@ -443,7 +443,6 @@ export default function PlanPanel({
       toast.info("Unit Count: click to place a pin · right-click to remove.");
     }
   }, [countModeRequest]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
   const [hideUnselected, setHideUnselected] = useState(false);
   const [showPageOverview, setShowPageOverview] = useState(false);
   // Saved/favorite custom colors (persisted in localStorage)
@@ -546,7 +545,6 @@ export default function PlanPanel({
   useEffect(() => {
     pageSizeRef.current = null;
     setPageReady(false);
-    setCrosshair(null);
     setMode("none");
     modeRef.current = "none";
   }, [currentPage, pdfFile]);
@@ -789,23 +787,27 @@ export default function PlanPanel({
       const color = pin.color;
 
       // Pin sizes are FIXED in canvas pixels regardless of zoom.
-      // S = RENDER_BASE_ZOOM / displayZoom, so dividing by S gives constant screen size.
-      // Dots
-      const R_XS = 3 * S;   // dot-xs
-      const R_SM = 5 * S;   // dot-sm
-      const R    = 8 * S;   // dot (default)
-      // Circles
-      const RC   = 10 * S;  // circle
-      const RL   = 14 * S;  // large-circle
-      const RXL  = 18 * S;  // xl-circle
-      // Squares (half-side)
-      const SQ   = 10 * S;  // square
-      const SQLG = 14 * S;  // square-lg
-      const SQXL = 18 * S;  // square-xl
-      // Triangles (half-base)
-      const TSM  = 9 * S;   // triangle-sm
-      const TM   = 13 * S;  // triangle
-      const TLG  = 17 * S;  // triangle-lg
+      // S = RENDER_BASE_ZOOM / displayZoom, so sizes stay constant on screen.
+      // ── Dots (solid filled) — SM / MD / LG / XL
+      const DOT_SM = 3 * S;
+      const DOT_MD = 5 * S;
+      const DOT_LG = 8 * S;
+      const DOT_XL = 11 * S;
+      // ── Circles (stroke-only rings) — SM / MD / LG / XL
+      const CIR_SM = 8 * S;
+      const CIR_MD = 11 * S;
+      const CIR_LG = 14 * S;
+      const CIR_XL = 18 * S;
+      // ── Squares (half-side) — SM / MD / LG / XL
+      const SQ_SM  = 7 * S;
+      const SQ_MD  = 10 * S;
+      const SQ_LG  = 14 * S;
+      const SQ_XL  = 18 * S;
+      // ── Triangles (half-base) — SM / MD / LG / XL
+      const TRI_SM = 7 * S;
+      const TRI_MD = 10 * S;
+      const TRI_LG = 14 * S;
+      const TRI_XL = 18 * S;
 
       ctx.save();
       ctx.strokeStyle = color;
@@ -829,33 +831,56 @@ export default function PlanPanel({
         ctx.stroke();
       };
 
-      if (shape === "dot-xs") {
-        ctx.beginPath(); ctx.arc(px.x, px.y, R_XS, 0, Math.PI * 2); ctx.fill();
-      } else if (shape === "dot-sm") {
-        ctx.beginPath(); ctx.arc(px.x, px.y, R_SM, 0, Math.PI * 2); ctx.fill();
-      } else if (shape === "dot") {
-        ctx.beginPath(); ctx.arc(px.x, px.y, R, 0, Math.PI * 2); ctx.fill();
-      } else if (shape === "circle") {
-        ctx.beginPath(); ctx.arc(px.x, px.y, RC, 0, Math.PI * 2); ctx.stroke();
-      } else if (shape === "large-circle") {
-        ctx.beginPath(); ctx.arc(px.x, px.y, RL, 0, Math.PI * 2); ctx.stroke();
-      } else if (shape === "xl-circle") {
-        ctx.beginPath(); ctx.arc(px.x, px.y, RXL, 0, Math.PI * 2); ctx.stroke();
-      } else if (shape === "square") {
-        ctx.strokeRect(px.x - SQ, px.y - SQ, SQ * 2, SQ * 2);
+      // ── Dots
+      if (shape === "dot-sm") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, DOT_SM, 0, Math.PI * 2); ctx.fill();
+      } else if (shape === "dot-md") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, DOT_MD, 0, Math.PI * 2); ctx.fill();
+      } else if (shape === "dot-lg") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, DOT_LG, 0, Math.PI * 2); ctx.fill();
+      } else if (shape === "dot-xl") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, DOT_XL, 0, Math.PI * 2); ctx.fill();
+      // ── Circles
+      } else if (shape === "circle-sm") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, CIR_SM, 0, Math.PI * 2); ctx.stroke();
+      } else if (shape === "circle-md") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, CIR_MD, 0, Math.PI * 2); ctx.stroke();
+      } else if (shape === "circle-lg") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, CIR_LG, 0, Math.PI * 2); ctx.stroke();
+      } else if (shape === "circle-xl") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, CIR_XL, 0, Math.PI * 2); ctx.stroke();
+      // ── Squares
+      } else if (shape === "square-sm") {
+        ctx.strokeRect(px.x - SQ_SM, px.y - SQ_SM, SQ_SM * 2, SQ_SM * 2);
+      } else if (shape === "square-md") {
+        ctx.strokeRect(px.x - SQ_MD, px.y - SQ_MD, SQ_MD * 2, SQ_MD * 2);
       } else if (shape === "square-lg") {
-        ctx.strokeRect(px.x - SQLG, px.y - SQLG, SQLG * 2, SQLG * 2);
+        ctx.strokeRect(px.x - SQ_LG, px.y - SQ_LG, SQ_LG * 2, SQ_LG * 2);
       } else if (shape === "square-xl") {
-        ctx.strokeRect(px.x - SQXL, px.y - SQXL, SQXL * 2, SQXL * 2);
+        ctx.strokeRect(px.x - SQ_XL, px.y - SQ_XL, SQ_XL * 2, SQ_XL * 2);
+      // ── Triangles
       } else if (shape === "triangle-sm") {
-        drawTriangle(TSM);
-      } else if (shape === "triangle") {
-        drawTriangle(TM);
+        drawTriangle(TRI_SM);
+      } else if (shape === "triangle-md") {
+        drawTriangle(TRI_MD);
       } else if (shape === "triangle-lg") {
-        drawTriangle(TLG);
+        drawTriangle(TRI_LG);
+      } else if (shape === "triangle-xl") {
+        drawTriangle(TRI_XL);
+      // ── Legacy IDs (backward compat for any saved sessions)
+      } else if (shape === "dot-xs" || shape === "dot") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, DOT_MD, 0, Math.PI * 2); ctx.fill();
+      } else if (shape === "circle" || shape === "large-circle") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, CIR_MD, 0, Math.PI * 2); ctx.stroke();
+      } else if (shape === "xl-circle") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, CIR_XL, 0, Math.PI * 2); ctx.stroke();
+      } else if (shape === "square") {
+        ctx.strokeRect(px.x - SQ_MD, px.y - SQ_MD, SQ_MD * 2, SQ_MD * 2);
+      } else if (shape === "triangle") {
+        drawTriangle(TRI_MD);
       } else {
-        // Fallback: filled dot
-        ctx.beginPath(); ctx.arc(px.x, px.y, R, 0, Math.PI * 2); ctx.fill();
+        // Fallback: filled dot MD
+        ctx.beginPath(); ctx.arc(px.x, px.y, DOT_MD, 0, Math.PI * 2); ctx.fill();
       }
 
       ctx.shadowColor = "transparent";
@@ -915,37 +940,7 @@ export default function PlanPanel({
       ctx.fillText(`S${i + 1}`, p.x + 8 * S, p.y - 6 * S);
     });
 
-    // ── Vibrant precision crosshair ──────────────────────────────────────────
-    if (crosshair && modeRef.current !== "none") {
-      const { x, y } = crosshair;
-      ctx.save();
-      ctx.setLineDash([]);
-      // Outer glow (constant screen size)
-      ctx.strokeStyle = "rgba(255,220,0,0.20)";
-      ctx.lineWidth = 8 * S;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      // Mid glow
-      ctx.strokeStyle = "rgba(255,230,0,0.50)";
-      ctx.lineWidth = 3 * S;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      // Crisp inner line
-      ctx.strokeStyle = "rgba(255,238,0,1)";
-      ctx.lineWidth = 1 * S;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      // Center dot
-      ctx.beginPath();
-      ctx.arc(x, y, 5 * S, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255,238,0,1)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.8)";
-      ctx.lineWidth = 1.5 * S;
-      ctx.stroke();
-      ctx.restore();
-    }
-  }, [currentRuns, currentActiveRunId, scalePoints, crosshair, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins]);
+  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins]);
 
   useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
 
@@ -1127,8 +1122,7 @@ export default function PlanPanel({
       if (e.key === "Escape") {
         setMode("none");
         modeRef.current = "none";
-        setCrosshair(null);
-      }
+          }
       if (e.key === "ArrowLeft" && numPages > 1) {
         e.preventDefault();
         setCurrentPage((p) => Math.max(1, p - 1));
@@ -1349,18 +1343,9 @@ export default function PlanPanel({
     }
   }, [normToCanvas, onPinRemoved]);
 
-  // ── Canvas mouse move (thin crosshair) ────────────────────────────────────
-  const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (modeRef.current === "none") { setCrosshair(null); return; }
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    // Use offsetX/Y (pre-transform canvas local coords) — correct even inside CSS-scaled container
-    const scaleX = canvas.width  / canvas.offsetWidth;
-    const scaleY = canvas.height / canvas.offsetHeight;
-    setCrosshair({
-      x: e.nativeEvent.offsetX * scaleX,
-      y: e.nativeEvent.offsetY * scaleY,
-    });
+  // ── Canvas mouse move (drag only) ────────────────────────────────────────
+  const handleCanvasMouseMove = useCallback((_e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Drag handled by handleCanvasDragMove — crosshair removed per user request
   }, []);
 
   // ── Confirm scale ──────────────────────────────────────────────────────────
@@ -1474,7 +1459,6 @@ export default function PlanPanel({
     onCurrentPageChange?.(clamped);
     setMode("none");
     modeRef.current = "none";
-    setCrosshair(null);
   }, [numPages, setCurrentPage, onCurrentPageChange]);
 
   // ── Compute run count per page for page selector badges ───────────────────
@@ -2100,7 +2084,7 @@ export default function PlanPanel({
                   onMouseMove={(e) => { handleCanvasMouseMove(e); handleCanvasDragMove(e); }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseUp={handleCanvasDragEnd}
-                  onMouseLeave={() => { setCrosshair(null); handleCanvasDragEnd(); }}
+                  onMouseLeave={() => { handleCanvasDragEnd(); }}
                 />
               )}
             </div>

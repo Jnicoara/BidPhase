@@ -24,7 +24,7 @@ import type {
   CountPin,
   CountSession,
 } from "@/contexts/AppContext";
-import { COUNT_ICONS, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR, type PinShape } from "@/lib/CountIcons";
+import { COUNT_ICONS, ICON_CATEGORIES, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR, type PinShape } from "@/lib/CountIcons";
 import { WIRE_TYPES, WIRE_CATEGORIES, type WireCategory } from "@/lib/wireTypes";
 import { toast } from "sonner";
 import CatalogPicker from "@/components/CatalogPicker";
@@ -1224,7 +1224,7 @@ function CivilEditor({
                                 className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#F5C518] text-black text-[10px] font-bold hover:bg-[#F5C518]/80 active:scale-95 transition-all shrink-0"
                               ><Save size={10} /><span>Save to L&amp;M</span></button>
                               <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive"><Trash2 size={11} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive"><Trash2 size={11} /></button>
                             </>
                           )}
                         </div>
@@ -1364,7 +1364,7 @@ function PinShapeSwatch({ shape, color, size = 16 }: { shape: PinShape; color: s
   );
 }
 
-// ─── Simple 4-shape picker ───────────────────────────────────────────────────
+// ─── Grouped 4×4 shape picker ────────────────────────────────────────────────
 function CivilShapeSelector({
   activeIconId,
   activeColor,
@@ -1377,23 +1377,33 @@ function CivilShapeSelector({
   return (
     <div className="space-y-2">
       <Label className="text-xs font-medium text-muted-foreground">Pin Shape</Label>
-      <div className="flex gap-2">
-        {COUNT_ICONS.map((icon) => (
-          <button key={icon.id} title={icon.label} onClick={() => onSelect(icon.id)}
-            className={cn("flex flex-col items-center gap-1 p-2 rounded-md border text-[9px] transition-all flex-1",
-              activeIconId === icon.id ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground" : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground")}>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
-              {icon.paths.map((seg, pi) => (
-                <path key={pi} d={seg.d}
-                  fill={seg.strokeOnly ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
-                  stroke={activeIconId === icon.id ? activeColor : "currentColor"}
-                  strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+      {ICON_CATEGORIES.map((cat) => {
+        const icons = COUNT_ICONS.filter((ic) => ic.category === cat);
+        return (
+          <div key={cat}>
+            <p className="text-[9px] text-muted-foreground/60 uppercase tracking-wide mb-1">{cat}</p>
+            <div className="grid grid-cols-4 gap-1">
+              {icons.map((icon) => (
+                <button key={icon.id} title={icon.label} onClick={() => onSelect(icon.id)}
+                  className={cn("flex flex-col items-center gap-0.5 p-1.5 rounded border text-[8px] transition-all",
+                    activeIconId === icon.id
+                      ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground"
+                      : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground")}>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    {icon.paths.map((seg, pi) => (
+                      <path key={pi} d={seg.d}
+                        fill={seg.strokeOnly ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
+                        stroke={activeIconId === icon.id ? activeColor : "currentColor"}
+                        strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                    ))}
+                  </svg>
+                  <span className="leading-tight text-center truncate w-full">{icon.label}</span>
+                </button>
               ))}
-            </svg>
-            <span className="leading-tight text-center">{icon.label}</span>
-          </button>
-        ))}
-      </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
