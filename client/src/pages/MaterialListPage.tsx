@@ -1,713 +1,432 @@
 /**
- * BidPhase — MaterialListPage
+ * BidPhase — Labor & Material Summary Page
  *
- * Full-screen editable material list view. Accessible via:
- *   - "Full View →" button on the right-panel material list header in any tab
- *   - Export → "View Material List" in the floating export button
- *
- * Features:
- *   - Notes column (free text per row)
- *   - Labor cost row (hours × hourly rate = labor total) — persisted in AppContext
- *   - Markup % field — persisted in AppContext
- *   - Sync edits back to AppContext (qty, unit cost for residential/commercial rows)
- *   - Add custom rows, remove rows with confirmation
- *   - Print button (window.print with print stylesheet)
- *   - Export as CSV or PDF
- *
- * Design: Tactical Dark Mode SaaS · Space Grotesk headers
+ * Full-screen view showing:
+ *  1. Material rows (from count sessions + runs + manual additions) with catalog picker
+ *  2. Journeyman labor lines (description + hours × rate)
+ *  3. Trainee labor lines (description + hours × rate)
+ *  4. Totals strip: material subtotal + labor subtotal + markup % = grand total
+ *  5. Export: CSV, PDF, Print
  */
-import { useState, useCallback } from "react";
-import { ArrowLeft, Plus, Trash2, FileText, FileSpreadsheet, Check, X, HardHat, Printer, Percent } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { nanoid } from "nanoid";
+import {
+  ArrowLeft, Plus, Trash2, Printer, Download, FileText,
+  ChevronDown, ChevronUp, Edit2, HardHat, Wrench,
+  Tag, DollarSign, Percent,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
-import { toast } from "sonner";
-import type { CountSession } from "@/contexts/AppContext";
+import type { LaborLine } from "@/contexts/AppContext";
+import CatalogPicker from "@/components/CatalogPicker";
+import type { CatalogItem } from "@/lib/materialCatalog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-export interface MaterialRow {
+interface MaterialRow {
   id: string;
-  section: string;   // "Civil" | "Commercial" | "Residential" | "Custom"
   description: string;
   unit: string;
-  quantity: number;
-  unitCost: number | null;
-  extCost: number | null;
+  qty: number;
+  unitCost: number;
   notes: string;
-  editable: boolean;
-  /** For syncing back to context: "residential-{index}" | "commercial-{index}" */
-  sourceKey?: string;
+  catalogId: string | null;
+  source: "session" | "manual" | "run";
 }
-
-let rowSeq = 0;
-function mkId() { return `mr-${++rowSeq}-${Date.now()}`; }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function calcExtCost(row: MaterialRow): number | null {
-  if (row.unitCost == null) return null;
-  return parseFloat((row.unitCost * row.quantity).toFixed(2));
+function fmt(n: number) {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function sessionExtCost(cs: CountSession): number | null {
-  if (cs.unitCost == null || cs.pins.length === 0) return null;
-  return parseFloat((cs.priceMode === "total" ? cs.unitCost : cs.unitCost * cs.pins.length).toFixed(2));
-}
-
-function sessionUnitCost(cs: CountSession): number | null {
-  if (cs.unitCost == null || cs.pins.length === 0) return null;
-  return cs.priceMode === "total"
-    ? parseFloat((cs.unitCost / cs.pins.length).toFixed(4))
-    : cs.unitCost;
-}
-
-// ─── CSV export ───────────────────────────────────────────────────────────────
-function buildCSV(rows: string[][]): string {
-  return rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
-}
-
-function exportCSVFromRows(
-  rows: MaterialRow[],
-  laborHours: number,
-  laborRate: number,
-  markupPct: number,
-  projectName: string
-) {
-  const header = ["Section", "Description", "Unit", "Qty", "Unit $", "Ext $", "Notes"];
-  const data = rows.map((r) => {
-    const ext = r.extCost ?? calcExtCost(r);
-    return [
-      r.section,
-      r.description,
-      r.unit,
-      String(r.quantity),
-      r.unitCost != null ? `$${r.unitCost.toFixed(2)}` : "—",
-      ext != null ? `$${ext.toFixed(2)}` : "—",
-      r.notes || "",
-    ];
-  });
-  const totalMat = rows.reduce((s, r) => s + (r.extCost ?? calcExtCost(r) ?? 0), 0);
-  const laborTotal = laborHours * laborRate;
-  const subtotal = totalMat + laborTotal;
-  const markupAmt = subtotal * (markupPct / 100);
-  const grandTotal = subtotal + markupAmt;
-
-  data.push(["", "TOTAL MATERIAL", "", "", "", `$${totalMat.toFixed(2)}`, ""]);
-  if (laborHours > 0) {
-    data.push(["Labor", `${laborHours} hrs @ $${laborRate}/hr`, "HR", String(laborHours), `$${laborRate.toFixed(2)}`, `$${laborTotal.toFixed(2)}`, ""]);
+function InlineEdit({
+  value, onSave, className, inputClassName, prefix,
+}: {
+  value: string; onSave: (v: string) => void;
+  className?: string; inputClassName?: string; prefix?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const commit = () => { onSave(draft); setEditing(false); };
+  if (!editing) {
+    return (
+      <span
+        className={cn("cursor-pointer hover:text-[#F5C518] transition-colors group flex items-center gap-1", className)}
+        onClick={() => { setDraft(value); setEditing(true); }}
+      >
+        {prefix}{value}
+        <Edit2 size={10} className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0" />
+      </span>
+    );
   }
-  if (markupPct > 0) {
-    data.push(["", `Markup (${markupPct}%)`, "", "", "", `$${markupAmt.toFixed(2)}`, ""]);
-  }
-  data.push(["", "GRAND TOTAL", "", "", "", `$${grandTotal.toFixed(2)}`, ""]);
-
-  const csv = buildCSV([
-    [`BidPhase — Material List${projectName ? ` — ${projectName}` : ""}`],
-    [`Generated: ${new Date().toLocaleString()}`],
-    [],
-    header,
-    ...data,
-  ]);
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `BidPhase_MaterialList_${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast.success("Material list exported as CSV.");
+  return (
+    <input
+      autoFocus
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); }}
+      className={cn("bg-transparent border-b border-[#F5C518] outline-none text-[#F5C518]", inputClassName)}
+    />
+  );
 }
 
-// ─── PDF export ───────────────────────────────────────────────────────────────
-async function exportPDFFromRows(
-  rows: MaterialRow[],
-  laborHours: number,
-  laborRate: number,
-  markupPct: number,
-  projectName: string
-) {
-  const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
-
-  const PW = 612, PH = 792;
-  const ML = 36, MR = 36, MT = 50;
-  const contentW = PW - ML - MR;
-  let y = MT;
-
-  // Header band
-  doc.setFillColor(20, 20, 20);
-  doc.rect(0, 0, PW, 80, "F");
-  doc.setTextColor(245, 197, 24);
-  doc.setFontSize(20);
-  doc.setFont("helvetica", "bold");
-  doc.text("BidPhase", ML, 32);
-  doc.setFontSize(11);
-  doc.setTextColor(200, 200, 200);
-  doc.text("Material List", ML, 50);
-  if (projectName) {
-    doc.setFontSize(9);
-    doc.setTextColor(150, 150, 150);
-    doc.text(projectName, ML, 65);
-  }
-  doc.setFontSize(8);
-  doc.setTextColor(120, 120, 120);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, PW - MR, 65, { align: "right" });
-
-  y = 100;
-
-  // Table columns
-  const cols = [
-    { label: "Description", x: ML,       w: 190 },
-    { label: "Unit",        x: ML + 190, w: 40  },
-    { label: "Qty",         x: ML + 230, w: 40  },
-    { label: "Unit $",      x: ML + 270, w: 60  },
-    { label: "Ext $",       x: ML + 330, w: 65  },
-    { label: "Notes",       x: ML + 395, w: contentW - 395 },
-  ];
-
-  doc.setFillColor(40, 40, 40);
-  doc.rect(ML, y - 12, contentW, 18, "F");
-  doc.setFontSize(7.5);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(200, 200, 200);
-  cols.forEach((c) => doc.text(c.label, c.x + 3, y));
-  y += 10;
-
-  let lastSection = "";
-  let totalMat = 0;
-
-  rows.forEach((row, i) => {
-    if (y > PH - 100) { doc.addPage(); y = MT; }
-
-    if (row.section !== lastSection) {
-      lastSection = row.section;
-      y += 4;
-      doc.setFillColor(30, 30, 30);
-      doc.rect(ML, y - 10, contentW, 14, "F");
-      doc.setFontSize(7);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(245, 197, 24);
-      doc.text(row.section.toUpperCase(), ML + 4, y);
-      y += 8;
-    }
-
-    const bg = i % 2 === 0 ? [22, 22, 22] : [26, 26, 26];
-    doc.setFillColor(bg[0], bg[1], bg[2]);
-    doc.rect(ML, y - 10, contentW, 14, "F");
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(220, 220, 220);
-    doc.text(row.description, cols[0].x + 3, y, { maxWidth: cols[0].w - 6 });
-    doc.setTextColor(160, 160, 160);
-    doc.text(row.unit, cols[1].x + 3, y);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(220, 220, 220);
-    doc.text(String(row.quantity), cols[2].x + cols[2].w - 3, y, { align: "right" });
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(160, 160, 160);
-    const uc = row.unitCost ?? null;
-    doc.text(uc != null ? `$${uc.toFixed(2)}` : "—", cols[3].x + cols[3].w - 3, y, { align: "right" });
-    const ext = row.extCost ?? calcExtCost(row);
-    if (ext != null) {
-      totalMat += ext;
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(245, 197, 24);
-      doc.text(`$${ext.toFixed(2)}`, cols[4].x + cols[4].w - 3, y, { align: "right" });
-    } else {
-      doc.setTextColor(100, 100, 100);
-      doc.text("—", cols[4].x + cols[4].w - 3, y, { align: "right" });
-    }
-    if (row.notes) {
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(140, 140, 140);
-      doc.text(row.notes, cols[5].x + 3, y, { maxWidth: cols[5].w - 6 });
-    }
-    y += 14;
-  });
-
-  // Totals
-  const laborTotal = laborHours * laborRate;
-  const subtotal = totalMat + laborTotal;
-  const markupAmt = subtotal * (markupPct / 100);
-  const grandTotal = subtotal + markupAmt;
-
-  const drawTotalRow = (label: string, value: string, highlight = false) => {
-    if (y > PH - 40) { doc.addPage(); y = MT; }
-    y += 2;
-    doc.setFillColor(highlight ? 50 : 40, highlight ? 40 : 40, highlight ? 10 : 40);
-    doc.rect(ML, y - 10, contentW, 18, "F");
-    doc.setFontSize(highlight ? 9 : 8);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(highlight ? 245 : 200, highlight ? 197 : 200, highlight ? 24 : 200);
-    doc.text(label, cols[0].x + 3, y);
-    doc.setTextColor(245, 197, 24);
-    doc.text(value, cols[4].x + cols[4].w - 3, y, { align: "right" });
-    y += 18;
-  };
-
-  drawTotalRow("TOTAL MATERIAL COST", `$${totalMat.toFixed(2)}`);
-  if (laborHours > 0) drawTotalRow(`LABOR — ${laborHours} hrs @ $${laborRate.toFixed(2)}/hr`, `$${laborTotal.toFixed(2)}`);
-  if (markupPct > 0) drawTotalRow(`MARKUP (${markupPct}%)`, `$${markupAmt.toFixed(2)}`);
-  if (laborHours > 0 || markupPct > 0) drawTotalRow("GRAND TOTAL", `$${grandTotal.toFixed(2)}`, true);
-
-  doc.save(`BidPhase_MaterialList_${new Date().toISOString().slice(0, 10)}.pdf`);
-  toast.success("Material list exported as PDF.");
-}
-
-// ─── Print stylesheet injection ───────────────────────────────────────────────
-function injectPrintStyle() {
-  const id = "bp-print-style";
-  if (document.getElementById(id)) return;
-  const style = document.createElement("style");
-  style.id = id;
-  style.textContent = `
-    @media print {
-      body > *:not(#bp-print-root) { display: none !important; }
-      #bp-print-root { display: block !important; position: static !important; height: auto !important; overflow: visible !important; }
-      #bp-print-root header { display: none !important; }
-      #bp-print-root .no-print { display: none !important; }
-      #bp-print-root table { font-size: 10pt; }
-      #bp-print-root tfoot { display: table-row-group; }
-      @page { margin: 1.5cm; }
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 interface MaterialListPageProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 export default function MaterialListPage({ onBack }: MaterialListPageProps) {
   const {
-    civilState,
-    assemblyState,
-    roomState,
-    activeCivilProject,
-    activeCommercialProject,
-    activeResidentialProject,
-    setRoomState,
-    setAssemblyState,
-    laborHours,
-    setLaborHours,
-    laborRate,
-    setLaborRate,
-    markupPct,
-    setMarkupPct,
+    setShowMaterialList,
+    activeCivilProject, activeCommercialProject, activeResidentialProject,
+    markupPct, setMarkupPct,
+    journeymanLines, setJourneymanLines,
+    traineeLines, setTraineeLines,
+    journeymanRate, setJourneymanRate,
+    traineeRate, setTraineeRate,
   } = useApp();
 
-  // ── Build initial rows from context ─────────────────────────────────────────
+  const goBack = onBack ?? (() => setShowMaterialList(false));
+
+  // ── Build initial material rows from all three active projects ──────────────
   const buildRows = useCallback((): MaterialRow[] => {
-    const result: MaterialRow[] = [];
+    const rows: MaterialRow[] = [];
 
-    // Civil: runs
-    const runs = civilState.runs ?? [];
-    runs.forEach((run) => {
-      result.push({
-        id: mkId(), section: "Civil",
-        description: `Run: ${run.name}`, unit: "FT",
-        quantity: run.feet ?? 0, unitCost: null, extCost: null, notes: "",
-        editable: false,
-      });
-    });
-    (civilState.countSessions ?? []).filter((cs) => cs.pins.length > 0).forEach((cs) => {
-      result.push({
-        id: mkId(), section: "Civil",
-        description: cs.name, unit: "EA",
-        quantity: cs.pins.length, unitCost: sessionUnitCost(cs), extCost: sessionExtCost(cs), notes: "",
-        editable: false, sourceKey: `count-civil-${cs.id}`,
-      });
-    });
-
-    // Commercial: BOM materials
-    assemblyState.materials.forEach((m, idx) => {
-      result.push({
-        id: mkId(), section: "Commercial",
-        description: m.description, unit: m.unit,
-        quantity: m.quantity, unitCost: m.unitCost,
-        extCost: parseFloat((m.unitCost * m.quantity).toFixed(2)), notes: "",
-        editable: true, sourceKey: `commercial-${idx}`,
-      });
-    });
-    (assemblyState.countSessions ?? []).filter((cs) => cs.pins.length > 0).forEach((cs) => {
-      result.push({
-        id: mkId(), section: "Commercial",
-        description: cs.name, unit: "EA",
-        quantity: cs.pins.length, unitCost: sessionUnitCost(cs), extCost: sessionExtCost(cs), notes: "",
-        editable: false, sourceKey: `count-commercial-${cs.id}`,
-      });
-    });
-
-    // Residential: room materials
-    roomState.materials.forEach((m, idx) => {
-      result.push({
-        id: mkId(), section: "Residential",
-        description: m.description, unit: m.unit,
-        quantity: m.quantity, unitCost: null, extCost: null, notes: "",
-        editable: true, sourceKey: `residential-${idx}`,
-      });
-    });
-    (roomState.countSessions ?? []).filter((cs) => cs.pins.length > 0).forEach((cs) => {
-      result.push({
-        id: mkId(), section: "Residential",
-        description: cs.name, unit: "EA",
-        quantity: cs.pins.length, unitCost: sessionUnitCost(cs), extCost: sessionExtCost(cs), notes: "",
-        editable: false, sourceKey: `count-residential-${cs.id}`,
-      });
-    });
-
-    return result;
-  }, [civilState, assemblyState, roomState]);
+    // Civil — count sessions
+    for (const s of activeCivilProject?.state?.countSessions ?? []) {
+      const qty = s.pins.length;
+      if (!qty && !s.unitCost) continue;
+      const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
+      rows.push({ id: `civil-s-${s.id}`, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
+    }
+    // Civil — runs
+    for (const r of activeCivilProject?.state?.runs ?? []) {
+      if (!r.feet) continue;
+      rows.push({ id: `civil-r-${r.id}`, description: `Run: ${r.name || "Unnamed"} (${r.conduitType ?? ""} ${r.conduitSize ?? ""})`.trim(), unit: "FT", qty: Math.round(r.feet), unitCost: 0, notes: r.conductors ? `${r.conductors} conductors` : "", catalogId: null, source: "run" });
+    }
+    // Commercial — count sessions
+    for (const s of activeCommercialProject?.state?.countSessions ?? []) {
+      const qty = s.pins.length;
+      if (!qty && !s.unitCost) continue;
+      const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
+      rows.push({ id: `comm-s-${s.id}`, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
+    }
+    // Commercial — assembly materials
+    for (const m of activeCommercialProject?.state?.materials ?? []) {
+      rows.push({ id: `comm-m-${nanoid(6)}`, description: m.description, unit: m.unit, qty: m.quantity, unitCost: m.unitCost, notes: "", catalogId: null, source: "manual" });
+    }
+    // Residential — count sessions
+    for (const s of activeResidentialProject?.state?.countSessions ?? []) {
+      const qty = s.pins.length;
+      if (!qty && !s.unitCost) continue;
+      const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
+      rows.push({ id: `res-s-${s.id}`, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
+    }
+    // Residential — room materials
+    for (const m of activeResidentialProject?.state?.materials ?? []) {
+      rows.push({ id: `res-m-${nanoid(6)}`, description: m.description, unit: m.unit, qty: m.quantity, unitCost: 0, notes: "", catalogId: null, source: "manual" });
+    }
+    return rows;
+  }, [activeCivilProject, activeCommercialProject, activeResidentialProject]);
 
   const [rows, setRows] = useState<MaterialRow[]>(() => buildRows());
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editBuf, setEditBuf] = useState<Partial<MaterialRow>>({});
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [manualRows, setManualRows] = useState<MaterialRow[]>([]);
+  const [deletingRowId, setDeletingRowId] = useState<string | null>(null);
+  const [deletingLaborId, setDeletingLaborId] = useState<string | null>(null);
+  const [markupDraft, setMarkupDraft] = useState(String(markupPct));
+  const [jRateDraft, setJRateDraft] = useState(String(journeymanRate));
+  const [tRateDraft, setTRateDraft] = useState(String(traineeRate));
+  const [showMaterials, setShowMaterials] = useState(true);
+  const [showJourneyman, setShowJourneyman] = useState(true);
+  const [showTrainee, setShowTrainee] = useState(true);
 
-  // Labor editing state (local buf, persisted value lives in context)
-  const [editingLabor, setEditingLabor] = useState(false);
-  const [laborBuf, setLaborBuf] = useState({ hours: laborHours, rate: laborRate });
+  useEffect(() => { setRows(buildRows()); }, [buildRows]);
 
-  // Markup editing state
-  const [editingMarkup, setEditingMarkup] = useState(false);
-  const [markupBuf, setMarkupBuf] = useState(markupPct);
+  const allRows = [...rows, ...manualRows];
 
-  // Derived totals
-  const totalMat = rows.reduce((s, r) => s + (r.extCost ?? calcExtCost(r) ?? 0), 0);
-  const laborTotal = laborHours * laborRate;
-  const subtotal = totalMat + laborTotal;
+  // ── Totals ──────────────────────────────────────────────────────────────────
+  const materialSubtotal = allRows.reduce((s, r) => s + r.qty * r.unitCost, 0);
+  const jHours = journeymanLines.reduce((s, l) => s + l.hours, 0);
+  const tHours = traineeLines.reduce((s, l) => s + l.hours, 0);
+  const jLaborTotal = jHours * journeymanRate;
+  const tLaborTotal = tHours * traineeRate;
+  const laborSubtotal = jLaborTotal + tLaborTotal;
+  const subtotal = materialSubtotal + laborSubtotal;
   const markupAmt = subtotal * (markupPct / 100);
   const grandTotal = subtotal + markupAmt;
 
-  // ── Sync edits back to AppContext ────────────────────────────────────────────
-  const syncToContext = useCallback((updatedRows: MaterialRow[]) => {
-    const resRows = updatedRows.filter((r) => r.sourceKey?.startsWith("residential-") && !r.sourceKey.includes("count"));
-    if (resRows.length > 0) {
-      const updatedMaterials = [...(roomState.materials ?? [])];
-      resRows.forEach((row) => {
-        const idx = parseInt(row.sourceKey!.split("-")[1]);
-        if (!isNaN(idx) && updatedMaterials[idx]) {
-          updatedMaterials[idx] = { ...updatedMaterials[idx], quantity: row.quantity };
-        }
-      });
-      setRoomState({ ...roomState, materials: updatedMaterials });
-    }
-
-    const comRows = updatedRows.filter((r) => r.sourceKey?.startsWith("commercial-") && !r.sourceKey.includes("count"));
-    if (comRows.length > 0) {
-      const updatedMaterials = [...(assemblyState.materials ?? [])];
-      comRows.forEach((row) => {
-        const idx = parseInt(row.sourceKey!.split("-")[1]);
-        if (!isNaN(idx) && updatedMaterials[idx]) {
-          updatedMaterials[idx] = {
-            ...updatedMaterials[idx],
-            quantity: row.quantity,
-            unitCost: row.unitCost ?? updatedMaterials[idx].unitCost,
-          };
-        }
-      });
-      setAssemblyState({ ...assemblyState, materials: updatedMaterials });
-    }
-  }, [roomState, assemblyState, setRoomState, setAssemblyState]);
-
-  // ── Row editing ──────────────────────────────────────────────────────────────
-  const startEdit = (row: MaterialRow) => {
-    setEditingId(row.id);
-    setEditBuf({ description: row.description, unit: row.unit, quantity: row.quantity, unitCost: row.unitCost, notes: row.notes });
+  // ── Row helpers ─────────────────────────────────────────────────────────────
+  const updateRow = (id: string, patch: Partial<MaterialRow>) => {
+    setRows((p) => p.map((r) => r.id === id ? { ...r, ...patch } : r));
+    setManualRows((p) => p.map((r) => r.id === id ? { ...r, ...patch } : r));
+  };
+  const addManualRow = () => setManualRows((p) => [...p, { id: nanoid(8), description: "New item", unit: "EA", qty: 1, unitCost: 0, notes: "", catalogId: null, source: "manual" }]);
+  const applyCatalog = (rowId: string, item: CatalogItem | null) => {
+    if (!item) { updateRow(rowId, { catalogId: null }); return; }
+    updateRow(rowId, { catalogId: item.id, description: item.description, unit: item.unit, unitCost: item.unitPrice });
   };
 
-  const commitEdit = (id: string) => {
-    let updatedRows: MaterialRow[] = [];
-    setRows((prev) => {
-      updatedRows = prev.map((r) => {
-        if (r.id !== id) return r;
-        const qty = Number(editBuf.quantity) || r.quantity;
-        const uc = editBuf.unitCost != null ? Number(editBuf.unitCost) : r.unitCost;
-        const ext = uc != null ? parseFloat((uc * qty).toFixed(2)) : null;
-        return { ...r, description: String(editBuf.description ?? r.description), unit: String(editBuf.unit ?? r.unit), quantity: qty, unitCost: uc, extCost: ext, notes: String(editBuf.notes ?? r.notes ?? "") };
-      });
-      return updatedRows;
-    });
-    setEditingId(null);
-    setEditBuf({});
-    setTimeout(() => syncToContext(updatedRows), 0);
-  };
-
-  const cancelEdit = () => { setEditingId(null); setEditBuf({}); };
-
-  // ── Add custom row ───────────────────────────────────────────────────────────
-  const addRow = () => {
-    const newRow: MaterialRow = { id: mkId(), section: "Custom", description: "New item", unit: "EA", quantity: 1, unitCost: null, extCost: null, notes: "", editable: true };
-    setRows((prev) => [...prev, newRow]);
-    setEditingId(newRow.id);
-    setEditBuf({ description: "New item", unit: "EA", quantity: 1, unitCost: null, notes: "" });
-  };
-
-  // ── Delete row ───────────────────────────────────────────────────────────────
-  const deleteRow = (id: string) => {
-    setRows((prev) => prev.filter((r) => r.id !== id));
-    setDeletingId(null);
-    toast.info("Row removed.");
-  };
-
-  // ── Print ────────────────────────────────────────────────────────────────────
-  const handlePrint = () => {
-    injectPrintStyle();
-    window.print();
-  };
+  // ── Labor helpers ────────────────────────────────────────────────────────────
+  const addJLine = () => setJourneymanLines([...journeymanLines, { id: nanoid(6), description: "Task", hours: 0 }]);
+  const addTLine = () => setTraineeLines([...traineeLines, { id: nanoid(6), description: "Task", hours: 0 }]);
+  const updateJLine = (id: string, patch: Partial<LaborLine>) => setJourneymanLines(journeymanLines.map((l) => l.id === id ? { ...l, ...patch } : l));
+  const updateTLine = (id: string, patch: Partial<LaborLine>) => setTraineeLines(traineeLines.map((l) => l.id === id ? { ...l, ...patch } : l));
 
   // ── Export ───────────────────────────────────────────────────────────────────
-  const projectLabel = [activeCivilProject.name, activeCommercialProject.name, activeResidentialProject.name].filter(Boolean).join(" / ");
-  const handleExportCSV = () => exportCSVFromRows(rows, laborHours, laborRate, markupPct, projectLabel);
-  const handleExportPDF = () => exportPDFFromRows(rows, laborHours, laborRate, markupPct, projectLabel);
+  const exportCSV = () => {
+    const lines = [
+      "Section,Description,Unit,Qty,Unit Cost,Ext Cost,Notes",
+      ...allRows.map((r) => `"${r.source}","${r.description}",${r.unit},${r.qty},${r.unitCost.toFixed(2)},${(r.qty * r.unitCost).toFixed(2)},"${r.notes}"`),
+      "",
+      "Type,Description,Hours,Rate,Total",
+      ...journeymanLines.map((l) => `Journeyman,"${l.description}",${l.hours},${journeymanRate.toFixed(2)},${(l.hours * journeymanRate).toFixed(2)}`),
+      ...traineeLines.map((l) => `Trainee,"${l.description}",${l.hours},${traineeRate.toFixed(2)},${(l.hours * traineeRate).toFixed(2)}`),
+      "",
+      `Material Subtotal,,,,,${materialSubtotal.toFixed(2)}`,
+      `Labor Subtotal,,,,,${laborSubtotal.toFixed(2)}`,
+      `Markup (${markupPct}%),,,,,${markupAmt.toFixed(2)}`,
+      `Grand Total,,,,,${grandTotal.toFixed(2)}`,
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "labor-material.csv"; a.click();
+  };
 
-  const sections = Array.from(new Set(rows.map((r) => r.section)));
+  const exportPDF = () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><title>Labor & Material Summary</title>
+<style>body{font-family:Arial,sans-serif;font-size:11px;margin:24px;color:#111}h1{font-size:16px}h2{font-size:12px;margin:14px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}table{width:100%;border-collapse:collapse}th{background:#1a1a1a;color:#F5C518;text-align:left;padding:4px 6px;font-size:10px}td{padding:3px 6px;border-bottom:1px solid #eee}.right{text-align:right}.bold{font-weight:bold}.grand{background:#1a1a1a;color:#F5C518}</style>
+</head><body>
+<h1>Labor & Material Summary</h1><p style="color:#888;font-size:10px">Generated ${new Date().toLocaleDateString()}</p>
+<h2>Materials</h2>
+<table><thead><tr><th>Description</th><th>Unit</th><th class="right">Qty</th><th class="right">Unit $</th><th class="right">Ext $</th><th>Notes</th></tr></thead><tbody>
+${allRows.map((r) => `<tr><td>${r.description}</td><td>${r.unit}</td><td class="right">${r.qty}</td><td class="right">$${r.unitCost.toFixed(2)}</td><td class="right">$${(r.qty * r.unitCost).toFixed(2)}</td><td>${r.notes}</td></tr>`).join("")}
+<tr class="bold"><td colspan="4">Material Subtotal</td><td class="right">$${materialSubtotal.toFixed(2)}</td><td></td></tr>
+</tbody></table>
+<h2>Journeyman Labor — $${journeymanRate}/hr</h2>
+<table><thead><tr><th>Task</th><th class="right">Hours</th><th class="right">Total</th></tr></thead><tbody>
+${journeymanLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.hours}</td><td class="right">$${(l.hours * journeymanRate).toFixed(2)}</td></tr>`).join("")}
+<tr class="bold"><td>Total (${jHours} hrs)</td><td></td><td class="right">$${jLaborTotal.toFixed(2)}</td></tr>
+</tbody></table>
+<h2>Trainee Labor — $${traineeRate}/hr</h2>
+<table><thead><tr><th>Task</th><th class="right">Hours</th><th class="right">Total</th></tr></thead><tbody>
+${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.hours}</td><td class="right">$${(l.hours * traineeRate).toFixed(2)}</td></tr>`).join("")}
+<tr class="bold"><td>Total (${tHours} hrs)</td><td></td><td class="right">$${tLaborTotal.toFixed(2)}</td></tr>
+</tbody></table>
+<h2>Totals</h2>
+<table><tbody>
+<tr><td>Material Subtotal</td><td class="right">$${materialSubtotal.toFixed(2)}</td></tr>
+<tr><td>Labor Subtotal</td><td class="right">$${laborSubtotal.toFixed(2)}</td></tr>
+<tr><td>Markup (${markupPct}%)</td><td class="right">$${markupAmt.toFixed(2)}</td></tr>
+<tr class="grand bold"><td>Grand Total</td><td class="right">$${grandTotal.toFixed(2)}</td></tr>
+</tbody></table>
+</body></html>`);
+    w.document.close(); w.print();
+  };
 
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div id="bp-print-root" className="flex flex-col h-full bg-background overflow-hidden">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0 bg-card no-print">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft size={16} />
-          <span style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Back</span>
+    <div className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden">
+      {/* Header */}
+      <header className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-border bg-card/80 backdrop-blur-sm">
+        <button onClick={goBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft size={16} /><span>Back</span>
         </button>
         <div className="w-px h-5 bg-border" />
-        <h1 className="text-base font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Material List</h1>
-        {projectLabel && <span className="text-xs text-muted-foreground font-mono truncate">— {projectLabel}</span>}
-        <div className="ml-auto flex items-center gap-2">
-          {/* Grand total badge */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30">
-            <span className="text-[10px] text-muted-foreground font-mono">TOTAL</span>
-            <span className="text-sm font-bold text-[#F5C518] font-mono">${grandTotal.toFixed(2)}</span>
-          </div>
-          {/* Add row */}
-          <button onClick={addRow} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#F5C518]/40 transition-all" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            <Plus size={13} />Add Row
-          </button>
-          {/* Print */}
-          <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#F5C518]/40 transition-all" style={{ fontFamily: "'Space Grotesk', sans-serif" }} title="Print material list">
+        <h1 className="text-sm font-semibold text-foreground flex-1">Labor & Material Summary</h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:text-foreground hover:border-[#F5C518]/40 transition-all">
             <Printer size={13} />Print
           </button>
-          {/* Export CSV */}
-          <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted/40 border border-border text-xs text-muted-foreground hover:text-foreground hover:border-[#F5C518]/40 transition-all" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            <FileSpreadsheet size={13} className="text-[#F5C518]" />CSV
+          <button onClick={exportCSV} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-border text-muted-foreground hover:text-foreground hover:border-[#F5C518]/40 transition-all">
+            <Download size={13} />CSV
           </button>
-          {/* Export PDF */}
-          <button onClick={handleExportPDF} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#F5C518] text-black text-xs font-semibold hover:bg-[#e0b315] transition-colors" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          <button onClick={exportPDF} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[#F5C518] text-black font-medium hover:bg-[#F5C518]/90 transition-all">
             <FileText size={13} />PDF
           </button>
         </div>
       </header>
 
-      {/* ── Table ──────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto">
-        {rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
-            <FileText size={40} className="opacity-30" />
-            <p className="text-sm">No materials yet. Add runs, assemblies, or count sessions in the project tabs.</p>
-            <button onClick={addRow} className="flex items-center gap-2 px-4 py-2 rounded-md bg-[#F5C518] text-black text-sm font-semibold hover:bg-[#e0b315] transition-colors">
-              <Plus size={14} />Add Custom Row
-            </button>
-          </div>
-        ) : (
-          <table className="w-full text-xs border-collapse">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-muted/30 border-b border-border">
-                <th className="text-left px-4 py-2.5 text-muted-foreground font-medium w-24">Section</th>
-                <th className="text-left px-3 py-2.5 text-muted-foreground font-medium">Description</th>
-                <th className="text-center px-3 py-2.5 text-muted-foreground font-medium w-16">Unit</th>
-                <th className="text-right px-3 py-2.5 text-muted-foreground font-medium w-16">Qty</th>
-                <th className="text-right px-3 py-2.5 text-muted-foreground font-medium w-20">Unit $</th>
-                <th className="text-right px-3 py-2.5 text-muted-foreground font-medium w-24">Ext $</th>
-                <th className="text-left px-3 py-2.5 text-muted-foreground font-medium">Notes</th>
-                <th className="w-14 px-2 py-2.5 no-print" />
-              </tr>
-            </thead>
-            <tbody>
-              {sections.map((section) => {
-                const sectionRows = rows.filter((r) => r.section === section);
-                const sectionTotal = sectionRows.reduce((s, r) => s + (r.extCost ?? calcExtCost(r) ?? 0), 0);
-                return (
-                  <>
-                    <tr key={`sec-${section}`} className="bg-muted/20 border-b border-border/50">
-                      <td colSpan={6} className="px-4 py-1.5 text-[10px] font-semibold text-[#F5C518] uppercase tracking-widest" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{section}</td>
-                      <td className="px-3 py-1.5 text-right font-mono text-[10px] text-muted-foreground">{sectionTotal > 0 ? `$${sectionTotal.toFixed(2)}` : ""}</td>
-                      <td className="no-print" />
-                    </tr>
-                    {sectionRows.map((row, i) => {
-                      const isEditing = editingId === row.id;
-                      const displayExt = row.extCost ?? calcExtCost(row);
-                      return (
-                        <tr key={row.id} className={cn("border-b border-border/30 transition-colors", i % 2 === 0 ? "bg-background" : "bg-muted/5", isEditing ? "bg-[#F5C518]/5" : "hover:bg-muted/10")}>
-                          <td className="px-4 py-2" />
-                          {/* Description */}
-                          <td className="px-3 py-2 text-foreground">
-                            {isEditing ? (
-                              <input autoFocus value={String(editBuf.description ?? "")} onChange={(e) => setEditBuf((b) => ({ ...b, description: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") commitEdit(row.id); if (e.key === "Escape") cancelEdit(); }} className="w-full bg-transparent border-b border-[#F5C518] text-xs text-foreground outline-none font-mono" />
-                            ) : (
-                              <span className="cursor-text hover:text-[#F5C518] transition-colors" onClick={() => startEdit(row)} title="Click to edit">{row.description}</span>
-                            )}
-                          </td>
-                          {/* Unit */}
-                          <td className="px-3 py-2 text-center font-mono text-muted-foreground">
-                            {isEditing ? (
-                              <input value={String(editBuf.unit ?? "")} onChange={(e) => setEditBuf((b) => ({ ...b, unit: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") commitEdit(row.id); if (e.key === "Escape") cancelEdit(); }} className="w-12 bg-transparent border-b border-[#F5C518] text-xs text-center text-foreground outline-none font-mono" />
-                            ) : (
-                              <span onClick={() => startEdit(row)} className="cursor-text">{row.unit}</span>
-                            )}
-                          </td>
-                          {/* Qty */}
-                          <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">
-                            {isEditing ? (
-                              <input type="number" min={0} value={editBuf.quantity ?? ""} onChange={(e) => setEditBuf((b) => ({ ...b, quantity: parseFloat(e.target.value) }))} onKeyDown={(e) => { if (e.key === "Enter") commitEdit(row.id); if (e.key === "Escape") cancelEdit(); }} className="w-14 bg-transparent border-b border-[#F5C518] text-xs text-right text-foreground outline-none font-mono" />
-                            ) : (
-                              <span onClick={() => startEdit(row)} className="cursor-text">{row.quantity}</span>
-                            )}
-                          </td>
-                          {/* Unit Cost */}
-                          <td className="px-3 py-2 text-right font-mono text-muted-foreground">
-                            {isEditing ? (
-                              <input type="number" min={0} step={0.01} placeholder="0.00" value={editBuf.unitCost ?? ""} onChange={(e) => { const v = parseFloat(e.target.value); setEditBuf((b) => ({ ...b, unitCost: isNaN(v) ? null : v })); }} onKeyDown={(e) => { if (e.key === "Enter") commitEdit(row.id); if (e.key === "Escape") cancelEdit(); }} className="w-16 bg-transparent border-b border-[#F5C518] text-xs text-right text-foreground outline-none font-mono" />
-                            ) : (
-                              <span onClick={() => startEdit(row)} className="cursor-text">{row.unitCost != null ? `$${row.unitCost.toFixed(2)}` : "—"}</span>
-                            )}
-                          </td>
-                          {/* Ext Cost */}
-                          <td className="px-3 py-2 text-right font-mono font-semibold text-[#F5C518]">{displayExt != null ? `$${displayExt.toFixed(2)}` : "—"}</td>
-                          {/* Notes */}
-                          <td className="px-3 py-2 text-muted-foreground">
-                            {isEditing ? (
-                              <input value={String(editBuf.notes ?? "")} onChange={(e) => setEditBuf((b) => ({ ...b, notes: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") commitEdit(row.id); if (e.key === "Escape") cancelEdit(); }} placeholder="Spec, model #, supplier…" className="w-full bg-transparent border-b border-[#F5C518] text-xs text-foreground outline-none font-mono" />
-                            ) : (
-                              <span onClick={() => startEdit(row)} className={cn("cursor-text text-[11px]", row.notes ? "text-muted-foreground" : "text-muted-foreground/30 italic")}>{row.notes || "Add note…"}</span>
-                            )}
-                          </td>
-                          {/* Actions */}
-                          <td className="px-2 py-2 no-print">
-                            <div className="flex items-center gap-1 justify-end">
-                              {isEditing ? (
-                                <>
-                                  <button onClick={() => commitEdit(row.id)} className="text-[#F5C518] hover:opacity-70 transition-opacity" title="Save (Enter)"><Check size={12} /></button>
-                                  <button onClick={cancelEdit} className="text-muted-foreground hover:text-foreground transition-colors" title="Cancel (Esc)"><X size={12} /></button>
-                                </>
-                              ) : (
-                                <button onClick={() => setDeletingId(row.id)} className="text-muted-foreground hover:text-destructive transition-colors" title="Remove row"><Trash2 size={11} /></button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </>
-                );
-              })}
-            </tbody>
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
 
-            {/* ── Labor row ────────────────────────────────────────────────── */}
-            <tbody>
-              <tr className="border-t border-border/50 bg-muted/10">
-                <td colSpan={8} className="px-4 py-0.5">
-                  <div className="flex items-center gap-2 py-2">
-                    <HardHat size={13} className="text-[#F5C518] shrink-0" />
-                    <span className="text-[10px] font-semibold text-[#F5C518] uppercase tracking-widest" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Labor</span>
-                    {editingLabor ? (
-                      <>
-                        <input type="number" min={0} step={0.5} value={laborBuf.hours} onChange={(e) => setLaborBuf((b) => ({ ...b, hours: parseFloat(e.target.value) || 0 }))} className="w-16 bg-transparent border-b border-[#F5C518] text-xs text-right text-foreground outline-none font-mono" placeholder="hrs" />
-                        <span className="text-[10px] text-muted-foreground font-mono">hrs @</span>
-                        <span className="text-[10px] text-muted-foreground font-mono">$</span>
-                        <input type="number" min={0} step={1} value={laborBuf.rate} onChange={(e) => setLaborBuf((b) => ({ ...b, rate: parseFloat(e.target.value) || 0 }))} className="w-16 bg-transparent border-b border-[#F5C518] text-xs text-right text-foreground outline-none font-mono" placeholder="rate" />
-                        <span className="text-[10px] text-muted-foreground font-mono">/hr</span>
-                        <button onClick={() => { setLaborHours(laborBuf.hours); setLaborRate(laborBuf.rate); setEditingLabor(false); }} className="text-[#F5C518] hover:opacity-70 transition-opacity ml-1" title="Save"><Check size={12} /></button>
-                        <button onClick={() => setEditingLabor(false)} className="text-muted-foreground hover:text-foreground transition-colors" title="Cancel"><X size={12} /></button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-xs font-mono text-muted-foreground cursor-text hover:text-foreground transition-colors" onClick={() => { setLaborBuf({ hours: laborHours, rate: laborRate }); setEditingLabor(true); }} title="Click to edit labor">
-                          {laborHours > 0 ? `${laborHours} hrs @ $${laborRate.toFixed(2)}/hr` : "Click to add labor hours"}
-                        </span>
-                        {laborHours > 0 && <span className="ml-auto text-sm font-bold font-mono text-[#F5C518]">${laborTotal.toFixed(2)}</span>}
-                      </>
-                    )}
+        {/* Materials */}
+        <section className="bg-card border border-border rounded-xl overflow-hidden">
+          <button onClick={() => setShowMaterials((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
+            <div className="flex items-center gap-2">
+              <Tag size={14} className="text-[#F5C518]" />
+              <span className="text-sm font-semibold">Materials</span>
+              <span className="text-xs text-muted-foreground font-mono">{allRows.length} items · ${fmt(materialSubtotal)}</span>
+            </div>
+            {showMaterials ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+          </button>
+          {showMaterials && (
+            <div>
+              <div className="grid grid-cols-[2fr_60px_70px_80px_80px_1fr_28px] gap-1 px-4 py-2 bg-muted/20 border-y border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                <span>Description / Catalog</span><span>Unit</span><span className="text-right">Qty</span><span className="text-right">Unit $</span><span className="text-right">Ext $</span><span>Notes</span><span />
+              </div>
+              {allRows.length === 0 && <div className="px-4 py-8 text-center text-xs text-muted-foreground">No materials yet. Add count sessions or click "+ Add Row".</div>}
+              {allRows.map((row) => (
+                <div key={row.id} className="grid grid-cols-[2fr_60px_70px_80px_80px_1fr_28px] gap-1 px-4 py-2 border-b border-border/40 items-start group hover:bg-muted/10 transition-colors">
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <InlineEdit value={row.description} onSave={(v) => updateRow(row.id, { description: v })} className="text-xs font-medium text-foreground truncate" inputClassName="text-xs w-full" />
+                    <CatalogPicker value={row.catalogId} onChange={(item) => applyCatalog(row.id, item)} placeholder="Link to catalog…" />
                   </div>
-                </td>
-              </tr>
-
-              {/* ── Markup row ───────────────────────────────────────────── */}
-              <tr className="border-t border-border/30 bg-muted/5">
-                <td colSpan={8} className="px-4 py-0.5">
-                  <div className="flex items-center gap-2 py-2">
-                    <Percent size={13} className="text-[#F5C518] shrink-0" />
-                    <span className="text-[10px] font-semibold text-[#F5C518] uppercase tracking-widest" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Markup</span>
-                    {editingMarkup ? (
-                      <>
-                        <input type="number" min={0} max={200} step={0.5} value={markupBuf} onChange={(e) => setMarkupBuf(parseFloat(e.target.value) || 0)} className="w-16 bg-transparent border-b border-[#F5C518] text-xs text-right text-foreground outline-none font-mono" placeholder="%" />
-                        <span className="text-[10px] text-muted-foreground font-mono">%</span>
-                        <button onClick={() => { setMarkupPct(markupBuf); setEditingMarkup(false); }} className="text-[#F5C518] hover:opacity-70 transition-opacity ml-1" title="Save"><Check size={12} /></button>
-                        <button onClick={() => setEditingMarkup(false)} className="text-muted-foreground hover:text-foreground transition-colors" title="Cancel"><X size={12} /></button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-xs font-mono text-muted-foreground cursor-text hover:text-foreground transition-colors" onClick={() => { setMarkupBuf(markupPct); setEditingMarkup(true); }} title="Click to set markup %">
-                          {markupPct > 0 ? `${markupPct}% on subtotal` : "Click to add markup %"}
-                        </span>
-                        {markupPct > 0 && <span className="ml-auto text-sm font-bold font-mono text-[#F5C518]">+${markupAmt.toFixed(2)}</span>}
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-
-            {/* ── Totals footer ─────────────────────────────────────────────── */}
-            <tfoot className="sticky bottom-0">
-              <tr className="border-t border-border bg-muted/20">
-                <td colSpan={5} className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Material Subtotal</td>
-                <td className="px-3 py-2 text-right font-mono font-semibold text-foreground text-xs">${totalMat.toFixed(2)}</td>
-                <td colSpan={2} />
-              </tr>
-              {laborHours > 0 && (
-                <tr className="border-t border-border/50 bg-muted/10">
-                  <td colSpan={5} className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Labor Subtotal</td>
-                  <td className="px-3 py-2 text-right font-mono font-semibold text-foreground text-xs">${laborTotal.toFixed(2)}</td>
-                  <td colSpan={2} />
-                </tr>
-              )}
-              {markupPct > 0 && (
-                <tr className="border-t border-border/50 bg-muted/10">
-                  <td colSpan={5} className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Markup ({markupPct}%)</td>
-                  <td className="px-3 py-2 text-right font-mono font-semibold text-foreground text-xs">+${markupAmt.toFixed(2)}</td>
-                  <td colSpan={2} />
-                </tr>
-              )}
-              <tr className="border-t-2 border-[#F5C518]/40 bg-card">
-                <td colSpan={5} className="px-4 py-3 text-right text-sm font-bold text-foreground">
-                  {(laborHours > 0 || markupPct > 0) ? "Grand Total" : "Total Material Cost"}
-                </td>
-                <td className="px-3 py-3 text-right font-mono font-bold text-[#F5C518] text-base">${grandTotal.toFixed(2)}</td>
-                <td colSpan={2} />
-              </tr>
-            </tfoot>
-          </table>
-        )}
-      </div>
-
-      {/* ── Delete row confirmation ─────────────────────────────────────────── */}
-      {deletingId && (() => {
-        const row = rows.find((r) => r.id === deletingId);
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
-              <h3 className="font-semibold text-foreground mb-2">Remove Row?</h3>
-              <p className="text-sm text-muted-foreground mb-5">Remove <span className="font-medium text-foreground">"{row?.description}"</span> from the material list?</p>
-              <div className="flex gap-3 justify-end">
-                <button onClick={() => setDeletingId(null)} className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-                <button onClick={() => deleteRow(deletingId)} className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium">Remove</button>
+                  <InlineEdit value={row.unit} onSave={(v) => updateRow(row.id, { unit: v })} className="text-xs text-muted-foreground font-mono mt-1" inputClassName="text-xs w-14 font-mono" />
+                  <div className="text-right mt-1"><InlineEdit value={String(row.qty)} onSave={(v) => updateRow(row.id, { qty: parseFloat(v) || 0 })} className="text-xs font-mono text-foreground justify-end" inputClassName="text-xs w-14 font-mono text-right" /></div>
+                  <div className="text-right mt-1"><InlineEdit value={row.unitCost.toFixed(2)} onSave={(v) => updateRow(row.id, { unitCost: parseFloat(v) || 0 })} className="text-xs font-mono text-foreground justify-end" inputClassName="text-xs w-16 font-mono text-right" prefix="$" /></div>
+                  <div className="text-right text-xs font-mono font-medium text-[#F5C518] mt-1">${fmt(row.qty * row.unitCost)}</div>
+                  <InlineEdit value={row.notes} onSave={(v) => updateRow(row.id, { notes: v })} className="text-xs text-muted-foreground truncate mt-1" inputClassName="text-xs w-full" />
+                  <button onClick={() => setDeletingRowId(row.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400 mt-1"><Trash2 size={12} /></button>
+                </div>
+              ))}
+              <div className="px-4 py-2 flex items-center justify-between">
+                <button onClick={addManualRow} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors"><Plus size={12} />Add Row</button>
+                <span className="text-xs font-mono font-bold text-[#F5C518]">Subtotal: ${fmt(materialSubtotal)}</span>
               </div>
             </div>
+          )}
+        </section>
+
+        {/* Journeyman Labor */}
+        <section className="bg-card border border-border rounded-xl overflow-hidden">
+          <button onClick={() => setShowJourneyman((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
+            <div className="flex items-center gap-2">
+              <HardHat size={14} className="text-[#F5C518]" />
+              <span className="text-sm font-semibold">Journeyman Labor</span>
+              <span className="text-xs text-muted-foreground font-mono">{jHours} hrs · ${fmt(jLaborTotal)}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                <span>Rate: $</span>
+                <input type="number" min={0} step={1} value={jRateDraft} onChange={(e) => setJRateDraft(e.target.value)}
+                  onBlur={() => { const v = parseFloat(jRateDraft); if (!isNaN(v) && v > 0) setJourneymanRate(v); else setJRateDraft(String(journeymanRate)); }}
+                  className="w-14 bg-transparent border-b border-[#F5C518]/40 text-[#F5C518] font-mono text-xs text-right outline-none focus:border-[#F5C518]" />
+                <span>/hr</span>
+              </div>
+              {showJourneyman ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            </div>
+          </button>
+          {showJourneyman && (
+            <div>
+              <div className="grid grid-cols-[1fr_100px_100px_28px] gap-2 px-4 py-2 bg-muted/20 border-y border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                <span>Task</span><span className="text-right">Hours</span><span className="text-right">Total</span><span />
+              </div>
+              {journeymanLines.length === 0 && <div className="px-4 py-6 text-center text-xs text-muted-foreground">No journeyman tasks yet.</div>}
+              {journeymanLines.map((line) => (
+                <div key={line.id} className="grid grid-cols-[1fr_100px_100px_28px] gap-2 px-4 py-2 border-b border-border/40 items-center group hover:bg-muted/10 transition-colors">
+                  <InlineEdit value={line.description} onSave={(v) => updateJLine(line.id, { description: v })} className="text-xs text-foreground" inputClassName="text-xs w-full" />
+                  <div className="text-right"><InlineEdit value={String(line.hours)} onSave={(v) => updateJLine(line.id, { hours: parseFloat(v) || 0 })} className="text-xs font-mono text-foreground justify-end" inputClassName="text-xs w-20 font-mono text-right" /></div>
+                  <div className="text-right text-xs font-mono font-medium text-[#F5C518]">${fmt(line.hours * journeymanRate)}</div>
+                  <button onClick={() => setDeletingLaborId(line.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"><Trash2 size={12} /></button>
+                </div>
+              ))}
+              <div className="px-4 py-2 flex items-center justify-between">
+                <button onClick={addJLine} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors"><Plus size={12} />Add Task</button>
+                <span className="text-xs font-mono font-bold text-[#F5C518]">{jHours} hrs · ${fmt(jLaborTotal)}</span>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Trainee Labor */}
+        <section className="bg-card border border-border rounded-xl overflow-hidden">
+          <button onClick={() => setShowTrainee((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
+            <div className="flex items-center gap-2">
+              <Wrench size={14} className="text-[#F5C518]" />
+              <span className="text-sm font-semibold">Trainee Labor</span>
+              <span className="text-xs text-muted-foreground font-mono">{tHours} hrs · ${fmt(tLaborTotal)}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+                <span>Rate: $</span>
+                <input type="number" min={0} step={1} value={tRateDraft} onChange={(e) => setTRateDraft(e.target.value)}
+                  onBlur={() => { const v = parseFloat(tRateDraft); if (!isNaN(v) && v > 0) setTraineeRate(v); else setTRateDraft(String(traineeRate)); }}
+                  className="w-14 bg-transparent border-b border-[#F5C518]/40 text-[#F5C518] font-mono text-xs text-right outline-none focus:border-[#F5C518]" />
+                <span>/hr</span>
+              </div>
+              {showTrainee ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            </div>
+          </button>
+          {showTrainee && (
+            <div>
+              <div className="grid grid-cols-[1fr_100px_100px_28px] gap-2 px-4 py-2 bg-muted/20 border-y border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                <span>Task</span><span className="text-right">Hours</span><span className="text-right">Total</span><span />
+              </div>
+              {traineeLines.length === 0 && <div className="px-4 py-6 text-center text-xs text-muted-foreground">No trainee tasks yet.</div>}
+              {traineeLines.map((line) => (
+                <div key={line.id} className="grid grid-cols-[1fr_100px_100px_28px] gap-2 px-4 py-2 border-b border-border/40 items-center group hover:bg-muted/10 transition-colors">
+                  <InlineEdit value={line.description} onSave={(v) => updateTLine(line.id, { description: v })} className="text-xs text-foreground" inputClassName="text-xs w-full" />
+                  <div className="text-right"><InlineEdit value={String(line.hours)} onSave={(v) => updateTLine(line.id, { hours: parseFloat(v) || 0 })} className="text-xs font-mono text-foreground justify-end" inputClassName="text-xs w-20 font-mono text-right" /></div>
+                  <div className="text-right text-xs font-mono font-medium text-[#F5C518]">${fmt(line.hours * traineeRate)}</div>
+                  <button onClick={() => setDeletingLaborId(line.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"><Trash2 size={12} /></button>
+                </div>
+              ))}
+              <div className="px-4 py-2 flex items-center justify-between">
+                <button onClick={addTLine} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors"><Plus size={12} />Add Task</button>
+                <span className="text-xs font-mono font-bold text-[#F5C518]">{tHours} hrs · ${fmt(tLaborTotal)}</span>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Totals */}
+        <section className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+            <DollarSign size={14} className="text-[#F5C518]" />
+            <span className="text-sm font-semibold">Project Totals</span>
           </div>
-        );
-      })()}
+          <div className="divide-y divide-border/40">
+            <div className="flex items-center justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">Material Subtotal</span><span className="font-mono font-medium">${fmt(materialSubtotal)}</span></div>
+            <div className="flex items-center justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">Labor Subtotal</span><span className="font-mono font-medium">${fmt(laborSubtotal)}</span></div>
+            <div className="flex items-center justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-mono font-medium">${fmt(subtotal)}</span></div>
+            <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Percent size={12} /><span>Markup</span>
+                <input type="number" min={0} max={200} step={0.5} value={markupDraft} onChange={(e) => setMarkupDraft(e.target.value)}
+                  onBlur={() => { const v = parseFloat(markupDraft); if (!isNaN(v) && v >= 0) setMarkupPct(v); else setMarkupDraft(String(markupPct)); }}
+                  className="w-14 bg-transparent border-b border-[#F5C518]/40 text-[#F5C518] font-mono text-xs text-right outline-none focus:border-[#F5C518]" />
+                <span className="text-xs">%</span>
+              </div>
+              <span className="font-mono font-medium text-[#F5C518]">+${fmt(markupAmt)}</span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3 bg-[#F5C518]/5">
+              <span className="font-bold text-base">Grand Total</span>
+              <span className="font-mono font-bold text-xl text-[#F5C518]">${fmt(grandTotal)}</span>
+            </div>
+          </div>
+        </section>
+
+        <div className="h-8" />
+      </div>
+
+      {/* Delete Row Confirmation */}
+      {deletingRowId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl p-6 w-80 shadow-2xl">
+            <h3 className="text-sm font-semibold mb-2">Remove this row?</h3>
+            <p className="text-xs text-muted-foreground mb-4">Count session data in the plan is not affected.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeletingRowId(null)} className="px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-muted/20 transition-colors">Cancel</button>
+              <button onClick={() => { setRows((p) => p.filter((r) => r.id !== deletingRowId)); setManualRows((p) => p.filter((r) => r.id !== deletingRowId)); setDeletingRowId(null); }} className="px-3 py-1.5 text-xs bg-red-500/90 text-white rounded-lg hover:bg-red-500 transition-colors">Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Labor Confirmation */}
+      {deletingLaborId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl p-6 w-80 shadow-2xl">
+            <h3 className="text-sm font-semibold mb-2">Remove this labor task?</h3>
+            <p className="text-xs text-muted-foreground mb-4">This will permanently remove the labor line.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeletingLaborId(null)} className="px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-muted/20 transition-colors">Cancel</button>
+              <button onClick={() => { setJourneymanLines(journeymanLines.filter((l) => l.id !== deletingLaborId)); setTraineeLines(traineeLines.filter((l) => l.id !== deletingLaborId)); setDeletingLaborId(null); }} className="px-3 py-1.5 text-xs bg-red-500/90 text-white rounded-lg hover:bg-red-500 transition-colors">Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

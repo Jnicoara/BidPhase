@@ -24,6 +24,13 @@ import React, { createContext, useContext, useCallback, useState } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { nanoid } from "nanoid";
 
+// ─── Labor line type ────────────────────────────────────────────────────────
+export interface LaborLine {
+  id: string;
+  description: string;  // e.g. "Rough-in", "Panel install"
+  hours: number;
+}
+
 // ─── Conduit types ──────────────────────────────────────────────────────────
 export const CONDUIT_TYPES = [
   { value: "EMT",  label: "EMT"  },
@@ -297,12 +304,24 @@ interface AppContextValue {
   setShowMaterialList: (v: boolean) => void;
 
   // ── Material List labor + markup (persisted across sessions) ────────────────
+  /** @deprecated use journeymanLines / traineeLines instead */
   laborHours: number;
   setLaborHours: (v: number) => void;
+  /** @deprecated use journeymanLines / traineeLines instead */
   laborRate: number;
   setLaborRate: (v: number) => void;
   markupPct: number;
   setMarkupPct: (v: number) => void;
+
+  // ── Journeyman & Trainee labor lines (persisted) ────────────────────────────
+  journeymanLines: LaborLine[];
+  setJourneymanLines: (lines: LaborLine[]) => void;
+  traineeLines: LaborLine[];
+  setTraineeLines: (lines: LaborLine[]) => void;
+  journeymanRate: number;
+  setJourneymanRate: (v: number) => void;
+  traineeRate: number;
+  setTraineeRate: (v: number) => void;
 
   // ── Legacy single-state accessors (used by ExportButton) ───────────────────
   // These are convenience aliases for activeCivilProject.state etc.
@@ -409,6 +428,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [laborHours, setLaborHours] = useLocalStorage<number>("bp_labor_hours", 0);
   const [laborRate, setLaborRate] = useLocalStorage<number>("bp_labor_rate", 85);
   const [markupPct, setMarkupPct] = useLocalStorage<number>("bp_markup_pct", 0);
+  const [journeymanLines, setJourneymanLines] = useLocalStorage<LaborLine[]>("bp_journeyman_lines", []);
+  const [traineeLines, setTraineeLines] = useLocalStorage<LaborLine[]>("bp_trainee_lines", []);
+  const [journeymanRate, setJourneymanRate] = useLocalStorage<number>("bp_journeyman_rate", 95);
+  const [traineeRate, setTraineeRate] = useLocalStorage<number>("bp_trainee_rate", 55);
 
   // ── Civil ─────────────────────────────────────────────────────────────────
   const [civilProjects, setCivilProjects] = useLocalStorage<CivilProject[]>(
@@ -567,6 +590,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLaborRate,
         markupPct,
         setMarkupPct,
+
+        // Journeyman & Trainee labor lines
+        journeymanLines,
+        setJourneymanLines,
+        traineeLines,
+        setTraineeLines,
+        journeymanRate,
+        setJourneymanRate,
+        traineeRate,
+        setTraineeRate,
 
         // Legacy single-state accessors for ExportButton
         civilState:      activeCivilProject.state,
