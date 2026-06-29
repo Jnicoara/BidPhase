@@ -27,7 +27,7 @@ import { nanoid } from "nanoid";
 // ─── Trash type ─────────────────────────────────────────────────────────────
 export interface TrashedProject {
   project: CivilProject;
-  category: "civil" | "commercial" | "residential";
+  category: "civil" | "commercial" | "residential" | "industrial";
   deletedAt: number;
 }
 
@@ -286,8 +286,8 @@ interface AppContextValue {
   // Active tab
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  activeCategory: "civil" | "commercial" | "residential";
-  setActiveCategory: (c: "civil" | "commercial" | "residential") => void;
+  activeCategory: "civil" | "commercial" | "residential" | "industrial";
+  setActiveCategory: (c: "civil" | "commercial" | "residential" | "industrial") => void;
   // Per-category project stores (all use CivilProject/CivilState type)
   civilCatProjects: CivilProject[];
   activeCivilCatId: string;
@@ -313,6 +313,15 @@ interface AppContextValue {
   renameResidentialCatProject: (id: string, name: string) => void;
   deleteResidentialCatProject: (id: string) => void;
   switchResidentialCatProject: (id: string) => void;
+  // ── Industrial category store ────────────────────────────────────────────────
+  industrialCatProjects: CivilProject[];
+  activeIndustrialCatId: string;
+  activeIndustrialCatProject: CivilProject;
+  setIndustrialCatState: (s: CivilState) => void;
+  addIndustrialCatProject: (name?: string) => void;
+  renameIndustrialCatProject: (id: string, name: string) => void;
+  deleteIndustrialCatProject: (id: string) => void;
+  switchIndustrialCatProject: (id: string) => void;
 
   // ── Civil projects ──────────────────────────────────────────────────────────
   civilProjects: CivilProject[];
@@ -403,7 +412,7 @@ interface AppContextValue {
 
   // ── Trash ──────────────────────────────────────────────────────────────────
   trashedProjects: TrashedProject[];
-  trashProject: (project: CivilProject, category: "civil" | "commercial" | "residential") => void;
+  trashProject: (project: CivilProject, category: "civil" | "commercial" | "residential" | "industrial") => void;
   restoreProject: (id: string) => void;
   permanentlyDeleteProject: (id: string) => void;
   emptyTrash: () => void;
@@ -533,7 +542,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ── Active category (landing page selection) ──────────────────────────────
-  const [activeCategory, setActiveCategory] = useLocalStorage<"civil" | "commercial" | "residential">("bp_active_category", "civil");
+  const [activeCategory, setActiveCategory] = useLocalStorage<"civil" | "commercial" | "residential" | "industrial">("bp_active_category", "civil");
+  // ── Industrial category store ─────────────────────────────────────────────
+  const [industrialCatProjects, setIndustrialCatProjects] = useLocalStorage<CivilProject[]>("bp_industrial_cat_projects", [defaultCivilProject()]);
+  const safeICP = ensureOne(industrialCatProjects, defaultCivilProject);
+  const [activeIndustrialCatId, setActiveIndustrialCatId] = useLocalStorage<string>("bp_active_industrial_cat", safeICP[0].id);
+  const activeIndustrialCatProject = safeICP.find((p) => p.id === activeIndustrialCatId) ?? safeICP[0];
+  const industrialCatStore = useCallback(
+    () => makeProjectStore(safeICP, activeIndustrialCatId, setIndustrialCatProjects, setActiveIndustrialCatId, defaultCivilProject),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeIndustrialCatId, safeICP.length, setIndustrialCatProjects, setActiveIndustrialCatId]
+  );
   // ── Civil category store ──────────────────────────────────────────────────
   const [civilCatProjects, setCivilCatProjects] = useLocalStorage<CivilProject[]>("bp_civil_cat_projects", [defaultCivilProject()]);
   const safeCCP = ensureOne(civilCatProjects, defaultCivilProject);
@@ -665,7 +684,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   })();
 
   // ── Trash helpers ────────────────────────────────────────────────────────
-  const trashProject = useCallback((project: CivilProject, category: "civil" | "commercial" | "residential") => {
+  const trashProject = useCallback((project: CivilProject, category: "civil" | "commercial" | "residential" | "industrial") => {
     setTrashedProjects((prev) => [...prev, { project, category, deletedAt: Date.now() }]);
   }, [setTrashedProjects]);
   const restoreProject = useCallback((id: string) => {
@@ -676,11 +695,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCivilCatProjects((prev) => [...prev, item.project]);
     } else if (item.category === "commercial") {
       setCommercialCatProjects((prev) => [...prev, item.project]);
+    } else if (item.category === "industrial") {
+      setIndustrialCatProjects((prev) => [...prev, item.project]);
     } else {
       setResidentialCatProjects((prev) => [...prev, item.project]);
     }
     setTrashedProjects((prev) => prev.filter((t) => t.project.id !== id));
-  }, [trashedProjects, setTrashedProjects, setCivilCatProjects, setCommercialCatProjects, setResidentialCatProjects]);
+  }, [trashedProjects, setTrashedProjects, setCivilCatProjects, setCommercialCatProjects, setResidentialCatProjects, setIndustrialCatProjects]);
   const permanentlyDeleteProject = useCallback((id: string) => {
     setTrashedProjects((prev) => prev.filter((t) => t.project.id !== id));
   }, [setTrashedProjects]);
@@ -721,8 +742,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addResidentialCatProject:      residentialCatStore().add,
         renameResidentialCatProject:   residentialCatStore().rename,
         deleteResidentialCatProject:   residentialCatStore().remove,
-        switchResidentialCatProject:   residentialCatStore().switchTo,
-
+                switchResidentialCatProject:   residentialCatStore().switchTo,
+        // Industrial category store
+        industrialCatProjects: safeICP,
+        activeIndustrialCatId,
+        activeIndustrialCatProject,
+        setIndustrialCatState:        industrialCatStore().setState,
+        addIndustrialCatProject:      industrialCatStore().add,
+        renameIndustrialCatProject:   industrialCatStore().rename,
+        deleteIndustrialCatProject:   industrialCatStore().remove,
+        switchIndustrialCatProject:   industrialCatStore().switchTo,
         // Unified projects
         unifiedProjects: safeUP,
         activeUnifiedId,

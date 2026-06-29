@@ -16,7 +16,7 @@
  */
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
-import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon } from "@/components/tabs/UnifiedProjects";
+import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, IndustrialIcon } from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import ExportButton from "@/components/ExportButton";
 import MaterialListPage from "@/pages/MaterialListPage";
@@ -26,15 +26,18 @@ import EstimateEnginePage from "@/pages/EstimateEnginePage";
 import { Settings, Trash2, ChevronRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Route = "landing" | "civil" | "commercial" | "residential" | "material" | "settings" | "trash" | "estimate";
+type Route = "landing" | "civil" | "commercial" | "residential" | "industrial" | "material" | "settings" | "trash" | "estimate";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
 function pathToRoute(path: string): Route {
   // Support both hash-based (#/civil) and path-based (/civil) URLs
-  const p = path.replace(/^#\/?/, "").replace(/^\//, "").split("?")[0].split("#")[0];
+  // Also handle sub-routes like #/residential/project-id — use only the first segment
+  const full = path.replace(/^#\/?/, "").replace(/^\//, "").split("?")[0].split("#")[0];
+  const p = full.split("/")[0]; // only first segment for top-level route
   if (p === "residential") return "residential";
   if (p === "commercial") return "commercial";
   if (p === "civil") return "civil";
+  if (p === "industrial") return "industrial";
   if (p === "material") return "material";
   if (p === "estimate") return "estimate";
   if (p === "settings") return "settings";
@@ -59,16 +62,18 @@ const CATEGORY_ICONS = {
   residential: ResidentialIcon,
   commercial:  CommercialIcon,
   civil:       CivilIcon,
+  industrial:  IndustrialIcon,
 } as const;
 
 const CATEGORY_LABELS = {
   residential: "Residential",
   commercial:  "Commercial",
   civil:       "Civil & Underground",
+  industrial:  "Industrial",
 } as const;
 
-// Ordered: Residential first, Commercial, Civil last
-const CATEGORY_ORDER = ["residential", "commercial", "civil"] as const;
+// Ordered: Residential first, Commercial, Civil, Industrial
+const CATEGORY_ORDER = ["residential", "commercial", "civil", "industrial"] as const;
 
 export default function BidPhaseShell() {
   const {
@@ -92,7 +97,7 @@ export default function BidPhaseShell() {
       const r = getCurrentRoute();
       setRoute(r);
       // Sync AppContext state
-      if (r === "civil" || r === "commercial" || r === "residential") {
+      if (r === "civil" || r === "commercial" || r === "residential" || r === "industrial") {
         setActiveCategory(r);
         setActiveTab("projects");
       } else if (r === "settings") {
@@ -117,14 +122,14 @@ export default function BidPhaseShell() {
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const isOnLanding    = route === "landing";
-  const isInCategory   = route === "civil" || route === "commercial" || route === "residential";
+  const isInCategory   = route === "civil" || route === "commercial" || route === "residential" || route === "industrial";
   const isInSettings   = route === "settings";
   const isInTrash      = route === "trash";
   const isInEstimate   = route === "estimate";
   const isInMaterial   = route === "material";
 
   const currentCategory = isInCategory
-    ? (route as "civil" | "commercial" | "residential")
+    ? (route as "civil" | "commercial" | "residential" | "industrial")
     : activeCategory;
 
   // ── Open L&M with proper URL push ─────────────────────────────────────────
@@ -237,19 +242,19 @@ export default function BidPhaseShell() {
           />
         </nav>
 
-        {/* Bottom section: Settings + Trash */}
+        {/* Bottom section: Trash on top, Settings on bottom */}
         <div className="flex flex-col gap-1 p-2 border-t border-sidebar-border shrink-0">
-          <NavBtn
-            onClick={() => navigate("settings")}
-            isActive={isInSettings}
-            icon={Settings}
-            label="Settings"
-          />
           <NavBtn
             onClick={() => navigate("trash")}
             isActive={isInTrash}
             icon={Trash2}
             label="Trash"
+          />
+          <NavBtn
+            onClick={() => navigate("settings")}
+            isActive={isInSettings}
+            icon={Settings}
+            label="Settings"
           />
         </div>
 

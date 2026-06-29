@@ -4,7 +4,7 @@
  * Uses CivilState/CivilProject as the canonical project type.
  * Each run has a runType toggle: "conduit" (pipe sticks + fittings) or "wire" (bare conductor).
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useApp } from "@/contexts/AppContext";
 import {
   CONDUIT_SIZES,
@@ -149,6 +149,25 @@ export function ResidentialIcon({ size = 20, className = "" }: { size?: number; 
       <rect x="9" y="14" width="6" height="7" rx="1" />
       <circle cx="10.5" cy="17.5" r="0.8" fill="currentColor" stroke="none" />
       <circle cx="13.5" cy="17.5" r="0.8" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function IndustrialIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      {/* Factory building */}
+      <rect x="2" y="10" width="20" height="12" rx="1" />
+      {/* Chimney stacks */}
+      <rect x="5" y="4" width="3" height="6" rx="0.5" />
+      <rect x="11" y="6" width="3" height="4" rx="0.5" />
+      {/* Door */}
+      <rect x="10" y="16" width="4" height="6" rx="0.5" />
+      {/* Windows */}
+      <rect x="4" y="13" width="3" height="3" rx="0.5" />
+      <rect x="17" y="13" width="3" height="3" rx="0.5" />
     </svg>
   );
 }
@@ -1267,9 +1286,9 @@ const CATEGORY_LABELS: Record<string, string> = {
   civil: "Civil & Underground",
   commercial: "Commercial Assembly",
   residential: "Residential Rough-In",
+  industrial: "Industrial",
 };
-
-export default function UnifiedProjects({ category = "civil" }: { category?: "civil" | "commercial" | "residential" }) {
+export default function UnifiedProjects({ category = "civil" }: { category?: "civil" | "commercial" | "residential" | "industrial" }) {
   const {
     civilCatProjects,
     activeCivilCatId,
@@ -1292,38 +1311,64 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
     renameResidentialCatProject,
     deleteResidentialCatProject,
     switchResidentialCatProject,
+    industrialCatProjects,
+    activeIndustrialCatId,
+    activeIndustrialCatProject,
+    addIndustrialCatProject,
+    renameIndustrialCatProject,
+    deleteIndustrialCatProject,
+    switchIndustrialCatProject,
   } = useApp();
-
   // Pick the right store based on category
-  const civilProjects = category === "civil" ? civilCatProjects : category === "commercial" ? commercialCatProjects : residentialCatProjects;
-  const activeCivilId = category === "civil" ? activeCivilCatId : category === "commercial" ? activeCommercialCatId : activeResidentialCatId;
-  const activeCivilProject = category === "civil" ? activeCivilCatProject : category === "commercial" ? activeCommercialCatProject : activeResidentialCatProject;
-  const addCivilProject = category === "civil" ? addCivilCatProject : category === "commercial" ? addCommercialCatProject : addResidentialCatProject;
-  const renameCivilProject = category === "civil" ? renameCivilCatProject : category === "commercial" ? renameCommercialCatProject : renameResidentialCatProject;
-  const deleteCivilProject = category === "civil" ? deleteCivilCatProject : category === "commercial" ? deleteCommercialCatProject : deleteResidentialCatProject;
-  const switchCivilProject = category === "civil" ? switchCivilCatProject : category === "commercial" ? switchCommercialCatProject : switchResidentialCatProject;
-  const categoryLabel = CATEGORY_LABELS[category] ?? "Projects";
+  const civilProjects = category === "civil" ? civilCatProjects : category === "commercial" ? commercialCatProjects : category === "industrial" ? industrialCatProjects : residentialCatProjects;
+  const activeCivilId = category === "civil" ? activeCivilCatId : category === "commercial" ? activeCommercialCatId : category === "industrial" ? activeIndustrialCatId : activeResidentialCatId;
+  const activeCivilProject = category === "civil" ? activeCivilCatProject : category === "commercial" ? activeCommercialCatProject : category === "industrial" ? activeIndustrialCatProject : activeResidentialCatProject;
+  const addCivilProject = category === "civil" ? addCivilCatProject : category === "commercial" ? addCommercialCatProject : category === "industrial" ? addIndustrialCatProject : addResidentialCatProject;
+  const renameCivilProject = category === "civil" ? renameCivilCatProject : category === "commercial" ? renameCommercialCatProject : category === "industrial" ? renameIndustrialCatProject : renameResidentialCatProject;
+  const deleteCivilProject = category === "civil" ? deleteCivilCatProject : category === "commercial" ? deleteCommercialCatProject : category === "industrial" ? deleteIndustrialCatProject : deleteResidentialCatProject;
+  const switchCivilProject = category === "civil" ? switchCivilCatProject : category === "commercial" ? switchCommercialCatProject : category === "industrial" ? switchIndustrialCatProject : switchResidentialCatProject;
+    const categoryLabel = CATEGORY_LABELS[category] ?? "Projects";
 
-  // "null" means show homepage; a project id means show editor
-  const [openProjectId, setOpenProjectId] = useState<string | null>(null);
+  // ── Hash-based sub-routing so browser back/forward works ──────────────────
+  // Hash format: #/residential/project-id  (project list = #/residential)
+  function getProjectIdFromHash(): string | null {
+    const hash = window.location.hash.replace(/^#\/?/, "");
+    const parts = hash.split("/");
+    // parts[0] = category, parts[1] = project id (if present)
+    if (parts[0] === category && parts[1] && parts[1] !== "") return parts[1];
+    return null;
+  }
+
+  const [openProjectId, setOpenProjectId] = useState<string | null>(() => getProjectIdFromHash());
+
+  // Listen for browser back/forward to sync openProjectId
+  useEffect(() => {
+    const onHashChange = () => {
+      setOpenProjectId(getProjectIdFromHash());
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category]);
 
   const handleOpen = (id: string) => {
     switchCivilProject(id);
+    // Push sub-route so browser back returns to project list
+    window.location.hash = `/${category}/${id}`;
     setOpenProjectId(id);
   };
-
   const handleNew = (name?: string) => {
     addCivilProject(name);
     // After adding, the new project becomes active — open it immediately
-    // We need a small delay since addCivilProject is async state update
     setTimeout(() => {
-      // The new project is the last one
-      setOpenProjectId(null); // trigger re-render to pick up new activeCivilId
-      // Actually open it after state settles
-      setTimeout(() => setOpenProjectId("__new__"), 50);
+      setOpenProjectId(null);
+      setTimeout(() => {
+        // Push sub-route with "__new__" sentinel
+        window.location.hash = `/${category}/__new__`;
+        setOpenProjectId("__new__");
+      }, 50);
     }, 50);
   };
-
   // When openProjectId is "__new__", resolve to actual activeCivilId
   const resolvedOpenId =
     openProjectId === "__new__" ? activeCivilId : openProjectId;
@@ -1350,7 +1395,16 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
       projectId={proj.id}
       projectName={proj.name}
       categoryLabel={categoryLabel}
-      onBack={() => setOpenProjectId(null)}
+      onBack={() => {
+        // Use browser history.back() so the URL sub-route is popped
+        // and the hashchange listener above will set openProjectId to null
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.location.hash = `/${category}`;
+          setOpenProjectId(null);
+        }
+      }}
     />
   );
 }

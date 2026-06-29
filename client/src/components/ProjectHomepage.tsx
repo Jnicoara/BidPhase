@@ -25,7 +25,7 @@ interface ProjectHomepageProps {
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onSwitch?: (id: string) => void;
-  category?: "civil" | "commercial" | "residential";
+  category?: "civil" | "commercial" | "residential" | "industrial";
 }
 
 export default function ProjectHomepage({

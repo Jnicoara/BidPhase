@@ -13,6 +13,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   civil: "Civil & Underground",
   commercial: "Commercial",
   residential: "Residential",
+  industrial: "Industrial",
 };
 
 export default function TrashPage({ onBack }: { onBack: () => void }) {

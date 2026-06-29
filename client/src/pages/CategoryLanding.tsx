@@ -16,25 +16,28 @@ const CATEGORIES = [
   { id: "residential" as const, label: "Residential" },
   { id: "commercial" as const, label: "Commercial" },
   { id: "civil" as const, label: "Civil & Underground" },
+  { id: "industrial" as const, label: "Industrial" },
 ] as const;
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil" | "commercial" | "residential") => void } = {}) {
+export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil" | "commercial" | "residential" | "industrial") => void } = {}) {
   const {
     setActiveCategory,
     setActiveTab,
     civilCatProjects,
     commercialCatProjects,
     residentialCatProjects,
+    industrialCatProjects,
   } = useApp();
 
   const counts: Record<string, number> = {
     civil: civilCatProjects.length,
     commercial: commercialCatProjects.length,
     residential: residentialCatProjects.length,
+    industrial: industrialCatProjects.length,
   };
 
-  const handleSelect = (id: "civil" | "commercial" | "residential") => {
+  const handleSelect = (id: "civil" | "commercial" | "residential" | "industrial") => {
     if (onSelect) {
       onSelect(id);
     } else {
@@ -60,7 +63,7 @@ export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil"
 
       {/* ── Category cards ─────────────────────────────────────────────── */}
       <div className="flex-1 flex items-center justify-center px-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-5xl">
           {CATEGORIES.map((cat) => {
             const count = counts[cat.id] ?? 0;
             return (
