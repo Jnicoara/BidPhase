@@ -183,8 +183,11 @@ function defaultFittings(): FittingCounts {
   return { connector: 0, coupling: 0, lb: 0, elbow90: 0, elbow45: 0, sweep: 0, offset: 0 };
 }
 
-function calcWire(feet: number, conductors: number) {
-  return parseFloat((feet * conductors * 1.1).toFixed(1));
+function calcWire(feet: number, conductors: number, slackPct = 10) {
+  return parseFloat((feet * conductors * (1 + slackPct / 100)).toFixed(1));
+}
+function calcConduitWithSlack(feet: number, slackPct = 10) {
+  return parseFloat((feet * (1 + slackPct / 100)).toFixed(1));
 }
 
 function conductorLabel(mat: ConductorMaterial, size: ConductorSize) {
@@ -334,8 +337,12 @@ function RunCard({
   onRemove: (id: string) => void;
 }) {
   const [showFittings, setShowFittings] = useState(false);
+  const isWire = (run.runType ?? "conduit") === "wire";
+  const wireSlack = run.wireSlackPct ?? 10;
+  const conduitSlack = run.conduitSlackPct ?? 10;
   const sticks = calcSticks(run.feet);
-  const wire = calcWire(run.feet, run.conductors);
+  const conduitWithSlack = calcConduitWithSlack(run.feet, conduitSlack);
+  const wire = calcWire(run.feet, run.conductors, wireSlack);
 
   const updateFitting = (key: FittingId, val: number) => {
     onUpdate(run.id, { fittings: { ...run.fittings, [key]: val } });
@@ -382,8 +389,8 @@ function RunCard({
 
       {/* Run body */}
       <div className="p-4 space-y-4">
-        {/* Distance + Conductors row */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Distance row — full width for wire runs, half for conduit */}
+        <div className={isWire ? "space-y-1.5" : "grid grid-cols-2 gap-3"}>
           <div className="space-y-1.5">
             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Distance (ft)</Label>
             <Input
@@ -396,18 +403,20 @@ function RunCard({
               className="h-8 font-mono text-sm bg-input border-border"
             />
           </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductors</Label>
-              <span className="text-sm font-bold text-[#F5C518] font-mono">{run.conductors}</span>
+          {!isWire && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductors</Label>
+                <span className="text-sm font-bold text-[#F5C518] font-mono">{run.conductors}</span>
+              </div>
+              <Slider
+                min={1} max={12} step={1}
+                value={[run.conductors]}
+                onValueChange={([v]) => onUpdate(run.id, { conductors: v })}
+                className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+              />
             </div>
-            <Slider
-              min={1} max={12} step={1}
-              value={[run.conductors]}
-              onValueChange={([v]) => onUpdate(run.id, { conductors: v })}
-              className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
-            />
-          </div>
+          )}
         </div>
 
         {/* Run type toggle: Conduit vs Wire */}
@@ -482,26 +491,28 @@ function RunCard({
           />
         )}
 
-        {/* Conductor material */}
-        <div className="space-y-1.5">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Material</Label>
-          <div className="flex gap-2">
-            {CONDUCTOR_MATERIALS.map((cm) => (
-              <button
-                key={cm.id}
-                onClick={() => onUpdate(run.id, { conductorMaterial: cm.id as ConductorMaterial })}
-                className={cn(
-                  "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
-                  (run.conductorMaterial ?? "CU") === cm.id
-                    ? "bg-yellow-400 text-black border-yellow-400"
-                    : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                )}
-              >
-                {cm.label}
-              </button>
-            ))}
+        {/* Conductor material — hidden for wire runs (material is embedded in wire type name) */}
+        {!isWire && (
+          <div className="space-y-1.5">
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Material</Label>
+            <div className="flex gap-2">
+              {CONDUCTOR_MATERIALS.map((cm) => (
+                <button
+                  key={cm.id}
+                  onClick={() => onUpdate(run.id, { conductorMaterial: cm.id as ConductorMaterial })}
+                  className={cn(
+                    "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
+                    (run.conductorMaterial ?? "CU") === cm.id
+                      ? "bg-yellow-400 text-black border-yellow-400"
+                      : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                  )}
+                >
+                  {cm.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Conductor size */}
         <div className="space-y-1.5">
@@ -524,15 +535,48 @@ function RunCard({
           </div>
         </div>
 
+        {/* Slack controls */}
+        <div className="space-y-2">
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Slack</Label>
+          <div className={cn("grid gap-3", isWire ? "grid-cols-1" : "grid-cols-2")}>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">{isWire ? "Wire Slack" : "Wire Slack"}</span>
+                <span className="text-xs font-bold font-mono text-[#F5C518]">{wireSlack}%</span>
+              </div>
+              <Slider
+                min={0} max={50} step={1}
+                value={[wireSlack]}
+                onValueChange={([v]) => onUpdate(run.id, { wireSlackPct: v })}
+                className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+              />
+            </div>
+            {!isWire && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">Conduit Slack</span>
+                  <span className="text-xs font-bold font-mono text-[#F5C518]">{conduitSlack}%</span>
+                </div>
+                <Slider
+                  min={0} max={50} step={1}
+                  value={[conduitSlack]}
+                  onValueChange={([v]) => onUpdate(run.id, { conduitSlackPct: v })}
+                  className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Calculated outputs */}
         <div className="grid grid-cols-2 gap-2">
-          {(run.runType ?? "conduit") === "conduit" && (
+          {!isWire && (
             <div className="bg-muted/20 rounded-lg p-2.5">
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
                 <ConduitPipeIcon size={10} /> Pipe Sticks
               </div>
-              <div className="text-xl font-bold font-mono text-foreground">{sticks}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">10-ft sticks</div>
+              <div className="text-xl font-bold font-mono text-foreground">{calcSticks(conduitWithSlack)}</div>
+              <div className="text-[10px] text-muted-foreground font-mono">10-ft sticks ({conduitSlack}% slack)</div>
             </div>
           )}
           <div className="bg-muted/20 rounded-lg p-2.5">
@@ -540,7 +584,7 @@ function RunCard({
               <StrippedWireIcon size={10} /> Wire Length
             </div>
             <div className="text-xl font-bold font-mono text-foreground">{wire}</div>
-            <div className="text-[10px] text-muted-foreground font-mono">ft w/ 10% slack</div>
+            <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wireSlack}% slack</div>
           </div>
         </div>
 

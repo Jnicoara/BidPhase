@@ -735,23 +735,27 @@ export default function PlanPanel({
         }
       }
 
-      // Dots
+      // Dots — solid red, white outline, always visible against any background
       const dotR = (isActive ? 5 : 4) * S;
       pts.forEach((p, i) => {
-        // Dot shadow
+        // White halo for contrast
         ctx.beginPath();
-        ctx.arc(p.x, p.y, dotR + 1.5 * S, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
-        ctx.fill();
-        // Dot fill
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.globalAlpha = isActive ? 1 : 0.75;
+        ctx.arc(p.x, p.y, dotR + 2 * S, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.globalAlpha = 0.9;
         ctx.fill();
         ctx.globalAlpha = 1;
+        // Solid red fill
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
+        ctx.fillStyle = "#e53e3e";
+        ctx.fill();
+        // Thin dark ring
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.lineWidth = 1 * S;
+        ctx.stroke();
         if (isActive && (i === 0 || i === pts.length - 1)) {
-          ctx.fillStyle = color;
+          ctx.fillStyle = "#e53e3e";
           ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
           ctx.fillText(i === 0 ? "▶" : "■", p.x + 7 * S, p.y - 6 * S);
         }
@@ -928,16 +932,25 @@ export default function PlanPanel({
       ctx.setLineDash([]);
     }
     scalePts.forEach((p, i) => {
+      // White halo
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 8 * S, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.globalAlpha = 0.9;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Solid red fill
       ctx.beginPath();
       ctx.arc(p.x, p.y, 6 * S, 0, Math.PI * 2);
-      ctx.fillStyle = "#F5C518";
+      ctx.fillStyle = "#e53e3e";
       ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.strokeStyle = "rgba(0,0,0,0.55)";
       ctx.lineWidth = 1.5 * S;
       ctx.stroke();
-      ctx.fillStyle = "#F5C518";
+      // Label
+      ctx.fillStyle = "#e53e3e";
       ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
-      ctx.fillText(`S${i + 1}`, p.x + 8 * S, p.y - 6 * S);
+      ctx.fillText(`S${i + 1}`, p.x + 9 * S, p.y - 7 * S);
     });
 
   }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins]);
@@ -1984,7 +1997,7 @@ export default function PlanPanel({
         ref={viewportRef}
         className="flex-1 relative overflow-hidden"
         style={{
-          cursor: isPanning ? "grabbing" : mode !== "none" ? "none" : "grab",
+          cursor: isPanning ? "grabbing" : mode !== "none" ? "crosshair" : "grab",
         }}
         onContextMenu={(e) => { if (mode !== "count") e.preventDefault(); }}
         onMouseDown={(e) => {
@@ -2077,7 +2090,7 @@ export default function PlanPanel({
                     left: 0,
                     pointerEvents: "auto",
                     zIndex: 10,
-                    cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : mode === "none" ? "default" : "crosshair",
+                    cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : mode === "none" ? "inherit" : "crosshair",
                   }}
                   onClick={handleCanvasClick}
                   onContextMenu={handleCanvasContextMenu}

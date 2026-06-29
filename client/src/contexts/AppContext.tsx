@@ -133,6 +133,10 @@ export interface RunItem {
   wireTypeId?: string;
   /** Whether to use stranded form (only applies when wireType.hasStrandedChoice === true) */
   wireStranded?: boolean;
+  /** Slack % added to wire length calculation (default 10) */
+  wireSlackPct?: number;
+  /** Slack % added to conduit length in conduit (default 10) */
+  conduitSlackPct?: number;
 }
 
 // ─── Saved material row (count session saved to L&M) ───────────────────────
