@@ -65,7 +65,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure" | "count";
+type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure" | "count" | "drag-scale" | "drag-run";
 
 // CountPin and CountSession types are imported from AppContext
 // (they live there so AssemblyState can reference them without circular imports)
@@ -384,6 +384,13 @@ export default function PlanPanel({
   }, [pageIdx, setPageScaleMap]);
 
   const [knownDistance, setKnownDistance] = useState<string>("");
+  // ── Scale prompt: show on first PDF load if no scale set ─────────────────
+  const [showScalePrompt, setShowScalePrompt] = useState(false);
+  // ── Drag state for scale points and run points ────────────────────────────
+  // dragPointRef: { type: 'scale' | 'run', index: number, runId?: string }
+  const dragPointRef = useRef<{ type: 'scale' | 'run'; index: number; runId?: string } | null>(null);
+  // ── Delete confirm dialog ─────────────────────────────────────────────────
+  const [deleteConfirm, setDeleteConfirm] = useState<{ count: number; onConfirm: () => void } | null>(null);
 
   // ── Count pins (session-based, cross-page) ────────────────────────────────
   // Pins live in the parent's CountSession state, not in a local PagePinsMap.
@@ -783,10 +790,22 @@ export default function PlanPanel({
 
       // Pin sizes are FIXED in canvas pixels regardless of zoom.
       // S = RENDER_BASE_ZOOM / displayZoom, so dividing by S gives constant screen size.
-      const R = 8 * S;   // dot radius  (8 screen px)
-      const RC = 10 * S; // circle radius (10 screen px)
-      const RL = 14 * S; // large-circle radius (14 screen px)
-      const SQ = 12 * S; // square half-side (12 screen px)
+      // Dots
+      const R_XS = 3 * S;   // dot-xs
+      const R_SM = 5 * S;   // dot-sm
+      const R    = 8 * S;   // dot (default)
+      // Circles
+      const RC   = 10 * S;  // circle
+      const RL   = 14 * S;  // large-circle
+      const RXL  = 18 * S;  // xl-circle
+      // Squares (half-side)
+      const SQ   = 10 * S;  // square
+      const SQLG = 14 * S;  // square-lg
+      const SQXL = 18 * S;  // square-xl
+      // Triangles (half-base)
+      const TSM  = 9 * S;   // triangle-sm
+      const TM   = 13 * S;  // triangle
+      const TLG  = 17 * S;  // triangle-lg
 
       ctx.save();
       ctx.strokeStyle = color;
@@ -800,26 +819,43 @@ export default function PlanPanel({
       ctx.shadowColor = "rgba(0,0,0,0.70)";
       ctx.shadowBlur = 4 * S;
 
-      if (shape === "dot") {
+      const drawTriangle = (half: number) => {
+        const h = half * 1.73; // equilateral height
         ctx.beginPath();
-        ctx.arc(px.x, px.y, R, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(px.x, px.y - h * 0.67);
+        ctx.lineTo(px.x + half, px.y + h * 0.33);
+        ctx.lineTo(px.x - half, px.y + h * 0.33);
+        ctx.closePath();
+        ctx.stroke();
+      };
+
+      if (shape === "dot-xs") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, R_XS, 0, Math.PI * 2); ctx.fill();
+      } else if (shape === "dot-sm") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, R_SM, 0, Math.PI * 2); ctx.fill();
+      } else if (shape === "dot") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, R, 0, Math.PI * 2); ctx.fill();
       } else if (shape === "circle") {
-        ctx.beginPath();
-        ctx.arc(px.x, px.y, RC, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(px.x, px.y, RC, 0, Math.PI * 2); ctx.stroke();
       } else if (shape === "large-circle") {
-        ctx.beginPath();
-        ctx.arc(px.x, px.y, RL, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(px.x, px.y, RL, 0, Math.PI * 2); ctx.stroke();
+      } else if (shape === "xl-circle") {
+        ctx.beginPath(); ctx.arc(px.x, px.y, RXL, 0, Math.PI * 2); ctx.stroke();
       } else if (shape === "square") {
-        ctx.beginPath();
         ctx.strokeRect(px.x - SQ, px.y - SQ, SQ * 2, SQ * 2);
+      } else if (shape === "square-lg") {
+        ctx.strokeRect(px.x - SQLG, px.y - SQLG, SQLG * 2, SQLG * 2);
+      } else if (shape === "square-xl") {
+        ctx.strokeRect(px.x - SQXL, px.y - SQXL, SQXL * 2, SQXL * 2);
+      } else if (shape === "triangle-sm") {
+        drawTriangle(TSM);
+      } else if (shape === "triangle") {
+        drawTriangle(TM);
+      } else if (shape === "triangle-lg") {
+        drawTriangle(TLG);
       } else {
         // Fallback: filled dot
-        ctx.beginPath();
-        ctx.arc(px.x, px.y, R, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(px.x, px.y, R, 0, Math.PI * 2); ctx.fill();
       }
 
       ctx.shadowColor = "transparent";
@@ -945,6 +981,13 @@ export default function PlanPanel({
     pageSizeRef.current = { w: page.width, h: page.height };
     setPageReady(true);
   }, []);
+
+  // Show scale prompt when page becomes ready and no scale is set yet
+  useEffect(() => {
+    if (pageReady && pdfFile && scaleRatio === null) {
+      setShowScalePrompt(true);
+    }
+  }, [pageReady, pdfFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Zoom helpers ──────────────────────────────────────────────────────────
   // No debounce needed — PDF renders once at RENDER_BASE_ZOOM, zoom is pure CSS scale.
@@ -1103,15 +1146,142 @@ export default function PlanPanel({
   // Canvas is rendered at renderZoom; getBoundingClientRect gives display size.
   // During the transient CSS scale (displayZoom != renderZoom) the canvas is also
   // scaled, so we must account for the visual scale to get correct canvas pixels.
-  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  // ── Helper: canvas coords from mouse event ───────────────────────────────────────────
+  const getCanvasCoords = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    // rect.width = canvas.width * (displayZoom / renderZoom) during transient scale
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const cx = (e.clientX - rect.left) * scaleX;
-    const cy = (e.clientY - rect.top)  * scaleY;
+    return {
+      cx: (e.clientX - rect.left) * scaleX,
+      cy: (e.clientY - rect.top)  * scaleY,
+    };
+  }, []);
+
+  // ── Hit-test helpers ──────────────────────────────────────────────────────────────────
+  const HIT_PX = 14; // screen pixels
+  const hitTestPoint = useCallback((cx: number, cy: number, pt: NormPoint): boolean => {
+    const p = normToCanvas(pt);
+    if (!p) return false;
+    const screenDist = dist2D(cx, cy, p.x, p.y) * (displayZoomRef.current / RENDER_BASE_ZOOM);
+    return screenDist <= HIT_PX;
+  }, [normToCanvas]);
+
+  const hitTestSegment = useCallback((cx: number, cy: number, a: NormPoint, b: NormPoint): boolean => {
+    const pa = normToCanvas(a);
+    const pb = normToCanvas(b);
+    if (!pa || !pb) return false;
+    const dx = pb.x - pa.x;
+    const dy = pb.y - pa.y;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return dist2D(cx, cy, pa.x, pa.y) * (displayZoomRef.current / RENDER_BASE_ZOOM) <= HIT_PX;
+    const t = Math.max(0, Math.min(1, ((cx - pa.x) * dx + (cy - pa.y) * dy) / lenSq));
+    const projX = pa.x + t * dx;
+    const projY = pa.y + t * dy;
+    return dist2D(cx, cy, projX, projY) * (displayZoomRef.current / RENDER_BASE_ZOOM) <= HIT_PX;
+  }, [normToCanvas]);
+
+  // ── Canvas mouse down: start drag if near a point, else click-to-place ───────
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return;
+    const coords = getCanvasCoords(e);
+    if (!coords) return;
+    const { cx, cy } = coords;
+    const m = modeRef.current;
+
+    // In scale modes: check if clicking near an existing scale point to drag it
+    if (m === "set-scale-p1" || m === "set-scale-p2") {
+      for (let i = 0; i < scalePoints.length; i++) {
+        if (hitTestPoint(cx, cy, scalePoints[i])) {
+          dragPointRef.current = { type: 'scale', index: i };
+          setMode("drag-scale");
+          modeRef.current = "drag-scale";
+          e.stopPropagation();
+          return;
+        }
+      }
+    }
+
+    // In measure mode: check if clicking near an existing run point to drag it
+    if (m === "measure" && activeRun) {
+      for (let i = 0; i < activeRun.points.length; i++) {
+        if (hitTestPoint(cx, cy, activeRun.points[i])) {
+          dragPointRef.current = { type: 'run', index: i, runId: activeRun.id };
+          setMode("drag-run");
+          modeRef.current = "drag-run";
+          e.stopPropagation();
+          return;
+        }
+      }
+    }
+
+    // In none mode: check if clicking near a run line to activate that run
+    if (m === "none") {
+      for (const run of currentRuns) {
+        if (run.points.length < 2) continue;
+        for (let i = 1; i < run.points.length; i++) {
+          if (hitTestSegment(cx, cy, run.points[i - 1], run.points[i])) {
+            setCurrentActiveRunId(run.id);
+            setMode("measure");
+            modeRef.current = "measure";
+            toast.info(`"${run.name}" selected — click to add points or press Esc to finish.`);
+            e.stopPropagation();
+            return;
+          }
+        }
+      }
+    }
+  }, [getCanvasCoords, scalePoints, hitTestPoint, hitTestSegment, activeRun, currentRuns, setCurrentActiveRunId]);
+
+  // ── Canvas mouse move during drag ───────────────────────────────────────────────
+  const handleCanvasDragMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const drag = dragPointRef.current;
+    if (!drag) return;
+    const coords = getCanvasCoords(e);
+    if (!coords) return;
+    const { cx, cy } = coords;
+    const pt = canvasToNorm(cx, cy);
+    if (!pt) return;
+
+    if (drag.type === 'scale') {
+      setScalePoints((prev) => {
+        const next = [...prev];
+        next[drag.index] = pt;
+        return next;
+      });
+    } else if (drag.type === 'run' && drag.runId) {
+      setCurrentRuns((prev) =>
+        prev.map((r) => {
+          if (r.id !== drag.runId) return r;
+          const pts = [...r.points];
+          pts[drag.index] = pt;
+          return { ...r, points: pts };
+        })
+      );
+    }
+  }, [getCanvasCoords, canvasToNorm, setScalePoints, setCurrentRuns]);
+
+  // ── Canvas mouse up: end drag ────────────────────────────────────────────────────────
+  const handleCanvasDragEnd = useCallback(() => {
+    const drag = dragPointRef.current;
+    if (!drag) return;
+    dragPointRef.current = null;
+    if (drag.type === 'scale') {
+      setMode("set-scale-p2");
+      modeRef.current = "set-scale-p2";
+    } else {
+      setMode("measure");
+      modeRef.current = "measure";
+    }
+  }, []);
+
+  // ── Canvas click handler ──────────────────────────────────────────────────────
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (dragPointRef.current !== null) return; // just finished a drag
+    const coords = getCanvasCoords(e);
+    if (!coords) return;
+    const { cx, cy } = coords;
     const pt = canvasToNorm(cx, cy);
     if (!pt) return;
 
@@ -1121,15 +1291,19 @@ export default function PlanPanel({
       setMode("set-scale-p2");
       modeRef.current = "set-scale-p2";
     } else if (m === "set-scale-p2") {
-      setScalePoints((prev) => [...prev.slice(0, 1), pt]);
+      if (scalePoints.length === 0 || !hitTestPoint(cx, cy, scalePoints[0])) {
+        setScalePoints((prev) => [...prev.slice(0, 1), pt]);
+      }
     } else if (m === "measure") {
-      setCurrentRuns((prev) =>
-        prev.map((r) =>
-          r.id === currentActiveRunId ? { ...r, points: [...r.points, pt] } : r
-        )
-      );
+      const isNearExisting = activeRun?.points.some((p) => hitTestPoint(cx, cy, p)) ?? false;
+      if (!isNearExisting) {
+        setCurrentRuns((prev) =>
+          prev.map((r) =>
+            r.id === currentActiveRunId ? { ...r, points: [...r.points, pt] } : r
+          )
+        );
+      }
     } else if (m === "count") {
-      // Drop a count pin — session ownership lives in the parent (CommercialAssembly)
       if (!activeCountSession) {
         toast.warning("Create a count session first.");
         return;
@@ -1144,7 +1318,7 @@ export default function PlanPanel({
       const total = (activeCountSession.pins.length) + 1;
       toast.success(`Pin ${total} placed (${activeCountSession.name}).`);
     }
-  }, [canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId, activeCountSession, currentPage, onPinAdded]);
+  }, [getCanvasCoords, canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId, activeCountSession, currentPage, onPinAdded, scalePoints, hitTestPoint, activeRun]);
 
   // ── Canvas right-click: delete nearest count pin ────────────────────────
   const handleCanvasContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1199,8 +1373,10 @@ export default function PlanPanel({
     // pxDist is in canvas pixels at RENDER_BASE_ZOOM; divide by RENDER_BASE_ZOOM to get px/ft at zoom=1
     const pxPerFtAtZoom1 = (pxDist / d) / RENDER_BASE_ZOOM;
     setScaleRatio(pxPerFtAtZoom1);
+    setKnownDistance(""); // clear so next reset starts with empty input
     setMode("none");
     modeRef.current = "none";
+    setShowScalePrompt(false);
     toast.success(`Scale set ✓  1 ft = ${(pxDist / d).toFixed(2)} px at current zoom.`);
   }, [scalePoints, knownDistance, normDist, setScaleRatio]);
 
@@ -1255,7 +1431,7 @@ export default function PlanPanel({
     const id = nanoid6();
     const name = `Run ${currentRuns.length + 1}`;
     const color = BASE_PALETTE[currentRuns.length % BASE_PALETTE.length];
-    const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "3/4" };
+    const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "1/2" };
     setCurrentRuns((prev) => [...prev, newRun]);
     setCurrentActiveRunId(id);
     // Automatically activate measure mode so the user can start clicking immediately
@@ -1313,6 +1489,75 @@ export default function PlanPanel({
     <div className="flex flex-col h-full bg-background border-r border-border relative">
 
       {/* ── Page Overview Overlay ─────────────────────────────────────── */}
+      {/* ── Scale Prompt Overlay ─────────────────────────────────────────── */}
+      {showScalePrompt && (
+        <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-base font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Set Scale First</h3>
+              <p className="text-sm text-muted-foreground">Before measuring, calibrate the scale by drawing a line over a known distance on the plan.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  setShowScalePrompt(false);
+                  setScalePoints([]);
+                  setMode("set-scale-p1");
+                  modeRef.current = "set-scale-p1";
+                  toast.info("Click the first point of a known distance on the plan.");
+                }}
+              >
+                Set Scale Now
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowScalePrompt(false)}
+              >
+                Skip
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Dialog ─────────────────────────────────────────── */}
+      {deleteConfirm && (
+        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-5 max-w-xs w-full mx-4 space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-destructive">Confirm Delete</h3>
+              <p className="text-sm text-muted-foreground">
+                You are about to delete {deleteConfirm.count} item{deleteConfirm.count !== 1 ? "s" : ""}. This cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="destructive"
+                className="flex-1"
+                onClick={() => {
+                  deleteConfirm.onConfirm();
+                  setDeleteConfirm(null);
+                }}
+              >
+                Yes, Delete
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setDeleteConfirm(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPageOverview && pdfFile && numPages > 0 && (
         <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
@@ -1453,7 +1698,7 @@ export default function PlanPanel({
             const runNum = currentRuns.length + 1;
             const name = `Run ${runNum}`;
             const color = BASE_PALETTE[(runNum - 1) % BASE_PALETTE.length];
-            const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "3/4" };
+            const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "1/2" };
             setCurrentRuns((prev) => [...prev, newRun]);
             setCurrentActiveRunId(id);
             setMode("measure");
@@ -1513,19 +1758,32 @@ export default function PlanPanel({
           <Undo2 size={13} />
         </Button>
 
-        {/* Clear run points */}
+        {/* Clear run points — with confirm if many points */}
         <Button
           size="icon"
           className="h-7 w-7 shrink-0"
           variant="ghost"
           onClick={() => {
-            setCurrentRuns((prev) => prev.map((r) => r.id === currentActiveRunId ? { ...r, points: [], totalFeet: null } : r));
-            setMode("none");
-            modeRef.current = "none";
-            toast.info("Run points cleared. Scale preserved.");
+            const pts = activeRun?.points?.length ?? 0;
+            const pinsOnPage = currentPins.length;
+            const total = pts + pinsOnPage;
+            const doDelete = () => {
+              setCurrentRuns((prev) => prev.map((r) => r.id === currentActiveRunId ? { ...r, points: [], totalFeet: null } : r));
+              if (pinsOnPage > 0 && activeCountSession) {
+                onClearPagePins?.(currentPage);
+              }
+              setMode("none");
+              modeRef.current = "none";
+              toast.info("Cleared. Scale preserved.");
+            };
+            if (total >= 3) {
+              setDeleteConfirm({ count: total, onConfirm: doDelete });
+            } else {
+              doDelete();
+            }
           }}
           disabled={!pdfFile}
-          title="Clear run points (scale preserved)"
+          title="Clear run points and page pins (scale preserved)"
         >
           <Trash2 size={13} />
         </Button>
@@ -1538,8 +1796,18 @@ export default function PlanPanel({
             variant="ghost"
             onClick={() => {
               if (!activeCountSession) return;
-              onClearPagePins?.(currentPage);
-              toast.info(`Cleared ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}.`);
+              if (currentPins.length >= 3) {
+                setDeleteConfirm({
+                  count: currentPins.length,
+                  onConfirm: () => {
+                    onClearPagePins?.(currentPage);
+                    toast.info(`Cleared ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}.`);
+                  },
+                });
+              } else {
+                onClearPagePins?.(currentPage);
+                toast.info(`Cleared ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}.`);
+              }
             }}
             title={`Clear all pins on page ${currentPage}`}
           >
@@ -1823,14 +2091,16 @@ export default function PlanPanel({
                     position: "absolute",
                     top: 0,
                     left: 0,
-                    pointerEvents: mode !== "none" ? "auto" : "none",
+                    pointerEvents: "auto",
                     zIndex: 10,
-                    cursor: "none",
+                    cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : mode === "none" ? "default" : "crosshair",
                   }}
                   onClick={handleCanvasClick}
                   onContextMenu={handleCanvasContextMenu}
-                  onMouseMove={handleCanvasMouseMove}
-                  onMouseLeave={() => setCrosshair(null)}
+                  onMouseMove={(e) => { handleCanvasMouseMove(e); handleCanvasDragMove(e); }}
+                  onMouseDown={handleCanvasMouseDown}
+                  onMouseUp={handleCanvasDragEnd}
+                  onMouseLeave={() => { setCrosshair(null); handleCanvasDragEnd(); }}
                 />
               )}
             </div>

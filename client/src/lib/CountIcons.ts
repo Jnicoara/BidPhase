@@ -1,7 +1,7 @@
 /**
  * BidPhase — Pin Shape Library
  *
- * Four simple shapes for Unit Count sessions.
+ * Shapes for Unit Count sessions.
  * Shape rendering is handled directly in PlanPanel canvas code
  * (not via SVG paths) for crisp results at all zoom levels.
  *
@@ -9,12 +9,24 @@
  * 24×24 preview swatch rendered in the session row UI.
  */
 
-export type PinShape = "dot" | "circle" | "large-circle" | "square";
+export type PinShape =
+  | "dot-xs"
+  | "dot-sm"
+  | "dot"
+  | "circle"
+  | "large-circle"
+  | "xl-circle"
+  | "square"
+  | "square-lg"
+  | "square-xl"
+  | "triangle-sm"
+  | "triangle"
+  | "triangle-lg";
 
 export interface CountIconDef {
   id: PinShape;
   label: string;
-  category: "Shapes";
+  category: "Dots" | "Circles" | "Squares" | "Triangles";
   /** SVG path(s) for the 24×24 preview swatch in the session row */
   paths: Array<{
     d: string;
@@ -23,37 +35,85 @@ export interface CountIconDef {
   }>;
 }
 
-export const ICON_CATEGORIES = ["Shapes"] as const;
+export const ICON_CATEGORIES = ["Dots", "Circles", "Squares", "Triangles"] as const;
 export type IconCategory = typeof ICON_CATEGORIES[number];
 
 export const COUNT_ICONS: CountIconDef[] = [
+  // ── Dots ──────────────────────────────────────────────────────────────────
+  {
+    id: "dot-xs",
+    label: "Dot XS",
+    category: "Dots",
+    paths: [{ d: "M13 12 a1 1 0 1 1 -2 0 a1 1 0 1 1 2 0 Z", strokeOnly: false, strokeWidth: 0 }],
+  },
+  {
+    id: "dot-sm",
+    label: "Dot SM",
+    category: "Dots",
+    paths: [{ d: "M14 12 a2 2 0 1 1 -4 0 a2 2 0 1 1 4 0 Z", strokeOnly: false, strokeWidth: 0 }],
+  },
   {
     id: "dot",
     label: "Dot",
-    category: "Shapes",
-    // Small filled circle, radius 4, centred at 12,12
+    category: "Dots",
     paths: [{ d: "M16 12 a4 4 0 1 1 -8 0 a4 4 0 1 1 8 0 Z", strokeOnly: false, strokeWidth: 0 }],
   },
+  // ── Circles ───────────────────────────────────────────────────────────────
   {
     id: "circle",
     label: "Circle",
-    category: "Shapes",
-    // Medium outline circle, radius 6
+    category: "Circles",
     paths: [{ d: "M18 12 a6 6 0 1 1 -12 0 a6 6 0 1 1 12 0 Z", strokeOnly: true, strokeWidth: 1.8 }],
   },
   {
     id: "large-circle",
-    label: "Large Circle",
-    category: "Shapes",
-    // Large outline circle, radius 9
+    label: "Circle LG",
+    category: "Circles",
     paths: [{ d: "M21 12 a9 9 0 1 1 -18 0 a9 9 0 1 1 18 0 Z", strokeOnly: true, strokeWidth: 1.8 }],
   },
   {
+    id: "xl-circle",
+    label: "Circle XL",
+    category: "Circles",
+    paths: [{ d: "M23 12 a11 11 0 1 1 -22 0 a11 11 0 1 1 22 0 Z", strokeOnly: true, strokeWidth: 2 }],
+  },
+  // ── Squares ───────────────────────────────────────────────────────────────
+  {
     id: "square",
     label: "Square",
-    category: "Shapes",
-    // Outline square, 12×12 centred at 12,12
+    category: "Squares",
     paths: [{ d: "M6 6 h12 v12 h-12 Z", strokeOnly: true, strokeWidth: 1.8 }],
+  },
+  {
+    id: "square-lg",
+    label: "Square LG",
+    category: "Squares",
+    paths: [{ d: "M4 4 h16 v16 h-16 Z", strokeOnly: true, strokeWidth: 2 }],
+  },
+  {
+    id: "square-xl",
+    label: "Square XL",
+    category: "Squares",
+    paths: [{ d: "M2 2 h20 v20 h-20 Z", strokeOnly: true, strokeWidth: 2.2 }],
+  },
+  // ── Triangles ─────────────────────────────────────────────────────────────
+  {
+    id: "triangle-sm",
+    label: "Triangle SM",
+    category: "Triangles",
+    paths: [{ d: "M12 6 L18 18 L6 18 Z", strokeOnly: true, strokeWidth: 1.8 }],
+  },
+  {
+    id: "triangle",
+    label: "Triangle",
+    category: "Triangles",
+    paths: [{ d: "M12 3 L21 20 L3 20 Z", strokeOnly: true, strokeWidth: 1.8 }],
+  },
+  {
+    id: "triangle-lg",
+    label: "Triangle LG",
+    category: "Triangles",
+    paths: [{ d: "M12 1 L23 22 L1 22 Z", strokeOnly: true, strokeWidth: 2 }],
   },
 ];
 

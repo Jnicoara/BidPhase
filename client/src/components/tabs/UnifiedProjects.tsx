@@ -4,7 +4,7 @@
  * Uses CivilState/CivilProject as the canonical project type.
  * Each run has a runType toggle: "conduit" (pipe sticks + fittings) or "wire" (bare conductor).
  */
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useApp } from "@/contexts/AppContext";
 import {
   CONDUIT_SIZES,
@@ -25,6 +25,7 @@ import type {
   CountSession,
 } from "@/contexts/AppContext";
 import { COUNT_ICONS, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR, type PinShape } from "@/lib/CountIcons";
+import { WIRE_TYPES, WIRE_CATEGORIES, type WireCategory } from "@/lib/wireTypes";
 import { toast } from "sonner";
 import CatalogPicker from "@/components/CatalogPicker";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
+import type { ImperativePanelHandle } from "react-resizable-panels";
 import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
@@ -229,6 +231,84 @@ function FittingCounter({
   );
 }
 
+// ─── Wire Type Picker ────────────────────────────────────────────────────────
+function WireTypePicker({
+  value,
+  stranded,
+  onChange,
+}: {
+  value?: string;
+  stranded?: boolean;
+  onChange: (id: string, stranded: boolean) => void;
+}) {
+  const [activeCategory, setActiveCategory] = useState<WireCategory>("THHN / THWN");
+  const filtered = WIRE_TYPES.filter((w) => w.category === activeCategory);
+  const selected = WIRE_TYPES.find((w) => w.id === value);
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Wire Type</Label>
+      {/* Category tabs */}
+      <div className="flex flex-wrap gap-1">
+        {WIRE_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className={cn(
+              "px-2 py-0.5 rounded text-[9px] font-medium border transition-all",
+              activeCategory === cat
+                ? "bg-yellow-400 text-black border-yellow-400"
+                : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50"
+            )}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+      {/* Wire list */}
+      <div className="max-h-32 overflow-y-auto space-y-0.5 pr-0.5" style={{ scrollbarWidth: "thin" }}>
+        {filtered.map((wt) => {
+          const isSelected = value === wt.id;
+          return (
+            <button
+              key={wt.id}
+              onClick={() => onChange(wt.id, wt.hasStrandedChoice ? (wt.defaultStranded ?? false) : false)}
+              className={cn(
+                "w-full text-left px-2 py-1.5 rounded text-[10px] border transition-all",
+                isSelected
+                  ? "bg-yellow-400/20 border-yellow-400 text-foreground"
+                  : "bg-muted/20 border-transparent hover:border-yellow-400/40 text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span className="font-mono font-semibold">{wt.label}</span>
+              <span className="ml-1.5 text-[9px] opacity-70">{wt.description}</span>
+            </button>
+          );
+        })}
+      </div>
+      {/* Stranded / Solid toggle — only shown when selected wire supports it */}
+      {selected?.hasStrandedChoice && (
+        <div className="flex gap-2">
+          {([false, true] as const).map((isStranded) => (
+            <button
+              key={String(isStranded)}
+              onClick={() => onChange(selected.id, isStranded)}
+              className={cn(
+                "flex-1 py-1 rounded text-[10px] font-medium border transition-all",
+                (stranded ?? selected.defaultStranded ?? false) === isStranded
+                  ? "bg-yellow-400 text-black border-yellow-400"
+                  : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50"
+              )}
+            >
+              {isStranded ? "Stranded" : "Solid"}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Run Card ─────────────────────────────────────────────────────────────────
 /**
  * RunCard — editable card for a single conduit run pushed from PlanPanel.
@@ -393,6 +473,15 @@ function RunCard({
             </div>
           </>
         )}
+        {/* Wire Type Picker — only shown for wire runs */}
+        {(run.runType ?? "conduit") === "wire" && (
+          <WireTypePicker
+            value={run.wireTypeId}
+            stranded={run.wireStranded}
+            onChange={(id, stranded) => onUpdate(run.id, { wireTypeId: id, wireStranded: stranded })}
+          />
+        )}
+
         {/* Conductor material */}
         <div className="space-y-1.5">
           <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Material</Label>
@@ -585,7 +674,11 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
   );
 
   return (
-    <div className="bp-card p-4 border-[#F5C518]/30 bg-[#F5C518]/5">
+    <div
+      className="bp-card p-4 border-[#F5C518]/30 bg-[#F5C518]/5 cursor-pointer hover:bg-[#F5C518]/10 transition-colors"
+      onClick={() => setShowMaterialList(true)}
+      title="Open Labor & Material list"
+    >
       <h3
         className="text-xs font-semibold text-[#F5C518] uppercase tracking-wider mb-1 flex items-center gap-2"
         style={{ fontFamily: "'Space Grotesk', sans-serif" }}
@@ -596,13 +689,9 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
             {runs.length} run{runs.length !== 1 ? "s" : ""} · {pages.length} page{pages.length !== 1 ? "s" : ""}
           </span>
         )}
-        <button
-          onClick={() => setShowMaterialList(true)}
-          className="ml-auto text-[10px] font-mono text-[#F5C518]/70 hover:text-[#F5C518] transition-colors flex items-center gap-1 normal-case tracking-normal"
-          title="Open full-screen material list"
-        >
-          Labor & Material →
-        </button>
+        <span className="ml-auto text-[10px] font-mono text-[#F5C518]/70 flex items-center gap-1 normal-case tracking-normal">
+          Open →
+        </span>
       </h3>
 
       {/* Summary strip — only shown once runs exist */}
@@ -627,7 +716,7 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
       <SectionHeader icon={<span />} title="Labor & Material Summary" />
       <div className="space-y-1">
         {conduitRows.length === 0 ? (
-          <p className="text-[10px] text-muted-foreground/50 italic font-mono">No runs yet — push measurements to populate</p>
+          <p className="text-[10px] text-muted-foreground/50 italic font-mono">No runs or materials yet — push measurements or save count sessions to populate</p>
         ) : conduitRows.map(([key, row]) => (
           <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
             <span className="font-mono text-foreground font-semibold">{row.type} {row.size}"</span>
@@ -782,6 +871,7 @@ function CivilEditor({
   const [editingName, setEditingName] = useState("");
   const [countSessionsOpen, setCountSessionsOpen] = useState(true);
   const [countModeRequest, setCountModeRequest] = useState(0);
+  const rightPanelRef = useRef<ImperativePanelHandle>(null);
 
   const updateSessions = useCallback(
     (sessions: CountSession[], activeId?: string) => {
@@ -932,7 +1022,7 @@ function CivilEditor({
           pageNumber,
           feet: ft,
           runType: "conduit",
-          conduitSize: conduitSize ?? "3/4",
+          conduitSize: conduitSize ?? "1/2",
           conduitType: "EMT",
           conductors: 2,
           conductorMaterial: "CU",
@@ -942,6 +1032,11 @@ function CivilEditor({
         syncRuns([newRun, ...runs]);
         const pageLabel = pageNumber ? ` from page ${pageNumber}` : "";
         toast.success(`"${runName}"${pageLabel} — ${ft} ft added.`);
+        // Expand the right panel so the new run is visible
+        const rp = rightPanelRef.current;
+        if (rp && rp.getSize() < 35) {
+          rp.resize(40);
+        }
       }
     },
     [runs, syncRuns]
@@ -1019,7 +1114,7 @@ function CivilEditor({
         <ResizableHandle withHandle />
 
         {/* ── Calculator / Runs — max 45% so it stays to the right of the PDF ── */}
-        <ResizablePanel defaultSize={40} minSize={20} maxSize={45}>
+        <ResizablePanel ref={rightPanelRef} defaultSize={40} minSize={20} maxSize={45}>
           <div className="flex flex-col h-full overflow-hidden">
             {/* Header */}
             <div className="px-5 pt-4 pb-3 border-b border-border bg-card shrink-0">

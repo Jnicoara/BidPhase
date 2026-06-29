@@ -129,6 +129,10 @@ export interface RunItem {
   conductorMaterial: ConductorMaterial;
   conductorSize: ConductorSize;
   fittings: FittingCounts;
+  /** Wire type ID from wireTypes.ts — used when runType === "wire" */
+  wireTypeId?: string;
+  /** Whether to use stranded form (only applies when wireType.hasStrandedChoice === true) */
+  wireStranded?: boolean;
 }
 
 // ─── Saved material row (count session saved to L&M) ───────────────────────

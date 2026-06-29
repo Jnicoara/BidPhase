@@ -49,3 +49,21 @@
 - [x] Scale display: fix false "Scale set" message showing before scale is actually configured
 - [x] Measure/Run sync: synchronize the measure and run controls at the top of the page
 - [x] Unit count dropdown (right panel): fix so it works independently — should not require clicking the top toolbar button
+
+## PDF Workspace Improvements (v4.2)
+
+- [x] Scale: prompt to set scale on first entry if not previously set (modal/overlay)
+- [x] Scale: reset clears the input field so user types a fresh value (no stale previous value)
+- [x] Scale: draggable scale points — click a placed dot to reposition it before confirming
+- [x] Scale: "Reset Scale" button always visible in toolbar
+- [x] Runs: click any line segment to activate that run (no need to use top toolbar)
+- [x] Runs: draggable run points — click any placed dot to drag and reposition it
+- [x] Delete-all: confirm dialog when deleting 3+ items; also clears count pins for active session
+- [x] Pin shapes: add 2 larger square sizes, 1 larger circle, 2 smaller dot sizes
+- [x] Pin shapes: add 3 triangle sizes (small, medium, large)
+- [x] Wire types: replace conduit size picker with 50-entry wire type list (Romex, SER, SEU, THHN, low-voltage, etc.)
+- [x] Wire types: stranded/solid selector on applicable wire types
+- [x] Default conduit/conductor: start with 1/2" EMT + #12 copper (not 3/4" EMT)
+- [x] Labor/material tab: entire tab row is tappable (not just the text label)
+- [x] Empty state copy: update "No runs yet" message to mention materials broadly
+- [x] Right panel: auto-expand when a run is pushed so the new run is visible
