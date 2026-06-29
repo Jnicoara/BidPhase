@@ -3,9 +3,11 @@
  *
  * Full-screen view showing:
  *  1. Material rows (from count sessions + runs + manual additions) with catalog picker
+ *     — multi-select checkboxes for bulk delete/edit
+ *     — "Add from Catalog" button to add items directly from the price database
  *  2. Journeyman labor lines (description + hours × rate)
  *  3. Trainee labor lines (description + hours × rate)
- *  4. Totals strip: material subtotal + labor subtotal + markup % = grand total
+ *  4. Totals strip: material subtotal + markup % (material only) + labor subtotal = grand total
  *  5. Export: CSV, PDF, Print
  */
 import { useState, useCallback, useEffect } from "react";
@@ -13,13 +15,13 @@ import { nanoid } from "nanoid";
 import {
   ArrowLeft, Plus, Trash2, Printer, Download, FileText,
   ChevronDown, ChevronUp, Edit2, HardHat, Wrench,
-  Tag, DollarSign, Percent,
+  Tag, DollarSign, Percent, BookOpen, CheckSquare, Square, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import type { LaborLine } from "@/contexts/AppContext";
 import CatalogPicker from "@/components/CatalogPicker";
-import type { CatalogItem } from "@/lib/materialCatalog";
+import { CATALOG, type CatalogItem } from "@/lib/materialCatalog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MaterialRow {
@@ -70,6 +72,115 @@ function InlineEdit({
   );
 }
 
+// ─── Catalog Add Modal ────────────────────────────────────────────────────────
+function CatalogAddModal({ onAdd, onClose }: { onAdd: (item: CatalogItem) => void; onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const [selectedCat, setSelectedCat] = useState<string>("All");
+  const categories = ["All", ...Array.from(new Set(CATALOG.map((i) => i.category)))];
+  const filtered = CATALOG.filter((i) => {
+    const matchCat = selectedCat === "All" || i.category === selectedCat;
+    const matchQ = !query || i.description.toLowerCase().includes(query.toLowerCase()) || i.category.toLowerCase().includes(query.toLowerCase());
+    return matchCat && matchQ;
+  });
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl w-[560px] max-h-[80vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+          <div className="flex items-center gap-2">
+            <BookOpen size={14} className="text-[#F5C518]" />
+            <span className="text-sm font-semibold">Add from Material Catalog</span>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={14} /></button>
+        </div>
+        {/* Search + category filter */}
+        <div className="px-4 py-2 border-b border-border shrink-0 flex gap-2">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Search items…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="flex-1 bg-muted/20 border border-border rounded-lg px-3 py-1.5 text-xs outline-none focus:border-[#F5C518]/60 placeholder:text-muted-foreground"
+          />
+          <select
+            value={selectedCat}
+            onChange={(e) => setSelectedCat(e.target.value)}
+            className="bg-muted/20 border border-border rounded-lg px-2 py-1.5 text-xs outline-none focus:border-[#F5C518]/60 text-foreground"
+          >
+            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        {/* Item list */}
+        <div className="flex-1 overflow-y-auto divide-y divide-border/30">
+          {filtered.length === 0 && (
+            <div className="px-4 py-8 text-center text-xs text-muted-foreground">No items match your search.</div>
+          )}
+          {filtered.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => { onAdd(item); }}
+              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/20 transition-colors text-left group"
+            >
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-xs font-medium text-foreground group-hover:text-[#F5C518] transition-colors truncate">{item.description}</span>
+                <span className="text-[10px] text-muted-foreground">{item.category}</span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0 ml-4">
+                <span className="text-xs font-mono text-[#F5C518]">${item.unitPrice.toFixed(2)}/{item.unit}</span>
+                <Plus size={12} className="text-muted-foreground group-hover:text-[#F5C518] transition-colors" />
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Bulk Edit Bar ─────────────────────────────────────────────────────────────
+function BulkEditBar({
+  count,
+  onDelete,
+  onSetUnit,
+  onClearSelection,
+}: {
+  count: number;
+  onDelete: () => void;
+  onSetUnit: (unit: string) => void;
+  onClearSelection: () => void;
+}) {
+  const [unitDraft, setUnitDraft] = useState("");
+  return (
+    <div className="flex items-center gap-3 px-4 py-2 bg-[#F5C518]/10 border-b border-[#F5C518]/30">
+      <span className="text-xs font-semibold text-[#F5C518]">{count} selected</span>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span>Set unit:</span>
+        <input
+          type="text"
+          placeholder="EA"
+          value={unitDraft}
+          onChange={(e) => setUnitDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && unitDraft) { onSetUnit(unitDraft); setUnitDraft(""); } }}
+          className="w-16 bg-transparent border-b border-[#F5C518]/40 text-[#F5C518] font-mono text-xs outline-none focus:border-[#F5C518] px-1"
+        />
+        <button
+          onClick={() => { if (unitDraft) { onSetUnit(unitDraft); setUnitDraft(""); } }}
+          className="px-2 py-0.5 rounded text-[10px] bg-[#F5C518]/20 text-[#F5C518] hover:bg-[#F5C518]/30 transition-colors"
+        >Apply</button>
+      </div>
+      <button
+        onClick={onDelete}
+        className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors ml-auto"
+      >
+        <Trash2 size={10} />Delete selected
+      </button>
+      <button onClick={onClearSelection} className="text-muted-foreground hover:text-foreground transition-colors"><X size={12} /></button>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 interface MaterialListPageProps {
   onBack?: () => void;
@@ -111,10 +222,6 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
       const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
       rows.push({ id: `comm-s-${s.id}`, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
     }
-    // Commercial — assembly materials
-    for (const m of activeCommercialProject?.state?.materials ?? []) {
-      rows.push({ id: `comm-m-${nanoid(6)}`, description: m.description, unit: m.unit, qty: m.quantity, unitCost: m.unitCost, notes: "", catalogId: null, source: "manual" });
-    }
     // Residential — count sessions
     for (const s of activeResidentialProject?.state?.countSessions ?? []) {
       const qty = s.pins.length;
@@ -122,23 +229,22 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
       const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
       rows.push({ id: `res-s-${s.id}`, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
     }
-    // Residential — room materials
-    for (const m of activeResidentialProject?.state?.materials ?? []) {
-      rows.push({ id: `res-m-${nanoid(6)}`, description: m.description, unit: m.unit, qty: m.quantity, unitCost: 0, notes: "", catalogId: null, source: "manual" });
-    }
     return rows;
   }, [activeCivilProject, activeCommercialProject, activeResidentialProject]);
 
   const [rows, setRows] = useState<MaterialRow[]>(() => buildRows());
   const [manualRows, setManualRows] = useState<MaterialRow[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deletingRowId, setDeletingRowId] = useState<string | null>(null);
   const [deletingLaborId, setDeletingLaborId] = useState<string | null>(null);
+  const [bulkDeletePending, setBulkDeletePending] = useState(false);
   const [markupDraft, setMarkupDraft] = useState(String(markupPct));
   const [jRateDraft, setJRateDraft] = useState(String(journeymanRate));
   const [tRateDraft, setTRateDraft] = useState(String(traineeRate));
   const [showMaterials, setShowMaterials] = useState(true);
   const [showJourneyman, setShowJourneyman] = useState(true);
   const [showTrainee, setShowTrainee] = useState(true);
+  const [showCatalogModal, setShowCatalogModal] = useState(false);
 
   useEffect(() => { setRows(buildRows()); }, [buildRows]);
 
@@ -160,9 +266,32 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
     setManualRows((p) => p.map((r) => r.id === id ? { ...r, ...patch } : r));
   };
   const addManualRow = () => setManualRows((p) => [...p, { id: nanoid(8), description: "New item", unit: "EA", qty: 1, unitCost: 0, notes: "", catalogId: null, source: "manual" }]);
+  const addFromCatalog = (item: CatalogItem) => {
+    setManualRows((p) => [...p, { id: nanoid(8), description: item.description, unit: item.unit, qty: 1, unitCost: item.unitPrice, notes: "", catalogId: item.id, source: "manual" }]);
+  };
   const applyCatalog = (rowId: string, item: CatalogItem | null) => {
     if (!item) { updateRow(rowId, { catalogId: null }); return; }
     updateRow(rowId, { catalogId: item.id, description: item.description, unit: item.unit, unitCost: item.unitPrice });
+  };
+
+  // ── Selection helpers ────────────────────────────────────────────────────────
+  const toggleSelect = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const selectAll = () => setSelectedIds(new Set(allRows.map((r) => r.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+  const allSelected = allRows.length > 0 && selectedIds.size === allRows.length;
+
+  const bulkDelete = () => {
+    setRows((p) => p.filter((r) => !selectedIds.has(r.id)));
+    setManualRows((p) => p.filter((r) => !selectedIds.has(r.id)));
+    clearSelection();
+    setBulkDeletePending(false);
+  };
+  const bulkSetUnit = (unit: string) => {
+    selectedIds.forEach((id) => updateRow(id, { unit }));
   };
 
   // ── Labor helpers ────────────────────────────────────────────────────────────
@@ -182,8 +311,8 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
       ...traineeLines.map((l) => `Trainee,"${l.description}",${l.hours},${traineeRate.toFixed(2)},${(l.hours * traineeRate).toFixed(2)}`),
       "",
       `Material Subtotal,,,,,${materialSubtotal.toFixed(2)}`,
+      `Material Markup (${markupPct}%),,,,,${markupAmt.toFixed(2)}`,
       `Labor Subtotal,,,,,${laborSubtotal.toFixed(2)}`,
-      `Markup (${markupPct}%),,,,,${markupAmt.toFixed(2)}`,
       `Grand Total,,,,,${grandTotal.toFixed(2)}`,
     ];
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
@@ -201,6 +330,8 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
 <table><thead><tr><th>Description</th><th>Unit</th><th class="right">Qty</th><th class="right">Unit $</th><th class="right">Ext $</th><th>Notes</th></tr></thead><tbody>
 ${allRows.map((r) => `<tr><td>${r.description}</td><td>${r.unit}</td><td class="right">${r.qty}</td><td class="right">$${r.unitCost.toFixed(2)}</td><td class="right">$${(r.qty * r.unitCost).toFixed(2)}</td><td>${r.notes}</td></tr>`).join("")}
 <tr class="bold"><td colspan="4">Material Subtotal</td><td class="right">$${materialSubtotal.toFixed(2)}</td><td></td></tr>
+<tr><td colspan="4">Markup (${markupPct}%)</td><td class="right">$${markupAmt.toFixed(2)}</td><td></td></tr>
+<tr class="bold"><td colspan="4">Material Total</td><td class="right">$${(materialSubtotal + markupAmt).toFixed(2)}</td><td></td></tr>
 </tbody></table>
 <h2>Journeyman Labor — $${journeymanRate}/hr</h2>
 <table><thead><tr><th>Task</th><th class="right">Hours</th><th class="right">Total</th></tr></thead><tbody>
@@ -215,8 +346,8 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
 <h2>Totals</h2>
 <table><tbody>
 <tr><td>Material Subtotal</td><td class="right">$${materialSubtotal.toFixed(2)}</td></tr>
-<tr><td>Labor Subtotal</td><td class="right">$${laborSubtotal.toFixed(2)}</td></tr>
 <tr><td>Markup (${markupPct}%)</td><td class="right">$${markupAmt.toFixed(2)}</td></tr>
+<tr><td>Labor Total</td><td class="right">$${laborSubtotal.toFixed(2)}</td></tr>
 <tr class="grand bold"><td>Grand Total</td><td class="right">$${grandTotal.toFixed(2)}</td></tr>
 </tbody></table>
 </body></html>`);
@@ -261,12 +392,41 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
           </button>
           {showMaterials && (
             <div>
-              <div className="grid grid-cols-[2fr_60px_70px_80px_80px_1fr_28px] gap-1 px-4 py-2 bg-muted/20 border-y border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              {/* Bulk action bar */}
+              {selectedIds.size > 0 && (
+                <BulkEditBar
+                  count={selectedIds.size}
+                  onDelete={() => setBulkDeletePending(true)}
+                  onSetUnit={bulkSetUnit}
+                  onClearSelection={clearSelection}
+                />
+              )}
+              {/* Column headers */}
+              <div className="grid grid-cols-[28px_2fr_60px_70px_80px_80px_1fr_28px] gap-1 px-4 py-2 bg-muted/20 border-y border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                <button
+                  onClick={allSelected ? clearSelection : selectAll}
+                  className="flex items-center justify-center text-muted-foreground hover:text-[#F5C518] transition-colors"
+                  title={allSelected ? "Deselect all" : "Select all"}
+                >
+                  {allSelected ? <CheckSquare size={12} /> : <Square size={12} />}
+                </button>
                 <span>Description / Catalog</span><span>Unit</span><span className="text-right">Qty</span><span className="text-right">Unit $</span><span className="text-right">Ext $</span><span>Notes</span><span />
               </div>
               {allRows.length === 0 && <div className="px-4 py-8 text-center text-xs text-muted-foreground">No materials yet. Add count sessions or click "+ Add Row".</div>}
               {allRows.map((row) => (
-                <div key={row.id} className="grid grid-cols-[2fr_60px_70px_80px_80px_1fr_28px] gap-1 px-4 py-2 border-b border-border/40 items-start group hover:bg-muted/10 transition-colors">
+                <div
+                  key={row.id}
+                  className={cn(
+                    "grid grid-cols-[28px_2fr_60px_70px_80px_80px_1fr_28px] gap-1 px-4 py-2 border-b border-border/40 items-start group hover:bg-muted/10 transition-colors",
+                    selectedIds.has(row.id) && "bg-[#F5C518]/5 border-l-2 border-l-[#F5C518]/40"
+                  )}
+                >
+                  <button
+                    onClick={() => toggleSelect(row.id)}
+                    className="flex items-center justify-center mt-1 text-muted-foreground hover:text-[#F5C518] transition-colors"
+                  >
+                    {selectedIds.has(row.id) ? <CheckSquare size={12} className="text-[#F5C518]" /> : <Square size={12} />}
+                  </button>
                   <div className="flex flex-col gap-1 min-w-0">
                     <InlineEdit value={row.description} onSave={(v) => updateRow(row.id, { description: v })} className="text-xs font-medium text-foreground truncate" inputClassName="text-xs w-full" />
                     <CatalogPicker value={row.catalogId} onChange={(item) => applyCatalog(row.id, item)} placeholder="Link to catalog…" />
@@ -279,8 +439,16 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
                   <button onClick={() => setDeletingRowId(row.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400 mt-1"><Trash2 size={12} /></button>
                 </div>
               ))}
-              <div className="px-4 py-2 flex items-center justify-between">
-                <button onClick={addManualRow} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors"><Plus size={12} />Add Row</button>
+              <div className="px-4 py-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <button onClick={addManualRow} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors">
+                    <Plus size={12} />Add Row
+                  </button>
+                  <span className="text-muted-foreground/40 text-xs">|</span>
+                  <button onClick={() => setShowCatalogModal(true)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors">
+                    <BookOpen size={12} />Add from Catalog
+                  </button>
+                </div>
                 <span className="text-xs font-mono font-bold text-[#F5C518]">Subtotal: ${fmt(materialSubtotal)}</span>
               </div>
             </div>
@@ -401,6 +569,28 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
 
         <div className="h-8" />
       </div>
+
+      {/* Catalog Add Modal */}
+      {showCatalogModal && (
+        <CatalogAddModal
+          onAdd={(item) => { addFromCatalog(item); }}
+          onClose={() => setShowCatalogModal(false)}
+        />
+      )}
+
+      {/* Bulk Delete Confirmation */}
+      {bulkDeletePending && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl p-6 w-80 shadow-2xl">
+            <h3 className="text-sm font-semibold mb-2">Delete {selectedIds.size} rows?</h3>
+            <p className="text-xs text-muted-foreground mb-4">Count session data in the plan is not affected.</p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setBulkDeletePending(false)} className="px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-muted/20 transition-colors">Cancel</button>
+              <button onClick={bulkDelete} className="px-3 py-1.5 text-xs bg-red-500/90 text-white rounded-lg hover:bg-red-500 transition-colors">Delete All</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Row Confirmation */}
       {deletingRowId && (

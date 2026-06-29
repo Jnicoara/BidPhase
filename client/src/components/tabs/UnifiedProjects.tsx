@@ -39,8 +39,9 @@ import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
   Plus, Minus, ChevronLeft, ChevronDown, ChevronUp,
-  Link2, Trash2, Pencil, Check, X, Undo2,
+  Link2, Trash2, Pencil, Check, X, Undo2, BookOpen,
 } from "lucide-react";
+import { CATALOG, type CatalogItem } from "@/lib/materialCatalog";
 
 // ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ─
 function ConduitPipeIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
@@ -583,24 +584,26 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
         </button>
       </h3>
 
-      {/* Summary strip */}
-      <div className="grid grid-cols-3 gap-2 mb-1 mt-3">
-        <div className="bg-muted/20 rounded p-2 text-center">
-          <div className="text-lg font-bold font-mono text-[#F5C518]">{totalFeet.toFixed(0)}</div>
-          <div className="text-[9px] text-muted-foreground font-mono uppercase">Total ft</div>
+      {/* Summary strip — only shown once runs exist */}
+      {runs.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 mb-1 mt-3">
+          <div className="bg-muted/20 rounded p-2 text-center">
+            <div className="text-lg font-bold font-mono text-[#F5C518]">{totalFeet.toFixed(0)}</div>
+            <div className="text-[9px] text-muted-foreground font-mono uppercase">Total ft</div>
+          </div>
+          <div className="bg-muted/20 rounded p-2 text-center">
+            <div className="text-lg font-bold font-mono text-[#F5C518]">{totalSticks}</div>
+            <div className="text-[9px] text-muted-foreground font-mono uppercase">Sticks</div>
+          </div>
+          <div className="bg-muted/20 rounded p-2 text-center">
+            <div className="text-lg font-bold font-mono text-[#F5C518]">{totalWire.toFixed(0)}</div>
+            <div className="text-[9px] text-muted-foreground font-mono uppercase">Wire ft</div>
+          </div>
         </div>
-        <div className="bg-muted/20 rounded p-2 text-center">
-          <div className="text-lg font-bold font-mono text-[#F5C518]">{totalSticks}</div>
-          <div className="text-[9px] text-muted-foreground font-mono uppercase">Sticks</div>
-        </div>
-        <div className="bg-muted/20 rounded p-2 text-center">
-          <div className="text-lg font-bold font-mono text-[#F5C518]">{totalWire.toFixed(0)}</div>
-          <div className="text-[9px] text-muted-foreground font-mono uppercase">Wire ft</div>
-        </div>
-      </div>
+      )}
 
       {/* ── Conduit ── */}
-      <SectionHeader icon={<ConduitPipeIcon size={11} />} title="Conduit" />
+      <SectionHeader icon={<span />} title="Conduit" />
       <div className="space-y-1">
         {conduitRows.length === 0 ? (
           <p className="text-[10px] text-muted-foreground/50 italic font-mono">No runs yet — push measurements to populate</p>
@@ -1096,6 +1099,34 @@ function CivilEditor({
                           </span>
                         )}
                       </button>
+                    </div>
+                    {/* Material catalog browser — inline in unit count panel */}
+                    <div className="pt-1 border-t border-border/50">
+                      <details className="group/cat">
+                        <summary className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 cursor-pointer list-none transition-all select-none">
+                          <BookOpen size={12} />
+                          Browse Material Catalog
+                          <ChevronDown size={10} className="ml-auto group-open/cat:rotate-180 transition-transform" />
+                        </summary>
+                        <div className="mt-2 max-h-64 overflow-y-auto space-y-0.5 px-1">
+                          {(Array.from(new Set(CATALOG.map((i: CatalogItem) => i.category))) as string[]).map((cat: string) => (
+                            <details key={cat} className="group/catrow">
+                              <summary className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-semibold text-[#F5C518] uppercase tracking-wider cursor-pointer list-none hover:bg-muted/10 select-none">
+                                <ChevronDown size={9} className="group-open/catrow:rotate-180 transition-transform shrink-0" />
+                                {cat}
+                              </summary>
+                              <div className="pl-3 space-y-0.5 pb-1">
+                                {CATALOG.filter((i: CatalogItem) => i.category === cat).map((item: CatalogItem) => (
+                                  <div key={item.id} className="flex items-center justify-between py-0.5 text-[10px] font-mono">
+                                    <span className="text-foreground/80 truncate flex-1 mr-2">{item.description}</span>
+                                    <span className="text-[#F5C518] shrink-0">${item.unitPrice.toFixed(2)}/{item.unit}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      </details>
                     </div>
                   </div>
                 )}

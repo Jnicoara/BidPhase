@@ -29,8 +29,8 @@ const CATEGORY_ICONS = {
 
 const CATEGORY_LABELS = {
   civil:       "Civil & Underground",
-  commercial:  "Commercial Assembly",
-  residential: "Residential Rough-In",
+  commercial:  "Commercial",
+  residential: "Residential",
 } as const;
 
 export default function BidPhaseShell() {
@@ -66,20 +66,22 @@ export default function BidPhaseShell() {
         className="hidden md:flex flex-col shrink-0 w-16 hover:w-56 transition-[width] duration-200 ease-out
                    bg-sidebar border-r border-sidebar-border overflow-hidden group z-20"
       >
-        {/* Logo — always visible, click returns to landing */}
+        {/* Logo — text only, click returns to landing */}
         <div
           onClick={() => { setShowLanding(true); setActiveTab("projects"); }}
-          className="flex items-center gap-3 px-3 py-4 h-16 border-b border-sidebar-border shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+          className="flex items-center justify-center gap-2 px-3 py-4 h-16 border-b border-sidebar-border shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
           title="Back to home"
         >
-          <img
-            src="/manus-storage/bidphase-logo_e745a05f.png"
-            alt="BidPhase"
-            className="w-9 h-9 shrink-0 rounded-md object-contain bg-sidebar p-0.5"
-          />
+          {/* Collapsed: show "BP" monogram; expanded: show full wordmark */}
           <span
-            className="font-display font-bold text-base text-foreground whitespace-nowrap
-                       opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            className="font-bold text-[#F5C518] text-sm shrink-0 group-hover:hidden"
+            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+          >
+            BP
+          </span>
+          <span
+            className="font-bold text-base text-foreground whitespace-nowrap
+                       hidden group-hover:block transition-opacity duration-150"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
           >
             BidPhase
@@ -153,15 +155,10 @@ export default function BidPhaseShell() {
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile header */}
         <header className="md:hidden flex items-center gap-3 px-4 h-14 border-b border-border shrink-0 bg-sidebar">
-          <img
-            src="/manus-storage/bidphase-logo_e745a05f.png"
-            alt="BidPhase"
-            className="w-8 h-8 rounded-md object-contain bg-sidebar p-0.5"
-            onClick={() => { setShowLanding(true); setActiveTab("projects"); }}
-          />
           <span
-            className="font-bold text-base text-foreground"
+            className="font-bold text-base text-foreground cursor-pointer"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            onClick={() => { setShowLanding(true); setActiveTab("projects"); }}
           >
             BidPhase
           </span>
