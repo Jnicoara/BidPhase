@@ -7,10 +7,12 @@
  * Unified tab: single "Projects" tab replaces the three separate Civil/Commercial/Residential tabs.
  */
 import { useApp } from "@/contexts/AppContext";
+import { useState } from "react";
 import UnifiedProjects, { CivilIcon } from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import ExportButton from "@/components/ExportButton";
 import MaterialListPage from "@/pages/MaterialListPage";
+import CategoryLanding from "@/pages/CategoryLanding";
 import {
   FolderOpen,
   Settings,
@@ -26,13 +28,14 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 export default function BidPhaseShell() {
-  const { activeTab, setActiveTab, uiFontScale, showMaterialList, setShowMaterialList } = useApp();
+  const { activeTab, setActiveTab, uiFontScale, showMaterialList, setShowMaterialList, activeCategory, setActiveCategory } = useApp();
+  const [showLanding, setShowLanding] = useState(false);
 
   const renderTab = () => {
     switch (activeTab as TabId) {
-      case "projects":  return <UnifiedProjects />;
+      case "projects":  return <UnifiedProjects category={activeCategory} />;
       case "settings":  return <SettingsTab />;
-      default:          return <UnifiedProjects />;
+      default:          return <UnifiedProjects category={activeCategory} />;
     }
   };
 
@@ -44,7 +47,7 @@ export default function BidPhaseShell() {
                    bg-sidebar border-r border-sidebar-border overflow-hidden group z-20"
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-3 py-4 h-16 border-b border-sidebar-border shrink-0">
+        <div onClick={() => setShowLanding(true)} className="flex items-center gap-3 px-3 py-4 h-16 border-b border-sidebar-border shrink-0 cursor-pointer hover:opacity-80 transition-opacity">
           <img
             src="/manus-storage/bidphase-logo_e745a05f.png"
             alt="BidPhase"
@@ -130,6 +133,8 @@ export default function BidPhaseShell() {
         >
           {showMaterialList
             ? <MaterialListPage onBack={() => setShowMaterialList(false)} />
+            : showLanding
+            ? <CategoryLanding onSelect={(cat) => { setActiveCategory(cat); setShowLanding(false); setActiveTab("projects"); }} />
             : renderTab()
           }
         </div>

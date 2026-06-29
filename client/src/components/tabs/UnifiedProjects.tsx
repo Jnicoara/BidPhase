@@ -678,13 +678,25 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
 function CivilEditor({
   projectId,
   projectName,
+  categoryLabel,
   onBack,
 }: {
   projectId: string;
   projectName: string;
+  categoryLabel: string;
   onBack: () => void;
 }) {
-  const { activeUnifiedProject: activeCivilProject, setUnifiedState: setCivilState } = useApp();
+  const {
+    activeCategory,
+    activeCivilCatProject,
+    setCivilCatState,
+    activeCommercialCatProject,
+    setCommercialCatState,
+    activeResidentialCatProject,
+    setResidentialCatState,
+  } = useApp();
+  const activeCivilProject = categoryLabel === "Civil & Underground" ? activeCivilCatProject : categoryLabel === "Commercial Assembly" ? activeCommercialCatProject : activeResidentialCatProject;
+  const setCivilState = categoryLabel === "Civil & Underground" ? setCivilCatState : categoryLabel === "Commercial Assembly" ? setCommercialCatState : setResidentialCatState;
   const s = activeCivilProject.state;
 
   // Per-run items — stored in component state (persisted via AppContext civilState.runs)
@@ -902,9 +914,9 @@ function CivilEditor({
                     className="text-base font-bold text-foreground"
                     style={{ fontFamily: "'Space Grotesk', sans-serif" }}
                   >
-                    Civil & Underground
+                    {projectName}
                   </h1>
-                  <p className="text-xs text-muted-foreground">{projectName}</p>
+                  <p className="text-xs text-muted-foreground">{categoryLabel}</p>
                 </div>
                 <span className="shrink-0 text-xs font-mono px-2 py-0.5 rounded bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30">
                   Page {activePage}
@@ -1152,16 +1164,46 @@ function CivilShapeSelector({
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function UnifiedProjects() {
+const CATEGORY_LABELS: Record<string, string> = {
+  civil: "Civil & Underground",
+  commercial: "Commercial Assembly",
+  residential: "Residential Rough-In",
+};
+
+export default function UnifiedProjects({ category = "civil" }: { category?: "civil" | "commercial" | "residential" }) {
   const {
-    unifiedProjects: civilProjects,
-    activeUnifiedId: activeCivilId,
-    activeUnifiedProject: activeCivilProject,
-    addUnifiedProject: addCivilProject,
-    renameUnifiedProject: renameCivilProject,
-    deleteUnifiedProject: deleteCivilProject,
-    switchUnifiedProject: switchCivilProject,
+    civilCatProjects,
+    activeCivilCatId,
+    activeCivilCatProject,
+    addCivilCatProject,
+    renameCivilCatProject,
+    deleteCivilCatProject,
+    switchCivilCatProject,
+    commercialCatProjects,
+    activeCommercialCatId,
+    activeCommercialCatProject,
+    addCommercialCatProject,
+    renameCommercialCatProject,
+    deleteCommercialCatProject,
+    switchCommercialCatProject,
+    residentialCatProjects,
+    activeResidentialCatId,
+    activeResidentialCatProject,
+    addResidentialCatProject,
+    renameResidentialCatProject,
+    deleteResidentialCatProject,
+    switchResidentialCatProject,
   } = useApp();
+
+  // Pick the right store based on category
+  const civilProjects = category === "civil" ? civilCatProjects : category === "commercial" ? commercialCatProjects : residentialCatProjects;
+  const activeCivilId = category === "civil" ? activeCivilCatId : category === "commercial" ? activeCommercialCatId : activeResidentialCatId;
+  const activeCivilProject = category === "civil" ? activeCivilCatProject : category === "commercial" ? activeCommercialCatProject : activeResidentialCatProject;
+  const addCivilProject = category === "civil" ? addCivilCatProject : category === "commercial" ? addCommercialCatProject : addResidentialCatProject;
+  const renameCivilProject = category === "civil" ? renameCivilCatProject : category === "commercial" ? renameCommercialCatProject : renameResidentialCatProject;
+  const deleteCivilProject = category === "civil" ? deleteCivilCatProject : category === "commercial" ? deleteCommercialCatProject : deleteResidentialCatProject;
+  const switchCivilProject = category === "civil" ? switchCivilCatProject : category === "commercial" ? switchCommercialCatProject : switchResidentialCatProject;
+  const categoryLabel = CATEGORY_LABELS[category] ?? "Projects";
 
   // "null" means show homepage; a project id means show editor
   const [openProjectId, setOpenProjectId] = useState<string | null>(null);
@@ -1200,7 +1242,7 @@ export default function UnifiedProjects() {
   if (!resolvedOpenId) {
     return (
       <ProjectHomepage
-        title="Projects"
+        title={categoryLabel}
         icon={<CivilIcon size={18} className="text-[#F5C518]" />}
         projects={projectCards}
         activeId={activeCivilId}
@@ -1218,6 +1260,7 @@ export default function UnifiedProjects() {
     <CivilEditor
       projectId={proj.id}
       projectName={proj.name}
+      categoryLabel={categoryLabel}
       onBack={() => setOpenProjectId(null)}
     />
   );

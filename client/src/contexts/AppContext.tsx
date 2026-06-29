@@ -266,6 +266,33 @@ interface AppContextValue {
   // Active tab
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  activeCategory: "civil" | "commercial" | "residential";
+  setActiveCategory: (c: "civil" | "commercial" | "residential") => void;
+  // Per-category project stores (all use CivilProject/CivilState type)
+  civilCatProjects: CivilProject[];
+  activeCivilCatId: string;
+  activeCivilCatProject: CivilProject;
+  setCivilCatState: (s: CivilState) => void;
+  addCivilCatProject: (name?: string) => void;
+  renameCivilCatProject: (id: string, name: string) => void;
+  deleteCivilCatProject: (id: string) => void;
+  switchCivilCatProject: (id: string) => void;
+  commercialCatProjects: CivilProject[];
+  activeCommercialCatId: string;
+  activeCommercialCatProject: CivilProject;
+  setCommercialCatState: (s: CivilState) => void;
+  addCommercialCatProject: (name?: string) => void;
+  renameCommercialCatProject: (id: string, name: string) => void;
+  deleteCommercialCatProject: (id: string) => void;
+  switchCommercialCatProject: (id: string) => void;
+  residentialCatProjects: CivilProject[];
+  activeResidentialCatId: string;
+  activeResidentialCatProject: CivilProject;
+  setResidentialCatState: (s: CivilState) => void;
+  addResidentialCatProject: (name?: string) => void;
+  renameResidentialCatProject: (id: string, name: string) => void;
+  deleteResidentialCatProject: (id: string) => void;
+  switchResidentialCatProject: (id: string) => void;
 
   // ── Civil projects ──────────────────────────────────────────────────────────
   civilProjects: CivilProject[];
@@ -435,7 +462,7 @@ function makeProjectStore<TProject extends { id: string; name: string; state: TS
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useLocalStorage<string>("bp_active_tab", "residential");
-  const [uiFontScale, setUiFontScale] = useLocalStorage<number>("bp_ui_font_scale", 1.1);
+  const [uiFontScale, setUiFontScale] = useLocalStorage<number>("bp_ui_font_scale", 1.0);
   const [showMaterialList, setShowMaterialList] = useState(false);
   const [laborHours, setLaborHours] = useLocalStorage<number>("bp_labor_hours", 0);
   const [laborRate, setLaborRate] = useLocalStorage<number>("bp_labor_rate", 85);
@@ -463,6 +490,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [activeUnifiedId, safeUP.length, setUnifiedProjects, setActiveUnifiedId]
   );
 
+  // ── Active category (landing page selection) ──────────────────────────────
+  const [activeCategory, setActiveCategory] = useLocalStorage<"civil" | "commercial" | "residential">("bp_active_category", "civil");
+  // ── Civil category store ──────────────────────────────────────────────────
+  const [civilCatProjects, setCivilCatProjects] = useLocalStorage<CivilProject[]>("bp_civil_cat_projects", [defaultCivilProject()]);
+  const safeCCP = ensureOne(civilCatProjects, defaultCivilProject);
+  const [activeCivilCatId, setActiveCivilCatId] = useLocalStorage<string>("bp_active_civil_cat", safeCCP[0].id);
+  const activeCivilCatProject = safeCCP.find((p) => p.id === activeCivilCatId) ?? safeCCP[0];
+  const civilCatStore = useCallback(
+    () => makeProjectStore(safeCCP, activeCivilCatId, setCivilCatProjects, setActiveCivilCatId, defaultCivilProject),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeCivilCatId, safeCCP.length, setCivilCatProjects, setActiveCivilCatId]
+  );
+  // ── Commercial category store ─────────────────────────────────────────────
+  const [commercialCatProjects, setCommercialCatProjects] = useLocalStorage<CivilProject[]>("bp_commercial_cat_projects", [defaultCivilProject()]);
+  const safeCmCP = ensureOne(commercialCatProjects, defaultCivilProject);
+  const [activeCommercialCatId, setActiveCommercialCatId] = useLocalStorage<string>("bp_active_commercial_cat", safeCmCP[0].id);
+  const activeCommercialCatProject = safeCmCP.find((p) => p.id === activeCommercialCatId) ?? safeCmCP[0];
+  const commercialCatStore = useCallback(
+    () => makeProjectStore(safeCmCP, activeCommercialCatId, setCommercialCatProjects, setActiveCommercialCatId, defaultCivilProject),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeCommercialCatId, safeCmCP.length, setCommercialCatProjects, setActiveCommercialCatId]
+  );
+  // ── Residential category store ────────────────────────────────────────────
+  const [residentialCatProjects, setResidentialCatProjects] = useLocalStorage<CivilProject[]>("bp_residential_cat_projects", [defaultCivilProject()]);
+  const safeRCP = ensureOne(residentialCatProjects, defaultCivilProject);
+  const [activeResidentialCatId, setActiveResidentialCatId] = useLocalStorage<string>("bp_active_residential_cat", safeRCP[0].id);
+  const activeResidentialCatProject = safeRCP.find((p) => p.id === activeResidentialCatId) ?? safeRCP[0];
+  const residentialCatStore = useCallback(
+    () => makeProjectStore(safeRCP, activeResidentialCatId, setResidentialCatProjects, setActiveResidentialCatId, defaultCivilProject),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeResidentialCatId, safeRCP.length, setResidentialCatProjects, setActiveResidentialCatId]
+  );
   // ── Civil ─────────────────────────────────────────────────────────────────
   const [civilProjects, setCivilProjects] = useLocalStorage<CivilProject[]>(
     "bp_civil_projects",
@@ -568,6 +627,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       value={{
         activeTab,
         setActiveTab,
+        activeCategory,
+        setActiveCategory,
+
+        // Category-specific project stores
+        civilCatProjects: safeCCP,
+        activeCivilCatId,
+        activeCivilCatProject,
+        setCivilCatState:        civilCatStore().setState,
+        addCivilCatProject:      civilCatStore().add,
+        renameCivilCatProject:   civilCatStore().rename,
+        deleteCivilCatProject:   civilCatStore().remove,
+        switchCivilCatProject:   civilCatStore().switchTo,
+        commercialCatProjects: safeCmCP,
+        activeCommercialCatId,
+        activeCommercialCatProject,
+        setCommercialCatState:        commercialCatStore().setState,
+        addCommercialCatProject:      commercialCatStore().add,
+        renameCommercialCatProject:   commercialCatStore().rename,
+        deleteCommercialCatProject:   commercialCatStore().remove,
+        switchCommercialCatProject:   commercialCatStore().switchTo,
+        residentialCatProjects: safeRCP,
+        activeResidentialCatId,
+        activeResidentialCatProject,
+        setResidentialCatState:        residentialCatStore().setState,
+        addResidentialCatProject:      residentialCatStore().add,
+        renameResidentialCatProject:   residentialCatStore().rename,
+        deleteResidentialCatProject:   residentialCatStore().remove,
+        switchResidentialCatProject:   residentialCatStore().switchTo,
 
         // Unified projects
         unifiedProjects: safeUP,

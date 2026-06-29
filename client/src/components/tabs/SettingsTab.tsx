@@ -22,10 +22,13 @@ export interface MaterialRecord {
 export const MATERIAL_DB_KEY = "bp_material_db";
 
 const FONT_PRESETS = [
-  { label: "S",  value: 0.85, title: "Small"   },
-  { label: "M",  value: 1.0,  title: "Medium"  },
-  { label: "L",  value: 1.15, title: "Large"   },
-  { label: "XL", value: 1.3,  title: "X-Large" },
+  { label: "80%",  value: 0.8,  title: "80% zoom"  },
+  { label: "90%",  value: 0.9,  title: "90% zoom"  },
+  { label: "100%", value: 1.0,  title: "100% zoom (default)" },
+  { label: "110%", value: 1.1,  title: "110% zoom" },
+  { label: "120%", value: 1.2,  title: "120% zoom" },
+  { label: "130%", value: 1.3,  title: "130% zoom" },
+  { label: "140%", value: 1.4,  title: "140% zoom" },
 ];
 
 // ── MaterialDbSection ─────────────────────────────────────────────────────────
@@ -309,7 +312,7 @@ export default function SettingsTab() {
             type="range"
             min={0.8}
             max={1.4}
-            step={0.05}
+            step={0.1}
             value={uiFontScale}
             onChange={(e) => setUiFontScale(parseFloat(e.target.value))}
             className="w-full accent-[#F5C518] cursor-pointer"
