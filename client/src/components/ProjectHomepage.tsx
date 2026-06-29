@@ -1,220 +1,302 @@
 /**
- * BidPhase — ProjectHomepage
+ * ProjectHomepage — project list with larger edit/delete, trash system, and inline rename.
  *
- * Shown when a tab first loads (or when user clicks the tab icon in the sidebar).
- * Displays a grid of project cards for the current category.
- * Clicking a card opens that project. "+ New Project" creates a blank one.
- *
- * Design: Tactical Dark Mode SaaS · Space Grotesk headers
+ * Design: Tactical Dark Mode SaaS, Safety Yellow (#F5C518) accent.
  */
-import { useState } from "react";
-import { FolderOpen, Plus, Pencil, Trash2, Check, X, Calendar, FileText } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Pencil, Trash2, RotateCcw, X, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { useApp } from "@/contexts/AppContext";
+import type { CivilProject } from "@/contexts/AppContext";
 
-export interface ProjectCard {
+// Minimal project shape accepted by ProjectHomepage
+interface ProjectLike {
   id: string;
   name: string;
   createdAt: number;
-  /** Optional summary line shown on the card */
-  summary?: string;
+  state?: unknown;
 }
 
 interface ProjectHomepageProps {
-  /** Category title shown in the header */
-  title: string;
-  /** Icon element shown in the header */
-  icon: React.ReactNode;
-  /** All projects for this category */
-  projects: ProjectCard[];
-  /** Currently active project id */
+  projects: ProjectLike[];
   activeId: string;
-  /** Open a project (switches to editor view) */
   onOpen: (id: string) => void;
-  /** Create a new blank project */
-  onNew: (name: string) => void;
-  /** Rename a project */
+  onNew: (name?: string) => void;
   onRename: (id: string, name: string) => void;
-  /** Delete a project */
   onDelete: (id: string) => void;
+  onSwitch?: (id: string) => void;
+  category?: "civil" | "commercial" | "residential";
 }
 
 export default function ProjectHomepage({
-  title,
-  icon,
   projects,
   activeId,
   onOpen,
   onNew,
   onRename,
   onDelete,
+  onSwitch,
+  category,
 }: ProjectHomepageProps) {
+  const { trashedProjects, trashProject, restoreProject, permanentlyDeleteProject, emptyTrash } = useApp();
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // Trash confirmation: id of project being soft-deleted
+  const [pendingTrashId, setPendingTrashId] = useState<string | null>(null);
+  // Undo toast: recently trashed project id
+  const [undoId, setUndoId] = useState<string | null>(null);
+  const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  // Trash view
+  const [showTrash, setShowTrash] = useState(false);
+  // Permanent delete confirmation in trash view
+  const [permDeleteId, setPermDeleteId] = useState<string | null>(null);
 
-  const commitEdit = (id: string) => {
-    const t = editName.trim();
-    if (t) { onRename(id, t); toast.success(`Renamed to "${t}"`); }
-    setEditingId(null);
-  };
+  const categoryTrash = trashedProjects.filter((t) => t.category === category);
+  // Auto-expire items older than 30 days from display (they stay in storage until emptyTrash)
+  const now = Date.now();
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+  const visibleTrash = categoryTrash.filter((t) => now - t.deletedAt < THIRTY_DAYS);
 
-  const handleNew = () => {
-    const name = newName.trim() || `Job ${projects.length + 1}`;
-    onNew(name);
+  function handleNew() {
+    if (!newName.trim()) return;
+    onNew(newName.trim());
     setNewName("");
     setShowNew(false);
-    toast.success(`"${name}" created — load a PDF to get started.`);
-  };
+  }
 
-  const handleDelete = (id: string) => {
-    if (projects.length <= 1) {
-      toast.error("Can't delete the last project.");
-      return;
-    }
-    setConfirmDeleteId(id);
-  };
-  const confirmDelete = (id: string) => {
+  function handleRename(id: string) {
+    if (editName.trim()) onRename(id, editName.trim());
+    setEditingId(null);
+  }
+
+  function handleTrashClick(proj: ProjectLike) {
+    setPendingTrashId(proj.id);
+  }
+
+  function confirmTrash(id: string) {
     const proj = projects.find((p) => p.id === id);
+    if (!proj) return;
+    // Soft-delete: move to trash
+    trashProject(proj as CivilProject, category ?? "civil");
     onDelete(id);
-    setConfirmDeleteId(null);
-    toast.info(`Deleted "${proj?.name ?? "project"}".`);
-  };
+    setPendingTrashId(null);
+    // Show undo toast for 5 seconds
+    setUndoId(id);
+    if (undoTimer) clearTimeout(undoTimer);
+    const t = setTimeout(() => setUndoId(null), 5000);
+    setUndoTimer(t);
+  }
 
-  const formatDate = (ts: number) => {
-    return new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-  };
+  function handleUndo() {
+    if (!undoId) return;
+    restoreProject(undoId);
+    setUndoId(null);
+    if (undoTimer) clearTimeout(undoTimer);
+  }
+
+  useEffect(() => {
+    return () => { if (undoTimer) clearTimeout(undoTimer); };
+  }, [undoTimer]);
+
+  const pendingProj = projects.find((p) => p.id === pendingTrashId);
+
+  if (showTrash) {
+    return (
+      <div className="flex flex-col h-full bg-background">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0">
+          <button
+            onClick={() => setShowTrash(false)}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X size={16} />
+            Close Trash
+          </button>
+          <span className="flex-1" />
+          {visibleTrash.length > 0 && (
+            <button
+              onClick={() => emptyTrash()}
+              className="text-xs text-destructive hover:opacity-80 transition-opacity font-medium"
+            >
+              Empty Trash
+            </button>
+          )}
+        </div>
+        <div className="flex-1 overflow-auto p-6">
+          {visibleTrash.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 gap-3 text-muted-foreground">
+              <Trash2 size={32} className="opacity-30" />
+              <p className="text-sm">Trash is empty</p>
+              <p className="text-xs opacity-60">Deleted projects appear here for 30 days</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-w-2xl">
+              <p className="text-xs text-muted-foreground mb-4">
+                Projects are permanently deleted after 30 days. You can restore or permanently delete them here.
+              </p>
+              {visibleTrash.map((item) => {
+                const daysLeft = Math.ceil((THIRTY_DAYS - (now - item.deletedAt)) / (24 * 60 * 60 * 1000));
+                return (
+                  <div key={item.project.id} className="flex items-center gap-4 px-4 py-3 rounded-xl border border-border bg-card">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{item.project.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Deleted {new Date(item.deletedAt).toLocaleDateString()} · {daysLeft} day{daysLeft !== 1 ? "s" : ""} until permanent deletion
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => restoreProject(item.project.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[#F5C518] border border-[#F5C518]/30 hover:bg-[#F5C518]/10 transition-colors"
+                      >
+                        <RotateCcw size={12} />
+                        Restore
+                      </button>
+                      <button
+                        onClick={() => setPermDeleteId(item.project.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-destructive border border-destructive/30 hover:bg-destructive/10 transition-colors"
+                      >
+                        <Trash2 size={12} />
+                        Delete Forever
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {/* Permanent delete confirmation */}
+        {permDeleteId && (() => {
+          const item = visibleTrash.find((t) => t.project.id === permDeleteId);
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
+                <h3 className="font-semibold text-foreground mb-2">Permanently Delete?</h3>
+                <p className="text-sm text-muted-foreground mb-5">
+                  <span className="font-medium text-foreground">"{item?.project.name}"</span> will be permanently deleted and cannot be recovered.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button onClick={() => setPermDeleteId(null)} className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+                  <button onClick={() => { permanentlyDeleteProject(permDeleteId); setPermDeleteId(null); }} className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium">Delete Forever</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col h-full overflow-auto bg-background">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="px-6 pt-8 pb-6 border-b border-border shrink-0">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="w-9 h-9 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
-            {icon}
-          </div>
-          <h1
-            className="text-2xl font-bold text-foreground"
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+    <div className="flex flex-col h-full bg-background relative">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+        <h2 className="text-base font-bold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+          Projects
+        </h2>
+        <div className="flex items-center gap-2">
+          {visibleTrash.length > 0 && (
+            <button
+              onClick={() => setShowTrash(true)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted/20"
+            >
+              <Trash2 size={13} />
+              Trash ({visibleTrash.length})
+            </button>
+          )}
+          <button
+            onClick={() => setShowNew(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F5C518] text-black text-xs font-semibold hover:bg-[#F5C518]/90 transition-colors"
           >
-            {title}
-          </h1>
+            <Plus size={13} />
+            New Project
+          </button>
         </div>
-        <p className="text-sm text-muted-foreground ml-12">
-          {projects.length} project{projects.length !== 1 ? "s" : ""} · Click a card to open
-        </p>
       </div>
 
-      {/* ── Project grid ───────────────────────────────────────────────────── */}
-      <div className="flex-1 p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-5xl">
-          {/* Existing project cards */}
+      {/* Project grid */}
+      <div className="flex-1 overflow-auto p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((proj) => {
             const isActive = proj.id === activeId;
+            const isEditing = editingId === proj.id;
             return (
               <div
                 key={proj.id}
+                onClick={() => { if (!isEditing) { onSwitch?.(proj.id); onOpen(proj.id); } }}
                 className={cn(
-                  "group relative rounded-xl border transition-all duration-150 cursor-pointer",
-                  "bg-card hover:bg-card/80",
+                  "group relative rounded-xl border bg-card flex flex-col cursor-pointer",
+                  "transition-all duration-150 hover:shadow-lg",
                   isActive
-                    ? "border-[#F5C518]/50 shadow-[0_0_0_1px_rgba(245,197,24,0.2)]"
-                    : "border-border hover:border-[#F5C518]/30"
+                    ? "border-[#F5C518]/60 shadow-[0_0_0_1px_rgba(245,197,24,0.2)]"
+                    : "border-border hover:border-border/80"
                 )}
-                onClick={() => onOpen(proj.id)}
               >
-                {/* Active badge */}
-                {isActive && (
-                  <div className="absolute top-3 right-3 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F5C518]/20 text-[#F5C518] uppercase tracking-wide">
-                    Active
-                  </div>
-                )}
-
-                <div className="p-4 pb-3">
-                  {/* Folder icon */}
-                  <div className="w-10 h-10 rounded-lg bg-muted/40 flex items-center justify-center mb-3">
-                    <FolderOpen size={18} className={isActive ? "text-[#F5C518]" : "text-muted-foreground"} />
-                  </div>
-
-                  {/* Name — editable inline */}
-                  {editingId === proj.id ? (
-                    <div
-                      className="flex items-center gap-1 mb-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <input
-                        autoFocus
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") commitEdit(proj.id);
-                          if (e.key === "Escape") setEditingId(null);
-                        }}
-                        className="flex-1 h-6 text-sm bg-background border border-border rounded px-2 text-foreground"
-                      />
-                      <button
-                        onClick={() => commitEdit(proj.id)}
-                        className="text-green-400 hover:text-green-300 p-0.5"
-                      >
-                        <Check size={13} />
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-muted-foreground hover:text-foreground p-0.5"
-                      >
-                        <X size={13} />
-                      </button>
+                {/* Card body */}
+                <div className="flex-1 px-5 pt-5 pb-3">
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                      isActive ? "bg-[#F5C518]/15" : "bg-muted/30"
+                    )}>
+                      <FolderOpen size={18} className={isActive ? "text-[#F5C518]" : "text-muted-foreground"} />
                     </div>
-                  ) : (
-                    <h3
-                      className="text-sm font-semibold text-foreground mb-1 pr-8 truncate"
-                      style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                    >
-                      {proj.name}
-                    </h3>
-                  )}
-
-                  {/* Summary */}
-                  {proj.summary && (
-                    <p className="text-[11px] text-muted-foreground font-mono truncate mb-2">
-                      {proj.summary}
-                    </p>
-                  )}
-
-                  {/* Date */}
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Calendar size={10} />
-                    <span>{formatDate(proj.createdAt)}</span>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      {isEditing ? (
+                        <input
+                          autoFocus
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRename(proj.id);
+                            if (e.key === "Escape") setEditingId(null);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full bg-transparent border-b border-[#F5C518] text-sm text-foreground outline-none font-medium pb-0.5"
+                        />
+                      ) : (
+                        <h3 className="text-sm font-semibold text-foreground truncate leading-snug">
+                          {proj.name}
+                        </h3>
+                      )}
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        {proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ""}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                {/* Action row */}
+                {/* Action row — larger buttons */}
                 <div
-                  className="flex items-center justify-between px-4 py-2 border-t border-border/50"
+                  className="flex items-center justify-between px-4 py-3 border-t border-border/50 gap-2"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    onClick={() => onOpen(proj.id)}
-                    className="text-[11px] font-medium text-[#F5C518] hover:text-[#F5C518]/80 transition-colors flex items-center gap-1"
+                    onClick={() => { onSwitch?.(proj.id); onOpen(proj.id); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-[#F5C518] hover:bg-[#F5C518]/10 transition-colors border border-[#F5C518]/20 hover:border-[#F5C518]/40"
                   >
-                    <FileText size={11} /> Open
+                    Open
                   </button>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => { setEditingId(proj.id); setEditName(proj.name); }}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors border border-transparent hover:border-border/50"
                       title="Rename"
                     >
-                      <Pencil size={12} />
+                      <Pencil size={13} />
+                      <span>Rename</span>
                     </button>
                     <button
-                      onClick={() => handleDelete(proj.id)}
-                      className="text-muted-foreground hover:text-destructive transition-colors"
+                      onClick={() => handleTrashClick(proj)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-transparent hover:border-destructive/30"
                       title="Delete"
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={13} />
+                      <span>Delete</span>
                     </button>
                   </div>
                 </div>
@@ -222,9 +304,9 @@ export default function ProjectHomepage({
             );
           })}
 
-          {/* ── New Project card ─────────────────────────────────────────── */}
+          {/* New project card */}
           {showNew ? (
-            <div className="rounded-xl border border-[#F5C518]/40 bg-card p-4 flex flex-col gap-3">
+            <div className="rounded-xl border border-[#F5C518]/40 bg-card p-5 flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
               <div className="w-10 h-10 rounded-lg bg-[#F5C518]/10 flex items-center justify-center">
                 <Plus size={18} className="text-[#F5C518]" />
               </div>
@@ -237,19 +319,13 @@ export default function ProjectHomepage({
                   if (e.key === "Escape") setShowNew(false);
                 }}
                 placeholder="Project name…"
-                className="h-8 text-sm bg-background border border-border rounded px-2 text-foreground w-full"
+                className="h-9 text-sm bg-background border border-border rounded-md px-3 text-foreground w-full focus:border-[#F5C518]/60 outline-none"
               />
               <div className="flex gap-2">
-                <button
-                  onClick={handleNew}
-                  className="flex-1 py-1.5 rounded bg-[#F5C518] text-black text-xs font-semibold hover:bg-[#F5C518]/90 transition-colors"
-                >
+                <button onClick={handleNew} className="flex-1 py-2 rounded-md bg-[#F5C518] text-black text-xs font-semibold hover:bg-[#F5C518]/90 transition-colors">
                   Create
                 </button>
-                <button
-                  onClick={() => setShowNew(false)}
-                  className="px-3 py-1.5 rounded border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
+                <button onClick={() => setShowNew(false)} className="px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground transition-colors">
                   Cancel
                 </button>
               </div>
@@ -272,24 +348,36 @@ export default function ProjectHomepage({
           )}
         </div>
       </div>
-      {/* Delete project confirmation dialog */}
-      {confirmDeleteId && (() => {
-        const proj = projects.find((p) => p.id === confirmDeleteId);
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
-              <h3 className="font-semibold text-foreground mb-2">Delete Project?</h3>
-              <p className="text-sm text-muted-foreground mb-5">
-                Delete <span className="font-medium text-foreground">"{proj?.name}"</span>? All runs, pins, and sessions will be lost. This cannot be undone.
-              </p>
-              <div className="flex gap-3 justify-end">
-                <button onClick={() => setConfirmDeleteId(null)} className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-                <button onClick={() => confirmDelete(confirmDeleteId)} className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium">Delete</button>
-              </div>
+
+      {/* Trash confirmation dialog */}
+      {pendingTrashId && pendingProj && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
+            <h3 className="font-semibold text-foreground mb-2">Move to Trash?</h3>
+            <p className="text-sm text-muted-foreground mb-5">
+              Move <span className="font-medium text-foreground">"{pendingProj.name}"</span> to trash? You can restore it within 30 days.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setPendingTrashId(null)} className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+              <button onClick={() => confirmTrash(pendingTrashId)} className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium">Move to Trash</button>
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
+
+      {/* Undo toast */}
+      {undoId && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl bg-card border border-border shadow-2xl">
+          <span className="text-sm text-foreground">Project moved to trash</span>
+          <button
+            onClick={handleUndo}
+            className="flex items-center gap-1.5 text-sm font-semibold text-[#F5C518] hover:text-[#F5C518]/80 transition-colors"
+          >
+            <RotateCcw size={14} />
+            Undo
+          </button>
+        </div>
+      )}
     </div>
   );
 }

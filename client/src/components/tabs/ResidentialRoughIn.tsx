@@ -609,7 +609,7 @@ export default function ResidentialRoughIn() {
     setOpenProjectId(id);
   };
 
-  const handleNew = (name: string) => {
+  const handleNew = (name?: string) => {
     addResidentialProject(name);
     setTimeout(() => setOpenProjectId("__new__"), 80);
   };
@@ -617,26 +617,17 @@ export default function ResidentialRoughIn() {
   const resolvedOpenId =
     openProjectId === "__new__" ? activeResidentialId : openProjectId;
 
-  const projectCards = residentialProjects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    createdAt: p.createdAt,
-    summary: p.state.roomId
-      ? ROOM_TEMPLATES.find((r) => r.id === p.state.roomId)?.name ?? p.state.roomId
-      : "No room selected",
-  }));
-
   if (!resolvedOpenId) {
     return (
       <ProjectHomepage
-        title="Residential"
-        icon={<Home size={18} className="text-[#F5C518]" />}
-        projects={projectCards}
+        projects={residentialProjects}
         activeId={activeResidentialId}
         onOpen={handleOpen}
         onNew={handleNew}
         onRename={renameResidentialProject}
         onDelete={deleteResidentialProject}
+        onSwitch={switchResidentialProject}
+        category="residential"
       />
     );
   }

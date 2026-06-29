@@ -26,6 +26,7 @@ import type {
 } from "@/contexts/AppContext";
 import { COUNT_ICONS, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR, type PinShape } from "@/lib/CountIcons";
 import { toast } from "sonner";
+import CatalogPicker from "@/components/CatalogPicker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -39,9 +40,10 @@ import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
   Plus, Minus, ChevronLeft, ChevronDown, ChevronUp,
-  Link2, Trash2, Pencil, Check, X, Undo2, BookOpen,
+  Link2, Trash2, Pencil, Check, X, Undo2, Save,
 } from "lucide-react";
-import { CATALOG, type CatalogItem } from "@/lib/materialCatalog";
+import type { CatalogItem } from "@/lib/materialCatalog";
+import type { SavedMaterialRow } from "@/contexts/AppContext";
 
 // ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ─
 function ConduitPipeIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
@@ -775,6 +777,40 @@ function CivilEditor({
     toast.success(`Session "${name}" created.`);
   };
 
+  const handleSaveCountToLM = useCallback((cs: CountSession) => {
+    if (cs.pins.length === 0) {
+      toast.error(`"${cs.name}" has no pins yet — drop pins first.`);
+      return;
+    }
+    const newRow: SavedMaterialRow = {
+      id: `smr-${Date.now().toString(36)}-${cs.id}`,
+      sessionId: cs.id,
+      description: cs.name,
+      qty: cs.pins.length,
+      unitCost: cs.unitCost ?? 0,
+      unit: "EA",
+      savedAt: Date.now(),
+    };
+    const existing = s.savedMaterialRows ?? [];
+    setCivilState({ ...s, runs, countSessions, activeCountSessionId, savedMaterialRows: [...existing, newRow] });
+    toast.success(`"${cs.name}" (${cs.pins.length} EA) saved to Labor & Material.`);
+  }, [s, runs, countSessions, activeCountSessionId, setCivilState]);
+
+  const handleAddCountSessionFromCatalog = useCallback((item: CatalogItem | null) => {
+    if (!item) return;
+    const newSession: CountSession = {
+      id: `cs-${Date.now().toString(36)}`,
+      name: item.description,
+      iconId: DEFAULT_ICON_ID,
+      color: DEFAULT_PIN_COLOR,
+      pins: [],
+      unitCost: item.unitPrice,
+      priceMode: "per-unit",
+    };
+    updateSessions([...countSessions, newSession], newSession.id);
+    toast.success(`"${item.description}" added to Unit Count.`);
+  }, [countSessions, updateSessions]);
+
   const handleDeleteCountSession = (id: string) => {
     const updated = countSessions.filter((cs) => cs.id !== id);
     const newActive = activeCountSessionId === id ? (updated[0]?.id ?? undefined) : activeCountSessionId;
@@ -1030,6 +1066,11 @@ function CivilEditor({
                             </>
                           ) : (
                             <>
+                              <button
+                                title="Save this count as a line item in Labor & Material"
+                                onClick={(e) => { e.stopPropagation(); handleSaveCountToLM(cs); }}
+                                className="text-muted-foreground hover:text-[#F5C518] transition-colors"
+                              ><Save size={11} /></button>
                               <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
                               <button onClick={(e) => { e.stopPropagation(); handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive"><Trash2 size={11} /></button>
                             </>
@@ -1100,33 +1141,20 @@ function CivilEditor({
                         )}
                       </button>
                     </div>
-                    {/* Material catalog browser — inline in unit count panel */}
-                    <div className="pt-1 border-t border-border/50">
-                      <details className="group/cat">
-                        <summary className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 cursor-pointer list-none transition-all select-none">
-                          <BookOpen size={12} />
-                          Browse Material Catalog
-                          <ChevronDown size={10} className="ml-auto group-open/cat:rotate-180 transition-transform" />
-                        </summary>
-                        <div className="mt-2 max-h-64 overflow-y-auto space-y-0.5 px-1">
-                          {(Array.from(new Set(CATALOG.map((i: CatalogItem) => i.category))) as string[]).map((cat: string) => (
-                            <details key={cat} className="group/catrow">
-                              <summary className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-semibold text-[#F5C518] uppercase tracking-wider cursor-pointer list-none hover:bg-muted/10 select-none">
-                                <ChevronDown size={9} className="group-open/catrow:rotate-180 transition-transform shrink-0" />
-                                {cat}
-                              </summary>
-                              <div className="pl-3 space-y-0.5 pb-1">
-                                {CATALOG.filter((i: CatalogItem) => i.category === cat).map((item: CatalogItem) => (
-                                  <div key={item.id} className="flex items-center justify-between py-0.5 text-[10px] font-mono">
-                                    <span className="text-foreground/80 truncate flex-1 mr-2">{item.description}</span>
-                                    <span className="text-[#F5C518] shrink-0">${item.unitPrice.toFixed(2)}/{item.unit}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </details>
-                          ))}
-                        </div>
-                      </details>
+                    {/* Searchable material quick-add for unit counts */}
+                    <div className="pt-1 border-t border-border/50 space-y-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium text-muted-foreground">Search material to start a count</Label>
+                        <CatalogPicker
+                          value={null}
+                          onChange={handleAddCountSessionFromCatalog}
+                          placeholder="Search catalog and create a prefilled count…"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground leading-relaxed">
+                        Picking a material creates a new count session with the item name and price loaded automatically.
+                        You can still change the price in the session row before or after dropping pins.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -1273,7 +1301,7 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
     setOpenProjectId(id);
   };
 
-  const handleNew = (name: string) => {
+  const handleNew = (name?: string) => {
     addCivilProject(name);
     // After adding, the new project becomes active — open it immediately
     // We need a small delay since addCivilProject is async state update
@@ -1289,27 +1317,17 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
   const resolvedOpenId =
     openProjectId === "__new__" ? activeCivilId : openProjectId;
 
-  const projectCards = civilProjects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    createdAt: p.createdAt,
-    summary:
-      (p.state.runs?.length ?? 0) > 0
-        ? `${p.state.runs!.length} run${p.state.runs!.length !== 1 ? "s" : ""} · ${(p.state.countSessions ?? []).reduce((a, cs) => a + cs.pins.length, 0)} pins`
-        : "No runs yet",
-  }));
-
   if (!resolvedOpenId) {
     return (
       <ProjectHomepage
-        title={categoryLabel}
-        icon={<CivilIcon size={18} className="text-[#F5C518]" />}
-        projects={projectCards}
+        projects={civilProjects}
         activeId={activeCivilId}
         onOpen={handleOpen}
         onNew={handleNew}
         onRename={renameCivilProject}
         onDelete={deleteCivilProject}
+        onSwitch={switchCivilProject}
+        category={category}
       />
     );
   }

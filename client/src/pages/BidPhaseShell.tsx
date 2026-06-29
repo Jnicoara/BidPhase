@@ -4,23 +4,42 @@
  * Mobile:  fixed bottom navigation bar
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
  *
- * Sidebar behaviour:
- *  - On the landing page: only the Settings icon is shown (no folder icon).
- *  - Inside a category: the active category icon replaces the folder icon.
- *    Clicking it opens the project list for that category.
- *    Clicking the logo returns to the landing page.
+ * Routing: uses window.history + hashchange so browser back/forward works.
+ *   #/           → landing page
+ *   #/civil      → Civil & Underground projects
+ *   #/commercial → Commercial projects
+ *   #/residential→ Residential projects
+ *   #/settings   → Settings
+ *   #/trash      → Trash
  */
 import { useApp } from "@/contexts/AppContext";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon } from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import ExportButton from "@/components/ExportButton";
 import MaterialListPage from "@/pages/MaterialListPage";
 import CategoryLanding from "@/pages/CategoryLanding";
-import { Settings, ChevronRight } from "lucide-react";
+import TrashPage from "@/pages/TrashPage";
+import { Settings, Trash2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ─── Category icon map ────────────────────────────────────────────────────────
+type Route = "landing" | "civil" | "commercial" | "residential" | "settings" | "trash";
+
+function hashToRoute(hash: string): Route {
+  const h = hash.replace(/^#\/?/, "");
+  if (h === "civil") return "civil";
+  if (h === "commercial") return "commercial";
+  if (h === "residential") return "residential";
+  if (h === "settings") return "settings";
+  if (h === "trash") return "trash";
+  return "landing";
+}
+
+function routeToHash(route: Route): string {
+  if (route === "landing") return "#/";
+  return `#/${route}`;
+}
+
 const CATEGORY_ICONS = {
   civil:       CivilIcon,
   commercial:  CommercialIcon,
@@ -41,23 +60,53 @@ export default function BidPhaseShell() {
     activeCategory, setActiveCategory,
   } = useApp();
 
-  // showLanding: true = show the category landing page
-  const [showLanding, setShowLanding] = useState(true);
+  // ── URL-based routing ──────────────────────────────────────────────────────
+  const [route, setRoute] = useState<Route>(() => hashToRoute(window.location.hash));
 
-  const isOnLanding = showLanding && !showMaterialList;
-  const isInCategory = !isOnLanding && activeTab === "projects";
+  const navigate = useCallback((r: Route) => {
+    window.location.hash = routeToHash(r);
+    // hashchange event will update state
+  }, []);
 
-  const renderTab = () => {
-    switch (activeTab) {
-      case "projects":  return <UnifiedProjects category={activeCategory} />;
-      case "settings":  return <SettingsTab />;
-      default:          return <UnifiedProjects category={activeCategory} />;
-    }
+  useEffect(() => {
+    const onHashChange = () => {
+      const r = hashToRoute(window.location.hash);
+      setRoute(r);
+      if (r === "civil" || r === "commercial" || r === "residential") {
+        setActiveCategory(r);
+        setActiveTab("projects");
+      } else if (r === "settings") {
+        setActiveTab("settings");
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    // Sync initial state
+    onHashChange();
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [setActiveCategory, setActiveTab]);
+
+  const isOnLanding = route === "landing";
+  const isInCategory = route === "civil" || route === "commercial" || route === "residential";
+  const isInSettings = route === "settings";
+  const isInTrash = route === "trash";
+
+  const currentCategory = isInCategory ? route as "civil" | "commercial" | "residential" : activeCategory;
+
+  const renderContent = () => {
+    if (showMaterialList) return <MaterialListPage onBack={() => setShowMaterialList(false)} />;
+    if (isOnLanding) return (
+      <CategoryLanding onSelect={(cat) => {
+        setActiveCategory(cat);
+        navigate(cat);
+      }} />
+    );
+    if (isInTrash) return <TrashPage onBack={() => navigate("landing")} />;
+    if (isInSettings) return <SettingsTab />;
+    // In a category
+    return <UnifiedProjects category={currentCategory} />;
   };
 
-  // The active category icon component (or null on landing)
-  const CategoryIcon = isInCategory ? CATEGORY_ICONS[activeCategory] : null;
-  const categoryLabel = isInCategory ? CATEGORY_LABELS[activeCategory] : "";
+  const routeKey = showMaterialList ? "material-list" : route;
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
@@ -66,13 +115,12 @@ export default function BidPhaseShell() {
         className="hidden md:flex flex-col shrink-0 w-16 hover:w-56 transition-[width] duration-200 ease-out
                    bg-sidebar border-r border-sidebar-border overflow-hidden group z-20"
       >
-        {/* Logo — text only, click returns to landing */}
+        {/* Logo — click returns to landing */}
         <div
-          onClick={() => { setShowLanding(true); setActiveTab("projects"); }}
+          onClick={() => navigate("landing")}
           className="flex items-center justify-center gap-2 px-3 py-4 h-16 border-b border-sidebar-border shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
           title="Back to home"
         >
-          {/* Collapsed: show "BP" monogram; expanded: show full wordmark */}
           <span
             className="font-bold text-[#F5C518] text-sm shrink-0 group-hover:hidden"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
@@ -90,52 +138,84 @@ export default function BidPhaseShell() {
 
         {/* Nav items */}
         <nav className="flex flex-col gap-1 p-2 flex-1">
-          {/* Category icon — only shown when inside a category */}
-          {CategoryIcon && (
-            <button
-              onClick={() => setActiveTab("projects")}
-              className={cn(
-                "flex items-center gap-3 px-2.5 py-3 rounded-md text-sm font-medium transition-all duration-150",
-                "hover:bg-accent hover:text-accent-foreground",
-                activeTab === "projects"
-                  ? "bp-tab-active text-foreground"
-                  : "text-muted-foreground"
-              )}
-              title={categoryLabel}
-            >
-              <CategoryIcon
-                size={20}
-                className={cn("shrink-0", activeTab === "projects" ? "text-[#F5C518]" : "")}
-              />
-              <span
-                className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 truncate"
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+          {/* Category icons — always shown once user has been in a category, or always visible */}
+          {(["civil", "commercial", "residential"] as const).map((cat) => {
+            const Icon = CATEGORY_ICONS[cat];
+            const label = CATEGORY_LABELS[cat];
+            const isActive = route === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => navigate(cat)}
+                className={cn(
+                  "flex items-center gap-3 px-2.5 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  isActive
+                    ? "bp-tab-active text-foreground"
+                    : "text-muted-foreground"
+                )}
+                title={label}
               >
-                {categoryLabel}
-              </span>
-            </button>
-          )}
+                <Icon
+                  size={20}
+                  className={cn("shrink-0", isActive ? "text-[#F5C518]" : "")}
+                />
+                <span
+                  className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 truncate text-xs"
+                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                >
+                  {label}
+                </span>
+              </button>
+            );
+          })}
 
-          {/* Settings — always visible */}
+          {/* Divider */}
+          <div className="my-1 border-t border-sidebar-border/50" />
+
+          {/* Settings */}
           <button
-            onClick={() => { setActiveTab("settings"); setShowLanding(false); }}
+            onClick={() => navigate("settings")}
             className={cn(
-              "flex items-center gap-3 px-2.5 py-3 rounded-md text-sm font-medium transition-all duration-150",
+              "flex items-center gap-3 px-2.5 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
               "hover:bg-accent hover:text-accent-foreground",
-              activeTab === "settings"
+              isInSettings
                 ? "bp-tab-active text-foreground"
                 : "text-muted-foreground"
             )}
           >
             <Settings
               size={20}
-              className={cn("shrink-0", activeTab === "settings" ? "text-[#F5C518]" : "")}
+              className={cn("shrink-0", isInSettings ? "text-[#F5C518]" : "")}
             />
             <span
-              className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+              className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-xs"
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
             >
               Settings
+            </span>
+          </button>
+
+          {/* Trash */}
+          <button
+            onClick={() => navigate("trash")}
+            className={cn(
+              "flex items-center gap-3 px-2.5 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
+              "hover:bg-accent hover:text-accent-foreground",
+              isInTrash
+                ? "bp-tab-active text-foreground"
+                : "text-muted-foreground"
+            )}
+          >
+            <Trash2
+              size={20}
+              className={cn("shrink-0", isInTrash ? "text-[#F5C518]" : "")}
+            />
+            <span
+              className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-xs"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            >
+              Trash
             </span>
           </button>
         </nav>
@@ -158,74 +238,73 @@ export default function BidPhaseShell() {
           <span
             className="font-bold text-base text-foreground cursor-pointer"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            onClick={() => { setShowLanding(true); setActiveTab("projects"); }}
+            onClick={() => navigate("landing")}
           >
             BidPhase
           </span>
           <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground font-mono">
             <ChevronRight size={12} />
             <span className="capitalize">
-              {isOnLanding ? "Home" : activeTab === "projects" ? categoryLabel : "Settings"}
+              {isOnLanding ? "Home" : isInTrash ? "Trash" : isInSettings ? "Settings" : CATEGORY_LABELS[currentCategory]}
             </span>
           </div>
         </header>
 
-        {/* Tab content — font scale applied here so all em-based text scales */}
+        {/* Tab content */}
         <div
           className="flex-1 overflow-hidden tab-enter"
-          key={showMaterialList ? "material-list" : isOnLanding ? "landing" : activeTab}
+          key={routeKey}
           style={{ fontSize: `${uiFontScale}rem` }}
         >
-          {showMaterialList
-            ? <MaterialListPage onBack={() => setShowMaterialList(false)} />
-            : isOnLanding
-            ? <CategoryLanding onSelect={(cat) => {
-                setActiveCategory(cat);
-                setShowLanding(false);
-                setActiveTab("projects");
-              }} />
-            : renderTab()
-          }
+          {renderContent()}
         </div>
       </main>
 
       {/* ── Mobile Bottom Nav ────────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex bg-sidebar border-t border-border">
-        {/* Category button — only shown when inside a category */}
-        {CategoryIcon && (
-          <button
-            onClick={() => setActiveTab("projects")}
-            className={cn(
-              "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-              activeTab === "projects" ? "text-[#F5C518]" : "text-muted-foreground"
-            )}
-          >
-            <CategoryIcon size={20} className={activeTab === "projects" ? "text-[#F5C518]" : ""} />
-            <span style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Projects</span>
-            {activeTab === "projects" && (
-              <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />
-            )}
-          </button>
-        )}
-
-        {/* Settings */}
+        {(["civil", "commercial", "residential"] as const).map((cat) => {
+          const Icon = CATEGORY_ICONS[cat];
+          const isActive = route === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => navigate(cat)}
+              className={cn(
+                "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
+                isActive ? "text-[#F5C518]" : "text-muted-foreground"
+              )}
+            >
+              <Icon size={18} className={isActive ? "text-[#F5C518]" : ""} />
+              {isActive && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
+            </button>
+          );
+        })}
         <button
-          onClick={() => { setActiveTab("settings"); setShowLanding(false); }}
+          onClick={() => navigate("settings")}
           className={cn(
             "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-            activeTab === "settings" ? "text-[#F5C518]" : "text-muted-foreground"
+            isInSettings ? "text-[#F5C518]" : "text-muted-foreground"
           )}
         >
-          <Settings size={20} className={activeTab === "settings" ? "text-[#F5C518]" : ""} />
-          <span style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Settings</span>
-          {activeTab === "settings" && (
-            <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />
+          <Settings size={18} className={isInSettings ? "text-[#F5C518]" : ""} />
+          {isInSettings && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
+        </button>
+        <button
+          onClick={() => navigate("trash")}
+          className={cn(
+            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
+            isInTrash ? "text-[#F5C518]" : "text-muted-foreground"
           )}
+        >
+          <Trash2 size={18} className={isInTrash ? "text-[#F5C518]" : ""} />
+          {isInTrash && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
         </button>
       </nav>
 
       {/* ── Floating Export Button ───────────────────────────────── */}
-      {!showMaterialList && !isOnLanding && <ExportButton onOpenMaterialList={() => setShowMaterialList(true)} />}
+      {!showMaterialList && !isOnLanding && !isInTrash && (
+        <ExportButton onOpenMaterialList={() => setShowMaterialList(true)} />
+      )}
     </div>
   );
 }

@@ -746,7 +746,7 @@ export default function CommercialAssembly() {
     setOpenProjectId(id);
   };
 
-  const handleNew = (name: string) => {
+  const handleNew = (name?: string) => {
     addCommercialProject(name);
     setTimeout(() => setOpenProjectId("__new__"), 80);
   };
@@ -754,26 +754,17 @@ export default function CommercialAssembly() {
   const resolvedOpenId =
     openProjectId === "__new__" ? activeCommercialId : openProjectId;
 
-  const projectCards = commercialProjects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    createdAt: p.createdAt,
-    summary: p.state.assemblyId
-      ? `${ASSEMBLIES.find((a) => a.id === p.state.assemblyId)?.name ?? p.state.assemblyId} × ${p.state.quantity || 1}`
-      : "No assembly selected",
-  }));
-
   if (!resolvedOpenId) {
     return (
       <ProjectHomepage
-        title="Commercial"
-        icon={<Building2 size={18} className="text-[#F5C518]" />}
-        projects={projectCards}
+        projects={commercialProjects}
         activeId={activeCommercialId}
         onOpen={handleOpen}
         onNew={handleNew}
         onRename={renameCommercialProject}
         onDelete={deleteCommercialProject}
+        onSwitch={switchCommercialProject}
+        category="commercial"
       />
     );
   }

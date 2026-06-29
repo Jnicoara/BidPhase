@@ -24,6 +24,13 @@ import React, { createContext, useContext, useCallback, useState } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { nanoid } from "nanoid";
 
+// ─── Trash type ─────────────────────────────────────────────────────────────
+export interface TrashedProject {
+  project: CivilProject;
+  category: "civil" | "commercial" | "residential";
+  deletedAt: number;
+}
+
 // ─── Labor line type ────────────────────────────────────────────────────────
 export interface LaborLine {
   id: string;
@@ -124,6 +131,17 @@ export interface RunItem {
   fittings: FittingCounts;
 }
 
+// ─── Saved material row (count session saved to L&M) ───────────────────────
+export interface SavedMaterialRow {
+  id: string;
+  sessionId: string;    // source count session id
+  description: string;  // item name
+  qty: number;          // pin count at save time
+  unitCost: number;     // price per unit
+  unit: string;         // e.g. "EA"
+  savedAt: number;      // timestamp
+}
+
 // ─── Civil / Underground ─────────────────────────────────────────────────────
 export interface CivilState {
   /** Legacy scalar — distance of the first/only run (kept for backward-compat). */
@@ -142,6 +160,8 @@ export interface CivilState {
   countSessions?: CountSession[];
   /** ID of the currently active count session */
   activeCountSessionId?: string;
+  /** Rows saved from count sessions to the Labor & Material list */
+  savedMaterialRows?: SavedMaterialRow[];
 }
 
 export interface CivilProject {
@@ -380,6 +400,13 @@ interface AppContextValue {
   // Automatically re-computed whenever any commercial project state changes.
   // Used by the global master list view and PDF export.
   masterTotals: MasterTotals;
+
+  // ── Trash ──────────────────────────────────────────────────────────────────
+  trashedProjects: TrashedProject[];
+  trashProject: (project: CivilProject, category: "civil" | "commercial" | "residential") => void;
+  restoreProject: (id: string) => void;
+  permanentlyDeleteProject: (id: string) => void;
+  emptyTrash: () => void;
 }
 
 /** Aggregated totals across all commercial projects. */
@@ -471,6 +498,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [traineeLines, setTraineeLines] = useLocalStorage<LaborLine[]>("bp_trainee_lines", []);
   const [journeymanRate, setJourneymanRate] = useLocalStorage<number>("bp_journeyman_rate", 95);
   const [traineeRate, setTraineeRate] = useLocalStorage<number>("bp_trainee_rate", 55);
+  const [trashedProjects, setTrashedProjects] = useLocalStorage<TrashedProject[]>("bp_trash", []);
 
   // ── Unified projects (single list, uses CivilProject/CivilState type) ──────
   const [unifiedProjects, setUnifiedProjects] = useLocalStorage<CivilProject[]>(
@@ -622,6 +650,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   })();
 
+  // ── Trash helpers ────────────────────────────────────────────────────────
+  const trashProject = useCallback((project: CivilProject, category: "civil" | "commercial" | "residential") => {
+    setTrashedProjects((prev) => [...prev, { project, category, deletedAt: Date.now() }]);
+  }, [setTrashedProjects]);
+  const restoreProject = useCallback((id: string) => {
+    const item = trashedProjects.find((t) => t.project.id === id);
+    if (!item) return;
+    // Re-add to the correct category store
+    if (item.category === "civil") {
+      setCivilCatProjects((prev) => [...prev, item.project]);
+    } else if (item.category === "commercial") {
+      setCommercialCatProjects((prev) => [...prev, item.project]);
+    } else {
+      setResidentialCatProjects((prev) => [...prev, item.project]);
+    }
+    setTrashedProjects((prev) => prev.filter((t) => t.project.id !== id));
+  }, [trashedProjects, setTrashedProjects, setCivilCatProjects, setCommercialCatProjects, setResidentialCatProjects]);
+  const permanentlyDeleteProject = useCallback((id: string) => {
+    setTrashedProjects((prev) => prev.filter((t) => t.project.id !== id));
+  }, [setTrashedProjects]);
+  const emptyTrash = useCallback(() => {
+    // Only permanently remove items older than 30 days or all if user confirms
+    setTrashedProjects([]);
+  }, [setTrashedProjects]);
+
   return (
     <AppContext.Provider
       value={{
@@ -727,6 +780,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setJourneymanRate,
         traineeRate,
         setTraineeRate,
+        // Trash
+        trashedProjects,
+        trashProject,
+        restoreProject,
+        permanentlyDeleteProject,
+        emptyTrash,
 
         // Legacy single-state accessors for ExportButton
         civilState:      activeCivilProject.state,

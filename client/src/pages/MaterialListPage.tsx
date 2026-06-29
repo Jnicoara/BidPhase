@@ -15,11 +15,11 @@ import { nanoid } from "nanoid";
 import {
   ArrowLeft, Plus, Trash2, Printer, Download, FileText,
   ChevronDown, ChevronUp, Edit2, HardHat, Wrench,
-  Tag, DollarSign, Percent, BookOpen, CheckSquare, Square, X,
+  Tag, DollarSign, Percent, BookOpen, CheckSquare, Square, X, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
-import type { LaborLine } from "@/contexts/AppContext";
+import type { LaborLine, SavedMaterialRow, CivilProject } from "@/contexts/AppContext";
 import CatalogPicker from "@/components/CatalogPicker";
 import { CATALOG, type CatalogItem } from "@/lib/materialCatalog";
 
@@ -190,6 +190,7 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
   const {
     setShowMaterialList,
     activeCivilProject, activeCommercialProject, activeResidentialProject,
+    activeCivilCatProject, activeCommercialCatProject, activeResidentialCatProject,
     markupPct, setMarkupPct,
     journeymanLines, setJourneymanLines,
     traineeLines, setTraineeLines,
@@ -201,36 +202,49 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
 
   // ── Build initial material rows from all three active projects ──────────────
   const buildRows = useCallback((): MaterialRow[] => {
-    const rows: MaterialRow[] = [];
+    const allRows: MaterialRow[] = [];
+    const seenIds = new Set<string>();
 
-    // Civil — count sessions
-    for (const s of activeCivilProject?.state?.countSessions ?? []) {
-      const qty = s.pins.length;
-      if (!qty && !s.unitCost) continue;
-      const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
-      rows.push({ id: `civil-s-${s.id}`, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
-    }
-    // Civil — runs
-    for (const r of activeCivilProject?.state?.runs ?? []) {
-      if (!r.feet) continue;
-      rows.push({ id: `civil-r-${r.id}`, description: `Run: ${r.name || "Unnamed"} (${r.conduitType ?? ""} ${r.conduitSize ?? ""})`.trim(), unit: "FT", qty: Math.round(r.feet), unitCost: 0, notes: r.conductors ? `${r.conductors} conductors` : "", catalogId: null, source: "run" });
-    }
-    // Commercial — count sessions
-    for (const s of activeCommercialProject?.state?.countSessions ?? []) {
-      const qty = s.pins.length;
-      if (!qty && !s.unitCost) continue;
-      const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
-      rows.push({ id: `comm-s-${s.id}`, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
-    }
-    // Residential — count sessions
-    for (const s of activeResidentialProject?.state?.countSessions ?? []) {
-      const qty = s.pins.length;
-      if (!qty && !s.unitCost) continue;
-      const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
-      rows.push({ id: `res-s-${s.id}`, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
-    }
-    return rows;
-  }, [activeCivilProject, activeCommercialProject, activeResidentialProject]);
+    const addProjectRows = (proj: CivilProject | undefined, prefix: string) => {
+      if (!proj) return;
+      const st = proj.state;
+      // Saved material rows (from count sessions saved via Save button)
+      for (const smr of st.savedMaterialRows ?? []) {
+        const id = `${prefix}-smr-${smr.id}`;
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        allRows.push({ id, description: smr.description, unit: smr.unit, qty: smr.qty, unitCost: smr.unitCost, notes: `Saved ${new Date(smr.savedAt).toLocaleDateString()}`, catalogId: null, source: "session" });
+      }
+      // Live count sessions (not yet saved as rows)
+      const savedSessionIds = new Set((st.savedMaterialRows ?? []).map((r) => (r as SavedMaterialRow).sessionId));
+      for (const s of st.countSessions ?? []) {
+        if (savedSessionIds.has(s.id)) continue;
+        const qty = s.pins.length;
+        if (!qty && !s.unitCost) continue;
+        const id = `${prefix}-s-${s.id}`;
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
+        allRows.push({ id, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
+      }
+      // Runs
+      for (const r of st.runs ?? []) {
+        if (!r.feet) continue;
+        const id = `${prefix}-r-${r.id}`;
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        allRows.push({ id, description: `Run: ${r.name || "Unnamed"} (${r.conduitType ?? ""} ${r.conduitSize ?? ""})`.trim(), unit: "FT", qty: Math.round(r.feet), unitCost: 0, notes: r.conductors ? `${r.conductors} conductors` : "", catalogId: null, source: "run" });
+      }
+    };
+
+    // Category-specific projects (used by BidPhaseShell)
+    addProjectRows(activeCivilCatProject, "civil-cat");
+    addProjectRows(activeCommercialCatProject, "comm-cat");
+    addProjectRows(activeResidentialCatProject, "res-cat");
+    // Legacy projects (fallback for old data / direct access)
+    addProjectRows(activeCivilProject, "civil");
+    return allRows;
+  }, [activeCivilProject, activeCommercialProject, activeResidentialProject, activeCivilCatProject, activeCommercialCatProject, activeResidentialCatProject]);
 
   const [rows, setRows] = useState<MaterialRow[]>(() => buildRows());
   const [manualRows, setManualRows] = useState<MaterialRow[]>([]);
@@ -245,10 +259,18 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
   const [showJourneyman, setShowJourneyman] = useState(true);
   const [showTrainee, setShowTrainee] = useState(true);
   const [showCatalogModal, setShowCatalogModal] = useState(false);
+  const [materialSearch, setMaterialSearch] = useState("");
 
   useEffect(() => { setRows(buildRows()); }, [buildRows]);
 
   const allRows = [...rows, ...manualRows];
+  const visibleRows = materialSearch.trim()
+    ? allRows.filter((r) =>
+        r.description.toLowerCase().includes(materialSearch.toLowerCase()) ||
+        r.notes.toLowerCase().includes(materialSearch.toLowerCase()) ||
+        r.unit.toLowerCase().includes(materialSearch.toLowerCase())
+      )
+    : allRows;
 
   // ── Totals ──────────────────────────────────────────────────────────────────
   const materialSubtotal = allRows.reduce((s, r) => s + r.qty * r.unitCost, 0);
@@ -392,6 +414,22 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
           </button>
           {showMaterials && (
             <div>
+              {/* Search bar */}
+              <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 bg-muted/5">
+                <Search size={12} className="text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Filter materials by name, unit, or notes…"
+                  value={materialSearch}
+                  onChange={(e) => setMaterialSearch(e.target.value)}
+                  className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none font-mono"
+                />
+                {materialSearch && (
+                  <button onClick={() => setMaterialSearch("")} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
               {/* Bulk action bar */}
               {selectedIds.size > 0 && (
                 <BulkEditBar
@@ -413,7 +451,10 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
                 <span>Description / Catalog</span><span>Unit</span><span className="text-right">Qty</span><span className="text-right">Unit $</span><span className="text-right">Ext $</span><span>Notes</span><span />
               </div>
               {allRows.length === 0 && <div className="px-4 py-8 text-center text-xs text-muted-foreground">No materials yet. Add count sessions or click "+ Add Row".</div>}
-              {allRows.map((row) => (
+              {allRows.length > 0 && visibleRows.length === 0 && (
+                <div className="px-4 py-6 text-center text-xs text-muted-foreground">No rows match "{materialSearch}".</div>
+              )}
+              {visibleRows.map((row) => (
                 <div
                   key={row.id}
                   className={cn(

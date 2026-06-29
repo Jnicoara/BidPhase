@@ -1148,7 +1148,7 @@ export default function CivilCalculator() {
     setOpenProjectId(id);
   };
 
-  const handleNew = (name: string) => {
+  const handleNew = (name?: string) => {
     addCivilProject(name);
     // After adding, the new project becomes active — open it immediately
     // We need a small delay since addCivilProject is async state update
@@ -1164,27 +1164,17 @@ export default function CivilCalculator() {
   const resolvedOpenId =
     openProjectId === "__new__" ? activeCivilId : openProjectId;
 
-  const projectCards = civilProjects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    createdAt: p.createdAt,
-    summary:
-      (p.state.runs?.length ?? 0) > 0
-        ? `${p.state.runs!.length} run${p.state.runs!.length !== 1 ? "s" : ""}`
-        : "No runs yet",
-  }));
-
   if (!resolvedOpenId) {
     return (
       <ProjectHomepage
-        title="Civil & Underground"
-        icon={<CivilIcon size={18} className="text-[#F5C518]" />}
-        projects={projectCards}
+        projects={civilProjects}
         activeId={activeCivilId}
         onOpen={handleOpen}
         onNew={handleNew}
         onRename={renameCivilProject}
         onDelete={deleteCivilProject}
+        onSwitch={switchCivilProject}
+        category="civil"
       />
     );
   }
