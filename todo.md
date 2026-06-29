@@ -70,9 +70,9 @@
 
 ## v4.3 — Crosshair, Pin Shapes, App Audit
 
-- [ ] Remove floating crosshair from run/measure mode (revert to default cursor behavior)
-- [ ] Add XL size to all 4 pin shape families (dot, square, circle, triangle)
-- [ ] Standardize pin shape names and sizes across CountIcons.ts and canvas draw code
-- [ ] App audit: verify all toolbar buttons interact correctly with each other
-- [ ] App audit: verify all delete/trash tools work as expected
-- [ ] App audit: document any issues or suggestions found
+- [x] Remove floating crosshair from run/measure mode (revert to default cursor behavior)
+- [x] Add XL size to all 4 pin shape families (dot, square, circle, triangle)
+- [x] Standardize pin shape names and sizes across CountIcons.ts and canvas draw code
+- [x] App audit: verify all toolbar buttons interact correctly with each other
+- [x] App audit: verify all delete/trash tools work as expected
+- [x] App audit: document any issues or suggestions found

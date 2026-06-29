@@ -118,7 +118,7 @@ export default function ProjectHomepage({
           <span className="flex-1" />
           {visibleTrash.length > 0 && (
             <button
-              onClick={() => emptyTrash()}
+              onClick={() => { if (window.confirm(`Permanently delete all ${visibleTrash.length} project${visibleTrash.length !== 1 ? 's' : ''} in trash? This cannot be undone.`)) emptyTrash(); }}
               className="text-xs text-destructive hover:opacity-80 transition-opacity font-medium"
             >
               Empty Trash
