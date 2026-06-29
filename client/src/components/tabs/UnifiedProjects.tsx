@@ -121,6 +121,35 @@ export function CivilIcon({ size = 20, className = "" }: { size?: number; classN
   );
 }
 
+export function CommercialIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="9" y1="9" x2="9" y2="21" />
+      <line x1="3" y1="15" x2="9" y2="15" />
+      <rect x="12" y="12" width="4" height="3" rx="0.5" />
+      <rect x="12" y="17" width="4" height="3" rx="0.5" />
+    </svg>
+  );
+}
+
+export function ResidentialIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      <path d="M3 10.5L12 3l9 7.5" />
+      <path d="M5 8.5V21h14V8.5" />
+      <rect x="9" y="14" width="6" height="7" rx="1" />
+      <circle cx="10.5" cy="17.5" r="0.8" fill="currentColor" stroke="none" />
+      <circle cx="13.5" cy="17.5" r="0.8" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 // Types and constants (RunItem, FittingCounts, FITTING_TYPES, etc.) are
 // imported from AppContext.tsx — see imports at the top of this file.
 // Local alias so existing JSX references to CONDUIT_TYPES still work:
