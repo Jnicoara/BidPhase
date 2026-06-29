@@ -20,10 +20,11 @@ import ExportButton from "@/components/ExportButton";
 import MaterialListPage from "@/pages/MaterialListPage";
 import CategoryLanding from "@/pages/CategoryLanding";
 import TrashPage from "@/pages/TrashPage";
-import { Settings, Trash2, ChevronRight } from "lucide-react";
+import EstimateEnginePage from "@/pages/EstimateEnginePage";
+import { Settings, Trash2, ChevronRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Route = "landing" | "civil" | "commercial" | "residential" | "settings" | "trash";
+type Route = "landing" | "civil" | "commercial" | "residential" | "settings" | "trash" | "estimate";
 
 function hashToRoute(hash: string): Route {
   const h = hash.replace(/^#\/?/, "");
@@ -32,11 +33,13 @@ function hashToRoute(hash: string): Route {
   if (h === "residential") return "residential";
   if (h === "settings") return "settings";
   if (h === "trash") return "trash";
+  if (h === "estimate") return "estimate";
   return "landing";
 }
 
 function routeToHash(route: Route): string {
   if (route === "landing") return "#/";
+  if (route === "estimate") return "#/estimate";
   return `#/${route}`;
 }
 
@@ -89,6 +92,7 @@ export default function BidPhaseShell() {
   const isInCategory = route === "civil" || route === "commercial" || route === "residential";
   const isInSettings = route === "settings";
   const isInTrash = route === "trash";
+  const isInEstimate = route === "estimate";
 
   const currentCategory = isInCategory ? route as "civil" | "commercial" | "residential" : activeCategory;
 
@@ -102,6 +106,7 @@ export default function BidPhaseShell() {
     );
     if (isInTrash) return <TrashPage onBack={() => navigate("landing")} />;
     if (isInSettings) return <SettingsTab />;
+    if (isInEstimate) return <EstimateEnginePage onBack={() => navigate("landing")} />;
     // In a category
     return <UnifiedProjects category={currentCategory} />;
   };
@@ -193,6 +198,30 @@ export default function BidPhaseShell() {
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
             >
               Settings
+            </span>
+          </button>
+
+          {/* Estimate Engine */}
+          <button
+            onClick={() => navigate("estimate")}
+            className={cn(
+              "flex items-center gap-3 px-2.5 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
+              "hover:bg-accent hover:text-accent-foreground",
+              isInEstimate
+                ? "bp-tab-active text-foreground"
+                : "text-muted-foreground"
+            )}
+            title="Estimate Engine"
+          >
+            <Zap
+              size={20}
+              className={cn("shrink-0", isInEstimate ? "text-[#F5C518]" : "")}
+            />
+            <span
+              className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-xs"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            >
+              Estimate Engine
             </span>
           </button>
 
@@ -299,10 +328,20 @@ export default function BidPhaseShell() {
           <Trash2 size={18} className={isInTrash ? "text-[#F5C518]" : ""} />
           {isInTrash && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
         </button>
+        <button
+          onClick={() => navigate("estimate")}
+          className={cn(
+            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
+            isInEstimate ? "text-[#F5C518]" : "text-muted-foreground"
+          )}
+        >
+          <Zap size={18} className={isInEstimate ? "text-[#F5C518]" : ""} />
+          {isInEstimate && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
+        </button>
       </nav>
 
       {/* ── Floating Export Button ───────────────────────────────── */}
-      {!showMaterialList && !isOnLanding && !isInTrash && (
+      {!showMaterialList && !isOnLanding && !isInTrash && !isInEstimate && (
         <ExportButton onOpenMaterialList={() => setShowMaterialList(true)} />
       )}
     </div>
