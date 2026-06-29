@@ -938,7 +938,7 @@ export default function ExportButton({ onOpenMaterialList }: ExportButtonProps =
                   onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
                   <FileText size={15} className="text-blue-400" />
-                  View Material List
+                  Labor & Material
                 </button>
               </>
             )}
@@ -948,7 +948,7 @@ export default function ExportButton({ onOpenMaterialList }: ExportButtonProps =
         {/* Main toggle button */}
         <button
           onClick={() => setOpen((v) => !v)}
-          title="Export Material List"
+          title="Export Labor & Material"
           className="flex items-center gap-2 px-4 py-3 rounded-full
                      bg-[#F5C518] text-black font-semibold text-sm
                      shadow-lg shadow-[#F5C518]/20

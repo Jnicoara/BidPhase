@@ -507,7 +507,7 @@ function ResidentialEditor({
                       className="text-[10px] font-mono text-[#F5C518]/70 hover:text-[#F5C518] transition-colors"
                       title="Open full-screen material list"
                     >
-                      Full View →
+                      Labor & Material →
                     </button>
                   </div>
                   <div className="divide-y divide-border/50">

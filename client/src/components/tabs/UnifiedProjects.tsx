@@ -1,15 +1,8 @@
 /**
- * BidPhase — Civil & Underground Conduit Calculator
- * Design: Tactical Dark Mode SaaS · Space Grotesk headers · JetBrains Mono outputs
- *
- * Features:
- * - Project homepage (card grid) → open project editor
- * - Multi-project manager (add / rename / delete / switch)
- * - Embedded PlanPanel (resizable split pane)
- * - Per-run line items auto-pushed from the plan panel
- * - Conduit size selector per run
- * - Manual fittings selector (connectors, couplings, LBs, elbows, sweeps, etc.)
- * - Total wire length with 10% slack
+ * BidPhase — Unified Projects Tab
+ * Single tab replacing Civil / Commercial / Residential.
+ * Uses CivilState/CivilProject as the canonical project type.
+ * Each run has a runType toggle: "conduit" (pipe sticks + fittings) or "wire" (bare conductor).
  */
 import { useState, useCallback } from "react";
 import { useApp } from "@/contexts/AppContext";
@@ -237,7 +230,9 @@ function RunCard({
             {run.name}
           </span>
           <span className="text-[10px] font-mono text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
-            {run.conduitType ?? "EMT"} {run.conduitSize}"
+            {(run.runType ?? "conduit") === "wire"
+              ? `Wire · ${run.conductors}c`
+              : `${run.conduitType ?? "EMT"} ${run.conduitSize}"`}
           </span>
           {run.pageNumber !== undefined && (
             <span className="text-[10px] font-mono text-muted-foreground/60 bg-muted/20 px-1.5 py-0.5 rounded">
@@ -284,48 +279,69 @@ function RunCard({
           </div>
         </div>
 
-        {/* Conduit type */}
+        {/* Run type toggle: Conduit vs Wire */}
         <div className="space-y-1.5">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Type</Label>
-          <div className="flex flex-wrap gap-1">
-            {CONDUIT_TYPES.map((ct) => (
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Run Type</Label>
+          <div className="flex gap-2">
+            {(["conduit", "wire"] as const).map((rt) => (
               <button
-                key={ct.id}
-                onClick={() => onUpdate(run.id, { conduitType: ct.id as ConduitType })}
+                key={rt}
+                onClick={() => onUpdate(run.id, { runType: rt })}
                 className={cn(
-                  "px-2.5 py-1 rounded text-[10px] font-mono font-semibold border transition-all",
-                  (run.conduitType ?? "EMT") === ct.id
+                  "flex-1 py-1.5 rounded text-xs font-medium border transition-all capitalize",
+                  (run.runType ?? "conduit") === rt
                     ? "bg-yellow-400 text-black border-yellow-400"
                     : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
                 )}
               >
-                {ct.label}
+                {rt}
               </button>
             ))}
           </div>
         </div>
-
-        {/* Conduit size */}
-        <div className="space-y-1.5">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Size</Label>
-          <div className="grid grid-cols-5 gap-1">
-            {CONDUIT_SIZES.map((cs) => (
-              <button
-                key={cs.value}
-                onClick={() => onUpdate(run.id, { conduitSize: cs.value })}
-                className={cn(
-                  "py-1 rounded text-[10px] font-mono font-medium border transition-all",
-                  run.conduitSize === cs.value
-                    ? "bg-yellow-400 text-black border-yellow-400"
-                    : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                )}
-              >
-                {cs.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
+                {/* Conduit type + size — only shown for conduit runs */}
+        {(run.runType ?? "conduit") === "conduit" && (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Type</Label>
+              <div className="flex flex-wrap gap-1">
+                {CONDUIT_TYPES.map((ct) => (
+                  <button
+                    key={ct.id}
+                    onClick={() => onUpdate(run.id, { conduitType: ct.id as ConduitType })}
+                    className={cn(
+                      "px-2.5 py-1 rounded text-[10px] font-mono font-semibold border transition-all",
+                      (run.conduitType ?? "EMT") === ct.id
+                        ? "bg-yellow-400 text-black border-yellow-400"
+                        : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                    )}
+                  >
+                    {ct.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Size</Label>
+              <div className="grid grid-cols-5 gap-1">
+                {CONDUIT_SIZES.map((cs) => (
+                  <button
+                    key={cs.value}
+                    onClick={() => onUpdate(run.id, { conduitSize: cs.value })}
+                    className={cn(
+                      "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                      run.conduitSize === cs.value
+                        ? "bg-yellow-400 text-black border-yellow-400"
+                        : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                    )}
+                  >
+                    {cs.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         {/* Conductor material */}
         <div className="space-y-1.5">
           <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Material</Label>
@@ -370,13 +386,15 @@ function RunCard({
 
         {/* Calculated outputs */}
         <div className="grid grid-cols-2 gap-2">
-          <div className="bg-muted/20 rounded-lg p-2.5">
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-              <ConduitPipeIcon size={10} /> Pipe Sticks
+          {(run.runType ?? "conduit") === "conduit" && (
+            <div className="bg-muted/20 rounded-lg p-2.5">
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                <ConduitPipeIcon size={10} /> Pipe Sticks
+              </div>
+              <div className="text-xl font-bold font-mono text-foreground">{sticks}</div>
+              <div className="text-[10px] text-muted-foreground font-mono">10-ft sticks</div>
             </div>
-            <div className="text-xl font-bold font-mono text-foreground">{sticks}</div>
-            <div className="text-[10px] text-muted-foreground font-mono">10-ft sticks</div>
-          </div>
+          )}
           <div className="bg-muted/20 rounded-lg p-2.5">
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
               <StrippedWireIcon size={10} /> Wire Length
@@ -386,39 +404,42 @@ function RunCard({
           </div>
         </div>
 
-        {/* Fittings toggle */}
-        <button
-          onClick={() => setShowFittings((v) => !v)}
-          className={cn(
-            "w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all text-xs font-medium",
-            showFittings
-              ? "border-[#F5C518]/40 bg-[#F5C518]/5 text-[#F5C518]"
-              : "border-border bg-muted/20 text-muted-foreground hover:text-foreground hover:border-border/80"
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <MaleAdapterIcon size={12} />
-            <span>Fittings</span>
-            {totalFittings > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-[#F5C518]/20 text-[#F5C518] text-[10px] font-bold">
-                {totalFittings}
-              </span>
+                {/* Fittings toggle — only for conduit runs */}
+        {(run.runType ?? "conduit") === "conduit" && (
+          <>
+            <button
+              onClick={() => setShowFittings((v) => !v)}
+              className={cn(
+                "w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all text-xs font-medium",
+                showFittings
+                  ? "border-[#F5C518]/40 bg-[#F5C518]/5 text-[#F5C518]"
+                  : "border-border bg-muted/20 text-muted-foreground hover:text-foreground hover:border-border/80"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <MaleAdapterIcon size={12} />
+                <span>Fittings</span>
+                {totalFittings > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-[#F5C518]/20 text-[#F5C518] text-[10px] font-bold">
+                    {totalFittings}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-muted-foreground">{showFittings ? "▲" : "▼"}</span>
+            </button>
+            {showFittings && (
+              <div className="bg-muted/10 rounded-lg px-3 py-2 border border-border/50">
+                {FITTING_TYPES.map((ft) => (
+                  <FittingCounter
+                    key={ft.id}
+                    label={ft.label}
+                    value={run.fittings[ft.id]}
+                    onChange={(v) => updateFitting(ft.id, v)}
+                  />
+                ))}
+              </div>
             )}
-          </div>
-          <span className="text-[10px] text-muted-foreground">{showFittings ? "▲" : "▼"}</span>
-        </button>
-
-        {showFittings && (
-          <div className="bg-muted/10 rounded-lg px-3 py-2 border border-border/50">
-            {FITTING_TYPES.map((ft) => (
-              <FittingCounter
-                key={ft.id}
-                label={ft.label}
-                value={run.fittings[ft.id]}
-                onChange={(v) => updateFitting(ft.id, v)}
-              />
-            ))}
-          </div>
+          </>
         )}
       </div>
     </div>
@@ -448,6 +469,7 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
   type ConduitKey = string; // e.g. "EMT 3/4""
   const conduitMap = new Map<ConduitKey, { type: string; size: string; feet: number; sticks: number }>();
   for (const r of runs) {
+    if ((r.runType ?? "conduit") === "wire") continue; // wire runs handled separately
     const key = `${r.conduitType ?? "EMT"} ${r.conduitSize}"`;
     const existing = conduitMap.get(key);
     if (existing) {
@@ -662,7 +684,7 @@ function CivilEditor({
   projectName: string;
   onBack: () => void;
 }) {
-  const { activeCivilProject, setCivilState } = useApp();
+  const { activeUnifiedProject: activeCivilProject, setUnifiedState: setCivilState } = useApp();
   const s = activeCivilProject.state;
 
   // Per-run items — stored in component state (persisted via AppContext civilState.runs)
@@ -797,6 +819,7 @@ function CivilEditor({
           name: runName,
           pageNumber,
           feet: ft,
+          runType: "conduit",
           conduitSize: conduitSize ?? "3/4",
           conduitType: "EMT",
           conductors: 2,
@@ -850,7 +873,7 @@ function CivilEditor({
         {/* ── Plan Panel — always gets at least 55% so the right panel can never cover the PDF ── */}
         <ResizablePanel defaultSize={60} minSize={55} maxSize={80}>
           <PlanPanel
-            tabKey={`civil_${projectId}`}
+            tabKey={`unified_${projectId}`}
             onPushDistance={(ft: number, runName: string, conduitSize?: string, pageNumber?: number) => handlePush(ft, runName, conduitSize, pageNumber)}
             onDeleteRun={(name, page) => handleDeleteRun(name, page)}
             onCurrentPageChange={(page) => setActivePage(page)}
@@ -1129,15 +1152,15 @@ function CivilShapeSelector({
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function CivilCalculator() {
+export default function UnifiedProjects() {
   const {
-    civilProjects,
-    activeCivilId,
-    activeCivilProject,
-    addCivilProject,
-    renameCivilProject,
-    deleteCivilProject,
-    switchCivilProject,
+    unifiedProjects: civilProjects,
+    activeUnifiedId: activeCivilId,
+    activeUnifiedProject: activeCivilProject,
+    addUnifiedProject: addCivilProject,
+    renameUnifiedProject: renameCivilProject,
+    deleteUnifiedProject: deleteCivilProject,
+    switchUnifiedProject: switchCivilProject,
   } = useApp();
 
   // "null" means show homepage; a project id means show editor
@@ -1170,14 +1193,14 @@ export default function CivilCalculator() {
     createdAt: p.createdAt,
     summary:
       (p.state.runs?.length ?? 0) > 0
-        ? `${p.state.runs!.length} run${p.state.runs!.length !== 1 ? "s" : ""}`
+        ? `${p.state.runs!.length} run${p.state.runs!.length !== 1 ? "s" : ""} · ${(p.state.countSessions ?? []).reduce((a, cs) => a + cs.pins.length, 0)} pins`
         : "No runs yet",
   }));
 
   if (!resolvedOpenId) {
     return (
       <ProjectHomepage
-        title="Civil & Underground"
+        title="Projects"
         icon={<CivilIcon size={18} className="text-[#F5C518]" />}
         projects={projectCards}
         activeId={activeCivilId}

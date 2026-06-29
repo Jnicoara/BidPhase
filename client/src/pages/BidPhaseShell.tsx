@@ -1,33 +1,26 @@
 /**
  * BidPhaseShell — Main layout shell
  * Desktop: fixed left sidebar (icon-only 64px, expands to 220px on hover)
- * Mobile:  fixed bottom navigation bar with 3 tabs
+ * Mobile:  fixed bottom navigation bar
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
  *
- * Each tab now embeds a PlanPanel on the left side — no standalone Plan Viewer tab.
+ * Unified tab: single "Projects" tab replaces the three separate Civil/Commercial/Residential tabs.
  */
 import { useApp } from "@/contexts/AppContext";
-import CivilCalculator, { CivilIcon } from "@/components/tabs/CivilCalculator";
-import CommercialAssembly from "@/components/tabs/CommercialAssembly";
-import ResidentialRoughIn from "@/components/tabs/ResidentialRoughIn";
+import UnifiedProjects, { CivilIcon } from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import ExportButton from "@/components/ExportButton";
 import MaterialListPage from "@/pages/MaterialListPage";
 import {
-  Building2,
-  Home,
-  ChevronRight,
+  FolderOpen,
   Settings,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// CivilIcon is imported from CivilCalculator.tsx (single source of truth).
-
 const TABS = [
-  { id: "residential", label: "Residential",      icon: Home,         short: "Res."  },
-  { id: "commercial",  label: "Commercial",        icon: Building2,    short: "Comm." },
-  { id: "civil",       label: "Civil / UG",        icon: CivilIcon,    short: "Civil" },
-  { id: "settings",    label: "Settings",          icon: Settings,     short: "Set."  },
+  { id: "projects",  label: "Projects",  icon: FolderOpen,  short: "Jobs"  },
+  { id: "settings",  label: "Settings",  icon: Settings,    short: "Set."  },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -37,11 +30,9 @@ export default function BidPhaseShell() {
 
   const renderTab = () => {
     switch (activeTab as TabId) {
-      case "residential": return <ResidentialRoughIn />;
-      case "commercial":  return <CommercialAssembly />;
-      case "civil":       return <CivilCalculator />;
-      case "settings":    return <SettingsTab />;
-      default:            return <ResidentialRoughIn />;
+      case "projects":  return <UnifiedProjects />;
+      case "settings":  return <SettingsTab />;
+      default:          return <UnifiedProjects />;
     }
   };
 
@@ -71,7 +62,7 @@ export default function BidPhaseShell() {
         {/* Nav items */}
         <nav className="flex flex-col gap-1 p-2 flex-1">
           {TABS.map(({ id, label, icon: Icon }) => {
-            const active = activeTab === id;
+            const active = activeTab === id || (activeTab !== "settings" && id === "projects");
             return (
               <button
                 key={id}
@@ -105,7 +96,7 @@ export default function BidPhaseShell() {
             className="text-[10px] text-muted-foreground whitespace-nowrap
                        opacity-0 group-hover:opacity-100 transition-opacity duration-150 font-mono"
           >
-            v2.0 · Field Edition
+            v3.0 · Field Edition
           </span>
         </div>
       </aside>
@@ -127,7 +118,7 @@ export default function BidPhaseShell() {
           </span>
           <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground font-mono">
             <ChevronRight size={12} />
-            <span className="capitalize">{activeTab}</span>
+            <span className="capitalize">{activeTab === "projects" ? "Projects" : activeTab}</span>
           </div>
         </header>
 
@@ -147,7 +138,7 @@ export default function BidPhaseShell() {
       {/* ── Mobile Bottom Nav ────────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex bg-sidebar border-t border-border">
         {TABS.map(({ id, short, icon: Icon }) => {
-          const active = activeTab === id;
+          const active = activeTab === id || (activeTab !== "settings" && id === "projects");
           return (
             <button
               key={id}

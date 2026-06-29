@@ -151,9 +151,8 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
   const jLaborTotal = jHours * journeymanRate;
   const tLaborTotal = tHours * traineeRate;
   const laborSubtotal = jLaborTotal + tLaborTotal;
-  const subtotal = materialSubtotal + laborSubtotal;
-  const markupAmt = subtotal * (markupPct / 100);
-  const grandTotal = subtotal + markupAmt;
+  const markupAmt = materialSubtotal * (markupPct / 100);
+  const grandTotal = materialSubtotal + markupAmt + laborSubtotal;
 
   // ── Row helpers ─────────────────────────────────────────────────────────────
   const updateRow = (id: string, patch: Partial<MaterialRow>) => {
@@ -377,12 +376,11 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
             <span className="text-sm font-semibold">Project Totals</span>
           </div>
           <div className="divide-y divide-border/40">
+            {/* Materials section */}
             <div className="flex items-center justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">Material Subtotal</span><span className="font-mono font-medium">${fmt(materialSubtotal)}</span></div>
-            <div className="flex items-center justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">Labor Subtotal</span><span className="font-mono font-medium">${fmt(laborSubtotal)}</span></div>
-            <div className="flex items-center justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-mono font-medium">${fmt(subtotal)}</span></div>
             <div className="flex items-center justify-between px-4 py-2.5 text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
-                <Percent size={12} /><span>Markup</span>
+                <Percent size={12} /><span>Material Markup</span>
                 <input type="number" min={0} max={200} step={0.5} value={markupDraft} onChange={(e) => setMarkupDraft(e.target.value)}
                   onBlur={() => { const v = parseFloat(markupDraft); if (!isNaN(v) && v >= 0) setMarkupPct(v); else setMarkupDraft(String(markupPct)); }}
                   className="w-14 bg-transparent border-b border-[#F5C518]/40 text-[#F5C518] font-mono text-xs text-right outline-none focus:border-[#F5C518]" />
@@ -390,6 +388,10 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
               </div>
               <span className="font-mono font-medium text-[#F5C518]">+${fmt(markupAmt)}</span>
             </div>
+            <div className="flex items-center justify-between px-4 py-2.5 text-sm bg-muted/10"><span className="font-medium text-muted-foreground">Material Total</span><span className="font-mono font-semibold">${fmt(materialSubtotal + markupAmt)}</span></div>
+            {/* Labor section — separate, no markup applied */}
+            <div className="flex items-center justify-between px-4 py-2.5 text-sm"><span className="text-muted-foreground">Labor Total</span><span className="font-mono font-medium">${fmt(laborSubtotal)}</span></div>
+            {/* Grand total */}
             <div className="flex items-center justify-between px-4 py-3 bg-[#F5C518]/5">
               <span className="font-bold text-base">Grand Total</span>
               <span className="font-mono font-bold text-xl text-[#F5C518]">${fmt(grandTotal)}</span>

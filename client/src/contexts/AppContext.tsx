@@ -114,6 +114,8 @@ export interface RunItem {
   name: string;
   pageNumber?: number;        // which PDF page this run came from
   feet: number;
+  /** "conduit" = EMT/IMC/RMC/PVC etc. with pipe sticks + fittings; "wire" = bare conductor only */
+  runType?: "conduit" | "wire";
   conduitSize: string;        // e.g. "3/4"
   conduitType: CivilConduitType;
   conductors: number;
@@ -323,6 +325,16 @@ interface AppContextValue {
   traineeRate: number;
   setTraineeRate: (v: number) => void;
 
+  // ── Unified projects (single project list replacing the three separate tabs) ─
+  unifiedProjects: CivilProject[];
+  activeUnifiedId: string;
+  activeUnifiedProject: CivilProject;
+  setUnifiedState: (s: CivilState) => void;
+  addUnifiedProject: (name?: string) => void;
+  renameUnifiedProject: (id: string, name: string) => void;
+  deleteUnifiedProject: (id: string) => void;
+  switchUnifiedProject: (id: string) => void;
+
   // ── Legacy single-state accessors (used by ExportButton) ───────────────────
   // These are convenience aliases for activeCivilProject.state etc.
   // They exist so ExportButton can destructure a flat object without knowing
@@ -433,6 +445,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [journeymanRate, setJourneymanRate] = useLocalStorage<number>("bp_journeyman_rate", 95);
   const [traineeRate, setTraineeRate] = useLocalStorage<number>("bp_trainee_rate", 55);
 
+  // ── Unified projects (single list, uses CivilProject/CivilState type) ──────
+  const [unifiedProjects, setUnifiedProjects] = useLocalStorage<CivilProject[]>(
+    "bp_unified_projects",
+    [defaultCivilProject()]
+  );
+  const safeUP = ensureOne(unifiedProjects, defaultCivilProject);
+  const [activeUnifiedId, setActiveUnifiedId] = useLocalStorage<string>(
+    "bp_active_unified",
+    safeUP[0].id
+  );
+  const activeUnifiedProject = safeUP.find((p) => p.id === activeUnifiedId) ?? safeUP[0];
+
+  const unifiedStore = useCallback(
+    () => makeProjectStore(safeUP, activeUnifiedId, setUnifiedProjects, setActiveUnifiedId, defaultCivilProject),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeUnifiedId, safeUP.length, setUnifiedProjects, setActiveUnifiedId]
+  );
+
   // ── Civil ─────────────────────────────────────────────────────────────────
   const [civilProjects, setCivilProjects] = useLocalStorage<CivilProject[]>(
     "bp_civil_projects",
@@ -538,6 +568,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       value={{
         activeTab,
         setActiveTab,
+
+        // Unified projects
+        unifiedProjects: safeUP,
+        activeUnifiedId,
+        activeUnifiedProject,
+        setUnifiedState:        unifiedStore().setState,
+        addUnifiedProject:      unifiedStore().add,
+        renameUnifiedProject:   unifiedStore().rename,
+        deleteUnifiedProject:   unifiedStore().remove,
+        switchUnifiedProject:   unifiedStore().switchTo,
 
         // Civil
         civilProjects: safeCP,
