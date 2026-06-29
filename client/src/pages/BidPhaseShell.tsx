@@ -203,7 +203,7 @@ export default function BidPhaseShell() {
   );
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background">
+    <div className="flex h-screen w-screen overflow-hidden bg-background" style={{ zoom: uiFontScale }}>
       {/* ── Desktop Sidebar ─────────────────────────────────────── */}
       <aside
         className="hidden md:flex flex-col shrink-0 w-16 hover:w-56 transition-[width] duration-200 ease-out
@@ -309,7 +309,7 @@ export default function BidPhaseShell() {
         <div
           className="flex-1 overflow-hidden tab-enter"
           key={routeKey}
-          style={{ fontSize: `${uiFontScale}rem` }}
+
         >
           {renderContent()}
         </div>

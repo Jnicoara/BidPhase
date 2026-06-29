@@ -1070,9 +1070,12 @@ export default function PlanPanel({
       if ((e.key === "u" || e.key === "U") && !e.ctrlKey && !e.metaKey) { e.preventDefault(); handleUndo(); }
       if (e.key === "m" || e.key === "M") {
         e.preventDefault();
-        if (scaleRatio) {
-          setMode("measure");
-          modeRef.current = "measure";
+        if (modeRef.current === "measure") {
+          setMode("none");
+          modeRef.current = "none";
+        } else if (pdfFile) {
+          // M key: start a new run and activate measure mode (no scale required)
+          addRun();
         }
       }
       if (e.key === "Escape") {
@@ -1247,8 +1250,11 @@ export default function PlanPanel({
     const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "3/4" };
     setCurrentRuns((prev) => [...prev, newRun]);
     setCurrentActiveRunId(id);
-    toast.info(`New run "${name}" created on page ${currentPage}.`);
-  }, [currentRuns.length, setCurrentRuns, setCurrentActiveRunId, currentPage]);
+    // Automatically activate measure mode so the user can start clicking immediately
+    setMode("measure");
+    modeRef.current = "measure";
+    toast.info(`"${name}" ready — click points along the path to measure.`);
+  }, [currentRuns.length, setCurrentRuns, setCurrentActiveRunId, currentPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setRunColor = useCallback((runId: string, color: string) => {
     setCurrentRuns((prev) => prev.map((r) => r.id === runId ? { ...r, color } : r));
@@ -1413,16 +1419,34 @@ export default function PlanPanel({
           className="h-7 text-xs px-2 shrink-0"
           variant={mode === "measure" ? "default" : "outline"}
           onClick={() => {
-            if (!scaleRatio) { toast.error("Set scale first."); return; }
+            if (mode === "measure") {
+              // Toggle off — finish current run
+              setMode("none");
+              modeRef.current = "none";
+              toast.info("Measurement paused. Click Measure to start a new run.");
+              return;
+            }
+            // Auto-create a new run and immediately start measuring it
+            const id = nanoid6();
+            const runNum = currentRuns.length + 1;
+            const name = `Run ${runNum}`;
+            const color = BASE_PALETTE[(runNum - 1) % BASE_PALETTE.length];
+            const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "3/4" };
+            setCurrentRuns((prev) => [...prev, newRun]);
+            setCurrentActiveRunId(id);
             setMode("measure");
             modeRef.current = "measure";
-            toast.info("Click points along the path. M key toggles. Esc to cancel.");
+            if (!scaleRatio) {
+              toast.info(`"${name}" started — click points along the path. Set scale for real-world feet.`);
+            } else {
+              toast.info(`"${name}" started — click points along the path. Esc or click Measure to finish.`);
+            }
           }}
-          disabled={!pdfFile || !scaleRatio}
-          title="Measure (M)"
+          disabled={!pdfFile}
+          title="Measure — starts a new run automatically"
         >
           <Ruler size={12} className="mr-1" />
-          Measure
+          {mode === "measure" ? "Done" : "Measure"}
         </Button>
 
         {/* Unit Count toggle */}

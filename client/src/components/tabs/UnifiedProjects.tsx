@@ -1082,31 +1082,10 @@ function CivilEditor({
                           ) : (
                             <span className="flex-1 text-xs text-foreground font-medium truncate">{cs.name}</span>
                           )}
-                          {/* Price mode toggle + cost input */}
-                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              title={cs.priceMode === "total" ? "Switch to per-unit price" : "Switch to total cost"}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateSessions(countSessions.map((x) =>
-                                  x.id === cs.id ? { ...x, priceMode: (x.priceMode === "total" ? "per-unit" : "total") as "per-unit" | "total" } : x
-                                ));
-                              }}
-                              className="text-[9px] font-mono text-muted-foreground hover:text-[#F5C518] transition-colors border border-border rounded px-1 py-0.5 leading-none"
-                            >{cs.priceMode === "total" ? "total" : "$/ea"}</button>
-                            <span className="text-[9px] text-muted-foreground font-mono">$</span>
-                            <input
-                              type="number" min={0} step={0.01} placeholder="0.00"
-                              value={cs.unitCost ?? ""}
-                              onChange={(e) => {
-                                const val = parseFloat(e.target.value);
-                                updateSessions(countSessions.map((x) =>
-                                  x.id === cs.id ? { ...x, unitCost: isNaN(val) ? undefined : val } : x
-                                ));
-                              }}
-                              className="w-14 bg-transparent border-b border-border text-[10px] font-mono text-foreground outline-none focus:border-[#F5C518]/60 text-right"
-                            />
-                          </div>
+                          {/* Unit cost display (read-only from catalog) */}
+                          {cs.unitCost != null && cs.unitCost > 0 && (
+                            <span className="text-[9px] font-mono text-muted-foreground shrink-0">${cs.unitCost.toFixed(2)}/ea</span>
+                          )}
                           <span className="font-mono text-[10px] text-muted-foreground shrink-0">{cs.pins.length} pin{cs.pins.length !== 1 ? "s" : ""}</span>
                           {isEditing ? (
                             <>
@@ -1131,16 +1110,11 @@ function CivilEditor({
                 )}
 
                 {/* New session row */}
-                <div className="flex gap-2 pt-1">
-                  <input value={newSessionName} onChange={(e) => setNewSessionName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleAddCountSession()}
-                    placeholder="Session name (e.g. Handholes)"
-                    className="flex-1 bg-input border border-border rounded-md px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-[#F5C518]/60 transition-colors font-mono" />
-                  <button onClick={handleAddCountSession}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#F5C518]/15 text-[#F5C518] text-xs font-medium hover:bg-[#F5C518]/25 transition-colors shrink-0">
-                    <Plus size={12} /> New
-                  </button>
-                </div>
+                <button
+                  onClick={handleAddCountSession}
+                  className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-md bg-[#F5C518]/15 text-[#F5C518] text-xs font-semibold hover:bg-[#F5C518]/25 active:scale-[0.98] transition-all border border-[#F5C518]/20">
+                  <Plus size={13} /> New Count Session
+                </button>
 
                 {/* Active session config */}
                 {activeCountSession && (
