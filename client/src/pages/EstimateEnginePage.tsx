@@ -1,56 +1,99 @@
 /**
- * BidPhase — Estimate Engine Page
+ * BidPhase — Estimate Engine Page (v2 — Dual-Mode Assembly/Item Engine)
  *
  * Workflow:
- *  1. User selects input source: existing count sessions OR paste a raw list
+ *  1. User builds a Takeoff using Item lines (from count sessions / paste) and/or Assembly lines
  *  2. User selects Project Category and sets Crew Efficiency Slider
- *  3. Engine matches each item against electricalDatabase, applies multipliers
- *  4. Outputs a structured report table grouped by phase
+ *  3. calculate_estimate() processes each line:
+ *       - Item mode:    qty × base_labor_hrs × category_factor × crew_slider
+ *       - Assembly mode: iterate child components, calculate each, sum into subtotal
+ *  4. Outputs a structured report table grouped by phase, assemblies expand inline
  *  5. Unmatched items flagged at the bottom for manual review
  *  6. Export to CSV or print
  */
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   ArrowLeft, Calculator, ChevronDown, ChevronUp,
   AlertTriangle, Download, Printer, RefreshCw, Info,
-  CheckCircle2, XCircle, Zap,
+  CheckCircle2, XCircle, Zap, Package, Plus, Trash2, Search,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import {
-  ELECTRICAL_DB, matchItem, DB_PHASES, CATEGORY_MULTIPLIERS, fetchPlattPrice,
-  type ElectricalItem, type ElectricalPhase,
+  ELECTRICAL_DB, ELECTRICAL_ASSEMBLIES, matchItem, DB_PHASES,
+  CATEGORY_MULTIPLIERS, fetchPlattPrice,
+  type ElectricalItem, type ElectricalPhase, type ElectricalAssembly,
 } from "@/lib/electricalDatabase";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
+
+/** A single line in the takeoff input — either an item or an assembly. */
+interface TakeoffLine {
+  id: string;
+  type: "item" | "assembly";
+  // Item fields
+  raw?: string;
+  qty: number;
+  description?: string;
+  // Assembly fields
+  assembly_id?: string;
+}
+
 interface InputLine {
   raw: string;
   qty: number;
   description: string;
 }
 
+/** A calculated child row within an assembly result. */
+interface AssemblyChildResult {
+  description: string;
+  unit: string;
+  qty: number;
+  unitMaterial: number;
+  baseLaborHrs: number;
+  finalLaborHrs: number;
+  lineMaterial: number;
+  lineLaborCost: number;
+  lineTotal: number;
+}
+
+/** A single row in the estimate report — either an item row or an assembly row. */
 interface EstimateRow {
-  phase: ElectricalPhase | "Unmatched";
+  rowType: "item" | "assembly";
+  phase: ElectricalPhase | "Assembly" | "Unmatched";
   description: string;
   qty: number;
   unit: string;
-  unitMaterial: number;
-  baseLaborHours: number;
-  categoryFactor: number;
-  crewFactor: number;
-  finalLaborHours: number;
+  // Item-specific
+  unitMaterial?: number;
+  baseLaborHours?: number;
+  categoryFactor?: number;
+  crewFactor?: number;
+  finalLaborHours?: number;
   lineTotal: number;
-  matched: boolean;
-  rawInput: string;
-      dbItem?: ElectricalItem | null;
+  matched?: boolean;
+  rawInput?: string;
+  dbItem?: ElectricalItem | null;
+  // Assembly-specific
+  assembly?: ElectricalAssembly;
+  children?: AssemblyChildResult[];
+  assemblyMaterial?: number;
+  assemblyLaborHrs?: number;
+  assemblyLaborCost?: number;
 }
 
-type ProjectCategory = "Residential" | "Commercial" | "Infrastructure";
-type InputMode = "sessions" | "paste";
+type ProjectCategory = "Residential" | "Commercial" | "Industrial" | "Infrastructure";
+type InputMode = "sessions" | "paste" | "assembly";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(n: number, decimals = 2) {
   return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
 }
 
 function parsePastedList(text: string): InputLine[] {
@@ -59,18 +102,13 @@ function parsePastedList(text: string): InputLine[] {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      // Try to parse "QTY DESCRIPTION" or "DESCRIPTION x QTY" or just "DESCRIPTION"
       const qtyFirst = line.match(/^(\d+(?:\.\d+)?)\s+(.+)$/);
-      const qtyLast = line.match(/^(.+?)\s+[xX×]\s*(\d+(?:\.\d+)?)$/);
-      const qtyEnd = line.match(/^(.+?)\s+(\d+(?:\.\d+)?)$/);
-
-      if (qtyFirst) {
-        return { raw: line, qty: parseFloat(qtyFirst[1]), description: qtyFirst[2].trim() };
-      } else if (qtyLast) {
-        return { raw: line, qty: parseFloat(qtyLast[2]), description: qtyLast[1].trim() };
-      } else if (qtyEnd && parseFloat(qtyEnd[2]) > 0 && parseFloat(qtyEnd[2]) < 10000) {
+      const qtyLast  = line.match(/^(.+?)\s+[xX×]\s*(\d+(?:\.\d+)?)$/);
+      const qtyEnd   = line.match(/^(.+?)\s+(\d+(?:\.\d+)?)$/);
+      if (qtyFirst) return { raw: line, qty: parseFloat(qtyFirst[1]), description: qtyFirst[2].trim() };
+      if (qtyLast)  return { raw: line, qty: parseFloat(qtyLast[2]),  description: qtyLast[1].trim() };
+      if (qtyEnd && parseFloat(qtyEnd[2]) > 0 && parseFloat(qtyEnd[2]) < 10000)
         return { raw: line, qty: parseFloat(qtyEnd[2]), description: qtyEnd[1].trim() };
-      }
       return { raw: line, qty: 1, description: line };
     });
 }
@@ -87,8 +125,161 @@ const PHASE_COLORS: Record<string, string> = {
   "Grounding": "text-lime-400",
   "Fittings & Hardware": "text-slate-400",
   "Infrastructure": "text-amber-500",
+  "Assembly": "text-violet-400",
   "Unmatched": "text-rose-400",
 };
+
+// ─── Assembly Picker Component ─────────────────────────────────────────────────
+interface AssemblyPickerProps {
+  onAdd: (assembly: ElectricalAssembly, qty: number) => void;
+  activeCategory: ProjectCategory;
+}
+
+function AssemblyPicker({ onAdd, activeCategory }: AssemblyPickerProps) {
+  const [search, setSearch] = useState("");
+  const [qty, setQty] = useState(1);
+  const [selected, setSelected] = useState<ElectricalAssembly | null>(null);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Map UI category to assembly category filter
+  const catKey = activeCategory.toLowerCase() as ElectricalAssembly["category"];
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return ELECTRICAL_ASSEMBLIES.filter((a) => {
+      const catMatch = a.category === catKey || a.category === "all";
+      const textMatch = !q || a.name.toLowerCase().includes(q) || a.description.toLowerCase().includes(q) || a.phase.toLowerCase().includes(q);
+      return catMatch && textMatch;
+    });
+  }, [search, catKey]);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleAdd = () => {
+    if (!selected) return;
+    onAdd(selected, Math.max(1, qty));
+    setSelected(null);
+    setSearch("");
+    setQty(1);
+    setOpen(false);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <div ref={ref} className="relative flex-1">
+          <div
+            className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-md border bg-input text-sm cursor-pointer transition-colors",
+              open ? "border-[#F5C518]/60" : "border-border hover:border-border/80"
+            )}
+            onClick={() => setOpen(!open)}
+          >
+            <Search size={13} className="text-muted-foreground shrink-0" />
+            {selected ? (
+              <span className="text-foreground truncate flex-1">{selected.name}</span>
+            ) : (
+              <span className="text-muted-foreground flex-1">Search assemblies for {activeCategory}…</span>
+            )}
+            <ChevronDown size={13} className={cn("text-muted-foreground transition-transform shrink-0", open && "rotate-180")} />
+          </div>
+
+          {open && (
+            <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-popover border border-border rounded-md shadow-xl overflow-hidden">
+              <div className="p-2 border-b border-border">
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Filter assemblies…"
+                  className="w-full bg-input border border-border rounded px-2 py-1.5 text-xs outline-none focus:border-[#F5C518]/60"
+                />
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {filtered.length === 0 ? (
+                  <div className="px-3 py-4 text-xs text-muted-foreground text-center">No assemblies found for {activeCategory}</div>
+                ) : (
+                  filtered.map((a) => (
+                    <button
+                      key={a.assembly_id}
+                      onClick={() => { setSelected(a); setOpen(false); }}
+                      className={cn(
+                        "w-full text-left px-3 py-2.5 text-xs hover:bg-muted/10 transition-colors border-b border-border/30 last:border-0",
+                        selected?.assembly_id === a.assembly_id && "bg-[#F5C518]/10"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Package size={11} className="text-violet-400 shrink-0" />
+                        <span className="font-medium text-foreground truncate">{a.name}</span>
+                        <span className="ml-auto text-muted-foreground shrink-0 font-mono">{a.unit}</span>
+                      </div>
+                      <div className="text-muted-foreground mt-0.5 pl-[19px] truncate">{a.description}</div>
+                      <div className="flex items-center gap-2 mt-0.5 pl-[19px]">
+                        <span className="text-violet-400/70">{a.phase}</span>
+                        <span className="text-muted-foreground/50">·</span>
+                        <span className="text-muted-foreground/70">{a.components.length} components</span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-xs text-muted-foreground">Qty</span>
+          <input
+            type="number" min={1} max={9999} step={1}
+            value={qty}
+            onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+            className="w-16 bg-input border border-border rounded px-2 py-2 text-sm font-mono text-center outline-none focus:border-[#F5C518]/60"
+          />
+        </div>
+
+        <button
+          onClick={handleAdd}
+          disabled={!selected}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all shrink-0",
+            selected
+              ? "bg-violet-500/20 text-violet-300 border border-violet-500/40 hover:bg-violet-500/30"
+              : "bg-muted/10 text-muted-foreground border border-border cursor-not-allowed"
+          )}
+        >
+          <Plus size={14} /> Add Assembly
+        </button>
+      </div>
+
+      {selected && (
+        <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-3 text-xs space-y-1.5">
+          <div className="flex items-center gap-2 font-medium text-violet-300">
+            <Package size={12} />
+            <span>{selected.name}</span>
+            <span className="ml-auto font-mono text-muted-foreground">{selected.components.length} components</span>
+          </div>
+          <div className="text-muted-foreground">{selected.description}</div>
+          <div className="grid grid-cols-2 gap-1 pt-1">
+            {selected.components.map((c, i) => (
+              <div key={i} className="flex items-center gap-1.5 text-muted-foreground/80">
+                <span className="font-mono text-violet-400/70">{c.qty_per_unit}×</span>
+                <span className="truncate">{c.description}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 interface EstimateEnginePageProps {
@@ -113,9 +304,13 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
   const [laborRate, setLaborRate] = useState(85);
   const [laborRateDraft, setLaborRateDraft] = useState("85");
   const [showReport, setShowReport] = useState(false);
-  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set(DB_PHASES));
+  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set([...DB_PHASES, "Assembly"]));
+  const [expandedAssemblies, setExpandedAssemblies] = useState<Set<number>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
   const [pricingSource, setPricingSource] = useState<"mock" | "platt">("mock");
+
+  // Assembly takeoff lines (user-built list of assemblies to include)
+  const [assemblyLines, setAssemblyLines] = useState<TakeoffLine[]>([]);
 
   // ── Collect count sessions from all active projects ────────────────────────
   const sessionLines = useMemo((): InputLine[] => {
@@ -143,35 +338,56 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
     return lines;
   }, [activeCivilCatProject, activeCommercialCatProject, activeResidentialCatProject, activeCivilProject, activeCommercialProject, activeResidentialProject]);
 
-  const activeLines = inputMode === "sessions" ? sessionLines : parsePastedList(pastedText);
+  const activeItemLines: InputLine[] =
+    inputMode === "sessions" ? sessionLines :
+    inputMode === "paste"    ? parsePastedList(pastedText) :
+    [];
 
-  // ── Run the estimate engine ────────────────────────────────────────────────
+  const totalTakeoffCount = activeItemLines.length + assemblyLines.length;
+
+  // ── Add / remove assembly lines ────────────────────────────────────────────
+  const addAssemblyLine = useCallback((assembly: ElectricalAssembly, qty: number) => {
+    setAssemblyLines((prev) => [...prev, {
+      id: uid(),
+      type: "assembly",
+      assembly_id: assembly.assembly_id,
+      qty,
+      description: assembly.name,
+    }]);
+  }, []);
+
+  const removeAssemblyLine = useCallback((id: string) => {
+    setAssemblyLines((prev) => prev.filter((l) => l.id !== id));
+  }, []);
+
+  const updateAssemblyQty = useCallback((id: string, qty: number) => {
+    setAssemblyLines((prev) => prev.map((l) => l.id === id ? { ...l, qty } : l));
+  }, []);
+
+  // ── calculate_estimate() — dual-mode engine ────────────────────────────────
   const runEstimate = useCallback(async () => {
     setIsGenerating(true);
     const catFactor = CATEGORY_MULTIPLIERS[category] ?? 1.0;
     const rows: EstimateRow[] = [];
 
-    for (const line of activeLines) {
+    // ── Process item lines ──────────────────────────────────────────────────
+    for (const line of activeItemLines) {
       const dbItem = matchItem(line.description);
 
-      // Try Platt pricing (returns null in mock mode)
       let unitMaterial = dbItem?.mock_unit_price ?? 0;
       if (dbItem?.platt_sku) {
         const plattPrice = await fetchPlattPrice(dbItem.platt_sku);
-        if (plattPrice !== null) {
-          unitMaterial = plattPrice;
-          setPricingSource("platt");
-        }
+        if (plattPrice !== null) { unitMaterial = plattPrice; setPricingSource("platt"); }
       }
 
       const baseLaborHours = dbItem?.base_labor_hours ?? 0;
-      const adjustedLabor = baseLaborHours * catFactor;
-      const finalLabor = adjustedLabor * crewSlider;
-      const laborCost = finalLabor * line.qty * laborRate;
+      const finalLaborHours = baseLaborHours * catFactor * crewSlider;
       const materialCost = unitMaterial * line.qty;
+      const laborCost = finalLaborHours * line.qty * laborRate;
       const lineTotal = materialCost + laborCost;
 
       rows.push({
+        rowType: "item",
         phase: dbItem?.phase ?? "Unmatched",
         description: dbItem?.description ?? line.description,
         qty: line.qty,
@@ -180,7 +396,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
         baseLaborHours,
         categoryFactor: catFactor,
         crewFactor: crewSlider,
-        finalLaborHours: finalLabor,
+        finalLaborHours,
         lineTotal,
         matched: !!dbItem,
         rawInput: line.raw,
@@ -188,13 +404,62 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
       });
     }
 
-    // Small delay for UX feedback
+    // ── Process assembly lines ──────────────────────────────────────────────
+    for (const line of assemblyLines) {
+      const assembly = ELECTRICAL_ASSEMBLIES.find((a) => a.assembly_id === line.assembly_id);
+      if (!assembly) continue;
+
+      const children: AssemblyChildResult[] = [];
+      let asmMaterial = 0;
+      let asmLaborHrs = 0;
+
+      for (const comp of assembly.components) {
+        const childQty = line.qty * comp.qty_per_unit;
+        const childMat = childQty * comp.mock_unit_cost;
+        const childLaborHrs = childQty * comp.base_labor_hrs * catFactor * crewSlider;
+        const childLaborCost = childLaborHrs * laborRate;
+        const childTotal = childMat + childLaborCost;
+
+        children.push({
+          description: comp.description,
+          unit: comp.unit,
+          qty: childQty,
+          unitMaterial: comp.mock_unit_cost,
+          baseLaborHrs: comp.base_labor_hrs,
+          finalLaborHrs: childLaborHrs,
+          lineMaterial: childMat,
+          lineLaborCost: childLaborCost,
+          lineTotal: childTotal,
+        });
+
+        asmMaterial += childMat;
+        asmLaborHrs += childLaborHrs;
+      }
+
+      const asmLaborCost = asmLaborHrs * laborRate;
+      const asmTotal = asmMaterial + asmLaborCost;
+
+      rows.push({
+        rowType: "assembly",
+        phase: "Assembly",
+        description: `${assembly.name} × ${line.qty}`,
+        qty: line.qty,
+        unit: assembly.unit,
+        assembly,
+        children,
+        assemblyMaterial: asmMaterial,
+        assemblyLaborHrs: asmLaborHrs,
+        assemblyLaborCost: asmLaborCost,
+        lineTotal: asmTotal,
+      });
+    }
+
     await new Promise((r) => setTimeout(r, 400));
     setIsGenerating(false);
     setShowReport(true);
-    // Store rows in state
     setEstimateRows(rows);
-  }, [activeLines, category, crewSlider, laborRate]);
+    setExpandedAssemblies(new Set());
+  }, [activeItemLines, assemblyLines, category, crewSlider, laborRate]);
 
   const [estimateRows, setEstimateRows] = useState<EstimateRow[]>([]);
 
@@ -209,25 +474,46 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
     return map;
   }, [estimateRows]);
 
-  const matchedRows = estimateRows.filter((r) => r.matched);
-  const unmatchedRows = estimateRows.filter((r) => !r.matched);
-  const totalMaterial = matchedRows.reduce((s, r) => s + r.unitMaterial * r.qty, 0);
-  const totalLaborHours = matchedRows.reduce((s, r) => s + r.finalLaborHours * r.qty, 0);
-  const totalLaborCost = totalLaborHours * laborRate;
-  const grandTotal = totalMaterial + totalLaborCost;
+  const matchedRows    = estimateRows.filter((r) => r.rowType === "item" && r.matched);
+  const unmatchedRows  = estimateRows.filter((r) => r.rowType === "item" && !r.matched);
+  const assemblyRows   = estimateRows.filter((r) => r.rowType === "assembly");
+
+  const totalMaterial    = estimateRows.reduce((s, r) => {
+    if (r.rowType === "item") return s + (r.unitMaterial ?? 0) * r.qty;
+    return s + (r.assemblyMaterial ?? 0);
+  }, 0);
+  const totalLaborHours  = estimateRows.reduce((s, r) => {
+    if (r.rowType === "item") return s + (r.finalLaborHours ?? 0) * r.qty;
+    return s + (r.assemblyLaborHrs ?? 0);
+  }, 0);
+  const totalLaborCost   = totalLaborHours * laborRate;
+  const grandTotal       = totalMaterial + totalLaborCost;
 
   // ── CSV Export ─────────────────────────────────────────────────────────────
   const exportCSV = useCallback(() => {
-    const header = "Phase,Item Description,Qty,Unit,Unit Material,Base Labor Hrs,Category Factor,Final Labor Hrs,Line Total\n";
-    const rows = estimateRows.map((r) =>
-      [
-        r.phase, `"${r.description}"`, r.qty, r.unit,
-        r.unitMaterial.toFixed(2), r.baseLaborHours.toFixed(4),
-        r.categoryFactor.toFixed(2), (r.finalLaborHours * r.qty).toFixed(3),
-        r.lineTotal.toFixed(2),
-      ].join(",")
-    ).join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv" });
+    const lines: string[] = [
+      "Type,Phase,Item Description,Qty,Unit,Unit Material,Base Labor Hrs,Cat Factor,Final Labor Hrs,Line Total"
+    ];
+    for (const r of estimateRows) {
+      if (r.rowType === "item") {
+        lines.push([
+          "Item", r.phase, `"${r.description}"`, r.qty, r.unit,
+          (r.unitMaterial ?? 0).toFixed(2), (r.baseLaborHours ?? 0).toFixed(4),
+          (r.categoryFactor ?? 1).toFixed(2), ((r.finalLaborHours ?? 0) * r.qty).toFixed(3),
+          r.lineTotal.toFixed(2),
+        ].join(","));
+      } else if (r.rowType === "assembly" && r.children) {
+        lines.push(["Assembly", "Assembly", `"${r.description}"`, r.qty, r.unit, "", "", "", "", r.lineTotal.toFixed(2)].join(","));
+        for (const c of r.children) {
+          lines.push([
+            "  └ Component", "", `"  ${c.description}"`, c.qty.toFixed(2), c.unit,
+            c.unitMaterial.toFixed(2), c.baseLaborHrs.toFixed(4), "",
+            c.finalLaborHrs.toFixed(3), c.lineTotal.toFixed(2),
+          ].join(","));
+        }
+      }
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -239,8 +525,15 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
   const togglePhase = (phase: string) => {
     setExpandedPhases((prev) => {
       const next = new Set(prev);
-      if (next.has(phase)) next.delete(phase);
-      else next.add(phase);
+      if (next.has(phase)) next.delete(phase); else next.add(phase);
+      return next;
+    });
+  };
+
+  const toggleAssembly = (idx: number) => {
+    setExpandedAssemblies((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
       return next;
     });
   };
@@ -256,11 +549,12 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
         <div className="flex items-center gap-2 ml-2">
           <Zap size={18} className="text-[#F5C518]" />
           <h1 className="font-bold text-base tracking-tight">Estimate Engine</h1>
+          <span className="text-xs text-violet-400 border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 rounded font-medium">v2 · Dual-Mode</span>
         </div>
         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
           <span className={cn("flex items-center gap-1", pricingSource === "platt" ? "text-green-400" : "text-amber-400")}>
             <span className={cn("w-1.5 h-1.5 rounded-full", pricingSource === "platt" ? "bg-green-400" : "bg-amber-400")} />
-            {pricingSource === "platt" ? "Platt Live Pricing" : "Mock Pricing (Platt stub ready)"}
+            {pricingSource === "platt" ? "Platt Live Pricing" : "Mock Pricing"}
           </span>
         </div>
       </header>
@@ -275,7 +569,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
             <div className="bp-card p-4 space-y-2">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Project Category</label>
               <div className="space-y-1.5">
-                {(["Residential", "Commercial", "Infrastructure"] as ProjectCategory[]).map((cat) => (
+                {(["Residential", "Commercial", "Industrial", "Infrastructure"] as ProjectCategory[]).map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setCategory(cat)}
@@ -287,7 +581,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
                     )}
                   >
                     <span>{cat}</span>
-                    <span className="font-mono text-xs">×{CATEGORY_MULTIPLIERS[cat].toFixed(2)}</span>
+                    <span className="font-mono text-xs">×{(CATEGORY_MULTIPLIERS[cat] ?? 1).toFixed(2)}</span>
                   </button>
                 ))}
               </div>
@@ -310,8 +604,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
                     onChange={(e) => setCrewDraft(e.target.value)}
                     onBlur={() => {
                       const v = Math.min(1.50, Math.max(0.60, parseFloat(crewDraft) || 1.00));
-                      setCrewSlider(v);
-                      setCrewDraft(v.toFixed(2));
+                      setCrewSlider(v); setCrewDraft(v.toFixed(2));
                     }}
                     className="w-16 bg-input border border-border rounded px-2 py-1 text-sm font-mono text-center outline-none focus:border-[#F5C518]/60"
                   />
@@ -324,7 +617,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
                   <span>1.50 (Fast)</span>
                 </div>
                 <div className="text-xs text-muted-foreground border-t border-border pt-2">
-                  Final labor = Base × <span className="text-[#F5C518] font-mono">{CATEGORY_MULTIPLIERS[category].toFixed(2)}</span> × <span className="text-[#F5C518] font-mono">{crewSlider.toFixed(2)}</span>
+                  Final labor = Base × <span className="text-[#F5C518] font-mono">{(CATEGORY_MULTIPLIERS[category] ?? 1).toFixed(2)}</span> × <span className="text-[#F5C518] font-mono">{crewSlider.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -340,8 +633,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
                   onChange={(e) => setLaborRateDraft(e.target.value)}
                   onBlur={() => {
                     const v = Math.min(300, Math.max(20, parseFloat(laborRateDraft) || 85));
-                    setLaborRate(v);
-                    setLaborRateDraft(String(v));
+                    setLaborRate(v); setLaborRateDraft(String(v));
                   }}
                   className="flex-1 bg-input border border-border rounded-md px-3 py-2 text-sm font-mono outline-none focus:border-[#F5C518]/60"
                 />
@@ -350,7 +642,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
               <p className="text-[11px] text-muted-foreground">Blended journeyman rate used to compute labor line totals.</p>
               <div className="text-xs text-muted-foreground border-t border-border pt-2 space-y-0.5">
                 <div className="flex justify-between"><span>Category:</span><span className="text-foreground font-mono">{category}</span></div>
-                <div className="flex justify-between"><span>Cat Factor:</span><span className="text-[#F5C518] font-mono">×{CATEGORY_MULTIPLIERS[category].toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Cat Factor:</span><span className="text-[#F5C518] font-mono">×{(CATEGORY_MULTIPLIERS[category] ?? 1).toFixed(2)}</span></div>
                 <div className="flex justify-between"><span>Crew Factor:</span><span className="text-[#F5C518] font-mono">×{crewSlider.toFixed(2)}</span></div>
               </div>
             </div>
@@ -359,24 +651,29 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
           {/* ── Input Source ─────────────────────────────────────────────── */}
           <div className="bp-card overflow-hidden">
             <div className="flex border-b border-border">
-              {(["sessions", "paste"] as InputMode[]).map((mode) => (
+              {(["sessions", "paste", "assembly"] as InputMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setInputMode(mode)}
                   className={cn(
-                    "flex-1 px-4 py-3 text-sm font-medium transition-colors",
+                    "flex-1 px-4 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5",
                     inputMode === mode
-                      ? "bg-[#F5C518]/10 text-[#F5C518] border-b-2 border-[#F5C518]"
+                      ? mode === "assembly"
+                        ? "bg-violet-500/10 text-violet-300 border-b-2 border-violet-400"
+                        : "bg-[#F5C518]/10 text-[#F5C518] border-b-2 border-[#F5C518]"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {mode === "sessions" ? `Count Sessions (${sessionLines.length} items)` : "Paste Raw List"}
+                  {mode === "sessions" && <><span>Count Sessions</span><span className="text-xs opacity-70">({sessionLines.length})</span></>}
+                  {mode === "paste"    && <span>Paste Raw List</span>}
+                  {mode === "assembly" && <><Layers size={13} /><span>Assemblies</span><span className="text-xs opacity-70">({assemblyLines.length})</span></>}
                 </button>
               ))}
             </div>
 
             <div className="p-4">
-              {inputMode === "sessions" ? (
+              {/* Count Sessions tab */}
+              {inputMode === "sessions" && (
                 <div>
                   {sessionLines.length === 0 ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
@@ -397,10 +694,13 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
                     </div>
                   )}
                 </div>
-              ) : (
+              )}
+
+              {/* Paste tab */}
+              {inputMode === "paste" && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Paste one item per line. Formats accepted: <span className="font-mono text-foreground">20 #12 AWG THHN Wire</span> or <span className="font-mono text-foreground">#12 AWG THHN Wire x 20</span> or <span className="font-mono text-foreground">#12 AWG THHN Wire 20</span>
+                    Paste one item per line. Formats: <span className="font-mono text-foreground">20 #12 AWG THHN Wire</span> or <span className="font-mono text-foreground">#12 AWG THHN Wire x 20</span>
                   </p>
                   <textarea
                     value={pastedText}
@@ -414,6 +714,48 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
                   )}
                 </div>
               )}
+
+              {/* Assembly tab */}
+              {inputMode === "assembly" && (
+                <div className="space-y-4">
+                  <AssemblyPicker onAdd={addAssemblyLine} activeCategory={category} />
+
+                  {assemblyLines.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Assembly Takeoff List</div>
+                      {assemblyLines.map((line) => {
+                        const asm = ELECTRICAL_ASSEMBLIES.find((a) => a.assembly_id === line.assembly_id);
+                        return (
+                          <div key={line.id} className="flex items-center gap-2 px-3 py-2 rounded-md border border-violet-500/30 bg-violet-500/5 text-xs">
+                            <Package size={12} className="text-violet-400 shrink-0" />
+                            <span className="flex-1 text-foreground truncate">{asm?.name ?? line.description}</span>
+                            <span className="text-muted-foreground shrink-0">{asm?.unit}</span>
+                            <input
+                              type="number" min={1} max={9999} step={1}
+                              value={line.qty}
+                              onChange={(e) => updateAssemblyQty(line.id, Math.max(1, parseInt(e.target.value) || 1))}
+                              className="w-14 bg-input border border-border rounded px-1.5 py-1 text-xs font-mono text-center outline-none focus:border-violet-400/60"
+                            />
+                            <button
+                              onClick={() => removeAssemblyLine(line.id)}
+                              className="text-muted-foreground hover:text-rose-400 transition-colors shrink-0"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {assemblyLines.length === 0 && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                      <Info size={13} />
+                      <span>Select an assembly above and click "Add Assembly" to build your takeoff list.</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -421,10 +763,10 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
           <div className="flex justify-center">
             <button
               onClick={runEstimate}
-              disabled={isGenerating || activeLines.length === 0}
+              disabled={isGenerating || totalTakeoffCount === 0}
               className={cn(
                 "flex items-center gap-2 px-8 py-3 rounded-lg font-semibold text-sm transition-all",
-                activeLines.length === 0
+                totalTakeoffCount === 0
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-[#F5C518] text-black hover:bg-[#F5C518]/90 active:scale-[0.98]"
               )}
@@ -432,7 +774,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
               {isGenerating ? (
                 <><RefreshCw size={16} className="animate-spin" /> Generating Estimate…</>
               ) : (
-                <><Calculator size={16} /> Generate Estimate ({activeLines.length} items)</>
+                <><Calculator size={16} /> Generate Estimate ({totalTakeoffCount} line{totalTakeoffCount !== 1 ? "s" : ""})</>
               )}
             </button>
           </div>
@@ -459,7 +801,10 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
               {/* Match rate */}
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1 text-green-400"><CheckCircle2 size={12} />{matchedRows.length} matched</span>
+                  <span className="flex items-center gap-1 text-green-400"><CheckCircle2 size={12} />{matchedRows.length} items matched</span>
+                  {assemblyRows.length > 0 && (
+                    <span className="flex items-center gap-1 text-violet-400"><Package size={12} />{assemblyRows.length} assembl{assemblyRows.length !== 1 ? "ies" : "y"}</span>
+                  )}
                   {unmatchedRows.length > 0 && (
                     <span className="flex items-center gap-1 text-rose-400"><XCircle size={12} />{unmatchedRows.length} unmatched</span>
                   )}
@@ -474,12 +819,94 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
                 </div>
               </div>
 
-              {/* Phase tables */}
+              {/* Assembly phase section */}
+              {rowsByPhase.has("Assembly") && (
+                <div className="bp-card overflow-hidden border-violet-500/30">
+                  <button
+                    onClick={() => togglePhase("Assembly")}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/10 transition-colors"
+                  >
+                    <Package size={14} className="text-violet-400 shrink-0" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-violet-400">Assemblies</span>
+                    <span className="text-xs text-muted-foreground font-mono ml-auto">{rowsByPhase.get("Assembly")!.length} assembl{rowsByPhase.get("Assembly")!.length !== 1 ? "ies" : "y"}</span>
+                    <span className="text-xs font-mono text-foreground">{fmt(rowsByPhase.get("Assembly")!.reduce((s, r) => s + (r.assemblyLaborHrs ?? 0), 0), 1)} hrs</span>
+                    <span className="text-xs font-mono font-semibold text-violet-300">${fmt(rowsByPhase.get("Assembly")!.reduce((s, r) => s + r.lineTotal, 0))}</span>
+                    {expandedPhases.has("Assembly") ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
+                  </button>
+
+                  {expandedPhases.has("Assembly") && (
+                    <div className="space-y-0 border-t border-border">
+                      {rowsByPhase.get("Assembly")!.map((row, asmIdx) => {
+                        const isOpen = expandedAssemblies.has(asmIdx);
+                        return (
+                          <div key={asmIdx} className="border-b border-border/50 last:border-0">
+                            {/* Assembly header row */}
+                            <button
+                              onClick={() => toggleAssembly(asmIdx)}
+                              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/5 transition-colors text-xs"
+                            >
+                              <Package size={12} className="text-violet-400 shrink-0" />
+                              <span className="text-foreground font-medium flex-1 text-left truncate">{row.description}</span>
+                              <span className="text-muted-foreground font-mono shrink-0">{row.unit}</span>
+                              <span className="text-muted-foreground font-mono shrink-0">{fmt(row.assemblyLaborHrs ?? 0, 1)} hrs</span>
+                              <span className="font-mono font-semibold text-violet-300 shrink-0">${fmt(row.lineTotal)}</span>
+                              <span className="text-muted-foreground/60 text-[10px] shrink-0">{isOpen ? "▲ hide" : "▼ expand"}</span>
+                            </button>
+
+                            {/* Expanded child rows */}
+                            {isOpen && row.children && (
+                              <div className="overflow-x-auto bg-violet-500/3 border-t border-violet-500/20">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="bg-violet-500/5">
+                                      <th className="text-left px-4 py-1.5 text-violet-400/70 font-medium pl-8">Component</th>
+                                      <th className="text-right px-3 py-1.5 text-violet-400/70 font-medium">Qty</th>
+                                      <th className="text-right px-3 py-1.5 text-violet-400/70 font-medium">Unit</th>
+                                      <th className="text-right px-3 py-1.5 text-violet-400/70 font-medium">Unit Mat.</th>
+                                      <th className="text-right px-3 py-1.5 text-violet-400/70 font-medium">Labor Hrs</th>
+                                      <th className="text-right px-3 py-1.5 text-violet-400/70 font-medium">Mat. Cost</th>
+                                      <th className="text-right px-4 py-1.5 text-violet-400/70 font-medium">Line Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {row.children.map((c, ci) => (
+                                      <tr key={ci} className="border-t border-violet-500/10 hover:bg-violet-500/5 transition-colors">
+                                        <td className="px-4 py-1.5 text-muted-foreground pl-8 truncate max-w-[200px]" title={c.description}>
+                                          <span className="text-violet-400/50 mr-1.5">└</span>{c.description}
+                                        </td>
+                                        <td className="px-3 py-1.5 text-right font-mono text-foreground">{fmt(c.qty, 2)}</td>
+                                        <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{c.unit}</td>
+                                        <td className="px-3 py-1.5 text-right font-mono text-foreground">${fmt(c.unitMaterial)}</td>
+                                        <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{fmt(c.finalLaborHrs, 3)}</td>
+                                        <td className="px-3 py-1.5 text-right font-mono text-foreground">${fmt(c.lineMaterial)}</td>
+                                        <td className="px-4 py-1.5 text-right font-mono font-semibold text-violet-200">${fmt(c.lineTotal)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  <tfoot>
+                                    <tr className="border-t border-violet-500/30 bg-violet-500/5">
+                                      <td colSpan={5} className="px-4 py-1.5 text-xs text-violet-400/70 font-medium pl-8">Assembly Subtotal</td>
+                                      <td className="px-3 py-1.5 text-right font-mono text-sm text-foreground">${fmt(row.assemblyMaterial ?? 0)}</td>
+                                      <td className="px-4 py-1.5 text-right font-mono text-sm font-bold text-violet-300">${fmt(row.lineTotal)}</td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Item phase tables */}
               {Array.from(rowsByPhase.entries())
-                .filter(([phase]) => phase !== "Unmatched")
+                .filter(([phase]) => phase !== "Unmatched" && phase !== "Assembly")
                 .map(([phase, rows]) => {
                   const phaseTotal = rows.reduce((s, r) => s + r.lineTotal, 0);
-                  const phaseLaborHrs = rows.reduce((s, r) => s + r.finalLaborHours * r.qty, 0);
+                  const phaseLaborHrs = rows.reduce((s, r) => s + (r.finalLaborHours ?? 0) * r.qty, 0);
                   const isOpen = expandedPhases.has(phase);
                   return (
                     <div key={phase} className="bp-card overflow-hidden">
@@ -514,10 +941,10 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
                                   <td className="px-4 py-2 text-foreground max-w-[200px] truncate" title={row.description}>{row.description}</td>
                                   <td className="px-3 py-2 text-right font-mono text-foreground">{row.qty}</td>
                                   <td className="px-3 py-2 text-right font-mono text-muted-foreground">{row.unit}</td>
-                                  <td className="px-3 py-2 text-right font-mono text-foreground">${fmt(row.unitMaterial)}</td>
-                                  <td className="px-3 py-2 text-right font-mono text-muted-foreground">{fmt(row.baseLaborHours, 4)}</td>
-                                  <td className="px-3 py-2 text-right font-mono text-[#F5C518]">{fmt(row.categoryFactor, 2)}</td>
-                                  <td className="px-3 py-2 text-right font-mono text-foreground">{fmt(row.finalLaborHours * row.qty, 3)}</td>
+                                  <td className="px-3 py-2 text-right font-mono text-foreground">${fmt(row.unitMaterial ?? 0)}</td>
+                                  <td className="px-3 py-2 text-right font-mono text-muted-foreground">{fmt(row.baseLaborHours ?? 0, 4)}</td>
+                                  <td className="px-3 py-2 text-right font-mono text-[#F5C518]">{fmt(row.categoryFactor ?? 1, 2)}</td>
+                                  <td className="px-3 py-2 text-right font-mono text-foreground">{fmt((row.finalLaborHours ?? 0) * row.qty, 3)}</td>
                                   <td className="px-4 py-2 text-right font-mono font-semibold text-foreground">${fmt(row.lineTotal)}</td>
                                 </tr>
                               ))}
@@ -569,7 +996,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
                         </tbody>
                       </table>
                       <p className="px-4 py-3 text-[11px] text-muted-foreground border-t border-border">
-                        These items did not match any entry in the electrical database. Add them manually to the Labor & Material page or expand the database with the exact description.
+                        These items did not match any entry in the electrical database. Add them manually to the Labor &amp; Material page or expand the database with the exact description.
                       </p>
                     </div>
                   )}

@@ -239,6 +239,492 @@ export const ELECTRICAL_DB: ElectricalItem[] = [
   { item_id: "CU-014", description: 'Pulling Lubricant (1 gallon)', phase: "Infrastructure", unit: "EA", base_labor_hours: 0.10, mock_unit_price: 18.00, keywords: ["pulling lube", "lubricant", "wire pulling", "conduit"] },
 ];
 
+// ─── Assembly Types ───────────────────────────────────────────────────────────
+
+/** A single component line within an assembly (child item with quantity ratio). */
+export interface AssemblyComponent {
+  item_id: string;          // references an ElectricalItem.item_id OR a standalone description
+  description: string;      // human-readable child item name
+  unit: string;             // EA, FT, LF, etc.
+  qty_per_unit: number;     // quantity of this component per 1 unit of the assembly
+  base_labor_hrs: number;   // NECA Column 1 for this component
+  mock_unit_cost: number;   // contractor net price (mock)
+}
+
+/** A bundled assembly that expands into multiple child items. */
+export interface ElectricalAssembly {
+  assembly_id: string;
+  name: string;
+  description: string;
+  category: "residential" | "commercial" | "industrial" | "infrastructure" | "all";
+  phase: string;
+  unit: string;             // the assembly's own unit (e.g. "EA" for a drop, "100FT" for a run)
+  components: AssemblyComponent[];
+}
+
+// ─── Assemblies Database ──────────────────────────────────────────────────────
+export const ELECTRICAL_ASSEMBLIES: ElectricalAssembly[] = [
+
+  // ── RESIDENTIAL ────────────────────────────────────────────────────────────
+
+  {
+    assembly_id: "ASM-RES-001",
+    name: "Residential Duplex Receptacle Drop",
+    description: "Standard 20A duplex receptacle rough-in and finish: box, NM cable, device, cover plate",
+    category: "residential",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "DW-001", description: "14/2 NM-B Cable (Romex)", unit: "FT", qty_per_unit: 12, base_labor_hrs: 0.008, mock_unit_cost: 0.38 },
+      { item_id: "DW-010", description: "Single-Gang Old-Work Box", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.15, mock_unit_cost: 1.25 },
+      { item_id: "DW-011", description: "20A Duplex Receptacle (Commercial Grade)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.25, mock_unit_cost: 4.50 },
+      { item_id: "DW-012", description: "Single-Gang Cover Plate", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.05, mock_unit_cost: 0.75 },
+      { item_id: "FH-014", description: "Electrical Tape", unit: "ROLL", qty_per_unit: 0.05, base_labor_hrs: 0.00, mock_unit_cost: 3.50 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-RES-002",
+    name: "Residential GFCI Receptacle Drop",
+    description: "20A GFCI receptacle for kitchen/bath/garage: box, NM cable, GFCI device, cover plate",
+    category: "residential",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "DW-001", description: "12/2 NM-B Cable (Romex)", unit: "FT", qty_per_unit: 12, base_labor_hrs: 0.010, mock_unit_cost: 0.62 },
+      { item_id: "DW-010", description: "Single-Gang Old-Work Box", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.15, mock_unit_cost: 1.25 },
+      { item_id: "DW-013", description: "20A GFCI Receptacle", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.35, mock_unit_cost: 18.50 },
+      { item_id: "DW-012", description: "Single-Gang Cover Plate", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.05, mock_unit_cost: 0.75 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-RES-003",
+    name: "Residential Single-Pole Switch Drop",
+    description: "15A single-pole switch rough-in and finish: box, NM cable, switch, cover plate",
+    category: "residential",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "DW-001", description: "14/2 NM-B Cable (Romex)", unit: "FT", qty_per_unit: 10, base_labor_hrs: 0.008, mock_unit_cost: 0.38 },
+      { item_id: "DW-010", description: "Single-Gang Old-Work Box", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.15, mock_unit_cost: 1.25 },
+      { item_id: "DW-014", description: "15A Single-Pole Switch", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.20, mock_unit_cost: 3.25 },
+      { item_id: "DW-012", description: "Single-Gang Cover Plate", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.05, mock_unit_cost: 0.75 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-RES-004",
+    name: "Residential Recessed Can Light Drop",
+    description: "6-inch LED recessed can rough-in and finish: NM cable, remodel housing, LED trim",
+    category: "residential",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "DW-001", description: "14/2 NM-B Cable (Romex)", unit: "FT", qty_per_unit: 8, base_labor_hrs: 0.008, mock_unit_cost: 0.38 },
+      { item_id: "LT-001", description: '6" LED Recessed Housing (Remodel)', unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.50, mock_unit_cost: 22.00 },
+      { item_id: "LT-002", description: '6" LED Trim & Bulb Kit', unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.20, mock_unit_cost: 18.00 },
+      { item_id: "WC-001", description: "Wire Connector (Marrette, 100-pk)", unit: "PKG", qty_per_unit: 0.05, base_labor_hrs: 0.00, mock_unit_cost: 8.50 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-RES-005",
+    name: "Residential 200A Panel Feed",
+    description: "200A main panel rough-in: 200A panel, 2/0 SER cable 10ft, meter base, grounding",
+    category: "residential",
+    phase: "Rough-In",
+    unit: "EA",
+    components: [
+      { item_id: "PB-001", description: "200A 40-Space Main Breaker Panel", unit: "EA", qty_per_unit: 1, base_labor_hrs: 4.00, mock_unit_cost: 185.00 },
+      { item_id: "WC-002", description: "2/0 SER Aluminum Service Cable", unit: "FT", qty_per_unit: 10, base_labor_hrs: 0.060, mock_unit_cost: 3.20 },
+      { item_id: "GR-001", description: '5/8" x 10ft Copper-Clad Ground Rod', unit: "EA", qty_per_unit: 2, base_labor_hrs: 1.00, mock_unit_cost: 28.00 },
+      { item_id: "GR-002", description: "#4 Bare Copper Ground Wire", unit: "FT", qty_per_unit: 20, base_labor_hrs: 0.012, mock_unit_cost: 0.85 },
+      { item_id: "FH-001", description: '1/2" EMT Conduit Connector', unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.08, mock_unit_cost: 0.65 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-RES-006",
+    name: "Residential Smoke Detector Drop",
+    description: "Hardwired smoke detector with interconnect: NM cable, box, detector",
+    category: "residential",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "DW-001", description: "14/3 NM-B Cable (Romex)", unit: "FT", qty_per_unit: 10, base_labor_hrs: 0.009, mock_unit_cost: 0.55 },
+      { item_id: "DW-010", description: "Single-Gang Old-Work Box", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.15, mock_unit_cost: 1.25 },
+      { item_id: "LV-001", description: "Hardwired Smoke Detector (Interconnectable)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.40, mock_unit_cost: 32.00 },
+    ],
+  },
+
+  // ── COMMERCIAL ─────────────────────────────────────────────────────────────
+
+  {
+    assembly_id: "ASM-COM-001",
+    name: "Commercial Duplex Receptacle Drop (EMT)",
+    description: "20A duplex receptacle in EMT conduit: 1/2\" EMT 10ft, box, #12 THHN, device, cover",
+    category: "commercial",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "CR-001", description: '1/2" EMT Conduit', unit: "FT", qty_per_unit: 10, base_labor_hrs: 0.025, mock_unit_cost: 0.42 },
+      { item_id: "CR-010", description: '1/2" EMT Coupling', unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.05, mock_unit_cost: 0.35 },
+      { item_id: "CR-011", description: '1/2" EMT Connector (Set-Screw)', unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.05, mock_unit_cost: 0.28 },
+      { item_id: "WC-003", description: "#12 THHN Wire", unit: "FT", qty_per_unit: 30, base_labor_hrs: 0.006, mock_unit_cost: 0.18 },
+      { item_id: "DW-010", description: "4-Square Box with Single-Gang Mud Ring", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.20, mock_unit_cost: 3.50 },
+      { item_id: "DW-011", description: "20A Duplex Receptacle (Commercial Grade)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.25, mock_unit_cost: 4.50 },
+      { item_id: "DW-012", description: "Single-Gang Cover Plate", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.05, mock_unit_cost: 0.75 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-COM-002",
+    name: "Commercial 2x4 Lay-In Fluorescent/LED Fixture",
+    description: "2x4 LED troffer rough-in and finish: 1/2\" EMT whip, fixture, wire connections",
+    category: "commercial",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "CR-001", description: '1/2" EMT Conduit (Whip)', unit: "FT", qty_per_unit: 6, base_labor_hrs: 0.025, mock_unit_cost: 0.42 },
+      { item_id: "WC-003", description: "#12 THHN Wire", unit: "FT", qty_per_unit: 18, base_labor_hrs: 0.006, mock_unit_cost: 0.18 },
+      { item_id: "LT-003", description: '2x4 LED Troffer (4000K, 40W)', unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.75, mock_unit_cost: 68.00 },
+      { item_id: "FH-002", description: "Fixture Hanger Wire (12ga, 4ft)", unit: "EA", qty_per_unit: 4, base_labor_hrs: 0.05, mock_unit_cost: 0.45 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-COM-003",
+    name: "Commercial 100A Panel Feed (3-Phase)",
+    description: "100A 3-phase sub-panel rough-in: panel, 1\" EMT 20ft, #1 THHN, breaker",
+    category: "commercial",
+    phase: "Rough-In",
+    unit: "EA",
+    components: [
+      { item_id: "PB-002", description: "100A 3-Phase 42-Space Sub-Panel", unit: "EA", qty_per_unit: 1, base_labor_hrs: 6.00, mock_unit_cost: 420.00 },
+      { item_id: "CR-003", description: '1" EMT Conduit', unit: "FT", qty_per_unit: 20, base_labor_hrs: 0.038, mock_unit_cost: 1.05 },
+      { item_id: "WC-004", description: "#1 THHN Copper Wire", unit: "FT", qty_per_unit: 80, base_labor_hrs: 0.014, mock_unit_cost: 2.85 },
+      { item_id: "PB-003", description: "100A 3-Pole Breaker", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.50, mock_unit_cost: 145.00 },
+      { item_id: "GR-002", description: "#6 Bare Copper Ground Wire", unit: "FT", qty_per_unit: 20, base_labor_hrs: 0.010, mock_unit_cost: 0.55 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-COM-004",
+    name: "Commercial Exit Sign / Emergency Light",
+    description: "Exit sign with battery backup: EMT whip, box, exit sign unit, wire connections",
+    category: "commercial",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "CR-001", description: '1/2" EMT Conduit (Whip)', unit: "FT", qty_per_unit: 6, base_labor_hrs: 0.025, mock_unit_cost: 0.42 },
+      { item_id: "WC-003", description: "#12 THHN Wire", unit: "FT", qty_per_unit: 18, base_labor_hrs: 0.006, mock_unit_cost: 0.18 },
+      { item_id: "LT-004", description: "LED Exit Sign w/ Battery Backup", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.60, mock_unit_cost: 52.00 },
+      { item_id: "DW-010", description: "4-Square Box", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.15, mock_unit_cost: 2.80 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-COM-005",
+    name: "Commercial Single-Pole Switch Drop (EMT)",
+    description: "20A single-pole switch in EMT: 1/2\" EMT, box, #12 THHN, switch, cover",
+    category: "commercial",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "CR-001", description: '1/2" EMT Conduit', unit: "FT", qty_per_unit: 10, base_labor_hrs: 0.025, mock_unit_cost: 0.42 },
+      { item_id: "WC-003", description: "#12 THHN Wire", unit: "FT", qty_per_unit: 30, base_labor_hrs: 0.006, mock_unit_cost: 0.18 },
+      { item_id: "DW-010", description: "4-Square Box with Single-Gang Mud Ring", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.20, mock_unit_cost: 3.50 },
+      { item_id: "DW-014", description: "20A Single-Pole Switch (Commercial)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.25, mock_unit_cost: 6.50 },
+      { item_id: "DW-012", description: "Single-Gang Cover Plate", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.05, mock_unit_cost: 0.75 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-COM-006",
+    name: "Commercial MC Cable Receptacle Drop",
+    description: "20A receptacle via MC cable: MC cable 15ft, box, device, cover",
+    category: "commercial",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "WC-005", description: "12/2 MC Cable (Aluminum Armor)", unit: "FT", qty_per_unit: 15, base_labor_hrs: 0.012, mock_unit_cost: 0.72 },
+      { item_id: "CR-012", description: "MC Cable Connector (3/4\")", unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.08, mock_unit_cost: 1.85 },
+      { item_id: "DW-010", description: "4-Square Box", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.20, mock_unit_cost: 2.80 },
+      { item_id: "DW-011", description: "20A Duplex Receptacle", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.25, mock_unit_cost: 4.50 },
+      { item_id: "DW-012", description: "Single-Gang Cover Plate", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.05, mock_unit_cost: 0.75 },
+    ],
+  },
+
+  // ── INDUSTRIAL ─────────────────────────────────────────────────────────────
+
+  {
+    assembly_id: "ASM-IND-001",
+    name: "Industrial Motor Connection (10HP, 480V)",
+    description: "10HP 480V 3-phase motor connection: 1\" RGS conduit, #8 THHN, disconnect, starter",
+    category: "industrial",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "CR-020", description: '1" Rigid Galvanized Steel (RGS) Conduit', unit: "FT", qty_per_unit: 20, base_labor_hrs: 0.065, mock_unit_cost: 3.20 },
+      { item_id: "WC-006", description: "#8 THHN Wire (600V)", unit: "FT", qty_per_unit: 80, base_labor_hrs: 0.009, mock_unit_cost: 0.62 },
+      { item_id: "MC-001", description: "30A 3-Phase Non-Fusible Disconnect", unit: "EA", qty_per_unit: 1, base_labor_hrs: 1.50, mock_unit_cost: 95.00 },
+      { item_id: "MC-002", description: "NEMA Size 1 Motor Starter (480V)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 2.00, mock_unit_cost: 185.00 },
+      { item_id: "GR-002", description: "#10 Green Ground Wire", unit: "FT", qty_per_unit: 20, base_labor_hrs: 0.008, mock_unit_cost: 0.32 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-IND-002",
+    name: "Industrial Motor Connection (50HP, 480V)",
+    description: "50HP 480V 3-phase motor connection: 2\" RGS conduit, #3 THHN, fusible disconnect",
+    category: "industrial",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "CR-021", description: '2" Rigid Galvanized Steel (RGS) Conduit', unit: "FT", qty_per_unit: 25, base_labor_hrs: 0.100, mock_unit_cost: 7.80 },
+      { item_id: "WC-007", description: "#3 THHN Wire (600V)", unit: "FT", qty_per_unit: 100, base_labor_hrs: 0.012, mock_unit_cost: 1.45 },
+      { item_id: "MC-003", description: "100A 3-Phase Fusible Disconnect", unit: "EA", qty_per_unit: 1, base_labor_hrs: 2.50, mock_unit_cost: 285.00 },
+      { item_id: "MC-004", description: "NEMA Size 3 Motor Starter (480V)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 3.50, mock_unit_cost: 520.00 },
+      { item_id: "GR-002", description: "#6 Green Ground Wire", unit: "FT", qty_per_unit: 25, base_labor_hrs: 0.010, mock_unit_cost: 0.55 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-IND-003",
+    name: "Industrial 480V Receptacle Drop (NEMA 6-50)",
+    description: "50A 480V welding/industrial receptacle: 1\" RGS conduit, #6 THHN, box, receptacle",
+    category: "industrial",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "CR-020", description: '1" Rigid Galvanized Steel (RGS) Conduit', unit: "FT", qty_per_unit: 15, base_labor_hrs: 0.065, mock_unit_cost: 3.20 },
+      { item_id: "WC-008", description: "#6 THHN Wire (600V)", unit: "FT", qty_per_unit: 60, base_labor_hrs: 0.010, mock_unit_cost: 0.88 },
+      { item_id: "DW-015", description: "NEMA 6-50R Flush Receptacle", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.50, mock_unit_cost: 28.00 },
+      { item_id: "DW-016", description: "4-Square Deep Box (Industrial)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.25, mock_unit_cost: 5.50 },
+      { item_id: "GR-002", description: "#10 Green Ground Wire", unit: "FT", qty_per_unit: 15, base_labor_hrs: 0.008, mock_unit_cost: 0.32 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-IND-004",
+    name: "Industrial Control Panel Feed (MCC Bucket)",
+    description: "MCC bucket feed: 2\" RGS conduit, #2 THHN, 225A breaker, bus connections",
+    category: "industrial",
+    phase: "Rough-In",
+    unit: "EA",
+    components: [
+      { item_id: "CR-021", description: '2" Rigid Galvanized Steel (RGS) Conduit', unit: "FT", qty_per_unit: 30, base_labor_hrs: 0.100, mock_unit_cost: 7.80 },
+      { item_id: "WC-009", description: "#2 THHN Wire (600V)", unit: "FT", qty_per_unit: 120, base_labor_hrs: 0.013, mock_unit_cost: 1.85 },
+      { item_id: "PB-004", description: "225A 3-Pole Breaker", unit: "EA", qty_per_unit: 1, base_labor_hrs: 1.50, mock_unit_cost: 380.00 },
+      { item_id: "GR-002", description: "#4 Green Ground Wire", unit: "FT", qty_per_unit: 30, base_labor_hrs: 0.010, mock_unit_cost: 0.42 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-IND-005",
+    name: "Industrial Explosion-Proof Receptacle Drop",
+    description: "Class I Div 1 explosion-proof 20A receptacle: RGS conduit, EYS seal, XP box, XP receptacle",
+    category: "industrial",
+    phase: "Rough-In / Finish",
+    unit: "EA",
+    components: [
+      { item_id: "CR-020", description: '3/4" Rigid Galvanized Steel (RGS) Conduit', unit: "FT", qty_per_unit: 10, base_labor_hrs: 0.055, mock_unit_cost: 2.40 },
+      { item_id: "WC-003", description: "#12 THHN Wire", unit: "FT", qty_per_unit: 30, base_labor_hrs: 0.006, mock_unit_cost: 0.18 },
+      { item_id: "MC-005", description: "EYS Conduit Seal Fitting (3/4\")", unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.75, mock_unit_cost: 32.00 },
+      { item_id: "DW-017", description: "Explosion-Proof Box (1-Gang)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.75, mock_unit_cost: 85.00 },
+      { item_id: "DW-018", description: "Explosion-Proof 20A Receptacle", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.50, mock_unit_cost: 120.00 },
+    ],
+  },
+
+  // ── INFRASTRUCTURE ─────────────────────────────────────────────────────────
+
+  {
+    assembly_id: "ASM-INF-001",
+    name: "100ft 2-inch PVC Infrastructure Run",
+    description: "Complete underground 2-inch PVC conduit run per 100 linear feet",
+    category: "infrastructure",
+    phase: "Rough-In",
+    unit: "100FT",
+    components: [
+      { item_id: "CU-001", description: "2-inch Schedule 40 PVC Conduit (10ft stick)", unit: "EA", qty_per_unit: 10, base_labor_hrs: 0.14, mock_unit_cost: 8.75 },
+      { item_id: "itm_pvc_coupling_2in", description: "2-inch PVC Coupling", unit: "EA", qty_per_unit: 10, base_labor_hrs: 0.04, mock_unit_cost: 0.85 },
+      { item_id: "itm_pvc_support_2in", description: "2-inch Conduit Strap/Support", unit: "EA", qty_per_unit: 20, base_labor_hrs: 0.02, mock_unit_cost: 0.45 },
+      { item_id: "itm_pvc_glue_qt", description: "PVC Cement (quart)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.00, mock_unit_cost: 12.50 },
+      { item_id: "itm_pvc_primer_qt", description: "PVC Primer (quart)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.00, mock_unit_cost: 9.25 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-INF-002",
+    name: "100ft 4-inch PVC Infrastructure Run",
+    description: "Complete underground 4-inch PVC conduit run per 100 linear feet",
+    category: "infrastructure",
+    phase: "Rough-In",
+    unit: "100FT",
+    components: [
+      { item_id: "CU-003", description: "4-inch Schedule 80 PVC Conduit (10ft stick)", unit: "EA", qty_per_unit: 10, base_labor_hrs: 0.20, mock_unit_cost: 22.00 },
+      { item_id: "itm_pvc_coupling_4in", description: "4-inch PVC Coupling", unit: "EA", qty_per_unit: 10, base_labor_hrs: 0.06, mock_unit_cost: 2.80 },
+      { item_id: "itm_pvc_support_4in", description: "4-inch Conduit Strap/Support", unit: "EA", qty_per_unit: 20, base_labor_hrs: 0.03, mock_unit_cost: 1.20 },
+      { item_id: "itm_pvc_glue_qt", description: "PVC Cement (quart)", unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.00, mock_unit_cost: 12.50 },
+      { item_id: "itm_pvc_primer_qt", description: "PVC Primer (quart)", unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.00, mock_unit_cost: 9.25 },
+      { item_id: "CU-008", description: "Underground Warning Tape (Red)", unit: "ROLL", qty_per_unit: 0.1, base_labor_hrs: 0.05, mock_unit_cost: 22.00 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-INF-003",
+    name: "Precast Handhole Installation",
+    description: "17x30 precast concrete handhole with cover, conduit entry seals, and pull string",
+    category: "infrastructure",
+    phase: "Rough-In",
+    unit: "EA",
+    components: [
+      { item_id: "CU-005", description: 'Precast Concrete Handhole (17"x30")', unit: "EA", qty_per_unit: 1, base_labor_hrs: 4.00, mock_unit_cost: 320.00 },
+      { item_id: "CU-007", description: "Duct Seal Compound (1 lb)", unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.20, mock_unit_cost: 4.50 },
+      { item_id: "itm_pull_string", description: "Pull String / Mule Tape (500ft)", unit: "EA", qty_per_unit: 0.1, base_labor_hrs: 0.10, mock_unit_cost: 28.00 },
+      { item_id: "itm_gravel_base", description: "Crushed Stone Base (ton)", unit: "TON", qty_per_unit: 0.5, base_labor_hrs: 0.50, mock_unit_cost: 45.00 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-INF-004",
+    name: "Precast Manhole Installation",
+    description: "36x48 precast concrete manhole with frame/cover, conduit entries, and ladder",
+    category: "infrastructure",
+    phase: "Rough-In",
+    unit: "EA",
+    components: [
+      { item_id: "CU-006", description: 'Precast Concrete Manhole (36"x48")', unit: "EA", qty_per_unit: 1, base_labor_hrs: 12.00, mock_unit_cost: 1200.00 },
+      { item_id: "CU-007", description: "Duct Seal Compound (1 lb)", unit: "EA", qty_per_unit: 4, base_labor_hrs: 0.20, mock_unit_cost: 4.50 },
+      { item_id: "itm_manhole_frame", description: "Cast Iron Frame & Cover", unit: "EA", qty_per_unit: 1, base_labor_hrs: 1.00, mock_unit_cost: 185.00 },
+      { item_id: "itm_gravel_base", description: "Crushed Stone Base (ton)", unit: "TON", qty_per_unit: 2, base_labor_hrs: 0.50, mock_unit_cost: 45.00 },
+      { item_id: "itm_pull_string", description: "Pull String / Mule Tape (500ft)", unit: "EA", qty_per_unit: 0.2, base_labor_hrs: 0.10, mock_unit_cost: 28.00 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-INF-005",
+    name: "Duct Bank (2-Way, 100ft)",
+    description: "2-conduit concrete-encased duct bank per 100 linear feet: 4\" PVC, spacers, concrete",
+    category: "infrastructure",
+    phase: "Rough-In",
+    unit: "100FT",
+    components: [
+      { item_id: "CU-003", description: "4-inch Schedule 80 PVC Conduit", unit: "FT", qty_per_unit: 200, base_labor_hrs: 0.100, mock_unit_cost: 5.50 },
+      { item_id: "CU-009", description: "Conduit Spacer / Separator (4-way)", unit: "EA", qty_per_unit: 50, base_labor_hrs: 0.10, mock_unit_cost: 1.80 },
+      { item_id: "CU-010", description: "Concrete Encasement (per CY)", unit: "CY", qty_per_unit: 4, base_labor_hrs: 2.00, mock_unit_cost: 180.00 },
+      { item_id: "CU-008", description: "Underground Warning Tape", unit: "ROLL", qty_per_unit: 0.2, base_labor_hrs: 0.05, mock_unit_cost: 22.00 },
+      { item_id: "itm_pull_string", description: "Pull String / Mule Tape (500ft)", unit: "EA", qty_per_unit: 0.4, base_labor_hrs: 0.10, mock_unit_cost: 28.00 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-INF-006",
+    name: "Utility Pole Installation",
+    description: "35ft Class 4 utility pole with crossarm, insulators, and grounding",
+    category: "infrastructure",
+    phase: "Rough-In",
+    unit: "EA",
+    components: [
+      { item_id: "CU-012", description: "Utility Pole (35ft, Class 4)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 8.00, mock_unit_cost: 380.00 },
+      { item_id: "itm_crossarm", description: "Wood Crossarm (8ft)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 1.00, mock_unit_cost: 45.00 },
+      { item_id: "itm_insulator", description: "Pin Insulator (Porcelain)", unit: "EA", qty_per_unit: 3, base_labor_hrs: 0.25, mock_unit_cost: 8.50 },
+      { item_id: "CU-013", description: "Ground Rod (5/8\" x 10ft)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 1.00, mock_unit_cost: 28.00 },
+      { item_id: "GR-002", description: "#4 Bare Copper Ground Wire", unit: "FT", qty_per_unit: 15, base_labor_hrs: 0.012, mock_unit_cost: 0.85 },
+    ],
+  },
+
+  // ── ALL CATEGORIES (Universal Assemblies) ──────────────────────────────────
+
+  {
+    assembly_id: "ASM-ALL-001",
+    name: "100ft 1/2\" EMT Conduit Run",
+    description: "Complete 1/2\" EMT conduit run per 100 linear feet with couplings, connectors, and straps",
+    category: "all",
+    phase: "Rough-In",
+    unit: "100FT",
+    components: [
+      { item_id: "CR-001", description: '1/2" EMT Conduit', unit: "FT", qty_per_unit: 100, base_labor_hrs: 0.025, mock_unit_cost: 0.42 },
+      { item_id: "CR-010", description: '1/2" EMT Coupling', unit: "EA", qty_per_unit: 10, base_labor_hrs: 0.05, mock_unit_cost: 0.35 },
+      { item_id: "CR-011", description: '1/2" EMT Connector', unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.05, mock_unit_cost: 0.28 },
+      { item_id: "FH-010", description: '1/2" One-Hole Strap', unit: "EA", qty_per_unit: 20, base_labor_hrs: 0.04, mock_unit_cost: 0.22 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-ALL-002",
+    name: "100ft 3/4\" EMT Conduit Run",
+    description: "Complete 3/4\" EMT conduit run per 100 linear feet with couplings, connectors, and straps",
+    category: "all",
+    phase: "Rough-In",
+    unit: "100FT",
+    components: [
+      { item_id: "CR-002", description: '3/4" EMT Conduit', unit: "FT", qty_per_unit: 100, base_labor_hrs: 0.030, mock_unit_cost: 0.68 },
+      { item_id: "CR-013", description: '3/4" EMT Coupling', unit: "EA", qty_per_unit: 10, base_labor_hrs: 0.06, mock_unit_cost: 0.48 },
+      { item_id: "CR-014", description: '3/4" EMT Connector', unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.06, mock_unit_cost: 0.38 },
+      { item_id: "FH-011", description: '3/4" One-Hole Strap', unit: "EA", qty_per_unit: 20, base_labor_hrs: 0.04, mock_unit_cost: 0.30 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-ALL-003",
+    name: "100ft 1\" EMT Conduit Run",
+    description: "Complete 1\" EMT conduit run per 100 linear feet with couplings, connectors, and straps",
+    category: "all",
+    phase: "Rough-In",
+    unit: "100FT",
+    components: [
+      { item_id: "CR-003", description: '1" EMT Conduit', unit: "FT", qty_per_unit: 100, base_labor_hrs: 0.038, mock_unit_cost: 1.05 },
+      { item_id: "CR-015", description: '1" EMT Coupling', unit: "EA", qty_per_unit: 10, base_labor_hrs: 0.07, mock_unit_cost: 0.72 },
+      { item_id: "CR-016", description: '1" EMT Connector', unit: "EA", qty_per_unit: 2, base_labor_hrs: 0.07, mock_unit_cost: 0.58 },
+      { item_id: "FH-012", description: '1" One-Hole Strap', unit: "EA", qty_per_unit: 20, base_labor_hrs: 0.05, mock_unit_cost: 0.42 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-ALL-004",
+    name: "Ground Rod Installation",
+    description: "Single 10ft copper-clad ground rod with clamp and #6 bare copper tail",
+    category: "all",
+    phase: "Rough-In",
+    unit: "EA",
+    components: [
+      { item_id: "CU-013", description: "Ground Rod (5/8\" x 10ft, Copper-Clad)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 1.00, mock_unit_cost: 28.00 },
+      { item_id: "GR-003", description: "Ground Rod Clamp (Acorn)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.15, mock_unit_cost: 3.50 },
+      { item_id: "GR-002", description: "#6 Bare Copper Ground Wire", unit: "FT", qty_per_unit: 10, base_labor_hrs: 0.010, mock_unit_cost: 0.55 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-ALL-005",
+    name: "Junction Box Installation (4-Square)",
+    description: "4-square junction box with blank cover, conduit knockouts, wire connections",
+    category: "all",
+    phase: "Rough-In",
+    unit: "EA",
+    components: [
+      { item_id: "DW-010", description: "4-Square Steel Box (1-1/2\" deep)", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.25, mock_unit_cost: 2.80 },
+      { item_id: "FH-003", description: "4-Square Blank Cover", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.05, mock_unit_cost: 1.20 },
+      { item_id: "WC-001", description: "Wire Connectors (Marrette, 100-pk)", unit: "PKG", qty_per_unit: 0.05, base_labor_hrs: 0.00, mock_unit_cost: 8.50 },
+    ],
+  },
+
+  {
+    assembly_id: "ASM-ALL-006",
+    name: "Panelboard Circuit Breaker (20A, 1-Pole)",
+    description: "Install single 20A 1-pole breaker in existing panel with #12 THHN circuit wire (20ft)",
+    category: "all",
+    phase: "Rough-In",
+    unit: "EA",
+    components: [
+      { item_id: "PB-005", description: "20A 1-Pole Circuit Breaker", unit: "EA", qty_per_unit: 1, base_labor_hrs: 0.30, mock_unit_cost: 8.50 },
+      { item_id: "WC-003", description: "#12 THHN Wire", unit: "FT", qty_per_unit: 60, base_labor_hrs: 0.006, mock_unit_cost: 0.18 },
+    ],
+  },
+
+];
+
 // ─── Lookup helpers ────────────────────────────────────────────────────────────
 
 /** Fuzzy-match a raw description string against the database.
@@ -296,8 +782,9 @@ export const DB_PHASES: ElectricalPhase[] = [
 
 // ─── Category multipliers ──────────────────────────────────────────────────────
 export const CATEGORY_MULTIPLIERS: Record<string, number> = {
-  "Residential": 0.90,
-  "Commercial": 1.05,
+  "Residential":    0.90,
+  "Commercial":     1.05,
+  "Industrial":     1.20,
   "Infrastructure": 1.30,
 };
 
