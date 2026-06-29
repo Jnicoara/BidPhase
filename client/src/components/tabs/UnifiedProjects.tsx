@@ -732,24 +732,36 @@ function CivilEditor({
   projectId,
   projectName,
   categoryLabel,
+  category,
   onBack,
 }: {
   projectId: string;
   projectName: string;
   categoryLabel: string;
+  category: "civil" | "commercial" | "residential" | "industrial";
   onBack: () => void;
 }) {
   const {
-    activeCategory,
     activeCivilCatProject,
     setCivilCatState,
     activeCommercialCatProject,
     setCommercialCatState,
     activeResidentialCatProject,
     setResidentialCatState,
+    activeIndustrialCatProject,
+    setIndustrialCatState,
   } = useApp();
-  const activeCivilProject = categoryLabel === "Infrastructure" ? activeCivilCatProject : categoryLabel === "Commercial Assembly" ? activeCommercialCatProject : activeResidentialCatProject;
-  const setCivilState = categoryLabel === "Infrastructure" ? setCivilCatState : categoryLabel === "Commercial Assembly" ? setCommercialCatState : setResidentialCatState;
+  // Use the actual category prop (not the display label string) to select the right store
+  const activeCivilProject =
+    category === "civil" ? activeCivilCatProject
+    : category === "commercial" ? activeCommercialCatProject
+    : category === "industrial" ? activeIndustrialCatProject
+    : activeResidentialCatProject;
+  const setCivilState =
+    category === "civil" ? setCivilCatState
+    : category === "commercial" ? setCommercialCatState
+    : category === "industrial" ? setIndustrialCatState
+    : setResidentialCatState;
   const s = activeCivilProject.state;
 
   // Per-run items — stored in component state (persisted via AppContext civilState.runs)
@@ -984,6 +996,23 @@ function CivilEditor({
             onClearPagePins={handleClearPageCountPins}
             onUnitCountToggle={(open) => setCountSessionsOpen(open)}
             countModeRequest={countModeRequest}
+            onRequestCountSession={() => {
+              // Bootstrap a session if none exists (mirrors right-panel Start Counting behavior)
+              if (countSessions.length === 0) {
+                const defaultSession: CountSession = {
+                  id: `cs-${Date.now().toString(36)}`,
+                  name: "Count 1",
+                  iconId: DEFAULT_ICON_ID,
+                  color: DEFAULT_PIN_COLOR,
+                  pins: [],
+                };
+                updateSessions([defaultSession], defaultSession.id);
+                toast.success('Session "Count 1" created — click to place pins.');
+              } else if (!activeCountSessionId && countSessions.length > 0) {
+                updateSessions(countSessions, countSessions[0].id);
+              }
+              setCountSessionsOpen(true);
+            }}
           />
         </ResizablePanel>
 
@@ -1388,6 +1417,7 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
       projectId={proj.id}
       projectName={proj.name}
       categoryLabel={categoryLabel}
+      category={category}
       onBack={() => {
         // Use browser history.back() so the URL sub-route is popped
         // and the hashchange listener above will set openProjectId to null

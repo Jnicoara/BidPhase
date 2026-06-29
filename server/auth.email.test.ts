@@ -68,7 +68,7 @@ describe("auth.signup", () => {
         openId: "email_abc",
         email: "test@example.com",
         name: "Test User",
-        passwordHash: "hashed:password123",
+        passwordHash: "hashed:Password1!",
         emailVerified: false,
         loginMethod: "email_password",
         role: "user",
@@ -82,7 +82,7 @@ describe("auth.signup", () => {
 
     const result = await caller.auth.signup({
       email: "test@example.com",
-      password: "password123",
+      password: "Password1!",
       name: "Test User",
     });
 
@@ -94,12 +94,13 @@ describe("auth.signup", () => {
   });
 
   it("throws CONFLICT if email already exists", async () => {
+    // Always return an existing user (simulates email already registered)
     vi.mocked(dbMod.getUserByEmail).mockResolvedValue({
       id: 1,
       openId: "email_existing",
       email: "existing@example.com",
       name: "Existing",
-      passwordHash: "hashed:pw",
+      passwordHash: "hashed:Password1!",
       emailVerified: false,
       loginMethod: "email_password",
       role: "user",
@@ -112,7 +113,7 @@ describe("auth.signup", () => {
     const caller = appRouter.createCaller(ctx);
 
     await expect(
-      caller.auth.signup({ email: "existing@example.com", password: "password123" })
+      caller.auth.signup({ email: "existing@example.com", password: "Password1!" })
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 });
@@ -126,7 +127,7 @@ describe("auth.login", () => {
       openId: "email_user2",
       email: "user@example.com",
       name: "User Two",
-      passwordHash: "hashed:correctpassword",
+      passwordHash: "hashed:Correct1!",
       emailVerified: true,
       loginMethod: "email_password",
       role: "user",
@@ -141,7 +142,7 @@ describe("auth.login", () => {
 
     const result = await caller.auth.login({
       email: "user@example.com",
-      password: "correctpassword",
+      password: "Correct1!",
     });
 
     expect(result.success).toBe(true);
@@ -154,7 +155,7 @@ describe("auth.login", () => {
       openId: "email_user2",
       email: "user@example.com",
       name: "User Two",
-      passwordHash: "hashed:correctpassword",
+      passwordHash: "hashed:Correct1!",
       emailVerified: true,
       loginMethod: "email_password",
       role: "user",
@@ -167,7 +168,7 @@ describe("auth.login", () => {
     const caller = appRouter.createCaller(ctx);
 
     await expect(
-      caller.auth.login({ email: "user@example.com", password: "wrongpassword" })
+      caller.auth.login({ email: "user@example.com", password: "WrongPass1!" })
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 

@@ -19,7 +19,13 @@ export const authRouter = router({
     .input(
       z.object({
         email: z.string().email().max(320),
-        password: z.string().min(8).max(128),
+        password: z
+          .string()
+          .min(8, "Password must be at least 8 characters")
+          .max(128)
+          .refine((p) => /[A-Z]/.test(p), "Password must contain at least one uppercase letter")
+          .refine((p) => /[0-9]/.test(p), "Password must contain at least one number")
+          .refine((p) => /[^A-Za-z0-9]/.test(p), "Password must contain at least one special character"),
         name: z.string().min(1).max(128).optional(),
       })
     )

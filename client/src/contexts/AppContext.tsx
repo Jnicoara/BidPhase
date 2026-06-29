@@ -254,7 +254,7 @@ export interface ResidentialProject {
 }
 
 // ─── Default factories ────────────────────────────────────────────────────────
-export function defaultCivilProject(name = "Job 1"): CivilProject {
+export function defaultCivilProject(name = "New Project"): CivilProject {
   return {
     id: nanoid(8),
     name,
@@ -263,7 +263,7 @@ export function defaultCivilProject(name = "Job 1"): CivilProject {
   };
 }
 
-export function defaultCommercialProject(name = "Job 1"): CommercialProject {
+export function defaultCommercialProject(name = "New Project"): CommercialProject {
   return {
     id: nanoid(8),
     name,
@@ -272,7 +272,7 @@ export function defaultCommercialProject(name = "Job 1"): CommercialProject {
   };
 }
 
-export function defaultResidentialProject(name = "Job 1"): ResidentialProject {
+export function defaultResidentialProject(name = "New Project"): ResidentialProject {
   return {
     id: nanoid(8),
     name,
@@ -441,8 +441,10 @@ export function useApp(): AppContextValue {
 }
 
 // ─── Helper: ensure at least one project exists ───────────────────────────────
-function ensureOne<T extends { id: string }>(list: T[], makeDefault: () => T): T[] {
-  return list.length > 0 ? list : [makeDefault()];
+// NOTE: We no longer enforce a minimum of 1. Users can delete all projects.
+// The UI will show a "New Project" CTA when the list is empty.
+function ensureOne<T extends { id: string }>(list: T[], _makeDefault: () => T): T[] {
+  return list;
 }
 
 // ─── Generic project-store factory ───────────────────────────────────────────
@@ -484,9 +486,11 @@ function makeProjectStore<TProject extends { id: string; name: string; state: TS
   const remove = (id: string) => {
     setProjects((prev) => {
       const next = prev.filter((p) => p.id !== id);
-      const safe = ensureOne(next, makeDefault);
-      if (activeId === id) setActiveId(safe[0].id);
-      return safe;
+      // If the deleted project was active, switch to another or clear the active id
+      if (activeId === id) {
+        setActiveId(next.length > 0 ? next[next.length - 1].id : "");
+      }
+      return next;
     });
   };
 
@@ -526,14 +530,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Unified projects (single list, uses CivilProject/CivilState type) ──────
   const [unifiedProjects, setUnifiedProjects] = useLocalStorage<CivilProject[]>(
     "bp_unified_projects",
-    [defaultCivilProject()]
+    []
   );
   const safeUP = ensureOne(unifiedProjects, defaultCivilProject);
   const [activeUnifiedId, setActiveUnifiedId] = useLocalStorage<string>(
     "bp_active_unified",
-    safeUP[0].id
+    safeUP[0]?.id ?? ""
   );
-  const activeUnifiedProject = safeUP.find((p) => p.id === activeUnifiedId) ?? safeUP[0];
+  const activeUnifiedProject = safeUP.find((p) => p.id === activeUnifiedId) ?? safeUP[0] ?? defaultCivilProject();
 
   const unifiedStore = useCallback(
     () => makeProjectStore(safeUP, activeUnifiedId, setUnifiedProjects, setActiveUnifiedId, defaultCivilProject),
@@ -544,40 +548,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Active category (landing page selection) ──────────────────────────────
   const [activeCategory, setActiveCategory] = useLocalStorage<"civil" | "commercial" | "residential" | "industrial">("bp_active_category", "civil");
   // ── Industrial category store ─────────────────────────────────────────────
-  const [industrialCatProjects, setIndustrialCatProjects] = useLocalStorage<CivilProject[]>("bp_industrial_cat_projects", [defaultCivilProject()]);
+  const [industrialCatProjects, setIndustrialCatProjects] = useLocalStorage<CivilProject[]>("bp_industrial_cat_projects", []);
   const safeICP = ensureOne(industrialCatProjects, defaultCivilProject);
-  const [activeIndustrialCatId, setActiveIndustrialCatId] = useLocalStorage<string>("bp_active_industrial_cat", safeICP[0].id);
-  const activeIndustrialCatProject = safeICP.find((p) => p.id === activeIndustrialCatId) ?? safeICP[0];
+  const [activeIndustrialCatId, setActiveIndustrialCatId] = useLocalStorage<string>("bp_active_industrial_cat", safeICP[0]?.id ?? "");
+  const activeIndustrialCatProject = safeICP.find((p) => p.id === activeIndustrialCatId) ?? safeICP[0] ?? defaultCivilProject();
   const industrialCatStore = useCallback(
     () => makeProjectStore(safeICP, activeIndustrialCatId, setIndustrialCatProjects, setActiveIndustrialCatId, defaultCivilProject),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeIndustrialCatId, safeICP.length, setIndustrialCatProjects, setActiveIndustrialCatId]
   );
   // ── Civil category store ──────────────────────────────────────────────────
-  const [civilCatProjects, setCivilCatProjects] = useLocalStorage<CivilProject[]>("bp_civil_cat_projects", [defaultCivilProject()]);
+  const [civilCatProjects, setCivilCatProjects] = useLocalStorage<CivilProject[]>("bp_civil_cat_projects", []);
   const safeCCP = ensureOne(civilCatProjects, defaultCivilProject);
-  const [activeCivilCatId, setActiveCivilCatId] = useLocalStorage<string>("bp_active_civil_cat", safeCCP[0].id);
-  const activeCivilCatProject = safeCCP.find((p) => p.id === activeCivilCatId) ?? safeCCP[0];
+  const [activeCivilCatId, setActiveCivilCatId] = useLocalStorage<string>("bp_active_civil_cat", safeCCP[0]?.id ?? "");
+  const activeCivilCatProject = safeCCP.find((p) => p.id === activeCivilCatId) ?? safeCCP[0] ?? defaultCivilProject();
   const civilCatStore = useCallback(
     () => makeProjectStore(safeCCP, activeCivilCatId, setCivilCatProjects, setActiveCivilCatId, defaultCivilProject),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeCivilCatId, safeCCP.length, setCivilCatProjects, setActiveCivilCatId]
   );
   // ── Commercial category store ─────────────────────────────────────────────
-  const [commercialCatProjects, setCommercialCatProjects] = useLocalStorage<CivilProject[]>("bp_commercial_cat_projects", [defaultCivilProject()]);
+  const [commercialCatProjects, setCommercialCatProjects] = useLocalStorage<CivilProject[]>("bp_commercial_cat_projects", []);
   const safeCmCP = ensureOne(commercialCatProjects, defaultCivilProject);
-  const [activeCommercialCatId, setActiveCommercialCatId] = useLocalStorage<string>("bp_active_commercial_cat", safeCmCP[0].id);
-  const activeCommercialCatProject = safeCmCP.find((p) => p.id === activeCommercialCatId) ?? safeCmCP[0];
+  const [activeCommercialCatId, setActiveCommercialCatId] = useLocalStorage<string>("bp_active_commercial_cat", safeCmCP[0]?.id ?? "");
+  const activeCommercialCatProject = safeCmCP.find((p) => p.id === activeCommercialCatId) ?? safeCmCP[0] ?? defaultCivilProject();
   const commercialCatStore = useCallback(
     () => makeProjectStore(safeCmCP, activeCommercialCatId, setCommercialCatProjects, setActiveCommercialCatId, defaultCivilProject),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeCommercialCatId, safeCmCP.length, setCommercialCatProjects, setActiveCommercialCatId]
   );
   // ── Residential category store ────────────────────────────────────────────
-  const [residentialCatProjects, setResidentialCatProjects] = useLocalStorage<CivilProject[]>("bp_residential_cat_projects", [defaultCivilProject()]);
+  const [residentialCatProjects, setResidentialCatProjects] = useLocalStorage<CivilProject[]>("bp_residential_cat_projects", []);
   const safeRCP = ensureOne(residentialCatProjects, defaultCivilProject);
-  const [activeResidentialCatId, setActiveResidentialCatId] = useLocalStorage<string>("bp_active_residential_cat", safeRCP[0].id);
-  const activeResidentialCatProject = safeRCP.find((p) => p.id === activeResidentialCatId) ?? safeRCP[0];
+  const [activeResidentialCatId, setActiveResidentialCatId] = useLocalStorage<string>("bp_active_residential_cat", safeRCP[0]?.id ?? "");
+  const activeResidentialCatProject = safeRCP.find((p) => p.id === activeResidentialCatId) ?? safeRCP[0] ?? defaultCivilProject();
   const residentialCatStore = useCallback(
     () => makeProjectStore(safeRCP, activeResidentialCatId, setResidentialCatProjects, setActiveResidentialCatId, defaultCivilProject),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -586,14 +590,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Civil ─────────────────────────────────────────────────────────────────
   const [civilProjects, setCivilProjects] = useLocalStorage<CivilProject[]>(
     "bp_civil_projects",
-    [defaultCivilProject()]
+    []
   );
   const safeCP = ensureOne(civilProjects, defaultCivilProject);
   const [activeCivilId, setActiveCivilId] = useLocalStorage<string>(
     "bp_active_civil",
-    safeCP[0].id
+    safeCP[0]?.id ?? ""
   );
-  const activeCivilProject = safeCP.find((p) => p.id === activeCivilId) ?? safeCP[0];
+  const activeCivilProject = safeCP.find((p) => p.id === activeCivilId) ?? safeCP[0] ?? defaultCivilProject();
 
   const civilStore = useCallback(
     () => makeProjectStore(safeCP, activeCivilId, setCivilProjects, setActiveCivilId, defaultCivilProject),
@@ -604,14 +608,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Commercial ────────────────────────────────────────────────────────────
   const [commercialProjects, setCommercialProjects] = useLocalStorage<CommercialProject[]>(
     "bp_commercial_projects",
-    [defaultCommercialProject()]
+    []
   );
   const safeCmP = ensureOne(commercialProjects, defaultCommercialProject);
   const [activeCommercialId, setActiveCommercialId] = useLocalStorage<string>(
     "bp_active_commercial",
-    safeCmP[0].id
+    safeCmP[0]?.id ?? ""
   );
-  const activeCommercialProject = safeCmP.find((p) => p.id === activeCommercialId) ?? safeCmP[0];
+  const activeCommercialProject = safeCmP.find((p) => p.id === activeCommercialId) ?? safeCmP[0] ?? defaultCommercialProject();
 
   const commercialStore = useCallback(
     () => makeProjectStore(safeCmP, activeCommercialId, setCommercialProjects, setActiveCommercialId, defaultCommercialProject),
@@ -622,14 +626,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Residential ───────────────────────────────────────────────────────────
   const [residentialProjects, setResidentialProjects] = useLocalStorage<ResidentialProject[]>(
     "bp_residential_projects",
-    [defaultResidentialProject()]
+    []
   );
   const safeRP = ensureOne(residentialProjects, defaultResidentialProject);
   const [activeResidentialId, setActiveResidentialId] = useLocalStorage<string>(
     "bp_active_residential",
-    safeRP[0].id
+    safeRP[0]?.id ?? ""
   );
-  const activeResidentialProject = safeRP.find((p) => p.id === activeResidentialId) ?? safeRP[0];
+  const activeResidentialProject = safeRP.find((p) => p.id === activeResidentialId) ?? safeRP[0] ?? defaultResidentialProject();
 
   const residentialStore = useCallback(
     () => makeProjectStore(safeRP, activeResidentialId, setResidentialProjects, setActiveResidentialId, defaultResidentialProject),

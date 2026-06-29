@@ -36,3 +36,16 @@
 - [ ] Email verification flow
 - [ ] Password reset via email
 - [ ] Admin dashboard for user management
+
+## Bug Fixes & UI Polish (v4.1)
+
+- [x] Login page: clean up clunky layout, fix overlapping lines, polish visual design
+- [x] Login page: remove lightning bolt icon, show only "BidPhase" text
+- [x] Login page: enforce strong password requirements (min 8 chars, uppercase, number, special char) with visual indicator
+- [x] Default project state: remove pre-seeded jobs, show "New Project" placeholder when no projects exist
+- [x] Projects: always allow deleting down to zero (no minimum project count enforced)
+- [x] Sidebar navigation: allow toggling between Residential/Commercial/Industrial/Infrastructure from inside a workspace
+- [x] Scale enforcement: require scale to be set before any measuring is allowed
+- [x] Scale display: fix false "Scale set" message showing before scale is actually configured
+- [x] Measure/Run sync: synchronize the measure and run controls at the top of the page
+- [x] Unit count dropdown (right panel): fix so it works independently — should not require clicking the top toolbar button

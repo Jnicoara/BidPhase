@@ -312,6 +312,8 @@ interface PlanPanelProps {
   onUnitCountToggle?: (open: boolean) => void;
   /** Increment this to programmatically activate count mode from the right panel */
   countModeRequest?: number;
+  /** Called when top toolbar Unit Count button is clicked — parent should bootstrap a session if none exists */
+  onRequestCountSession?: () => void;
 }
 
 export default function PlanPanel({
@@ -326,6 +328,7 @@ export default function PlanPanel({
   onClearPagePins,
   onUnitCountToggle,
   countModeRequest = 0,
+  onRequestCountSession,
 }: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
@@ -1396,7 +1399,7 @@ export default function PlanPanel({
           Set Scale
         </Button>
 
-        {scaleRatio && (
+        {scaleRatio !== null && scaleRatio > 0 && (
           <button
             onClick={() => {
               // Toggle back to set-scale mode to show/re-set the scale line
@@ -1476,6 +1479,8 @@ export default function PlanPanel({
               onUnitCountToggle?.(false);
               toast.info("Unit Count off.");
             } else {
+              // Ask parent to bootstrap a session if none exists, then activate count mode
+              onRequestCountSession?.();
               setMode("count");
               modeRef.current = "count";
               onUnitCountToggle?.(true);
