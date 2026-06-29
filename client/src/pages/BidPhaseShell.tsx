@@ -151,8 +151,13 @@ export default function BidPhaseShell() {
   }, [navigate]);
 
   const closeMaterialList = useCallback(() => {
-    // Go back to the category that was active before opening L&M
-    navigate(currentCategory);
+    // Use browser back to pop the #/material entry off the history stack
+    // This avoids creating a new entry and fixes the back-button loop
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      navigate(currentCategory);
+    }
   }, [navigate, currentCategory]);
 
   // ── Content renderer ───────────────────────────────────────────────────────

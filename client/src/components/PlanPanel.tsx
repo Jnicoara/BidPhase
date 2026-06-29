@@ -1074,7 +1074,7 @@ export default function PlanPanel({
           setMode("none");
           modeRef.current = "none";
         } else if (pdfFile) {
-          // M key: start a new run and activate measure mode (no scale required)
+          // M key: start a new run and activate measure mode (scale required - addRun checks)
           addRun();
         }
       }
@@ -1244,6 +1244,11 @@ export default function PlanPanel({
 
   // ── Add new run ────────────────────────────────────────────────────────────
   const addRun = useCallback(() => {
+    // Scale is required before measuring
+    if (!scaleRatio) {
+      toast.error("Set scale first — click \"Set Scale\", mark two points, enter the known distance in feet, then click OK.");
+      return;
+    }
     const id = nanoid6();
     const name = `Run ${currentRuns.length + 1}`;
     const color = BASE_PALETTE[currentRuns.length % BASE_PALETTE.length];
@@ -1254,7 +1259,7 @@ export default function PlanPanel({
     setMode("measure");
     modeRef.current = "measure";
     toast.info(`"${name}" ready — click points along the path to measure.`);
-  }, [currentRuns.length, setCurrentRuns, setCurrentActiveRunId, currentPage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentRuns.length, scaleRatio, setCurrentRuns, setCurrentActiveRunId, currentPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setRunColor = useCallback((runId: string, color: string) => {
     setCurrentRuns((prev) => prev.map((r) => r.id === runId ? { ...r, color } : r));
@@ -1391,10 +1396,19 @@ export default function PlanPanel({
           Set Scale
         </Button>
 
-        {scaleRatio && mode === "none" && (
-          <span className="text-[10px] font-mono text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded border border-yellow-400/30 shrink-0">
-            ✓ Scale
-          </span>
+        {scaleRatio && (
+          <button
+            onClick={() => {
+              // Toggle back to set-scale mode to show/re-set the scale line
+              setMode("set-scale-p1");
+              modeRef.current = "set-scale-p1";
+              toast.info("Scale line is shown on the plan. Click to re-set, or press Esc to cancel.");
+            }}
+            className="text-[10px] font-mono text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded border border-yellow-400/30 shrink-0 hover:bg-yellow-400/20 transition-colors"
+            title="Scale is set — click to view or re-set"
+          >
+            ✓ Scale set
+          </button>
         )}
 
         {mode === "set-scale-p2" && scalePoints.length >= 2 && (
@@ -1426,6 +1440,11 @@ export default function PlanPanel({
               toast.info("Measurement paused. Click Measure to start a new run.");
               return;
             }
+            // Scale is required before measuring
+            if (!scaleRatio) {
+              toast.error("Set scale first — click \"Set Scale\", mark two points, enter the known distance in feet, then click OK.");
+              return;
+            }
             // Auto-create a new run and immediately start measuring it
             const id = nanoid6();
             const runNum = currentRuns.length + 1;
@@ -1436,11 +1455,7 @@ export default function PlanPanel({
             setCurrentActiveRunId(id);
             setMode("measure");
             modeRef.current = "measure";
-            if (!scaleRatio) {
-              toast.info(`"${name}" started — click points along the path. Set scale for real-world feet.`);
-            } else {
-              toast.info(`"${name}" started — click points along the path. Esc or click Measure to finish.`);
-            }
+            toast.info(`"${name}" started — click points along the path. Click Done or press Esc to finish.`);
           }}
           disabled={!pdfFile}
           title="Measure — starts a new run automatically"

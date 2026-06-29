@@ -247,17 +247,25 @@ export default function ProjectHomepage({
                     </div>
                     <div className="flex-1 min-w-0 pt-0.5">
                       {isEditing ? (
-                        <input
-                          autoFocus
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleRename(proj.id);
-                            if (e.key === "Escape") setEditingId(null);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full bg-transparent border-b border-[#F5C518] text-sm text-foreground outline-none font-medium pb-0.5"
-                        />
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            autoFocus
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleRename(proj.id);
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                            onBlur={() => handleRename(proj.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 min-w-0 bg-transparent border-b border-[#F5C518] text-sm text-foreground outline-none font-medium pb-0.5"
+                          />
+                          <button
+                            onMouseDown={(e) => { e.preventDefault(); handleRename(proj.id); }}
+                            className="text-[#F5C518] text-xs px-1.5 py-0.5 rounded hover:bg-[#F5C518]/10 shrink-0"
+                            title="Save name"
+                          >✓</button>
+                        </div>
                       ) : (
                         <h3 className="text-sm font-semibold text-foreground truncate leading-snug">
                           {proj.name}
@@ -276,14 +284,29 @@ export default function ProjectHomepage({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    onClick={() => { onSwitch?.(proj.id); onOpen(proj.id); }}
+                    onClick={() => {
+                      // Commit any in-progress rename before opening
+                      if (editingId === proj.id && editName.trim()) {
+                        onRename(proj.id, editName.trim());
+                        setEditingId(null);
+                      }
+                      onSwitch?.(proj.id); onOpen(proj.id);
+                    }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-[#F5C518] hover:bg-[#F5C518]/10 transition-colors border border-[#F5C518]/20 hover:border-[#F5C518]/40"
                   >
                     Open
                   </button>
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => { setEditingId(proj.id); setEditName(proj.name); }}
+                      onClick={() => {
+                        if (editingId === proj.id) {
+                          // Second click = cancel rename
+                          setEditingId(null);
+                        } else {
+                          setEditingId(proj.id);
+                          setEditName(proj.name);
+                        }
+                      }}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors border border-transparent hover:border-border/50"
                       title="Rename"
                     >
