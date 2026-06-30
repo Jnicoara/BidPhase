@@ -1147,8 +1147,11 @@ function CivilEditor({
   const [newSessionName, setNewSessionName] = useState("");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [countSessionsOpen, setCountSessionsOpen] = useState(true);
-  // runsOpen removed — runs list is always visible
+  // Single activeSection drives the accordion — only one section open at a time
+  type RightSection = "count" | "runs" | "materials";
+  const [activeSection, setActiveSection] = useState<RightSection>("runs");
+  const countSessionsOpen = activeSection === "count";
+  const setCountSessionsOpen = (open: boolean) => setActiveSection(open ? "count" : "runs");
   const [countModeRequest, setCountModeRequest] = useState(0);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
@@ -1467,9 +1470,7 @@ function CivilEditor({
             }}
             countModeRequest={countModeRequest}
             onMeasureStart={() => {
-              // Switch right panel to Runs tab, collapse Unit Count
-              setCountSessionsOpen(false);
-              // Expand the right panel if it was collapsed
+              setActiveSection("runs");
               if (rightPanelCollapsed) toggleRightPanel();
             }}
             onRequestCountSession={() => {
@@ -1506,7 +1507,7 @@ function CivilEditor({
           onExpand={() => setRightPanelCollapsed(false)}
         >
           <div className="flex flex-col h-full overflow-hidden">
-            {/* Thin strip shown when panel is collapsed */}
+            {/* ── Thin strip shown when panel is collapsed ── */}
             {rightPanelCollapsed && (
               <div className="flex flex-col items-center justify-center h-full gap-3 bg-card border-l border-border cursor-pointer" onClick={toggleRightPanel} title="Expand panel">
                 <div className="w-6 h-6 rounded bg-[#F5C518]/15 flex items-center justify-center">
@@ -1515,241 +1516,237 @@ function CivilEditor({
                 <ChevronLeft size={12} className="text-muted-foreground" />
               </div>
             )}
-            {/* Header */}
-            <div className="px-4 pt-3 pb-3 border-b border-border bg-card shrink-0">
-              <div className="flex items-center gap-2.5">
-                {/* BP logo badge */}
-                <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center shrink-0">
-                  <span className="font-bold text-[#F5C518] text-xs" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h1
-                    className="text-sm font-bold text-foreground truncate"
-                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                  >
-                    {projectName}
-                  </h1>
-                </div>
-                <span className="shrink-0 text-xs font-mono px-2 py-0.5 rounded bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30">
-                  Pg {activePage}
-                </span>
-                {/* Collapse toggle */}
-                <button
-                  onClick={toggleRightPanel}
-                  className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors"
-                  title={rightPanelCollapsed ? "Expand panel" : "Collapse panel"}
-                >
-                  {rightPanelCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
-                </button>
-              </div>
-            </div>
 
-              {/* ── Unit Count ──────────────────────────────────────────── */}
-              <div className="bp-card overflow-hidden">
-                <button
-                  onClick={() => {
-                    const opening = !countSessionsOpen;
-                    setCountSessionsOpen(opening);
-                    if (opening) {
-                      // Auto-create a session if none exists when user opens the panel
-                      if (countSessions.length === 0) {
-                        const defaultSession: CountSession = {
-                          id: `cs-${Date.now().toString(36)}`,
-                          name: "Count 1",
-                          iconId: DEFAULT_ICON_ID,
-                          color: DEFAULT_PIN_COLOR,
-                          pins: [],
-                        };
-                        updateSessions([defaultSession], defaultSession.id);
-                        toast.success('Session "Count 1" created — click to place pins.');
-                      } else if (!activeCountSessionId && countSessions.length > 0) {
-                        updateSessions(countSessions, countSessions[0].id);
-                      }
-                      setCountModeRequest((v) => v + 1);
-                    }
-                  }}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
-                >
-                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Unit Count
-                    {countSessions.length > 0 && (
-                      <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{countSessions.length} session{countSessions.length !== 1 ? 's' : ''} · {countSessions.reduce((a, cs) => a + cs.pins.length, 0)} pins</span>
-                    )}
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    {countSessionsOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            {/* ── Full panel content — hidden when collapsed ── */}
+            {!rightPanelCollapsed && (
+              <>
+                {/* Header */}
+                <div className="px-4 pt-3 pb-3 border-b border-border bg-card shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center shrink-0">
+                      <span className="font-bold text-[#F5C518] text-xs" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h1 className="text-sm font-bold text-foreground truncate" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        {projectName}
+                      </h1>
+                    </div>
+                    <span className="shrink-0 text-xs font-mono px-2 py-0.5 rounded bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30">
+                      Pg {activePage}
+                    </span>
+                    <button
+                      onClick={toggleRightPanel}
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors"
+                      title="Collapse panel"
+                    >
+                      <ChevronRight size={14} />
+                    </button>
                   </div>
-                </button>
-                {countSessionsOpen && <div className="px-4 pb-4 space-y-3">
-
-                {/* Always-visible material search — creates a new session from catalog */}
-                <div className="space-y-1">
-                  <Label className="text-xs font-medium text-muted-foreground">Search material</Label>
-                  <CatalogPicker
-                    value={null}
-                    onChange={handleAddCountSessionFromCatalog}
-                    placeholder="Search catalog…"
-                  />
                 </div>
-                {countSessions.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">No sessions yet. Tap a shape above or search a material to start.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {countSessions.map((cs) => {
-                      const isActive = cs.id === activeCountSessionId;
-                      const isEditing = editingSessionId === cs.id;
-                      return (
-                        <div
-                          key={cs.id}
-                          onClick={() => !isEditing && updateSessions(countSessions, cs.id)}
-                          className={cn(
-                            "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-all",
-                            isActive ? "border-[#F5C518] bg-[#F5C518]/8" : "border-border bg-muted/5 hover:border-border/80"
-                          )}
-                        >
-                          <PinShapeSwatch shape={cs.iconId as PinShape} color={cs.color} size={16} />
-                          {isEditing ? (
-                            <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === "Enter") handleRenameCountSession(cs.id); if (e.key === "Escape") setEditingSessionId(null); }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="flex-1 bg-transparent border-b border-[#F5C518] text-xs text-foreground outline-none font-mono" />
-                          ) : (
-                            <span className="flex-1 text-xs text-foreground font-medium truncate">{cs.name}</span>
-                          )}
-                          {/* Unit cost display (read-only from catalog) */}
-                          {cs.unitCost != null && cs.unitCost > 0 && (
-                            <span className="text-[9px] font-mono text-muted-foreground shrink-0">${cs.unitCost.toFixed(2)}/ea</span>
-                          )}
-                          <span className="font-mono text-[10px] text-muted-foreground shrink-0">{cs.pins.length} pin{cs.pins.length !== 1 ? "s" : ""}</span>
-                          {isEditing ? (
-                            <>
-                              <button onClick={(e) => { e.stopPropagation(); handleRenameCountSession(cs.id); }} className="text-[#F5C518] hover:opacity-70"><Check size={12} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(null); }} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
-                            </>
-                          ) : (
-                            <>
-                              <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }} className="text-muted-foreground hover:text-foreground" title="Rename session"><Pencil size={11} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive" title="Delete session"><Trash2 size={11} /></button>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
 
-                {/* New session row */}
-                <button
-                  onClick={handleAddCountSession}
-                  className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-md bg-[#F5C518]/15 text-[#F5C518] text-xs font-semibold hover:bg-[#F5C518]/25 active:scale-[0.98] transition-all border border-[#F5C518]/20">
-                  <Plus size={13} /> New Count Session
-                </button>
+                {/* ── Scrollable accordion body ── */}
+                <div className="flex-1 overflow-auto">
 
-                {/* Active session config */}
-                {activeCountSession && (
-                  <div className="pt-2 border-t border-border space-y-3">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      Active: <span className="text-foreground">{activeCountSession.name}</span>
-                    </p>
-                    {/* Compact color + shape row — single line */}
-                    <CompactCountConfig
-                      color={activeCountSession.color}
-                      iconId={activeCountSession.iconId}
-                      onColorChange={(hex) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: hex } : cs))}
-                      onShapeChange={(id) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, iconId: id } : cs))}
-                    />
-                    {/* Undo last pin on current page */}
-                    <div className="pt-1 border-t border-border/50">
-                      <button
-                        onClick={handleUndoLastPin}
-                        disabled={!activeCountSession || activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length === 0}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        title="Remove last dropped pin on this page (U key also works)"
-                      >
-                        <Undo2 size={12} />
-                        Undo last pin
-                        {activeCountSession && activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length > 0 && (
-                          <span className="ml-auto font-mono text-[10px] text-[#F5C518]">
-                            {activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length} on pg {activePage}
-                          </span>
+                  {/* ── RUNS accordion ── */}
+                  <div className="bp-card overflow-hidden">
+                    <button
+                      onClick={() => setActiveSection("runs")}
+                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+                    >
+                      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        Runs — Page {activePage}
+                        {pageRuns.length > 0 && (
+                          <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{pageRuns.length} run{pageRuns.length !== 1 ? 's' : ''}</span>
                         )}
-                      </button>
-                    </div>
-                    {/* Searchable material quick-add for unit counts */}
-                    <div className="pt-1 border-t border-border/50 space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Add from material catalog</Label>
-                      <CatalogPicker
-                        value={null}
-                        onChange={handleAddCountSessionFromCatalog}
-                        placeholder="Search catalog…"
-                      />
-                    </div>
+                      </h2>
+                      {activeSection === "runs" ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
+                    </button>
+                    {activeSection === "runs" && (
+                      <div className="px-4 pb-4 space-y-4">
+                        {pageRuns.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
+                              <Link2 size={20} className="text-muted-foreground" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-muted-foreground">No runs on page {activePage}</p>
+                              <p className="text-xs text-muted-foreground/60 mt-1">Measure a conduit run on this page, then push it here.</p>
+                            </div>
+                          </div>
+                        ) : (
+                          pageRuns.map((run, i) => (
+                            <RunCard key={run.id} run={run} index={i} onUpdate={updateRun} onRemove={removeRun} />
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-                </div>}
-              </div>
 
-            <div className="flex flex-col">
-            {/* Runs section header */}
-            <div className="bp-card overflow-hidden shrink-0">
-              <div className="w-full flex items-center justify-between px-4 py-3">
-                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  Runs — Page {activePage}
-                  {pageRuns.length > 0 && (
-                    <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{pageRuns.length} run{pageRuns.length !== 1 ? 's' : ''}</span>
-                  )}
-                </h2>
-              </div>
-            </div>
-
-            {/* Runs list — always visible */}
-            <div className="flex-1 overflow-auto p-4 pt-2 pb-24 space-y-4">
-              {pageRuns.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
-                    <Link2 size={20} className="text-muted-foreground" />
+                  {/* ── UNIT COUNT accordion ── */}
+                  <div className="bp-card overflow-hidden">
+                    <button
+                      onClick={() => {
+                        const opening = activeSection !== "count";
+                        setActiveSection(opening ? "count" : "runs");
+                        if (opening) {
+                          if (countSessions.length === 0) {
+                            const defaultSession: CountSession = {
+                              id: `cs-${Date.now().toString(36)}`,
+                              name: "Count 1",
+                              iconId: DEFAULT_ICON_ID,
+                              color: DEFAULT_PIN_COLOR,
+                              pins: [],
+                            };
+                            updateSessions([defaultSession], defaultSession.id);
+                            toast.success('Session "Count 1" created — click to place pins.');
+                          } else if (!activeCountSessionId && countSessions.length > 0) {
+                            updateSessions(countSessions, countSessions[0].id);
+                          }
+                          setCountModeRequest((v) => v + 1);
+                        }
+                      }}
+                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+                    >
+                      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        Unit Count
+                        {countSessions.length > 0 && (
+                          <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{countSessions.length} session{countSessions.length !== 1 ? 's' : ''} · {countSessions.reduce((a, cs) => a + cs.pins.length, 0)} pins</span>
+                        )}
+                      </h2>
+                      {activeSection === "count" ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
+                    </button>
+                    {activeSection === "count" && (
+                      <div className="px-4 pb-4 space-y-3">
+                        {/* Material search — always visible at top of Unit Count */}
+                        <div className="space-y-1">
+                          <Label className="text-xs font-medium text-muted-foreground">Search material</Label>
+                          <CatalogPicker
+                            value={null}
+                            onChange={handleAddCountSessionFromCatalog}
+                            placeholder="Search catalog…"
+                          />
+                        </div>
+                        {countSessions.length === 0 ? (
+                          <p className="text-xs text-muted-foreground italic">No sessions yet. Search a material above or tap New Count Session to start.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {countSessions.map((cs) => {
+                              const isActive = cs.id === activeCountSessionId;
+                              const isEditing = editingSessionId === cs.id;
+                              return (
+                                <div
+                                  key={cs.id}
+                                  onClick={() => !isEditing && updateSessions(countSessions, cs.id)}
+                                  className={cn(
+                                    "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-all",
+                                    isActive ? "border-[#F5C518] bg-[#F5C518]/8" : "border-border bg-muted/5 hover:border-border/80"
+                                  )}
+                                >
+                                  <PinShapeSwatch shape={cs.iconId as PinShape} color={cs.color} size={16} />
+                                  {isEditing ? (
+                                    <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
+                                      onKeyDown={(e) => { if (e.key === "Enter") handleRenameCountSession(cs.id); if (e.key === "Escape") setEditingSessionId(null); }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex-1 bg-transparent border-b border-[#F5C518] text-xs text-foreground outline-none font-mono" />
+                                  ) : (
+                                    <span className="flex-1 text-xs text-foreground font-medium truncate">{cs.name}</span>
+                                  )}
+                                  {cs.unitCost != null && cs.unitCost > 0 && (
+                                    <span className="text-[9px] font-mono text-muted-foreground shrink-0">${cs.unitCost.toFixed(2)}/ea</span>
+                                  )}
+                                  <span className="font-mono text-[10px] text-muted-foreground shrink-0">{cs.pins.length} pin{cs.pins.length !== 1 ? "s" : ""}</span>
+                                  {isEditing ? (
+                                    <>
+                                      <button onClick={(e) => { e.stopPropagation(); handleRenameCountSession(cs.id); }} className="text-[#F5C518] hover:opacity-70"><Check size={12} /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(null); }} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }} className="text-muted-foreground hover:text-foreground" title="Rename session"><Pencil size={11} /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive" title="Delete session"><Trash2 size={11} /></button>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {/* New session button */}
+                        <button
+                          onClick={handleAddCountSession}
+                          className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-md bg-[#F5C518]/15 text-[#F5C518] text-xs font-semibold hover:bg-[#F5C518]/25 active:scale-[0.98] transition-all border border-[#F5C518]/20">
+                          <Plus size={13} /> New Count Session
+                        </button>
+                        {/* Active session config */}
+                        {activeCountSession && (
+                          <div className="pt-2 border-t border-border space-y-3">
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                              Active: <span className="text-foreground">{activeCountSession.name}</span>
+                            </p>
+                            <CompactCountConfig
+                              color={activeCountSession.color}
+                              iconId={activeCountSession.iconId}
+                              onColorChange={(hex) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: hex } : cs))}
+                              onShapeChange={(id) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, iconId: id } : cs))}
+                            />
+                            <div className="pt-1 border-t border-border/50">
+                              <button
+                                onClick={handleUndoLastPin}
+                                disabled={!activeCountSession || activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length === 0}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                title="Remove last dropped pin on this page (U key also works)"
+                              >
+                                <Undo2 size={12} />
+                                Undo last pin
+                                {activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length > 0 && (
+                                  <span className="ml-auto font-mono text-[10px] text-[#F5C518]">
+                                    {activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length} on pg {activePage}
+                                  </span>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">No runs on page {activePage}</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
-                      Measure a conduit run on this page, then push it here.
-                    </p>
+
+                  {/* ── MATERIALS accordion ── */}
+                  <div className="bp-card overflow-hidden">
+                    <button
+                      onClick={() => setActiveSection(activeSection === "materials" ? "runs" : "materials")}
+                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+                    >
+                      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        Materials
+                        {runs.length > 0 && (
+                          <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{runs.length} run{runs.length !== 1 ? 's' : ''} total</span>
+                        )}
+                      </h2>
+                      {activeSection === "materials" ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
+                    </button>
+                    {activeSection === "materials" && (
+                      <div className="px-4 pb-4 space-y-4">
+                        <CrossPageTotals runs={runs} countSessions={countSessions} />
+                        {(runs.length > 0 || countSessions.some((cs) => cs.pins.length > 0)) && (
+                          <div className="pt-2 border-t border-border/40">
+                            <button
+                              onClick={() => setConfirmClear({ type: "total-reset" })}
+                              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-destructive/70 hover:text-destructive hover:bg-destructive/10 border border-destructive/20 hover:border-destructive/40 transition-all"
+                              title="Clear all runs and count pins across all pages"
+                            >
+                              <Trash2 size={11} />
+                              Total Reset (all pages)
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <>
-                  {/* Newest first — already prepended on push */}
-                  {pageRuns.map((run, i) => (
-                    <RunCard
-                      key={run.id}
-                      run={run}
-                      index={i}
-                      onUpdate={updateRun}
-                      onRemove={removeRun}
-                    />
-                  ))}
-                </>
-              )}
 
-              {/* Cross-page totals — always visible, shows zeros until runs are added */}
-              <CrossPageTotals runs={runs} countSessions={countSessions} />
-
-              {/* Total Reset — clears all runs and count pins across all pages */}
-              {(runs.length > 0 || countSessions.some((cs) => cs.pins.length > 0)) && (
-                <div className="pt-4 border-t border-border/40 mt-4">
-                  <button
-                    onClick={() => setConfirmClear({ type: "total-reset" })}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-destructive/70 hover:text-destructive hover:bg-destructive/10 border border-destructive/20 hover:border-destructive/40 transition-all"
-                    title="Clear all runs and count pins across all pages"
-                  >
-                    <Trash2 size={11} />
-                    Total Reset (all pages)
-                  </button>
-                </div>
-              )}
-
-            </div>
-            </div>
+                </div>{/* end scrollable body */}
+              </>
+            )}{/* end !rightPanelCollapsed */}
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>

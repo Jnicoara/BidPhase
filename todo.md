@@ -191,3 +191,9 @@
 - [x] Runs list: always visible (remove the collapsible dropdown, show runs directly)
 - [x] Right panel: collapse to a very thin strip like the left sidebar, expand back with a button
 - [x] PDF upload: ask user to confirm before loading a new PDF; warn that all pins/runs/scale will be cleared
+
+## v5.8 — Right Panel Accordion Fix
+
+- [x] Material search bar: restore visibility under Unit Count section
+- [x] Right panel sections: mutually exclusive accordions (Runs / Unit Count / Materials) — clicking one collapses the others
+- [x] Right panel collapse/expand: fix so the panel actually collapses to a thin strip and expands back reliably
