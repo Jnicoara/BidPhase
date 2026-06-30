@@ -42,7 +42,7 @@ import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
   Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Link2, Trash2, Pencil, Check, X, Undo2, Save,
+  Link2, Trash2, Pencil, Check, X, Undo2,
 } from "lucide-react";
 import type { CatalogItem } from "@/lib/materialCatalog";
 import type { SavedMaterialRow } from "@/contexts/AppContext";
@@ -1148,6 +1148,7 @@ function CivilEditor({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [countSessionsOpen, setCountSessionsOpen] = useState(true);
+  const [runsOpen, setRunsOpen] = useState(true);
   const [countModeRequest, setCountModeRequest] = useState(0);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
@@ -1459,8 +1460,19 @@ function CivilEditor({
             onPinAdded={handleCountPinAdded}
             onPinRemoved={handleCountPinRemoved}
             onClearPagePins={handleClearPageCountPins}
-            onUnitCountToggle={(open) => setCountSessionsOpen(open)}
+            onUnitCountToggle={(open) => {
+              setCountSessionsOpen(open);
+              // When Unit Count opens, collapse Runs to give it space
+              if (open) setRunsOpen(false);
+            }}
             countModeRequest={countModeRequest}
+            onMeasureStart={() => {
+              // Switch right panel to Runs tab, collapse Unit Count
+              setRunsOpen(true);
+              setCountSessionsOpen(false);
+              // Expand the right panel if it was collapsed
+              if (rightPanelCollapsed) toggleRightPanel();
+            }}
             onRequestCountSession={() => {
               // Bootstrap a session if none exists (mirrors right-panel Start Counting behavior)
               if (countSessions.length === 0) {
@@ -1477,6 +1489,7 @@ function CivilEditor({
                 updateSessions(countSessions, countSessions[0].id);
               }
               setCountSessionsOpen(true);
+              setRunsOpen(false);
             }}
           />
         </ResizablePanel>
@@ -1608,13 +1621,8 @@ function CivilEditor({
                             </>
                           ) : (
                             <>
-                              <button
-                                title="Save to Labor & Material"
-                                onClick={(e) => { e.stopPropagation(); handleSaveCountToLM(cs); }}
-                                className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#F5C518] text-black text-[10px] font-bold hover:bg-[#F5C518]/80 active:scale-95 transition-all shrink-0"
-                              ><Save size={10} /><span>Save to L&amp;M</span></button>
-                              <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }} className="text-muted-foreground hover:text-foreground"><Pencil size={11} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive"><Trash2 size={11} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }} className="text-muted-foreground hover:text-foreground" title="Rename session"><Pencil size={11} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive" title="Delete session"><Trash2 size={11} /></button>
                             </>
                           )}
                         </div>
@@ -1636,30 +1644,12 @@ function CivilEditor({
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                       Active: <span className="text-foreground">{activeCountSession.name}</span>
                     </p>
-                    {/* Color picker — condensed single row, no label */}
-                    <div>
-                      <div className="flex gap-1 items-center">
-                        {PIN_COLORS.map((c) => (
-                          <button key={c.hex} title={c.label}
-                            onClick={() => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: c.hex } : cs))}
-                            className={cn("w-5 h-5 rounded-full border-2 transition-all shrink-0", activeCountSession.color === c.hex ? "border-white scale-110" : "border-transparent hover:border-white/50")}
-                            style={{ backgroundColor: c.hex }} />
-                        ))}
-                        <label className="relative w-5 h-5 rounded-full overflow-hidden border-2 border-dashed border-border hover:border-white/50 cursor-pointer shrink-0" title="Custom color">
-                          <input type="color" value={activeCountSession.color}
-                            onChange={(e) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: e.target.value } : cs))}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-                          <span className="flex items-center justify-center w-full h-full text-[8px] text-muted-foreground">+</span>
-                        </label>
-                        {/* Active color swatch preview */}
-                        <span className="ml-auto w-5 h-5 rounded border border-border/50 shrink-0" style={{ backgroundColor: activeCountSession.color }} title={activeCountSession.color} />
-                      </div>
-                    </div>
-                    {/* Shape picker */}
-                    <CivilShapeSelector
-                      activeIconId={activeCountSession.iconId}
-                      activeColor={activeCountSession.color}
-                      onSelect={(id) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, iconId: id } : cs))}
+                    {/* Compact color + shape row — single line */}
+                    <CompactCountConfig
+                      color={activeCountSession.color}
+                      iconId={activeCountSession.iconId}
+                      onColorChange={(hex) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: hex } : cs))}
+                      onShapeChange={(id) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, iconId: id } : cs))}
                     />
                     {/* Undo last pin on current page */}
                     <div className="pt-1 border-t border-border/50">
@@ -1692,25 +1682,37 @@ function CivilEditor({
                 </div>}
               </div>
 
-            {/* Runs section header with page-scoped clear */}
-            <div className="flex items-center justify-between px-4 pt-3 pb-1 shrink-0">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                Runs — Page {activePage}
-              </span>
-              {pageRuns.length > 0 && (
-                <button
-                  onClick={() => setConfirmClear({ type: "page-runs" })}
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors px-1.5 py-0.5 rounded hover:bg-destructive/10"
-                  title={`Clear all runs on page ${activePage}`}
-                >
-                  <Trash2 size={10} />
-                  Clear page
-                </button>
-              )}
+            <div className="flex flex-col">
+            {/* Runs section header — collapsible */}
+            <div className="bp-card overflow-hidden shrink-0">
+              <button
+                onClick={() => setRunsOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+              >
+                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  Runs — Page {activePage}
+                  {pageRuns.length > 0 && (
+                    <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{pageRuns.length} run{pageRuns.length !== 1 ? 's' : ''}</span>
+                  )}
+                </h2>
+                <div className="flex items-center gap-2">
+                  {runsOpen && pageRuns.length > 0 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setConfirmClear({ type: "page-runs" }); }}
+                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors px-1.5 py-0.5 rounded hover:bg-destructive/10"
+                      title={`Clear all runs on page ${activePage}`}
+                    >
+                      <Trash2 size={10} />
+                      Clear page
+                    </button>
+                  )}
+                  {runsOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+                </div>
+              </button>
             </div>
 
             {/* Runs list */}
-            <div className="flex-1 overflow-auto p-4 pt-2 pb-24 space-y-4">
+            {runsOpen && <div className="flex-1 overflow-auto p-4 pt-2 pb-24 space-y-4">
               {pageRuns.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
@@ -1755,6 +1757,7 @@ function CivilEditor({
                 </div>
               )}
 
+            </div>}
             </div>
           </div>
         </ResizablePanel>
@@ -1941,6 +1944,131 @@ function CivilShapeSelector({
                   </svg>
                   <span className={cn(
                     "text-[8px] font-medium leading-none",
+                    isActive ? "text-[#F5C518]" : "text-muted-foreground"
+                  )}>{SIZE_LABELS[sizeKey]}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+// ─── CompactCountConfig ──────────────────────────────────────────────────────
+// Single-row color + shape selector that replaces the separate pickers
+function CompactCountConfig({
+  color,
+  iconId,
+  onColorChange,
+  onShapeChange,
+}: {
+  color: string;
+  iconId: string;
+  onColorChange: (hex: string) => void;
+  onShapeChange: (id: PinShape) => void;
+}) {
+  const [expandedCat, setExpandedCat] = React.useState<string | null>(() => {
+    const active = COUNT_ICONS.find((ic) => ic.id === iconId);
+    return active?.category ?? null;
+  });
+
+  const toggleCat = (cat: string) =>
+    setExpandedCat((prev) => (prev === cat ? null : cat));
+
+  return (
+    <div className="space-y-1.5">
+      {/* Single row: color swatches | divider | shape family icons */}
+      <div className="flex items-center gap-1">
+        {/* Color swatches — compact */}
+        {PIN_COLORS.map((c) => (
+          <button
+            key={c.hex}
+            title={c.label}
+            onClick={() => onColorChange(c.hex)}
+            className={cn(
+              "w-4 h-4 rounded-full border-2 transition-all shrink-0",
+              color === c.hex ? "border-white scale-110" : "border-transparent hover:border-white/50"
+            )}
+            style={{ backgroundColor: c.hex }}
+          />
+        ))}
+        {/* Custom color */}
+        <label className="relative w-4 h-4 rounded-full overflow-hidden border border-dashed border-border hover:border-white/50 cursor-pointer shrink-0" title="Custom color">
+          <input type="color" value={color} onChange={(e) => onColorChange(e.target.value)}
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+          <span className="flex items-center justify-center w-full h-full text-[7px] text-muted-foreground">+</span>
+        </label>
+
+        <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
+
+        {/* Shape family icons */}
+        {ICON_CATEGORIES.map((cat) => {
+          const icons = COUNT_ICONS.filter((ic) => ic.category === cat);
+          const repIcon = icons.find((ic) => ic.id.endsWith("-md")) ?? icons[0];
+          const isExpanded = expandedCat === cat;
+          const activeInCat = icons.some((ic) => ic.id === iconId);
+          return (
+            <button
+              key={cat}
+              onClick={() => toggleCat(cat)}
+              title={cat}
+              className={cn(
+                "w-7 h-7 flex items-center justify-center rounded border transition-all shrink-0",
+                isExpanded
+                  ? "border-[#F5C518] bg-[#F5C518]/15"
+                  : activeInCat
+                    ? "border-[#F5C518]/40 bg-[#F5C518]/5"
+                    : "border-border/50 bg-muted/10 hover:border-border hover:bg-muted/20"
+              )}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+                {repIcon.paths.map((seg, pi) => (
+                  <path key={pi} d={seg.d}
+                    fill={seg.strokeOnly ? "none" : (activeInCat ? color : "currentColor")}
+                    stroke={activeInCat ? color : "currentColor"}
+                    strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                ))}
+              </svg>
+            </button>
+          );
+        })}
+
+        {/* Active color swatch preview */}
+        <span className="ml-auto w-4 h-4 rounded border border-border/50 shrink-0" style={{ backgroundColor: color }} />
+      </div>
+
+      {/* Expanded size row */}
+      {expandedCat && (() => {
+        const icons = COUNT_ICONS.filter((ic) => ic.category === expandedCat);
+        return (
+          <div className="flex gap-1 px-0.5">
+            {icons.map((icon) => {
+              const sizeKey = icon.id.split("-")[1] ?? "md";
+              const isActive = iconId === icon.id;
+              return (
+                <button
+                  key={icon.id}
+                  onClick={() => onShapeChange(icon.id)}
+                  title={`${expandedCat} ${SIZE_LABELS[sizeKey]}`}
+                  className={cn(
+                    "flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded border transition-all",
+                    isActive
+                      ? "border-[#F5C518] bg-[#F5C518]/15"
+                      : "border-border/50 bg-muted/10 hover:border-[#F5C518]/40 hover:bg-[#F5C518]/5"
+                  )}
+                >
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+                    {icon.paths.map((seg, pi) => (
+                      <path key={pi} d={seg.d}
+                        fill={seg.strokeOnly ? "none" : (isActive ? color : "currentColor")}
+                        stroke={isActive ? color : "currentColor"}
+                        strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                    ))}
+                  </svg>
+                  <span className={cn(
+                    "text-[7px] font-medium leading-none",
                     isActive ? "text-[#F5C518]" : "text-muted-foreground"
                   )}>{SIZE_LABELS[sizeKey]}</span>
                 </button>

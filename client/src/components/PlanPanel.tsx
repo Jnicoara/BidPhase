@@ -326,6 +326,8 @@ interface PlanPanelProps {
   countModeRequest?: number;
   /** Called when top toolbar Unit Count button is clicked — parent should bootstrap a session if none exists */
   onRequestCountSession?: () => void;
+  /** Called when user enters measure mode (Measure / Resume button clicked) */
+  onMeasureStart?: () => void;
 }
 
 export default function PlanPanel({
@@ -341,6 +343,7 @@ export default function PlanPanel({
   onUnitCountToggle,
   countModeRequest = 0,
   onRequestCountSession,
+  onMeasureStart,
 }: PlanPanelProps) {
   // ── PDF state (IndexedDB for large files) ──────────────────────────────────
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
@@ -1936,6 +1939,8 @@ export default function PlanPanel({
                 setShowScalePrompt(true);
                 return;
               }
+              // Notify parent to switch right panel to Runs tab
+              onMeasureStart?.();
               // If there's a paused run, resume it instead of creating a new one
               if (pausedRunId) {
                 const pausedRun = currentRuns.find(r => r.id === pausedRunId);
@@ -1973,6 +1978,36 @@ export default function PlanPanel({
           </Button>
         )}
 
+
+        {/* Unit Count button — enters count mode immediately */}
+        <Button
+          size="sm"
+          className={cn(
+            "h-7 text-xs px-2 shrink-0 transition-all",
+            mode === "count"
+              ? "bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
+              : ""
+          )}
+          variant={mode === "count" ? "default" : "outline"}
+          onClick={() => {
+            if (mode === "count") {
+              // Toggle off count mode
+              setMode("none");
+              modeRef.current = "none";
+              return;
+            }
+            // Bootstrap session if needed and enter count mode
+            onRequestCountSession?.();
+            setMode("count");
+            modeRef.current = "count";
+            toast.info("Unit Count: click to place a pin · right-click to remove.");
+          }}
+          disabled={!pdfFile}
+          title="Unit Count — click to place pins"
+        >
+          <Hash size={12} className="mr-1" />
+          Unit Count
+        </Button>
 
         <div className="w-px h-4 bg-border shrink-0" />
 

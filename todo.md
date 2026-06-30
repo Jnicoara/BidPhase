@@ -173,3 +173,12 @@
 - [x] Unit Count tab: condense color picker to a small swatch row (no labels, no expanded grid)
 - [x] Right panel: collapsible/minimizable with an easy expand button
 - [x] v5.4 cursor fixes: smooth overlay cursor (no lag), count mode dot cursor, count cursor color matches session, Reset Scale returns to dark inactive state
+
+## v5.6 — Unit Count UX & Panel Polish
+
+- [x] Allow unit counting before scale is set (remove scale gate from count mode)
+- [x] Remove "Save to Labor & Materials" button from Unit Count tab (redundant)
+- [x] Redesign shape + color selector: single compact inline row, less space
+- [x] Right panel: fully collapsible to a thin strip (like left sidebar), easy expand button
+- [x] Toolbar Runs button: switches right panel to Runs tab, collapses Unit Count tab
+- [x] Toolbar Unit Count button: switches right panel to Unit Count tab, starts counting immediately
