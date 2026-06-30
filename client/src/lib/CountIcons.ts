@@ -51,118 +51,118 @@ export const COUNT_ICONS: CountIconDef[] = [
   // ── Dots (solid filled) ───────────────────────────────────────────────────
   {
     id: "dot-sm",
-    label: "Dot SM",
+    label: "Dot",
     category: "Dots",
     paths: [{ d: "M13.5 12 a1.5 1.5 0 1 1 -3 0 a1.5 1.5 0 1 1 3 0 Z" }],
   },
   {
     id: "dot-md",
-    label: "Dot MD",
+    label: "Dot",
     category: "Dots",
     paths: [{ d: "M15 12 a3 3 0 1 1 -6 0 a3 3 0 1 1 6 0 Z" }],
   },
   {
     id: "dot-lg",
-    label: "Dot LG",
+    label: "Dot",
     category: "Dots",
     paths: [{ d: "M17 12 a5 5 0 1 1 -10 0 a5 5 0 1 1 10 0 Z" }],
   },
   {
     id: "dot-xl",
-    label: "Dot XL",
+    label: "Dot",
     category: "Dots",
     paths: [{ d: "M19 12 a7 7 0 1 1 -14 0 a7 7 0 1 1 14 0 Z" }],
   },
   // ── Circles (stroke-only rings) ───────────────────────────────────────────
   {
     id: "circle-sm",
-    label: "Circle SM",
+    label: "Circle",
     category: "Circles",
     paths: [{ d: "M17 12 a5 5 0 1 1 -10 0 a5 5 0 1 1 10 0 Z", strokeOnly: true, strokeWidth: 1.6 }],
   },
   {
     id: "circle-md",
-    label: "Circle MD",
+    label: "Circle",
     category: "Circles",
     paths: [{ d: "M19 12 a7 7 0 1 1 -14 0 a7 7 0 1 1 14 0 Z", strokeOnly: true, strokeWidth: 1.8 }],
   },
   {
     id: "circle-lg",
-    label: "Circle LG",
+    label: "Circle",
     category: "Circles",
     paths: [{ d: "M21 12 a9 9 0 1 1 -18 0 a9 9 0 1 1 18 0 Z", strokeOnly: true, strokeWidth: 1.8 }],
   },
   {
     id: "circle-xl",
-    label: "Circle XL",
+    label: "Circle",
     category: "Circles",
     paths: [{ d: "M23.5 12 a11.5 11.5 0 1 1 -23 0 a11.5 11.5 0 1 1 23 0 Z", strokeOnly: true, strokeWidth: 2 }],
   },
   // ── Squares (stroke-only) ─────────────────────────────────────────────────
   {
     id: "square-sm",
-    label: "Square SM",
+    label: "Square",
     category: "Squares",
     paths: [{ d: "M8 8 h8 v8 h-8 Z", strokeOnly: true, strokeWidth: 1.6 }],
   },
   {
     id: "square-md",
-    label: "Square MD",
+    label: "Square",
     category: "Squares",
     paths: [{ d: "M6 6 h12 v12 h-12 Z", strokeOnly: true, strokeWidth: 1.8 }],
   },
   {
     id: "square-lg",
-    label: "Square LG",
+    label: "Square",
     category: "Squares",
     paths: [{ d: "M4 4 h16 v16 h-16 Z", strokeOnly: true, strokeWidth: 2 }],
   },
   {
     id: "square-xl",
-    label: "Square XL",
+    label: "Square",
     category: "Squares",
     paths: [{ d: "M2 2 h20 v20 h-20 Z", strokeOnly: true, strokeWidth: 2.2 }],
   },
   // ── Triangles (stroke-only) ───────────────────────────────────────────────
   {
     id: "triangle-sm",
-    label: "Triangle SM",
+    label: "Triangle",
     category: "Triangles",
     paths: [{ d: "M12 7 L18 18 L6 18 Z", strokeOnly: true, strokeWidth: 1.6 }],
   },
   {
     id: "triangle-md",
-    label: "Triangle MD",
+    label: "Triangle",
     category: "Triangles",
     paths: [{ d: "M12 4 L20 19 L4 19 Z", strokeOnly: true, strokeWidth: 1.8 }],
   },
   {
     id: "triangle-lg",
-    label: "Triangle LG",
+    label: "Triangle",
     category: "Triangles",
     paths: [{ d: "M12 2 L22 21 L2 21 Z", strokeOnly: true, strokeWidth: 2 }],
   },
   {
     id: "triangle-xl",
-    label: "Triangle XL",
+    label: "Triangle",
     category: "Triangles",
     paths: [{ d: "M12 0.5 L23.5 23 L0.5 23 Z", strokeOnly: true, strokeWidth: 2.2 }],
   },
 ];
 
-/** Default high-visibility pin colors */
+/** Pin colors — harmonized with app palette, still clearly distinguishable */
 export const PIN_COLORS = [
-  { label: "Neon Green", hex: "#39FF14" },
-  { label: "Cyan",       hex: "#00CFFF" },
-  { label: "Magenta",    hex: "#FF3FD4" },
-  { label: "Yellow",     hex: "#FFE600" },
-  { label: "Orange",     hex: "#FF6B00" },
-  { label: "Purple",     hex: "#BF5FFF" },
-  { label: "Red",        hex: "#FF4444" },
-  { label: "Teal",       hex: "#00FFD1" },
-  { label: "White",      hex: "#FFFFFF" },
-  { label: "Gold",       hex: "#F5C518" },
+  { label: "Amber",      hex: "#FBBF24" },
+  { label: "Sky",        hex: "#38BDF8" },
+  { label: "Emerald",    hex: "#34D399" },
+  { label: "Violet",     hex: "#A78BFA" },
+  { label: "Orange",     hex: "#F97316" },
+  { label: "Pink",       hex: "#F472B6" },
+  { label: "Blue",       hex: "#60A5FA" },
+  { label: "Green",      hex: "#4ADE80" },
+  { label: "Indigo",     hex: "#818CF8" },
+  { label: "Peach",      hex: "#FB923C" },
 ];
 
 export const DEFAULT_ICON_ID: PinShape = "dot-md";
-export const DEFAULT_PIN_COLOR = "#39FF14";
+export const DEFAULT_PIN_COLOR = "#FBBF24";

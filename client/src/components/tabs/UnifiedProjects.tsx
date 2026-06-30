@@ -186,25 +186,20 @@ export function ElectricalIcon({ size = 20, className = "" }: { size?: number; c
   );
 }
 
-// ── Electrical Panel icon — minimalist breaker box (used in sidebar) ─────────────
-// Outer enclosure + horizontal bus bar + two rows of breaker slots
+// ── Projects icon — folder with blueprint grid inside (matches early-phase icon style) ─────────
 export function ElectricalPanelIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
       className={className}>
-      {/* Enclosure */}
-      <rect x="3" y="2" width="18" height="20" rx="1.5" />
-      {/* Center bus bar */}
-      <line x1="12" y1="4" x2="12" y2="20" />
-      {/* Left breaker slots */}
-      <rect x="4.5" y="5.5" width="6" height="2.5" rx="0.5" />
-      <rect x="4.5" y="10" width="6" height="2.5" rx="0.5" />
-      <rect x="4.5" y="14.5" width="6" height="2.5" rx="0.5" />
-      {/* Right breaker slots */}
-      <rect x="13.5" y="5.5" width="6" height="2.5" rx="0.5" />
-      <rect x="13.5" y="10" width="6" height="2.5" rx="0.5" />
-      <rect x="13.5" y="14.5" width="6" height="2.5" rx="0.5" />
+      {/* Folder tab */}
+      <path d="M2 7.5C2 6.67 2.67 6 3.5 6H9l2 2h9.5c.83 0 1.5.67 1.5 1.5V18c0 .83-.67 1.5-1.5 1.5h-17C2.67 19.5 2 18.83 2 18V7.5Z" />
+      {/* Blueprint grid: horizontal rules */}
+      <line x1="6.5" y1="11.5" x2="17.5" y2="11.5" />
+      <line x1="6.5" y1="14.5" x2="17.5" y2="14.5" />
+      <line x1="6.5" y1="17" x2="13" y2="17" />
+      {/* Blueprint grid: vertical rule */}
+      <line x1="11" y1="10" x2="11" y2="17.5" />
     </svg>
   );
 }

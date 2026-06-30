@@ -241,7 +241,7 @@ export default function BidPhaseShell() {
             onClick={() => navigate("civil")}
             isActive={isInCategory}
             icon={ElectricalPanelIcon}
-            label="Electrical"
+            label="Projects"
           />
 
           {/* Estimate Engine — hidden for now, backend intact */}
@@ -325,7 +325,7 @@ export default function BidPhaseShell() {
           )}
         >
           <ElectricalPanelIcon size={18} className={isInCategory ? "text-[#F5C518]" : ""} />
-          <span className="text-[9px]">Electrical</span>
+          <span className="text-[9px]">Projects</span>
           {isInCategory && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
         </button>
         {/* Estimate Engine mobile button — hidden for now */}

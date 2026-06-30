@@ -125,3 +125,12 @@
 - [x] Fix projectsRouter: remove old 4-category enum, hardcode "electrical" category
 - [x] Push DB migration (0002_chunky_adam_warlock.sql) — 7 tables dropped
 - [x] Schema now has 3 tables: users, projects, user_materials_db
+
+## v5.0 — UI Polish Round 3
+
+- [x] Remove Unit Count button from top toolbar (redundant with right panel)
+- [x] Fix Set Scale toggle: yellow = scale mode active/editable, dark = locked; clicking again saves previous scale (no toggle off)
+- [x] Scale pin shape numbers with shape size (larger shapes get larger font numbers)
+- [x] Harmonize run colors and pin colors to vibe with app dark palette while staying distinguishable
+- [x] Rename "Electrical" sidebar entry to "Projects" with a new clean icon matching early-phase icon style
+- [x] Homepage improvement suggestions delivered to user

@@ -103,16 +103,16 @@ const PAGE_GUTTER = 400;
 
 // 10 vibrant base colors for the color picker palette
 const BASE_PALETTE = [
-  "#00FF88", // neon green
-  "#00CFFF", // electric cyan
-  "#FF6B00", // vivid orange
-  "#FF3FD4", // hot magenta
-  "#FFE600", // bright yellow
-  "#BF5FFF", // vivid violet
-  "#FF4444", // neon red
-  "#00FFD1", // aqua mint
-  "#FF9900", // amber
-  "#39FF14", // electric lime
+  "#60A5FA", // soft blue
+  "#34D399", // emerald green
+  "#F97316", // warm orange
+  "#A78BFA", // soft violet
+  "#FBBF24", // amber gold
+  "#38BDF8", // sky blue
+  "#F472B6", // soft pink
+  "#4ADE80", // light green
+  "#FB923C", // peach orange
+  "#818CF8", // indigo
 ];
 // Legacy alias so any remaining RUN_COLORS refs still compile
 const RUN_COLORS = BASE_PALETTE;
@@ -919,14 +919,35 @@ export default function PlanPanel({
       ctx.shadowBlur = 0;
       ctx.restore();
 
-      // Small index badge below the pin — fixed 8px font regardless of zoom
-      const iconSize = 24 * S; // constant offset from pin center
-      const badgeSize = Math.round(8 * S); // 8 screen px font
+      // Index badge below the pin — font size scales with the shape size
+      // Compute the visual radius of the shape so the number sits just below it
+      const shapeRadius = (() => {
+        if (shape === "dot-sm") return DOT_SM;
+        if (shape === "dot-md") return DOT_MD;
+        if (shape === "dot-lg") return DOT_LG;
+        if (shape === "dot-xl") return DOT_XL;
+        if (shape === "circle-sm") return CIR_SM;
+        if (shape === "circle-md") return CIR_MD;
+        if (shape === "circle-lg") return CIR_LG;
+        if (shape === "circle-xl") return CIR_XL;
+        if (shape === "square-sm") return SQ_SM;
+        if (shape === "square-md") return SQ_MD;
+        if (shape === "square-lg") return SQ_LG;
+        if (shape === "square-xl") return SQ_XL;
+        if (shape === "triangle-sm") return TRI_SM;
+        if (shape === "triangle-md") return TRI_MD;
+        if (shape === "triangle-lg") return TRI_LG;
+        if (shape === "triangle-xl") return TRI_XL;
+        return DOT_MD; // fallback
+      })();
+      // Badge font: 6px for SM, 8px for MD, 10px for LG, 12px for XL (in screen px)
+      const badgePx = shape.endsWith("-sm") ? 6 : shape.endsWith("-md") ? 8 : shape.endsWith("-lg") ? 10 : 12;
+      const badgeSize = Math.round(badgePx * S);
       ctx.font = `bold ${badgeSize}px 'JetBrains Mono', monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.fillStyle = color;
-      ctx.fillText(String(idx + 1), px.x, px.y + iconSize / 2 + 2 * S);
+      ctx.fillText(String(idx + 1), px.x, px.y + shapeRadius + 2 * S);
     });
 
     // Draw all inactive runs first, then active on top
@@ -1742,44 +1763,55 @@ export default function PlanPanel({
 
         <div className="w-px h-4 bg-border shrink-0" />
 
-        {/* Scale group */}
-        <Button
-          size="sm"
-          className="h-7 text-xs px-2 shrink-0"
-          variant={mode === "set-scale-p1" || mode === "set-scale-p2" ? "default" : "outline"}
-          onClick={() => {
-            setScalePoints([]);
-            setMode("set-scale-p1");
-            modeRef.current = "set-scale-p1";
-            toast.info("Click the START of your known-distance reference line.");
-          }}
-          disabled={!pdfFile}
-          title="Set scale"
-        >
-          Set Scale
-        </Button>
-
-        {scaleRatio !== null && scaleRatio > 0 && (
-          <button
-            onClick={() => {
-              // Toggle back to set-scale mode to show/re-set the scale line
-              setMode("set-scale-p1");
-              modeRef.current = "set-scale-p1";
-              toast.info("Scale line is shown on the plan. Click to re-set, or press Esc to cancel.");
-            }}
-            className="text-[10px] font-mono text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded border border-yellow-400/30 shrink-0 hover:bg-yellow-400/20 transition-colors"
-            title="Scale is set — click to view or re-set"
-          >
-            {(() => {
-              const entry = pageScaleMap[pageIdx];
-              if (!entry?.knownFt || !entry?.pxDist) return "✓ Scale set";
-              // 72 PDF pts/in × BASE_DPI (1.5) × RENDER_BASE_ZOOM (1.5) = 162 canvas px/in
-              const ftPerIn = (162 * entry.knownFt) / entry.pxDist;
-              const rounded = ftPerIn >= 10 ? Math.round(ftPerIn) : Math.round(ftPerIn * 2) / 2;
-              return `Ref: ${entry.knownFt} ft  ·  1 in = ${rounded} ft`;
-            })()}
-          </button>
-        )}
+                {/* Scale group — yellow when editing, dark/locked when set */}
+        {(() => {
+          const isEditingScale = mode === "set-scale-p1" || mode === "set-scale-p2";
+          const entry = pageScaleMap[pageIdx];
+          const hasScale = scaleRatio !== null && scaleRatio > 0;
+          const scaleLabel = (() => {
+            if (!entry?.knownFt || !entry?.pxDist) return hasScale ? "✓ Scale set" : "Set Scale";
+            const ftPerIn = (162 * entry.knownFt) / entry.pxDist;
+            const rounded = ftPerIn >= 10 ? Math.round(ftPerIn) : Math.round(ftPerIn * 2) / 2;
+            return `${entry.knownFt} ft ref  ·  1 in = ${rounded} ft`;
+          })();
+          return (
+            <Button
+              size="sm"
+              className={cn(
+                "h-7 text-xs px-2 shrink-0 transition-all",
+                isEditingScale
+                  ? "bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
+                  : hasScale
+                    ? "bg-muted/40 text-muted-foreground border-border hover:bg-muted/60"
+                    : ""
+              )}
+              variant={isEditingScale ? "default" : "outline"}
+              onClick={() => {
+                if (isEditingScale) {
+                  // Cancel back to locked state (keep previous scale if any)
+                  setScalePoints([]);
+                  setMode("none");
+                  modeRef.current = "none";
+                  toast.info("Scale edit cancelled.");
+                } else {
+                  // Enter edit mode
+                  setScalePoints([]);
+                  setMode("set-scale-p1");
+                  modeRef.current = "set-scale-p1";
+                  toast.info(hasScale ? "Re-setting scale — click the START of your reference line." : "Click the START of your known-distance reference line.");
+                }
+              }}
+              disabled={!pdfFile}
+              title={isEditingScale ? "Cancel scale edit" : hasScale ? "Scale locked — click to re-set" : "Set scale"}
+            >
+              {isEditingScale ? (
+                <><Pencil size={11} className="mr-1" />Setting Scale…</>
+              ) : (
+                scaleLabel
+              )}
+            </Button>
+          );
+        })()}
 
         {mode === "set-scale-p2" && scalePoints.length >= 2 && (
           <div className="flex items-center gap-1 shrink-0">
@@ -1847,42 +1879,6 @@ export default function PlanPanel({
           {mode === "measure" ? "Done" : "Measure"}
         </Button>
 
-        {/* Unit Count toggle */}
-        <Button
-          size="sm"
-          className="h-7 text-xs px-2 shrink-0"
-          variant={mode === "count" ? "default" : "outline"}
-          onClick={() => {
-            if (mode === "count") {
-              setMode("none");
-              modeRef.current = "none";
-              onUnitCountToggle?.(false);
-              toast.info("Unit Count off.");
-            } else {
-              // If currently measuring, pause the run so we can resume later
-              if (modeRef.current === "measure") {
-                setPausedRunId(currentActiveRunId || null);
-                toast.info("Run paused — click Measure to resume where you left off.");
-              }
-              // Ask parent to bootstrap a session if none exists, then activate count mode
-              onRequestCountSession?.();
-              setMode("count");
-              modeRef.current = "count";
-              onUnitCountToggle?.(true);
-              toast.info("Unit Count: click to place a pin · right-click to remove.");
-            }
-          }}
-          disabled={!pdfFile}
-          title="Unit Count — click to place a pin, right-click to remove"
-        >
-          <Hash size={12} className="mr-1" />
-          Unit Count
-          {currentPins.length > 0 && (
-            <span className="ml-1 px-1 rounded-full text-[9px] font-mono bg-[#F5C518] text-black">
-              {currentPins.length}
-            </span>
-          )}
-        </Button>
 
         <div className="w-px h-4 bg-border shrink-0" />
 

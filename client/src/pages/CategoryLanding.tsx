@@ -2,7 +2,7 @@
  * BidPhase — Category Landing Page
  *
  * Design: Tactical Dark Mode SaaS, Safety Yellow (#F5C518) accent.
- * - Single "Electrical" card combines all 4 legacy categories
+ * - Single "Projects" card combines all 4 legacy categories
  * - Backend data models unchanged
  */
 import { useApp } from "@/contexts/AppContext";
@@ -51,7 +51,7 @@ export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil"
         </p>
       </div>
 
-      {/* ── Single Electrical card ────────────────────────────────────────────────────────────────────────────────────── */}
+      {/* ── Single Projects card ────────────────────────────────────────────────────────────────────────────────────── */}
       <div className="flex-1 flex items-center justify-center px-8">
         <button
           onClick={handleElectricalSelect}
@@ -71,7 +71,7 @@ export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil"
               className="text-3xl font-bold text-foreground group-hover:text-[#F5C518] transition-colors duration-200"
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
             >
-              Electrical
+              Projects
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
               Residential · Commercial · Industrial · Infrastructure
