@@ -1147,11 +1147,11 @@ function CivilEditor({
   const [newSessionName, setNewSessionName] = useState("");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  // Single activeSection drives the accordion — only one section open at a time
-  type RightSection = "count" | "runs" | "materials";
+  // Single activeSection drives the accordion — only one section open at a time; null = all closed
+  type RightSection = "count" | "runs" | "materials" | null;
   const [activeSection, setActiveSection] = useState<RightSection>("runs");
   const countSessionsOpen = activeSection === "count";
-  const setCountSessionsOpen = (open: boolean) => setActiveSection(open ? "count" : "runs");
+  const setCountSessionsOpen = (open: boolean) => setActiveSection(open ? "count" : null);
   const [countModeRequest, setCountModeRequest] = useState(0);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
@@ -1164,6 +1164,13 @@ function CivilEditor({
     } else {
       rp.collapse();
     }
+  };
+
+  const resetRightPanelSize = () => {
+    const rp = rightPanelRef.current;
+    if (!rp) return;
+    // Resize back to the default 40% width
+    rp.resize(40);
   };
 
   const updateSessions = useCallback(
@@ -1509,11 +1516,18 @@ function CivilEditor({
           <div className="flex flex-col h-full overflow-hidden">
             {/* ── Thin strip shown when panel is collapsed ── */}
             {rightPanelCollapsed && (
-              <div className="flex flex-col items-center justify-center h-full gap-3 bg-card border-l border-border cursor-pointer" onClick={toggleRightPanel} title="Expand panel">
-                <div className="w-6 h-6 rounded bg-[#F5C518]/15 flex items-center justify-center">
-                  <span className="font-bold text-[#F5C518] text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+              <div
+                className="flex flex-col items-center justify-start h-full py-4 bg-card border-l border-border cursor-pointer hover:bg-[#F5C518]/5 transition-colors"
+                onClick={toggleRightPanel}
+                title="Expand panel"
+              >
+                {/* BP badge + chevron as visual affordance */}
+                <div className="flex flex-col items-center gap-1.5 w-full px-1">
+                  <div className="w-6 h-6 rounded bg-[#F5C518]/15 flex items-center justify-center">
+                    <span className="font-bold text-[#F5C518] text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+                  </div>
+                  <ChevronLeft size={13} className="text-[#F5C518]" />
                 </div>
-                <ChevronLeft size={12} className="text-muted-foreground" />
               </div>
             )}
 
@@ -1534,6 +1548,18 @@ function CivilEditor({
                     <span className="shrink-0 text-xs font-mono px-2 py-0.5 rounded bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30">
                       Pg {activePage}
                     </span>
+                    {/* Reset size button */}
+                    <button
+                      onClick={resetRightPanelSize}
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-[#F5C518] hover:bg-[#F5C518]/10 transition-colors"
+                      title="Reset panel to default size"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <line x1="9" y1="3" x2="9" y2="21" />
+                      </svg>
+                    </button>
+                    {/* Collapse button */}
                     <button
                       onClick={toggleRightPanel}
                       className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors"
@@ -1550,7 +1576,7 @@ function CivilEditor({
                   {/* ── RUNS accordion ── */}
                   <div className="bp-card overflow-hidden">
                     <button
-                      onClick={() => setActiveSection("runs")}
+                      onClick={() => setActiveSection(activeSection === "runs" ? null : "runs")}
                       className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
                     >
                       <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>

@@ -197,3 +197,10 @@
 - [x] Material search bar: restore visibility under Unit Count section
 - [x] Right panel sections: mutually exclusive accordions (Runs / Unit Count / Materials) — clicking one collapses the others
 - [x] Right panel collapse/expand: fix so the panel actually collapses to a thin strip and expands back reliably
+
+## v5.9 — Panel & Cursor Polish
+
+- [x] Right panel thin strip: add a visible expand button/chevron so user can click anywhere on the strip to restore the panel
+- [x] Right panel header: add a reset-size button to snap the panel back to default 40% width after user drags the divider
+- [x] Runs accordion: make it collapsible — clicking the header when Runs is already open should collapse it (not just stay open)
+- [x] Cursor: always yellow (#F5C518) in both count mode and measure mode — no run-color matching for the dot or crosshair lines

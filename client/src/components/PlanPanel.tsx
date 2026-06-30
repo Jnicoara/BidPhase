@@ -494,13 +494,13 @@ export default function PlanPanel({
   const [isPanning, setIsPanning] = useState(false);
 
     // ── Dynamic color-matched cursor ──────────────────────────────────────────────
-  // Color for the overlay cursor dot — matches active run, count session, or scale (yellow)
+  // Color for the overlay cursor dot — always yellow in scale, measure, and count modes
   const activeCursorColor = useMemo(() => {
-    if (mode === "set-scale-p1" || mode === "set-scale-p2") return "#F5C518"; // scale = yellow
-    if (mode === "measure") return activeRunColor; // run-point dropping = run color
-    if (mode === "count") return activeCountSession?.color ?? "#F5C518"; // count = session color
+    if (mode === "set-scale-p1" || mode === "set-scale-p2") return "#F5C518";
+    if (mode === "measure") return "#F5C518";
+    if (mode === "count") return "#F5C518";
     return null; // no custom cursor needed
-  }, [mode, activeRunColor, activeCountSession]);
+  }, [mode]);
   // mousePos for the smooth pointer-events:none overlay cursor (no browser cursor lag)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   // ── Full-screen crosshair overlay state ──────────────────────────────────
@@ -1023,10 +1023,8 @@ export default function PlanPanel({
     // Color: yellow for scale mode, active run color for measure mode.
     if (crosshair) {
       const { x, y } = crosshair;
-      const lineColor = (modeRef.current === "set-scale-p1" || modeRef.current === "set-scale-p2")
-        ? "#F5C518"
-        : activeRunColor;
-      const hex = lineColor ?? "#F5C518";
+      // Crosshair lines are always yellow regardless of mode
+      const hex = "#F5C518";
       // Parse hex to rgb for rgba usage
       const r = parseInt(hex.slice(1, 3), 16);
       const g = parseInt(hex.slice(3, 5), 16);
