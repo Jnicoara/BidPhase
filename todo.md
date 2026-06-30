@@ -115,3 +115,13 @@
 - [x] Unit Count: add collapsible dropdown per shape (expand/collapse on click)
 - [x] Fix material search bar (hidden/not working in Unit Count section)
 - [x] Make Unit Count tab itself collapsible (click tab to collapse/expand the whole panel)
+
+## v4.9 — Backend Cleanup
+
+- [x] Remove unused DB tables: count_sessions, estimate_sessions, material_rows, plan_images, user_api_connectors, user_assemblies, user_labor_standards
+- [x] Remove dead router procedures: laborStandards, apiConnectors from dataRouter
+- [x] Remove dead DB helper functions for all removed tables from server/db.ts
+- [x] Clean up DataConnectorsPanel: remove LaborStandardsTab and ApiConnectorsTab, keep only MaterialsTab
+- [x] Fix projectsRouter: remove old 4-category enum, hardcode "electrical" category
+- [x] Push DB migration (0002_chunky_adam_warlock.sql) — 7 tables dropped
+- [x] Schema now has 3 tables: users, projects, user_materials_db

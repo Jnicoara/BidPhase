@@ -23,7 +23,6 @@ export const projectsRouter = router({
     .input(
       z.object({
         name: z.string().min(1).max(255),
-        category: z.enum(["residential", "commercial", "industrial", "infrastructure"]).default("commercial"),
         description: z.string().max(2000).optional(),
       })
     )
@@ -31,20 +30,19 @@ export const projectsRouter = router({
       await db.createProject({
         userId: ctx.user.id,
         name: input.name,
-        category: input.category,
+        category: "electrical",
         description: input.description ?? null,
       });
       const projects = await db.getProjectsByUser(ctx.user.id);
       return projects[0]; // most recently updated = just created
     }),
 
-  /** Update project name, category, or description */
+  /** Update project name or description */
   update: protectedProcedure
     .input(
       z.object({
         id: z.number().int().positive(),
         name: z.string().min(1).max(255).optional(),
-        category: z.enum(["residential", "commercial", "industrial", "infrastructure"]).optional(),
         description: z.string().max(2000).optional(),
       })
     )

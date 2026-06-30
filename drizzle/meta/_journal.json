@@ -15,6 +15,13 @@
       "when": 1782767866852,
       "tag": "0001_square_wallflower",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1782798433092,
+      "tag": "0002_chunky_adam_warlock",
+      "breakpoints": true
     }
   ]
 }
