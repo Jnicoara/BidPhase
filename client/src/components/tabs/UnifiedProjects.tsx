@@ -1359,25 +1359,9 @@ function CivilEditor({
 
   const removeRun = (id: string) => {
     const remaining = runs.filter((r) => r.id !== id);
-    if (remaining.length === 0) {
-      // Auto-create a fresh Run 1 so measuring can continue immediately
-      const newRun: RunItem = {
-        id: `run-${Date.now().toString(36)}`,
-        name: "Run 1",
-        feet: 0,
-        conduitSize: "3/4",
-        conduitType: "EMT",
-        conductors: 3,
-        conductorMaterial: "CU",
-        conductorSize: "12",
-        runType: "conduit",
-        fittings: defaultFittings(),
-        numPullPoints: 2,
-      };
-      syncRuns([newRun]);
-    } else {
-      syncRuns(remaining);
-    }
+    // Renumber remaining runs sequentially (Run 1, Run 2, …)
+    const renumbered = remaining.map((r, i) => ({ ...r, name: `Run ${i + 1}` }));
+    syncRuns(renumbered);
   };
 
   // Called when a run is deleted from PlanPanel's run strip
@@ -1385,25 +1369,9 @@ function CivilEditor({
     (runName: string, pageNumber?: number) => {
       // If pageNumber is provided, only delete the run on that specific page
       const remaining = runs.filter((r) => !(r.name === runName && (pageNumber == null || r.pageNumber === pageNumber)));
-      if (remaining.length === 0) {
-        // Auto-create a fresh Run 1 so measuring can continue immediately
-        const newRun: RunItem = {
-          id: `run-${Date.now().toString(36)}`,
-          name: "Run 1",
-          feet: 0,
-          conduitSize: "3/4",
-          conduitType: "EMT",
-          conductors: 3,
-          conductorMaterial: "CU",
-          conductorSize: "12",
-          runType: "conduit",
-          fittings: defaultFittings(),
-          numPullPoints: 2,
-        };
-        syncRuns([newRun]);
-      } else {
-        syncRuns(remaining);
-      }
+      // Renumber remaining runs sequentially (Run 1, Run 2, …)
+      const renumbered = remaining.map((r, i) => ({ ...r, name: `Run ${i + 1}` }));
+      syncRuns(renumbered);
     },
     [runs, syncRuns]
   );
@@ -1570,13 +1538,8 @@ function CivilEditor({
                 <div className="w-6 h-6 rounded-md bg-[#F5C518]/15 flex items-center justify-center shrink-0">
                   <span className="font-bold text-[#F5C518] text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
                 </div>
-                {/* Single toggle button — same icon/style as the header button */}
-                <button
-                  className="w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/15 border border-[#F5C518]/40 text-[#F5C518] hover:bg-[#F5C518]/25 transition-colors shrink-0"
-                  title="Expand panel"
-                >
-                  <ChevronLeft size={13} />
-                </button>
+                {/* Expand chevron — the entire strip is clickable, this is just a visual cue */}
+                <ChevronLeft size={14} className="text-[#F5C518]" />
               </div>
             )}
 
