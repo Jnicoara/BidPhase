@@ -484,20 +484,15 @@ export default function PlanPanel({
   const [isPanning, setIsPanning] = useState(false);
 
     // ── Dynamic color-matched cursor ──────────────────────────────────────────────
-  // Generates a data-URI SVG crosshair in the active color so the cursor
-  // matches the line being drawn: yellow for scale/measure, run-color for runs.
+  // Color for the overlay cursor dot — matches active run, count session, or scale (yellow)
   const activeCursorColor = useMemo(() => {
     if (mode === "set-scale-p1" || mode === "set-scale-p2") return "#F5C518"; // scale = yellow
     if (mode === "measure") return activeRunColor; // run-point dropping = run color
+    if (mode === "count") return activeCountSession?.color ?? "#F5C518"; // count = session color
     return null; // no custom cursor needed
-  }, [mode, activeRunColor]);
-  const svgCursor = useMemo(() => {
-    if (!activeCursorColor) return undefined;
-    const c = encodeURIComponent(activeCursorColor);
-    // Dot cursor: small filled circle (no plus arms — crosshair lines are drawn on canvas)
-    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><circle cx='8' cy='8' r='4' fill='${c}' stroke='rgba(0,0,0,0.5)' stroke-width='1.5'/></svg>`;
-    return `url("data:image/svg+xml,${svg}") 8 8, crosshair`;
-  }, [activeCursorColor]);
+  }, [mode, activeRunColor, activeCountSession]);
+  // mousePos for the smooth pointer-events:none overlay cursor (no browser cursor lag)
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   // ── Full-screen crosshair overlay state ──────────────────────────────────
   const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
 
@@ -1486,7 +1481,7 @@ export default function PlanPanel({
 
   // ── Canvas mouse move (drag only) ────────────────────────────────────────
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (modeRef.current === "none") { setCrosshair(null); return; }
+    if (modeRef.current === "none") { setCrosshair(null); setMousePos(null); return; }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const scaleX = canvas.width  / canvas.offsetWidth;
@@ -1495,6 +1490,12 @@ export default function PlanPanel({
       x: e.nativeEvent.offsetX * scaleX,
       y: e.nativeEvent.offsetY * scaleY,
     });
+    // Track viewport-relative position for the smooth overlay cursor div
+    const viewport = viewportRef.current;
+    if (viewport) {
+      const rect = viewport.getBoundingClientRect();
+      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    }
   }, []);
 
   // ── Confirm scale ──────────────────────────────────────────────────────────
@@ -1828,16 +1829,16 @@ export default function PlanPanel({
                   modeRef.current = "none";
                   toast.info("Scale edit cancelled.");
                 } else if (hasScale) {
-                  // Confirm before resetting an existing scale
+                  // Confirm before resetting — returns to dark inactive state, NOT scale mode
                   setDeleteConfirm({
                     count: 0,
                     name: "scale",
                     onConfirm: () => {
                       setScalePoints([]);
                       setScaleRatio(null, undefined);
-                      setMode("set-scale-p1");
-                      modeRef.current = "set-scale-p1";
-                      toast.info("Scale reset — click the START of your reference line.");
+                      setMode("none");
+                      modeRef.current = "none";
+                      toast.info("Scale cleared. Press \"Set Scale\" when ready to re-measure.");
                     },
                   });
                 } else {
@@ -2039,6 +2040,31 @@ export default function PlanPanel({
           <Trash2 size={13} />
         </Button>
 
+        {/* Clear Page Counts — visible in count mode when there are pins on this page */}
+        {mode === "count" && currentPins.length > 0 && (
+          <Button
+            size="sm"
+            className="h-7 text-xs px-2 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            variant="ghost"
+            onClick={() => {
+              if (!activeCountSession) return;
+              const pinsOnPage = currentPins.length;
+              setDeleteConfirm({
+                count: pinsOnPage,
+                name: `all count pins on page ${currentPage}`,
+                onConfirm: () => {
+                  onClearPagePins?.(currentPage);
+                  toast.info(`Cleared ${pinsOnPage} pin${pinsOnPage !== 1 ? "s" : ""} on page ${currentPage}.`);
+                },
+              });
+            }}
+            title={`Clear all count pins on page ${currentPage}`}
+          >
+            <Trash2 size={11} className="mr-1" />
+            Clear page
+          </Button>
+        )}
+
         {/* Zoom — right-aligned */}
         <div className="ml-auto flex items-center gap-0 shrink-0">
           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={zoomOut} title="Zoom out (-)">
@@ -2222,7 +2248,7 @@ export default function PlanPanel({
         ref={viewportRef}
         className="flex-1 relative overflow-hidden"
         style={{
-          cursor: isPanning ? "grabbing" : svgCursor ?? (mode !== "none" ? "crosshair" : "grab"),
+          cursor: isPanning ? "grabbing" : activeCursorColor ? "none" : (mode !== "none" ? "crosshair" : "grab"),
         }}
         onContextMenu={(e) => { if (mode !== "count") e.preventDefault(); }}
         onMouseDown={(e) => {
@@ -2315,17 +2341,67 @@ export default function PlanPanel({
                     left: 0,
                     pointerEvents: "auto",
                     zIndex: 10,
-                    cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : mode === "none" ? "inherit" : (svgCursor ?? "crosshair"),
+                    cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : mode === "none" ? "inherit" : (activeCursorColor ? "none" : "crosshair"),
                   }}
                   onClick={handleCanvasClick}
                   onContextMenu={handleCanvasContextMenu}
                   onMouseMove={(e) => { handleCanvasMouseMove(e); handleCanvasDragMove(e); }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseUp={handleCanvasDragEnd}
-                  onMouseLeave={() => { handleCanvasDragEnd(); setCrosshair(null); }}
+                  onMouseLeave={() => { handleCanvasDragEnd(); setCrosshair(null); setMousePos(null); }}
                 />
               )}
             </div>
+          </div>
+        )}
+
+        {/* Smooth overlay cursor — pointer-events:none div that tracks mouse, GPU-composited, zero lag */}
+        {mousePos && activeCursorColor && !isPanning && (
+          <div
+            className="absolute pointer-events-none z-[50]"
+            style={{
+              left: mousePos.x,
+              top: mousePos.y,
+              transform: "translate(-50%, -50%)",
+              willChange: "transform",
+            }}
+          >
+            {/* Dot */}
+            <div
+              className="absolute rounded-full"
+              style={{
+                width: 10,
+                height: 10,
+                left: -5,
+                top: -5,
+                backgroundColor: activeCursorColor,
+                boxShadow: "0 0 0 1.5px rgba(0,0,0,0.5)",
+              }}
+            />
+            {/* Horizontal hairline */}
+            <div
+              className="absolute"
+              style={{
+                width: 20,
+                height: 1,
+                left: -10,
+                top: -0.5,
+                backgroundColor: activeCursorColor,
+                opacity: 0.7,
+              }}
+            />
+            {/* Vertical hairline */}
+            <div
+              className="absolute"
+              style={{
+                width: 1,
+                height: 20,
+                left: -0.5,
+                top: -10,
+                backgroundColor: activeCursorColor,
+                opacity: 0.7,
+              }}
+            />
           </div>
         )}
       </div>

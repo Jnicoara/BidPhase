@@ -1557,17 +1557,6 @@ function CivilEditor({
                     )}
                   </h2>
                   <div className="flex items-center gap-2">
-                    {/* Clear page counts button — only shown when there are pins on this page */}
-                    {countSessions.some((cs) => cs.pins.some((p) => (p.pageNumber ?? 1) === activePage)) && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setConfirmClear({ type: "page-counts" }); }}
-                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors px-1.5 py-0.5 rounded hover:bg-destructive/10"
-                        title={`Clear all count pins on page ${activePage}`}
-                      >
-                        <Trash2 size={10} />
-                        Clear page
-                      </button>
-                    )}
                     {countSessionsOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
                   </div>
                 </button>
@@ -1647,23 +1636,23 @@ function CivilEditor({
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                       Active: <span className="text-foreground">{activeCountSession.name}</span>
                     </p>
-                    {/* Color picker */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-muted-foreground">Pin Color</Label>
-                      <div className="flex flex-wrap gap-1.5 items-center">
+                    {/* Color picker — condensed single row, no label */}
+                    <div>
+                      <div className="flex gap-1 items-center">
                         {PIN_COLORS.map((c) => (
                           <button key={c.hex} title={c.label}
                             onClick={() => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: c.hex } : cs))}
-                            className={cn("w-6 h-6 rounded-full border-2 transition-all", activeCountSession.color === c.hex ? "border-white scale-110" : "border-transparent hover:border-white/50")}
+                            className={cn("w-5 h-5 rounded-full border-2 transition-all shrink-0", activeCountSession.color === c.hex ? "border-white scale-110" : "border-transparent hover:border-white/50")}
                             style={{ backgroundColor: c.hex }} />
                         ))}
-                        <label className="relative w-6 h-6 rounded-full overflow-hidden border-2 border-dashed border-border hover:border-white/50 cursor-pointer" title="Custom color">
+                        <label className="relative w-5 h-5 rounded-full overflow-hidden border-2 border-dashed border-border hover:border-white/50 cursor-pointer shrink-0" title="Custom color">
                           <input type="color" value={activeCountSession.color}
                             onChange={(e) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: e.target.value } : cs))}
                             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
                           <span className="flex items-center justify-center w-full h-full text-[8px] text-muted-foreground">+</span>
                         </label>
-                        <span className="font-mono text-[10px] text-muted-foreground ml-1">{activeCountSession.color}</span>
+                        {/* Active color swatch preview */}
+                        <span className="ml-auto w-5 h-5 rounded border border-border/50 shrink-0" style={{ backgroundColor: activeCountSession.color }} title={activeCountSession.color} />
                       </div>
                     </div>
                     {/* Shape picker */}
@@ -1857,6 +1846,9 @@ function PinShapeSwatch({ shape, color, size = 16 }: { shape: PinShape; color: s
 }
 
 // ─── Grouped 4×4 shape picker ────────────────────────────────────────────────
+// Size labels for the 4 variants within each family
+const SIZE_LABELS: Record<string, string> = { sm: "S", md: "M", lg: "L", xl: "XL" };
+
 function CivilShapeSelector({
   activeIconId,
   activeColor,
@@ -1866,51 +1858,97 @@ function CivilShapeSelector({
   activeColor: string;
   onSelect: (id: PinShape) => void;
 }) {
-  const [openCats, setOpenCats] = React.useState<Record<string, boolean>>({});
-  const toggleCat = (cat: string) => setOpenCats((prev) => ({ ...prev, [cat]: !prev[cat] }));
+  // Only one family expanded at a time; null = all collapsed
+  const [expandedCat, setExpandedCat] = React.useState<string | null>(() => {
+    // Auto-expand the family of the currently active icon
+    const active = COUNT_ICONS.find((ic) => ic.id === activeIconId);
+    return active?.category ?? null;
+  });
+
+  const toggleCat = (cat: string) =>
+    setExpandedCat((prev) => (prev === cat ? null : cat));
+
   return (
-    <div className="space-y-1">
-      <Label className="text-xs font-medium text-muted-foreground">Pin Shape</Label>
-      {ICON_CATEGORIES.map((cat) => {
-        const icons = COUNT_ICONS.filter((ic) => ic.category === cat);
-        const isOpen = openCats[cat] ?? false;
-        const activeInCat = icons.some((ic) => ic.id === activeIconId);
-        return (
-          <div key={cat} className="rounded border border-border/50 overflow-hidden">
+    <div className="space-y-1.5">
+      <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Pin Shape</Label>
+
+      {/* Row of 4 family icons side-by-side */}
+      <div className="flex gap-1.5">
+        {ICON_CATEGORIES.map((cat) => {
+          const icons = COUNT_ICONS.filter((ic) => ic.category === cat);
+          // Representative icon for this family (medium size)
+          const repIcon = icons.find((ic) => ic.id.endsWith("-md")) ?? icons[0];
+          const isExpanded = expandedCat === cat;
+          const activeInCat = icons.some((ic) => ic.id === activeIconId);
+          return (
             <button
+              key={cat}
               onClick={() => toggleCat(cat)}
-              className="w-full flex items-center justify-between px-2 py-1.5 text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-colors"
+              title={cat}
+              className={cn(
+                "flex-1 flex flex-col items-center gap-1 py-2 rounded border transition-all",
+                isExpanded
+                  ? "border-[#F5C518] bg-[#F5C518]/10"
+                  : activeInCat
+                    ? "border-[#F5C518]/40 bg-[#F5C518]/5"
+                    : "border-border/50 bg-muted/10 hover:border-border hover:bg-muted/20"
+              )}
             >
-              <span className="uppercase tracking-wide">{cat}</span>
-              <div className="flex items-center gap-1.5">
-                {activeInCat && <span className="w-1.5 h-1.5 rounded-full bg-[#F5C518]" />}
-                {isOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-              </div>
-            </button>
-            {isOpen && (
-              <div className="grid grid-cols-4 gap-1 p-1.5 border-t border-border/30">
-                {icons.map((icon) => (
-                  <button key={icon.id} title={icon.label} onClick={() => onSelect(icon.id)}
-                    className={cn("flex flex-col items-center gap-0.5 p-1.5 rounded border text-[8px] transition-all",
-                      activeIconId === icon.id
-                        ? "border-[#F5C518] bg-[#F5C518]/10 text-foreground"
-                        : "border-border bg-muted/10 text-muted-foreground hover:border-border/80 hover:text-foreground")}>
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
-                      {icon.paths.map((seg, pi) => (
-                        <path key={pi} d={seg.d}
-                          fill={seg.strokeOnly ? "none" : (activeIconId === icon.id ? activeColor : "currentColor")}
-                          stroke={activeIconId === icon.id ? activeColor : "currentColor"}
-                          strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
-                      ))}
-                    </svg>
-                    <span className="leading-tight text-center truncate w-full">{icon.label.split(" ")[0]}</span>
-                  </button>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                {repIcon.paths.map((seg, pi) => (
+                  <path key={pi} d={seg.d}
+                    fill={seg.strokeOnly ? "none" : (activeInCat ? activeColor : "currentColor")}
+                    stroke={activeInCat ? activeColor : "currentColor"}
+                    strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
                 ))}
-              </div>
-            )}
+              </svg>
+              <span className={cn(
+                "text-[8px] font-medium leading-none",
+                isExpanded ? "text-[#F5C518]" : activeInCat ? "text-[#F5C518]/70" : "text-muted-foreground"
+              )}>{cat.slice(0, 3).toUpperCase()}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Expanded size row — shown inline below the family row */}
+      {expandedCat && (() => {
+        const icons = COUNT_ICONS.filter((ic) => ic.category === expandedCat);
+        return (
+          <div className="flex gap-1.5 px-0.5">
+            {icons.map((icon) => {
+              const sizeKey = icon.id.split("-")[1] ?? "md";
+              const isActive = activeIconId === icon.id;
+              return (
+                <button
+                  key={icon.id}
+                  onClick={() => onSelect(icon.id)}
+                  title={`${expandedCat} ${SIZE_LABELS[sizeKey]}`}
+                  className={cn(
+                    "flex-1 flex flex-col items-center gap-1 py-2 rounded border transition-all",
+                    isActive
+                      ? "border-[#F5C518] bg-[#F5C518]/15"
+                      : "border-border/50 bg-muted/10 hover:border-[#F5C518]/40 hover:bg-[#F5C518]/5"
+                  )}
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                    {icon.paths.map((seg, pi) => (
+                      <path key={pi} d={seg.d}
+                        fill={seg.strokeOnly ? "none" : (isActive ? activeColor : "currentColor")}
+                        stroke={isActive ? activeColor : "currentColor"}
+                        strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                    ))}
+                  </svg>
+                  <span className={cn(
+                    "text-[8px] font-medium leading-none",
+                    isActive ? "text-[#F5C518]" : "text-muted-foreground"
+                  )}>{SIZE_LABELS[sizeKey]}</span>
+                </button>
+              );
+            })}
           </div>
         );
-      })}
+      })()}
     </div>
   );
 }

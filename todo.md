@@ -165,3 +165,11 @@
 - [x] Right panel: collapsible with intuitive expand/collapse toggle (chevron or drag handle)
 - [x] Right panel header: remove "Infrastructure" category label, replace yellow icon with BP logo
 - [x] Material/labor summary: replace the weird symbol with the BP logo
+
+## v5.5 — Right Panel & Unit Count Redesign
+
+- [x] Move "Clear page counts" button from right panel to top toolbar (next to existing clear controls)
+- [x] Unit Count tab: accordion pin shape selector — all shapes shown side-by-side as small icons; clicking one expands it inline to show size variants; clicking another collapses the previous
+- [x] Unit Count tab: condense color picker to a small swatch row (no labels, no expanded grid)
+- [x] Right panel: collapsible/minimizable with an easy expand button
+- [x] v5.4 cursor fixes: smooth overlay cursor (no lag), count mode dot cursor, count cursor color matches session, Reset Scale returns to dark inactive state
