@@ -2,24 +2,14 @@
  * BidPhase — Category Landing Page
  *
  * Design: Tactical Dark Mode SaaS, Safety Yellow (#F5C518) accent.
- * - Text-only logo (no B icon)
- * - No icons on category cards — clean text-only cards
- * - No descriptions under card names
- * - Shortened names: "Infrastructure", "Commercial", "Residential"
- * - Expanded layout to fill the screen
+ * - Single "Electrical" card combines all 4 legacy categories
+ * - Backend data models unchanged
  */
 import { useApp } from "@/contexts/AppContext";
 import { cn } from "@/lib/utils";
+import { ElectricalIcon } from "@/components/tabs/UnifiedProjects";
 
-// ─── Category definitions ─────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: "residential" as const, label: "Residential" },
-  { id: "commercial" as const, label: "Commercial" },
-  { id: "industrial" as const, label: "Industrial" },
-  { id: "civil" as const, label: "Infrastructure" },
-] as const;
-
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Component ──────────────────────────────────────────────────────────────────────────────────────
 export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil" | "commercial" | "residential" | "industrial") => void } = {}) {
   const {
     setActiveCategory,
@@ -30,25 +20,26 @@ export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil"
     industrialCatProjects,
   } = useApp();
 
-  const counts: Record<string, number> = {
-    civil: civilCatProjects.length,
-    commercial: commercialCatProjects.length,
-    residential: residentialCatProjects.length,
-    industrial: industrialCatProjects.length,
-  };
+  const totalProjects =
+    civilCatProjects.length +
+    commercialCatProjects.length +
+    residentialCatProjects.length +
+    industrialCatProjects.length;
 
-  const handleSelect = (id: "civil" | "commercial" | "residential" | "industrial") => {
+  const handleElectricalSelect = () => {
+    // Default to "civil" (Infrastructure) as the entry point
+    const cat = "civil" as const;
     if (onSelect) {
-      onSelect(id);
+      onSelect(cat);
     } else {
-      setActiveCategory(id);
+      setActiveCategory(cat);
       setActiveTab("projects");
     }
   };
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* ── Header ─────────────────────────────────────────────────────── */}
+      {/* ── Header ────────────────────────────────────────────────────────────────────────────────────── */}
       <div className="flex flex-col items-center justify-center pt-16 pb-10 px-6 shrink-0">
         <h1
           className="text-4xl font-black tracking-tight text-foreground mb-2"
@@ -57,59 +48,59 @@ export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil"
           Bid<span className="text-[#F5C518]">Phase</span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          Select a project category to open your estimating workspace.
+          Open your estimating workspace.
         </p>
       </div>
 
-      {/* ── Category cards ─────────────────────────────────────────────── */}
+      {/* ── Single Electrical card ────────────────────────────────────────────────────────────────────────────────────── */}
       <div className="flex-1 flex items-center justify-center px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-5xl">
-          {CATEGORIES.map((cat) => {
-            const count = counts[cat.id] ?? 0;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => handleSelect(cat.id)}
-                className={cn(
-                  "group relative rounded-2xl border border-border bg-card",
-                  "flex flex-col items-start justify-between",
-                  "px-8 py-10 min-h-[200px]",
-                  "hover:border-[#F5C518]/60 hover:bg-[#F5C518]/5",
-                  "transition-all duration-200 text-left",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5C518]/50"
-                )}
-                style={{ boxShadow: "0 4px 32px rgba(0,0,0,0.25)" }}
-              >
-                {/* Category name */}
-                <div className="flex-1 flex flex-col justify-center w-full">
-                  <h2
-                    className="text-2xl font-bold text-foreground group-hover:text-[#F5C518] transition-colors duration-200"
-                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                  >
-                    {cat.label}
-                  </h2>
-                </div>
+        <button
+          onClick={handleElectricalSelect}
+          className={cn(
+            "group relative rounded-2xl border border-border bg-card",
+            "flex flex-col items-start justify-between",
+            "px-10 py-12 w-full max-w-sm min-h-[240px]",
+            "hover:border-[#F5C518]/60 hover:bg-[#F5C518]/5",
+            "transition-all duration-200 text-left",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F5C518]/50"
+          )}
+          style={{ boxShadow: "0 4px 32px rgba(0,0,0,0.25)" }}
+        >
+          {/* Icon */}
+          <div className="w-12 h-12 rounded-xl bg-[#F5C518]/10 border border-[#F5C518]/20 flex items-center justify-center mb-4">
+            <ElectricalIcon size={24} className="text-[#F5C518]" />
+          </div>
 
-                {/* Project count badge */}
-                <div className="mt-6">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-full bg-muted/40 text-muted-foreground border border-border/50 group-hover:border-[#F5C518]/30 group-hover:text-[#F5C518]/80 transition-all">
-                    {count} project{count !== 1 ? "s" : ""}
-                  </span>
-                </div>
+          {/* Label */}
+          <div className="flex-1 flex flex-col justify-center w-full">
+            <h2
+              className="text-3xl font-bold text-foreground group-hover:text-[#F5C518] transition-colors duration-200"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            >
+              Electrical
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Residential · Commercial · Industrial · Infrastructure
+            </p>
+          </div>
 
-                {/* Hover arrow */}
-                <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F5C518" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14M12 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+          {/* Project count badge */}
+          <div className="mt-6">
+            <span className="inline-flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-full bg-muted/40 text-muted-foreground border border-border/50 group-hover:border-[#F5C518]/30 group-hover:text-[#F5C518]/80 transition-all">
+              {totalProjects} project{totalProjects !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {/* Hover arrow */}
+          <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F5C518" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </div>
+        </button>
       </div>
 
-      {/* ── Footer hint ────────────────────────────────────────────────── */}
+      {/* ── Footer hint ────────────────────────────────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-center pb-8 shrink-0">
         <p className="text-[11px] text-muted-foreground/40 font-mono tracking-wide">
           Click the BidPhase logo at any time to return here

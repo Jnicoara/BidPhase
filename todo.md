@@ -87,3 +87,10 @@
 - [x] Conduit module: implement Total Billable Conduit, Net Wire Length per conductor, Total Billable Wire calculation
 - [x] Update AppContext RunItem data model with all new professional estimating fields
 - [x] Remove old wireSlackPct/conduitSlackPct (replaced by Waste Factor terminology)
+
+## v4.6 — Crosshair Overlay, Scale Prompt, Electrical Category
+
+- [x] Restore full-screen spanning crosshair lines overlay (vertical + horizontal lines to canvas edges) while keeping current + cursor shape
+- [x] Add per-page scale verification prompt: show modal/overlay whenever user navigates to a page without a scale set, before they can measure or add runs
+- [x] Combine Residential/Commercial/Industrial/Infrastructure into single "Electrical" category on homepage cards
+- [x] Combine 4 category icons into single "Electrical" icon in left sidebar

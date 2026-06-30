@@ -16,7 +16,7 @@
  */
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
-import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, IndustrialIcon } from "@/components/tabs/UnifiedProjects";
+import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, IndustrialIcon, ElectricalIcon } from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import ExportButton from "@/components/ExportButton";
 import MaterialListPage from "@/pages/MaterialListPage";
@@ -236,19 +236,13 @@ export default function BidPhaseShell() {
 
         {/* Nav items — top section */}
         <nav className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
-          {/* Categories: Residential → Commercial → Industrial → Infrastructure */}
-          {CATEGORY_ORDER.map((cat) => {
-            const Icon = CATEGORY_ICONS[cat];
-            return (
-              <NavBtn
-                key={cat}
-                onClick={() => navigate(cat)}
-                isActive={route === cat}
-                icon={Icon}
-                label={CATEGORY_LABELS[cat]}
-              />
-            );
-          })}
+          {/* Single "Electrical" entry — combines all 4 legacy categories */}
+          <NavBtn
+            onClick={() => navigate("civil")}
+            isActive={isInCategory}
+            icon={ElectricalIcon}
+            label="Electrical"
+          />
 
           {/* Estimate Engine — below Residential/Commercial/Civil */}
           <div className="my-1 border-t border-sidebar-border/50" />
@@ -322,23 +316,18 @@ export default function BidPhaseShell() {
 
       {/* ── Mobile Bottom Nav ────────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex bg-sidebar border-t border-border">
-        {CATEGORY_ORDER.map((cat) => {
-          const Icon = CATEGORY_ICONS[cat];
-          const isActive = route === cat;
-          return (
-            <button
-              key={cat}
-              onClick={() => navigate(cat)}
-              className={cn(
-                "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-                isActive ? "text-[#F5C518]" : "text-muted-foreground"
-              )}
-            >
-              <Icon size={18} className={isActive ? "text-[#F5C518]" : ""} />
-              {isActive && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
-            </button>
-          );
-        })}
+        {/* Single Electrical entry in mobile nav */}
+        <button
+          onClick={() => navigate("civil")}
+          className={cn(
+            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
+            isInCategory ? "text-[#F5C518]" : "text-muted-foreground"
+          )}
+        >
+          <ElectricalIcon size={18} className={isInCategory ? "text-[#F5C518]" : ""} />
+          <span className="text-[9px]">Electrical</span>
+          {isInCategory && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
+        </button>
         <button
           onClick={() => navigate("estimate")}
           className={cn(

@@ -174,6 +174,18 @@ export function IndustrialIcon({ size = 20, className = "" }: { size?: number; c
   );
 }
 
+// ── Electrical (combined) icon — lightning bolt ─────────────────────────────
+export function ElectricalIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      {/* Bolt shape */}
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  );
+}
+
 // Types and constants (RunItem, FittingCounts, FITTING_TYPES, etc.) are
 // imported from AppContext.tsx — see imports at the top of this file.
 // Local alias so existing JSX references to CONDUIT_TYPES still work:

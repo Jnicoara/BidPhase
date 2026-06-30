@@ -463,7 +463,7 @@ export default function PlanPanel({
   const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
 
-  // ── Dynamic color-matched cursor ──────────────────────────────────────────────
+    // ── Dynamic color-matched cursor ──────────────────────────────────────────────
   // Generates a data-URI SVG crosshair in the active color so the cursor
   // matches the line being drawn: yellow for scale/measure, run-color for runs.
   const activeCursorColor = useMemo(() => {
@@ -471,13 +471,14 @@ export default function PlanPanel({
     if (mode === "measure") return activeRunColor; // run-point dropping = run color
     return null; // no custom cursor needed
   }, [mode, activeRunColor]);
-
   const svgCursor = useMemo(() => {
     if (!activeCursorColor) return undefined;
     const c = encodeURIComponent(activeCursorColor);
     const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><line x1='12' y1='2' x2='12' y2='22' stroke='${c}' stroke-width='2'/><line x1='2' y1='12' x2='22' y2='12' stroke='${c}' stroke-width='2'/><circle cx='12' cy='12' r='2' fill='${c}'/></svg>`;
     return `url("data:image/svg+xml,${svg}") 12 12, crosshair`;
   }, [activeCursorColor]);
+  // ── Full-screen crosshair overlay state ──────────────────────────────────
+  const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
 
   // Legacy panRef alias (scroll-based pan no longer used)
   const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
@@ -966,14 +967,47 @@ export default function PlanPanel({
       ctx.lineWidth = 1.5 * S;
       ctx.stroke();
       // Label
-      ctx.fillStyle = "#F5C518";
+            ctx.fillStyle = "#F5C518";
       ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
       ctx.fillText(`S${i + 1}`, p.x + 9 * S, p.y - 7 * S);
     });
+    // ── Full-screen crosshair overlay ────────────────────────────────────────────
+    // Draws spanning hairlines from edge to edge in the active color.
+    // Color: yellow for scale mode, active run color for measure mode.
+    if (crosshair) {
+      const { x, y } = crosshair;
+      const lineColor = (modeRef.current === "set-scale-p1" || modeRef.current === "set-scale-p2")
+        ? "#F5C518"
+        : activeRunColor;
+      const hex = lineColor ?? "#F5C518";
+      // Parse hex to rgb for rgba usage
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      ctx.save();
+      ctx.setLineDash([]);
+      // Outer soft glow
+      ctx.strokeStyle = `rgba(${r},${g},${b},0.18)`;
+      ctx.lineWidth = 8 * S;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      // Mid glow
+      ctx.strokeStyle = `rgba(${r},${g},${b},0.45)`;
+      ctx.lineWidth = 3 * S;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      // Crisp inner hairline
+      ctx.strokeStyle = `rgba(${r},${g},${b},1)`;
+      ctx.lineWidth = 1 * S;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      ctx.restore();
+    }
+  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, crosshair, activeRunColor]);
 
-  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins]);
-
-  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
+  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady, crosshair]);
+  // Clear crosshair guide whenever mode returns to idle
+  useEffect(() => { if (mode === "none") setCrosshair(null); }, [mode]);
 
   // ── File upload ────────────────────────────────────────────────────────────
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1008,12 +1042,16 @@ export default function PlanPanel({
     setPageReady(true);
   }, []);
 
-  // Show scale prompt when page becomes ready and no scale is set yet
+  // Show scale prompt every time a page loads without a scale set
+  // This fires on initial load AND on every page navigation to an unscaled page
   useEffect(() => {
     if (pageReady && pdfFile && scaleRatio === null) {
       setShowScalePrompt(true);
+    } else if (pageReady && scaleRatio !== null) {
+      // Page has a scale — dismiss any lingering prompt
+      setShowScalePrompt(false);
     }
-  }, [pageReady, pdfFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pageReady, pdfFile, scaleRatio]); // re-run on every page change (scaleRatio changes per page)
 
   // ── Zoom helpers ──────────────────────────────────────────────────────────
   // No debounce needed — PDF renders once at RENDER_BASE_ZOOM, zoom is pure CSS scale.
@@ -1375,8 +1413,16 @@ export default function PlanPanel({
   }, [normToCanvas, onPinRemoved]);
 
   // ── Canvas mouse move (drag only) ────────────────────────────────────────
-  const handleCanvasMouseMove = useCallback((_e: React.MouseEvent<HTMLCanvasElement>) => {
-    // Drag handled by handleCanvasDragMove — crosshair removed per user request
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (modeRef.current === "none") { setCrosshair(null); return; }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const scaleX = canvas.width  / canvas.offsetWidth;
+    const scaleY = canvas.height / canvas.offsetHeight;
+    setCrosshair({
+      x: e.nativeEvent.offsetX * scaleX,
+      y: e.nativeEvent.offsetY * scaleY,
+    });
   }, []);
 
   // ── Confirm scale ──────────────────────────────────────────────────────────
@@ -1508,20 +1554,34 @@ export default function PlanPanel({
       {showScalePrompt && (
         <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 space-y-4">
-            <div className="space-y-1">
-              <h3 className="text-base font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Set Scale First</h3>
-              <p className="text-sm text-muted-foreground">Before measuring, calibrate the scale by drawing a line over a known distance on the plan.</p>
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-yellow-400/15 border border-yellow-400/30 flex items-center justify-center shrink-0 mt-0.5">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F5C518" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Scale Not Set for This Page</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">You must set the scale before measuring or adding runs. Draw a line over a known distance on the plan to calibrate.</p>
+              </div>
+            </div>
+            <div className="bg-muted/30 rounded-lg p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">How to set scale:</p>
+              <ol className="list-decimal list-inside space-y-0.5">
+                <li>Click <strong>Set Scale Now</strong> below</li>
+                <li>Click the start of a known-length line on the plan</li>
+                <li>Click the end of that line</li>
+                <li>Enter the real-world distance in feet and click OK</li>
+              </ol>
             </div>
             <div className="flex gap-2">
               <Button
                 size="sm"
-                className="flex-1"
+                className="flex-1 bg-yellow-400 text-black hover:bg-yellow-300"
                 onClick={() => {
                   setShowScalePrompt(false);
                   setScalePoints([]);
                   setMode("set-scale-p1");
                   modeRef.current = "set-scale-p1";
-                  toast.info("Click the first point of a known distance on the plan.");
+                  toast.info("Click the START of your known-distance reference line.");
                 }}
               >
                 Set Scale Now
@@ -1530,8 +1590,9 @@ export default function PlanPanel({
                 size="sm"
                 variant="outline"
                 onClick={() => setShowScalePrompt(false)}
+                title="Dismiss — you can set scale later from the toolbar"
               >
-                Skip
+                Dismiss
               </Button>
             </div>
           </div>
@@ -2115,7 +2176,7 @@ export default function PlanPanel({
                   onMouseMove={(e) => { handleCanvasMouseMove(e); handleCanvasDragMove(e); }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseUp={handleCanvasDragEnd}
-                  onMouseLeave={() => { handleCanvasDragEnd(); }}
+                  onMouseLeave={() => { handleCanvasDragEnd(); setCrosshair(null); }}
                 />
               )}
             </div>
