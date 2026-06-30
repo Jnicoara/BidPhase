@@ -103,3 +103,15 @@
 - [x] Show current page scale (e.g. "1 in = 20 ft") in PlanPanel toolbar at a glance
 - [x] Right-click context menu on canvas: "Continue run from here" option to resume/extend the active run from any clicked point; easy dismiss (click elsewhere or press Escape)
 - [x] Auto-pause active run measurement when user switches to Unit Count tab; auto-resume when switching back to Runs tab (unless they explicitly selected a different run)
+
+## v4.8 — UX Polish Round 2
+
+- [x] Double-right-click (not single) to open "Continue run from here" context menu
+- [x] Fix delete run confirmation: only mention the run being deleted, not "all items"
+- [x] Scale badge: show both ref footage (e.g. "50 ft ref") and computed ratio (e.g. "1 in ≈ 20 ft")
+- [x] Remove scale prompt on page open; only show it when user clicks Measure or Add Run
+- [x] Unit Count: simplify shape labels to just shape name (no size suffix)
+- [x] Unit Count: remove "Start Counting" step — pressing a shape immediately starts counting
+- [x] Unit Count: add collapsible dropdown per shape (expand/collapse on click)
+- [x] Fix material search bar (hidden/not working in Unit Count section)
+- [x] Make Unit Count tab itself collapsible (click tab to collapse/expand the whole panel)

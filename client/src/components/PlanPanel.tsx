@@ -391,11 +391,12 @@ export default function PlanPanel({
   // dragPointRef: { type: 'scale' | 'run', index: number, runId?: string }
   const dragPointRef = useRef<{ type: 'scale' | 'run'; index: number; runId?: string } | null>(null);
   // ── Delete confirm dialog ─────────────────────────────────────────────────
-  const [deleteConfirm, setDeleteConfirm] = useState<{ count: number; onConfirm: () => void } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ count: number; name?: string; onConfirm: () => void } | null>(null);
   // ── Right-click context menu ──────────────────────────────────────────────
   // Shown when user right-clicks in measure mode; lets them continue a run from
   // the clicked point. { x, y } are viewport pixel coordinates for positioning.
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; normPt: NormPoint } | null>(null);
+  const lastRightClickRef = useRef<{ time: number; x: number; y: number } | null>(null);
   // ── Paused run tracking ───────────────────────────────────────────────────
   // When the user switches to Unit Count mid-run, we save the active run id so
   // we can resume it automatically when they switch back to Measure mode.
@@ -1050,16 +1051,13 @@ export default function PlanPanel({
     setPageReady(true);
   }, []);
 
-  // Show scale prompt every time a page loads without a scale set
-  // This fires on initial load AND on every page navigation to an unscaled page
+  // Dismiss scale prompt when scale is set (e.g. after user completes set-scale flow)
+  // We do NOT auto-show the prompt on page load — only when user tries to measure
   useEffect(() => {
-    if (pageReady && pdfFile && scaleRatio === null) {
-      setShowScalePrompt(true);
-    } else if (pageReady && scaleRatio !== null) {
-      // Page has a scale — dismiss any lingering prompt
+    if (pageReady && scaleRatio !== null) {
       setShowScalePrompt(false);
     }
-  }, [pageReady, pdfFile, scaleRatio]); // re-run on every page change (scaleRatio changes per page)
+  }, [pageReady, scaleRatio]);
 
   // ── Zoom helpers ──────────────────────────────────────────────────────────
   // No debounce needed — PDF renders once at RENDER_BASE_ZOOM, zoom is pure CSS scale.
@@ -1429,7 +1427,16 @@ export default function PlanPanel({
     }
 
     if (m === "measure") {
-      // Show "Continue run from here" context menu at the clicked position
+      // Double-right-click to open "Continue run from here" menu
+      const now = Date.now();
+      const prev = lastRightClickRef.current;
+      const DOUBLE_THRESHOLD = 400; // ms
+      const DIST_THRESHOLD = 20; // px
+      const dx = prev ? Math.abs(e.clientX - prev.x) : 999;
+      const dy = prev ? Math.abs(e.clientY - prev.y) : 999;
+      const isDouble = prev && (now - prev.time) < DOUBLE_THRESHOLD && dx < DIST_THRESHOLD && dy < DIST_THRESHOLD;
+      lastRightClickRef.current = { time: now, x: e.clientX, y: e.clientY };
+      if (!isDouble) return; // single right-click — ignore
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
@@ -1638,7 +1645,7 @@ export default function PlanPanel({
             <div className="space-y-1">
               <h3 className="text-sm font-bold text-destructive">Confirm Delete</h3>
               <p className="text-sm text-muted-foreground">
-                You are about to delete {deleteConfirm.count} item{deleteConfirm.count !== 1 ? "s" : ""}. This cannot be undone.
+                Delete <strong>{deleteConfirm.name ?? "this run"}</strong>? This cannot be undone.
               </p>
             </div>
             <div className="flex gap-2">
@@ -1769,7 +1776,7 @@ export default function PlanPanel({
               // 72 PDF pts/in × BASE_DPI (1.5) × RENDER_BASE_ZOOM (1.5) = 162 canvas px/in
               const ftPerIn = (162 * entry.knownFt) / entry.pxDist;
               const rounded = ftPerIn >= 10 ? Math.round(ftPerIn) : Math.round(ftPerIn * 2) / 2;
-              return `1 in ≈ ${rounded} ft`;
+              return `Ref: ${entry.knownFt} ft  ·  1 in = ${rounded} ft`;
             })()}
           </button>
         )}
@@ -1803,9 +1810,9 @@ export default function PlanPanel({
               toast.info("Measurement paused. Click Measure to start a new run.");
               return;
             }
-            // Scale is required before measuring
+            // Scale is required before measuring — show the prompt instead of just a toast
             if (!scaleRatio) {
-              toast.error("Set scale first — click \"Set Scale\", mark two points, enter the known distance in feet, then click OK.");
+              setShowScalePrompt(true);
               return;
             }
             // If there's a paused run, resume it instead of creating a new one
@@ -1909,8 +1916,8 @@ export default function PlanPanel({
               modeRef.current = "none";
               toast.info("Cleared. Scale preserved.");
             };
-            if (total >= 3) {
-              setDeleteConfirm({ count: total, onConfirm: doDelete });
+            if (pts >= 3 || (pts > 0 && pinsOnPage > 0)) {
+              setDeleteConfirm({ count: pts, name: activeRun?.name, onConfirm: doDelete });
             } else {
               doDelete();
             }
@@ -1932,6 +1939,7 @@ export default function PlanPanel({
               if (currentPins.length >= 3) {
                 setDeleteConfirm({
                   count: currentPins.length,
+                  name: `${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}`,
                   onConfirm: () => {
                     onClearPagePins?.(currentPage);
                     toast.info(`Cleared ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}.`);
