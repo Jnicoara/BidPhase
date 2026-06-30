@@ -1737,38 +1737,26 @@ function CivilEditor({
                     )}
                   </div>
 
-                </div>{/* end scrollable accordion area */}
-
-                {/* ── MATERIAL SUMMARY — always visible, pinned at bottom ── */}
-                <div className="shrink-0 border-t border-border bg-card">
-                  <div className="px-4 py-2.5 border-b border-border/60">
-                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                      Material Summary
+                  {/* ── MATERIAL SUMMARY — inline below Runs, always visible, grows with content ── */}
+                  <div className="bp-card overflow-hidden border-t border-border/40">
+                    <div className="px-4 py-3 space-y-3">
+                      <CrossPageTotals runs={runs} countSessions={countSessions} />
                       {(runs.length > 0 || countSessions.some((cs) => cs.pins.length > 0)) && (
-                        <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">
-                          {runs.length > 0 ? `${runs.length} run${runs.length !== 1 ? 's' : ''}` : ''}
-                          {runs.length > 0 && countSessions.some((cs) => cs.pins.length > 0) ? ' · ' : ''}
-                          {countSessions.some((cs) => cs.pins.length > 0) ? `${countSessions.reduce((a, cs) => a + cs.pins.length, 0)} pins` : ''}
-                        </span>
+                        <div className="pt-2 border-t border-border/40">
+                          <button
+                            onClick={() => setConfirmClear({ type: "total-reset" })}
+                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-destructive/70 hover:text-destructive hover:bg-destructive/10 border border-destructive/20 hover:border-destructive/40 transition-all"
+                            title="Clear all runs and count pins across all pages"
+                          >
+                            <Trash2 size={11} />
+                            Total Reset (all pages)
+                          </button>
+                        </div>
                       )}
-                    </h2>
+                    </div>
                   </div>
-                  <div className="px-4 py-3 space-y-3 max-h-64 overflow-auto">
-                    <CrossPageTotals runs={runs} countSessions={countSessions} />
-                    {(runs.length > 0 || countSessions.some((cs) => cs.pins.length > 0)) && (
-                      <div className="pt-2 border-t border-border/40">
-                        <button
-                          onClick={() => setConfirmClear({ type: "total-reset" })}
-                          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-destructive/70 hover:text-destructive hover:bg-destructive/10 border border-destructive/20 hover:border-destructive/40 transition-all"
-                          title="Clear all runs and count pins across all pages"
-                        >
-                          <Trash2 size={11} />
-                          Total Reset (all pages)
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+
+                </div>{/* end scrollable accordion area */}
               </>
             )}{/* end !rightPanelCollapsed */}
           </div>

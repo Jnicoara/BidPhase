@@ -1067,10 +1067,15 @@ export default function PlanPanel({
     modeRef.current = "none";
     pageSizeRef.current = null;
     setPageReady(false);
+    // Clear all overlays so tools are not hidden after PDF replacement
+    setShowPageOverview(false);
+    setShowScalePrompt(false);
+    setDeleteConfirm(null);
+    setScalePoints([]);
     // Notify parent to clear count pins and sessions
     onPdfReplaced?.();
     toast.success("PDF loaded. Set scale before measuring.");
-  }, [setPdfHash, setPdfFile, setPageRunsMap, setPageActiveRunMap, setPageScaleMap, setCurrentPage, setPageReady, onPdfReplaced]);
+  }, [setPdfHash, setPdfFile, setPageRunsMap, setPageActiveRunMap, setPageScaleMap, setCurrentPage, setPageReady, onPdfReplaced, setShowPageOverview, setShowScalePrompt, setDeleteConfirm, setScalePoints]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

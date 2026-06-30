@@ -210,3 +210,8 @@
 - [x] Right panel: move Unit Count accordion to the top (above Runs)
 - [x] Right panel: move Runs accordion below Unit Count
 - [x] Right panel: rename "Materials" section to "Material Summary" and make it always-visible (non-collapsible), showing live totals
+
+## v5.11 — Material Summary Reposition & PDF Tool Bug
+
+- [x] Material Summary: remove the "Material Summary" heading, move the section inline below Runs in the scrollable area (grows with content, not pinned to bottom)
+- [x] Fix: toolbar/tools disappear after loading a new PDF into an existing project
