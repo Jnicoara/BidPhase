@@ -16,7 +16,7 @@
  */
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
-import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, IndustrialIcon, ElectricalIcon } from "@/components/tabs/UnifiedProjects";
+import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, IndustrialIcon, ElectricalIcon, ElectricalPanelIcon } from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import ExportButton from "@/components/ExportButton";
 import MaterialListPage from "@/pages/MaterialListPage";
@@ -240,18 +240,18 @@ export default function BidPhaseShell() {
           <NavBtn
             onClick={() => navigate("civil")}
             isActive={isInCategory}
-            icon={ElectricalIcon}
+            icon={ElectricalPanelIcon}
             label="Electrical"
           />
 
-          {/* Estimate Engine — below Residential/Commercial/Civil */}
-          <div className="my-1 border-t border-sidebar-border/50" />
+          {/* Estimate Engine — hidden for now, backend intact */}
+          {/* <div className="my-1 border-t border-sidebar-border/50" />
           <NavBtn
             onClick={() => navigate("estimate")}
             isActive={isInEstimate}
             icon={Zap}
             label="Estimate Engine"
-          />
+          /> */}
         </nav>
 
         {/* Bottom section: Trash on top, Settings on bottom */}
@@ -324,11 +324,12 @@ export default function BidPhaseShell() {
             isInCategory ? "text-[#F5C518]" : "text-muted-foreground"
           )}
         >
-          <ElectricalIcon size={18} className={isInCategory ? "text-[#F5C518]" : ""} />
+          <ElectricalPanelIcon size={18} className={isInCategory ? "text-[#F5C518]" : ""} />
           <span className="text-[9px]">Electrical</span>
           {isInCategory && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
         </button>
-        <button
+        {/* Estimate Engine mobile button — hidden for now */}
+        {/* <button
           onClick={() => navigate("estimate")}
           className={cn(
             "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
@@ -337,7 +338,7 @@ export default function BidPhaseShell() {
         >
           <Zap size={18} className={isInEstimate ? "text-[#F5C518]" : ""} />
           {isInEstimate && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
-        </button>
+        </button> */}
         <button
           onClick={() => navigate("settings")}
           className={cn(

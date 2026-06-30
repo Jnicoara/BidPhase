@@ -186,6 +186,29 @@ export function ElectricalIcon({ size = 20, className = "" }: { size?: number; c
   );
 }
 
+// ── Electrical Panel icon — minimalist breaker box (used in sidebar) ─────────────
+// Outer enclosure + horizontal bus bar + two rows of breaker slots
+export function ElectricalPanelIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      {/* Enclosure */}
+      <rect x="3" y="2" width="18" height="20" rx="1.5" />
+      {/* Center bus bar */}
+      <line x1="12" y1="4" x2="12" y2="20" />
+      {/* Left breaker slots */}
+      <rect x="4.5" y="5.5" width="6" height="2.5" rx="0.5" />
+      <rect x="4.5" y="10" width="6" height="2.5" rx="0.5" />
+      <rect x="4.5" y="14.5" width="6" height="2.5" rx="0.5" />
+      {/* Right breaker slots */}
+      <rect x="13.5" y="5.5" width="6" height="2.5" rx="0.5" />
+      <rect x="13.5" y="10" width="6" height="2.5" rx="0.5" />
+      <rect x="13.5" y="14.5" width="6" height="2.5" rx="0.5" />
+    </svg>
+  );
+}
+
 // Types and constants (RunItem, FittingCounts, FITTING_TYPES, etc.) are
 // imported from AppContext.tsx — see imports at the top of this file.
 // Local alias so existing JSX references to CONDUIT_TYPES still work:

@@ -362,17 +362,17 @@ export default function PlanPanel({
 
   // ── Scale persistence keyed by PDF hash + page index ────────────────────
   // Per-page scale map: pageIdx → { ratio: number | null, points: NormPoint[] }
-  type PageScaleEntry = { ratio: number | null; points: NormPoint[] };
+  type PageScaleEntry = { ratio: number | null; points: NormPoint[]; knownFt?: number; pxDist?: number };
   const pageScaleKey = pdfHash ? `bp_pagescale_${tabKey}_${pdfHash}` : `bp_pagescale_${tabKey}_nohash`;
   const [pageScaleMap, setPageScaleMap] = useLocalStorage<Record<number, PageScaleEntry>>(pageScaleKey, {});
 
   const scaleRatio: number | null = pageScaleMap[pageIdx]?.ratio ?? null;
   const scalePoints: NormPoint[] = pageScaleMap[pageIdx]?.points ?? [];
 
-  const setScaleRatio = useCallback((ratio: number | null) => {
+  const setScaleRatio = useCallback((ratio: number | null, knownFt?: number, pxDist?: number) => {
     setPageScaleMap((prev) => ({
       ...prev,
-      [pageIdx]: { ratio, points: prev[pageIdx]?.points ?? [] },
+      [pageIdx]: { ratio, points: prev[pageIdx]?.points ?? [], knownFt: knownFt ?? prev[pageIdx]?.knownFt, pxDist: pxDist ?? prev[pageIdx]?.pxDist },
     }));
   }, [pageIdx, setPageScaleMap]);
 
@@ -392,6 +392,14 @@ export default function PlanPanel({
   const dragPointRef = useRef<{ type: 'scale' | 'run'; index: number; runId?: string } | null>(null);
   // ── Delete confirm dialog ─────────────────────────────────────────────────
   const [deleteConfirm, setDeleteConfirm] = useState<{ count: number; onConfirm: () => void } | null>(null);
+  // ── Right-click context menu ──────────────────────────────────────────────
+  // Shown when user right-clicks in measure mode; lets them continue a run from
+  // the clicked point. { x, y } are viewport pixel coordinates for positioning.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; normPt: NormPoint } | null>(null);
+  // ── Paused run tracking ───────────────────────────────────────────────────
+  // When the user switches to Unit Count mid-run, we save the active run id so
+  // we can resume it automatically when they switch back to Measure mode.
+  const [pausedRunId, setPausedRunId] = useState<string | null>(null);
 
   // ── Count pins (session-based, cross-page) ────────────────────────────────
   // Pins live in the parent's CountSession state, not in a local PagePinsMap.
@@ -1189,9 +1197,10 @@ export default function PlanPanel({
         }
       }
       if (e.key === "Escape") {
+        setCtxMenu(null);
         setMode("none");
         modeRef.current = "none";
-          }
+      }
       if (e.key === "ArrowLeft" && numPages > 1) {
         e.preventDefault();
         setCurrentPage((p) => Math.max(1, p - 1));
@@ -1286,6 +1295,7 @@ export default function PlanPanel({
         for (let i = 1; i < run.points.length; i++) {
           if (hitTestSegment(cx, cy, run.points[i - 1], run.points[i])) {
             setCurrentActiveRunId(run.id);
+            setPausedRunId(null); // user explicitly selected a different run — clear any paused state
             setMode("measure");
             modeRef.current = "measure";
             toast.info(`"${run.name}" selected — click to add points or press Esc to finish.`);
@@ -1383,34 +1393,56 @@ export default function PlanPanel({
     }
   }, [getCanvasCoords, canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId, activeCountSession, currentPage, onPinAdded, scalePoints, hitTestPoint, activeRun]);
 
-  // ── Canvas right-click: delete nearest count pin ────────────────────────
+  // ── Canvas right-click ────────────────────────────────────────────────────
+  // • In "count" mode: remove nearest pin
+  // • In "measure" mode: show "Continue run from here" context menu
+  // • Otherwise: no-op (prevent default to avoid browser menu)
   const handleCanvasContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    if (modeRef.current !== "count") return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const cx = (e.clientX - rect.left) * scaleX;
-    const cy = (e.clientY - rect.top)  * scaleY;
-    const s = pageSizeRef.current;
-    if (!s) return;
-    // Find the nearest pin within a 20-screen-pixel hit radius
-    const HIT_RADIUS = 20 * (canvas.width / (s.w * (displayZoomRef.current / RENDER_BASE_ZOOM)));
-    const pins = currentPinsRef.current;
-    let closest: { id: string; dist: number } | null = null;
-    pins.forEach((pin) => {
-      const px = normToCanvas({ pageIndex: 0, nx: pin.nx, ny: pin.ny });
-      if (!px) return;
-      const d = dist2D(cx, cy, px.x, px.y);
-      if (d < HIT_RADIUS && (!closest || d < closest.dist)) closest = { id: pin.id, dist: d };
-    });
-    if (closest !== null) {
-      onPinRemoved?.((closest as { id: string }).id);
-      toast.info("Pin removed.");
+    const m = modeRef.current;
+
+    if (m === "count") {
+      // Delete nearest pin
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top)  * scaleY;
+      const s = pageSizeRef.current;
+      if (!s) return;
+      const HIT_RADIUS = 20 * (canvas.width / (s.w * (displayZoomRef.current / RENDER_BASE_ZOOM)));
+      const pins = currentPinsRef.current;
+      let closest: { id: string; dist: number } | null = null;
+      pins.forEach((pin) => {
+        const px = normToCanvas({ pageIndex: 0, nx: pin.nx, ny: pin.ny });
+        if (!px) return;
+        const d = dist2D(cx, cy, px.x, px.y);
+        if (d < HIT_RADIUS && (!closest || d < closest.dist)) closest = { id: pin.id, dist: d };
+      });
+      if (closest !== null) {
+        onPinRemoved?.((closest as { id: string }).id);
+        toast.info("Pin removed.");
+      }
+      return;
     }
-  }, [normToCanvas, onPinRemoved]);
+
+    if (m === "measure") {
+      // Show "Continue run from here" context menu at the clicked position
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top)  * scaleY;
+      const normPt = canvasToNorm(cx, cy);
+      if (!normPt) return;
+      setCtxMenu({ x: e.clientX, y: e.clientY, normPt });
+      return;
+    }
+  }, [normToCanvas, onPinRemoved, canvasToNorm]);
 
   // ── Canvas mouse move (drag only) ────────────────────────────────────────
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1434,7 +1466,7 @@ export default function PlanPanel({
     if (pxDist < 2) { toast.error("Points too close. Try again."); return; }
     // pxDist is in canvas pixels at RENDER_BASE_ZOOM; divide by RENDER_BASE_ZOOM to get px/ft at zoom=1
     const pxPerFtAtZoom1 = (pxDist / d) / RENDER_BASE_ZOOM;
-    setScaleRatio(pxPerFtAtZoom1);
+    setScaleRatio(pxPerFtAtZoom1, d, pxDist);
     setKnownDistance(""); // clear so next reset starts with empty input
     setMode("none");
     modeRef.current = "none";
@@ -1731,7 +1763,14 @@ export default function PlanPanel({
             className="text-[10px] font-mono text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded border border-yellow-400/30 shrink-0 hover:bg-yellow-400/20 transition-colors"
             title="Scale is set — click to view or re-set"
           >
-            ✓ Scale set
+            {(() => {
+              const entry = pageScaleMap[pageIdx];
+              if (!entry?.knownFt || !entry?.pxDist) return "✓ Scale set";
+              // 72 PDF pts/in × BASE_DPI (1.5) × RENDER_BASE_ZOOM (1.5) = 162 canvas px/in
+              const ftPerIn = (162 * entry.knownFt) / entry.pxDist;
+              const rounded = ftPerIn >= 10 ? Math.round(ftPerIn) : Math.round(ftPerIn * 2) / 2;
+              return `1 in ≈ ${rounded} ft`;
+            })()}
           </button>
         )}
 
@@ -1769,6 +1808,19 @@ export default function PlanPanel({
               toast.error("Set scale first — click \"Set Scale\", mark two points, enter the known distance in feet, then click OK.");
               return;
             }
+            // If there's a paused run, resume it instead of creating a new one
+            if (pausedRunId) {
+              const pausedRun = currentRuns.find(r => r.id === pausedRunId);
+              if (pausedRun) {
+                setCurrentActiveRunId(pausedRunId);
+                setPausedRunId(null);
+                setMode("measure");
+                modeRef.current = "measure";
+                toast.success(`Resumed "${pausedRun.name}" — continue clicking to extend.`);
+                return;
+              }
+              setPausedRunId(null); // stale — fall through to create new run
+            }
             // Auto-create a new run and immediately start measuring it
             const id = nanoid6();
             const runNum = currentRuns.length + 1;
@@ -1800,6 +1852,11 @@ export default function PlanPanel({
               onUnitCountToggle?.(false);
               toast.info("Unit Count off.");
             } else {
+              // If currently measuring, pause the run so we can resume later
+              if (modeRef.current === "measure") {
+                setPausedRunId(currentActiveRunId || null);
+                toast.info("Run paused — click Measure to resume where you left off.");
+              }
               // Ask parent to bootstrap a session if none exists, then activate count mode
               onRequestCountSession?.();
               setMode("count");
@@ -1898,7 +1955,7 @@ export default function PlanPanel({
             variant="ghost"
             onClick={() => {
               setScalePoints([]);
-              setScaleRatio(null);
+              setScaleRatio(null, undefined);
               setMode("none");
               modeRef.current = "none";
               toast.info("Scale reset for this page.");
@@ -2016,7 +2073,7 @@ export default function PlanPanel({
                 runColor={runColor}
                 canDelete={true}
                 savedColors={savedColors}
-                onActivate={() => setCurrentActiveRunId(run.id)}
+                onActivate={() => { setCurrentActiveRunId(run.id); setPausedRunId(null); }}
                 onRename={(name) => renameRun(run.id, name)}
                 onDelete={() => deleteRun(run.id)}
                 onColorChange={(c) => setRunColor(run.id, c)}
@@ -2183,6 +2240,57 @@ export default function PlanPanel({
           </div>
         )}
       </div>
+
+      {/* ── Right-click context menu ─────────────────────────────────────────── */}
+      {ctxMenu && (
+        <>
+          {/* Invisible backdrop — click anywhere to dismiss */}
+          <div
+            className="fixed inset-0 z-[100]"
+            onClick={() => setCtxMenu(null)}
+          />
+          {/* Menu */}
+          <div
+            className="fixed z-[101] min-w-[180px] rounded-lg border border-border bg-card shadow-xl overflow-hidden"
+            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          >
+            <div className="px-3 py-2 border-b border-border/50">
+              <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wide">
+                Run: {currentRuns.find(r => r.id === currentActiveRunId)?.name ?? "Active Run"}
+              </p>
+            </div>
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-[#F5C518]/10 hover:text-[#F5C518] transition-colors text-left"
+              onClick={() => {
+                // Append the right-clicked point to the active run and keep measuring
+                setCurrentRuns((prev) =>
+                  prev.map((r) =>
+                    r.id === currentActiveRunId
+                      ? { ...r, points: [...r.points, ctxMenu.normPt] }
+                      : r
+                  )
+                );
+                setCtxMenu(null);
+                toast.success("Continued run from this point — keep clicking to extend.");
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+              Continue run from here
+            </button>
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/30 transition-colors text-left"
+              onClick={() => setCtxMenu(null)}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

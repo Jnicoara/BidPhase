@@ -94,3 +94,12 @@
 - [x] Add per-page scale verification prompt: show modal/overlay whenever user navigates to a page without a scale set, before they can measure or add runs
 - [x] Combine Residential/Commercial/Industrial/Infrastructure into single "Electrical" category on homepage cards
 - [x] Combine 4 category icons into single "Electrical" icon in left sidebar
+
+## v4.7 — UI Polish + Run Workflow Improvements
+
+- [x] Remove lightning bolt icon from CategoryLanding homepage (keep text-only Electrical card)
+- [x] Hide Estimate Engine tab from left sidebar (treat like hidden categories, keep backend)
+- [x] Replace electrical sidebar bolt icon with a minimalist electrical panel / breaker box icon
+- [x] Show current page scale (e.g. "1 in = 20 ft") in PlanPanel toolbar at a glance
+- [x] Right-click context menu on canvas: "Continue run from here" option to resume/extend the active run from any clicked point; easy dismiss (click elsewhere or press Escape)
+- [x] Auto-pause active run measurement when user switches to Unit Count tab; auto-resume when switching back to Runs tab (unless they explicitly selected a different run)

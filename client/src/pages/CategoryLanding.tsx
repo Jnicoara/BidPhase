@@ -7,7 +7,6 @@
  */
 import { useApp } from "@/contexts/AppContext";
 import { cn } from "@/lib/utils";
-import { ElectricalIcon } from "@/components/tabs/UnifiedProjects";
 
 // ─── Component ──────────────────────────────────────────────────────────────────────────────────────
 export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil" | "commercial" | "residential" | "industrial") => void } = {}) {
@@ -66,12 +65,7 @@ export default function CategoryLanding({ onSelect }: { onSelect?: (cat: "civil"
           )}
           style={{ boxShadow: "0 4px 32px rgba(0,0,0,0.25)" }}
         >
-          {/* Icon */}
-          <div className="w-12 h-12 rounded-xl bg-[#F5C518]/10 border border-[#F5C518]/20 flex items-center justify-center mb-4">
-            <ElectricalIcon size={24} className="text-[#F5C518]" />
-          </div>
-
-          {/* Label */}
+          {/* Label — no icon, clean text-only card */}
           <div className="flex-1 flex flex-col justify-center w-full">
             <h2
               className="text-3xl font-bold text-foreground group-hover:text-[#F5C518] transition-colors duration-200"
