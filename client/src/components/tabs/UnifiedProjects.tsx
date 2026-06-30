@@ -1517,15 +1517,15 @@ function CivilEditor({
             {/* ── Thin strip shown when panel is collapsed ── */}
             {rightPanelCollapsed && (
               <div
-                className="flex flex-col items-center justify-start h-full py-4 bg-card border-l border-border cursor-pointer hover:bg-[#F5C518]/5 transition-colors"
+                className="flex flex-col items-center justify-center h-full py-4 bg-card border-l border-border cursor-pointer hover:bg-[#F5C518]/5 transition-colors gap-3"
                 onClick={toggleRightPanel}
                 title="Expand panel"
               >
-                {/* BP badge + chevron as visual affordance */}
-                <div className="flex flex-col items-center gap-1.5 w-full px-1">
-                  <div className="w-6 h-6 rounded bg-[#F5C518]/15 flex items-center justify-center">
-                    <span className="font-bold text-[#F5C518] text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
-                  </div>
+                <div className="w-6 h-6 rounded bg-[#F5C518]/15 flex items-center justify-center">
+                  <span className="font-bold text-[#F5C518] text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+                </div>
+                {/* Only the LEFT-pointing arrow shows when collapsed */}
+                <div className="w-6 h-6 rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 flex items-center justify-center">
                   <ChevronLeft size={13} className="text-[#F5C518]" />
                 </div>
               </div>
@@ -1559,10 +1559,10 @@ function CivilEditor({
                         <line x1="9" y1="3" x2="9" y2="21" />
                       </svg>
                     </button>
-                    {/* Collapse button */}
+                    {/* Only the RIGHT-pointing arrow shows when expanded — click to collapse */}
                     <button
                       onClick={toggleRightPanel}
-                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors"
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-[#F5C518] hover:bg-[#F5C518]/10 border border-transparent hover:border-[#F5C518]/30 transition-colors"
                       title="Collapse panel"
                     >
                       <ChevronRight size={14} />
