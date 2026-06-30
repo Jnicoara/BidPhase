@@ -1573,41 +1573,6 @@ function CivilEditor({
                 {/* ── Scrollable accordion body ── */}
                 <div className="flex-1 overflow-auto">
 
-                  {/* ── RUNS accordion ── */}
-                  <div className="bp-card overflow-hidden">
-                    <button
-                      onClick={() => setActiveSection(activeSection === "runs" ? null : "runs")}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
-                    >
-                      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                        Runs — Page {activePage}
-                        {pageRuns.length > 0 && (
-                          <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{pageRuns.length} run{pageRuns.length !== 1 ? 's' : ''}</span>
-                        )}
-                      </h2>
-                      {activeSection === "runs" ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
-                    </button>
-                    {activeSection === "runs" && (
-                      <div className="px-4 pb-4 space-y-4">
-                        {pageRuns.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
-                              <Link2 size={20} className="text-muted-foreground" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-muted-foreground">No runs on page {activePage}</p>
-                              <p className="text-xs text-muted-foreground/60 mt-1">Measure a conduit run on this page, then push it here.</p>
-                            </div>
-                          </div>
-                        ) : (
-                          pageRuns.map((run, i) => (
-                            <RunCard key={run.id} run={run} index={i} onUpdate={updateRun} onRemove={removeRun} />
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-
                   {/* ── UNIT COUNT accordion ── */}
                   <div className="bp-card overflow-hidden">
                     <button
@@ -1737,40 +1702,73 @@ function CivilEditor({
                     )}
                   </div>
 
-                  {/* ── MATERIALS accordion ── */}
+                  {/* ── RUNS accordion ── */}
                   <div className="bp-card overflow-hidden">
                     <button
-                      onClick={() => setActiveSection(activeSection === "materials" ? "runs" : "materials")}
+                      onClick={() => setActiveSection(activeSection === "runs" ? null : "runs")}
                       className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
                     >
                       <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                        Materials
-                        {runs.length > 0 && (
-                          <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{runs.length} run{runs.length !== 1 ? 's' : ''} total</span>
+                        Runs — Page {activePage}
+                        {pageRuns.length > 0 && (
+                          <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{pageRuns.length} run{pageRuns.length !== 1 ? 's' : ''}</span>
                         )}
                       </h2>
-                      {activeSection === "materials" ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
+                      {activeSection === "runs" ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
                     </button>
-                    {activeSection === "materials" && (
+                    {activeSection === "runs" && (
                       <div className="px-4 pb-4 space-y-4">
-                        <CrossPageTotals runs={runs} countSessions={countSessions} />
-                        {(runs.length > 0 || countSessions.some((cs) => cs.pins.length > 0)) && (
-                          <div className="pt-2 border-t border-border/40">
-                            <button
-                              onClick={() => setConfirmClear({ type: "total-reset" })}
-                              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-destructive/70 hover:text-destructive hover:bg-destructive/10 border border-destructive/20 hover:border-destructive/40 transition-all"
-                              title="Clear all runs and count pins across all pages"
-                            >
-                              <Trash2 size={11} />
-                              Total Reset (all pages)
-                            </button>
+                        {pageRuns.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
+                            <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
+                              <Link2 size={20} className="text-muted-foreground" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-muted-foreground">No runs on page {activePage}</p>
+                              <p className="text-xs text-muted-foreground/60 mt-1">Measure a conduit run on this page, then push it here.</p>
+                            </div>
                           </div>
+                        ) : (
+                          pageRuns.map((run, i) => (
+                            <RunCard key={run.id} run={run} index={i} onUpdate={updateRun} onRemove={removeRun} />
+                          ))
                         )}
                       </div>
                     )}
                   </div>
 
-                </div>{/* end scrollable body */}
+                </div>{/* end scrollable accordion area */}
+
+                {/* ── MATERIAL SUMMARY — always visible, pinned at bottom ── */}
+                <div className="shrink-0 border-t border-border bg-card">
+                  <div className="px-4 py-2.5 border-b border-border/60">
+                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      Material Summary
+                      {(runs.length > 0 || countSessions.some((cs) => cs.pins.length > 0)) && (
+                        <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">
+                          {runs.length > 0 ? `${runs.length} run${runs.length !== 1 ? 's' : ''}` : ''}
+                          {runs.length > 0 && countSessions.some((cs) => cs.pins.length > 0) ? ' · ' : ''}
+                          {countSessions.some((cs) => cs.pins.length > 0) ? `${countSessions.reduce((a, cs) => a + cs.pins.length, 0)} pins` : ''}
+                        </span>
+                      )}
+                    </h2>
+                  </div>
+                  <div className="px-4 py-3 space-y-3 max-h-64 overflow-auto">
+                    <CrossPageTotals runs={runs} countSessions={countSessions} />
+                    {(runs.length > 0 || countSessions.some((cs) => cs.pins.length > 0)) && (
+                      <div className="pt-2 border-t border-border/40">
+                        <button
+                          onClick={() => setConfirmClear({ type: "total-reset" })}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-destructive/70 hover:text-destructive hover:bg-destructive/10 border border-destructive/20 hover:border-destructive/40 transition-all"
+                          title="Clear all runs and count pins across all pages"
+                        >
+                          <Trash2 size={11} />
+                          Total Reset (all pages)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </>
             )}{/* end !rightPanelCollapsed */}
           </div>

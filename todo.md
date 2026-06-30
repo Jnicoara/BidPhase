@@ -204,3 +204,9 @@
 - [x] Right panel header: add a reset-size button to snap the panel back to default 40% width after user drags the divider
 - [x] Runs accordion: make it collapsible — clicking the header when Runs is already open should collapse it (not just stay open)
 - [x] Cursor: always yellow (#F5C518) in both count mode and measure mode — no run-color matching for the dot or crosshair lines
+
+## v5.10 — Right Panel Layout Reorder
+
+- [x] Right panel: move Unit Count accordion to the top (above Runs)
+- [x] Right panel: move Runs accordion below Unit Count
+- [x] Right panel: rename "Materials" section to "Material Summary" and make it always-visible (non-collapsible), showing live totals
