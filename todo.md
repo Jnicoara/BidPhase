@@ -134,3 +134,16 @@
 - [x] Harmonize run colors and pin colors to vibe with app dark palette while staying distinguishable
 - [x] Rename "Electrical" sidebar entry to "Projects" with a new clean icon matching early-phase icon style
 - [x] Homepage improvement suggestions delivered to user
+
+## v5.1 — Homepage Merge, Run Workflow, Cursor & UX Polish
+
+- [x] Merge homepage with project list: branded BidPhase header + project cards below on same screen
+- [x] BP logo/icon in sidebar always navigates back to home/project list
+- [x] Set Scale button changes to "Reset Scale" after scale is set; clicking Reset Scale asks for confirmation before clearing
+- [x] Cursor: dot with crosshair lines (not plus shape) — color-matched to active run or yellow in scale mode
+- [x] Condensed pin color picker: small swatch popup grid instead of expanded inline picker
+- [x] Run cards in right panel: collapsible (click to expand/collapse like Unit Count)
+- [x] Run cards: replace minimize button with X button; X asks before deleting
+- [x] Deleting a run from right panel also removes it from toolbar strip; remaining runs re-number sequentially
+- [x] Run workflow: Pause button (saves progress, exits measure mode), Resume button (re-enters measure mode for that run), Finish button (completes/locks the run)
+- [x] Clicking a run in the toolbar strip or right panel re-enters measure mode for that run (resume)

@@ -48,7 +48,6 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  Lock,
   Pencil,
   Check,
   MapPin,
@@ -84,6 +83,8 @@ interface MeasureRun {
   points: NormPoint[];
   totalFeet: number | null;
   conduitSize: ConduitSize;
+  /** 'active' = currently being measured, 'paused' = user paused mid-run, 'finished' = locked */
+  status?: "active" | "paused" | "finished";
 }
 
 // Per-page run storage: pageIndex → MeasureRun[]
@@ -164,7 +165,11 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
       className={cn(
         "flex items-center gap-1 rounded border transition-all",
         isActive
-          ? "bg-[#F5C518]/10 border-[#F5C518]/50 shadow-sm"
+          ? run.status === "paused"
+            ? "bg-amber-500/10 border-amber-500/40 shadow-sm"
+            : run.status === "finished"
+              ? "bg-emerald-500/10 border-emerald-500/40 shadow-sm"
+              : "bg-[#F5C518]/10 border-[#F5C518]/50 shadow-sm"
           : "border-transparent opacity-60 hover:opacity-90"
       )}
     >
@@ -256,6 +261,12 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
           <span>{run.name}</span>
           {run.totalFeet !== null && (
             <span className="font-mono" style={{ color: runColor }}>{run.totalFeet}'</span>
+          )}
+          {run.status === "paused" && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300 font-medium">paused</span>
+          )}
+          {run.status === "finished" && (
+            <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">✓ done</span>
           )}
         </button>
       )}
@@ -483,8 +494,9 @@ export default function PlanPanel({
   const svgCursor = useMemo(() => {
     if (!activeCursorColor) return undefined;
     const c = encodeURIComponent(activeCursorColor);
-    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><line x1='12' y1='2' x2='12' y2='22' stroke='${c}' stroke-width='2'/><line x1='2' y1='12' x2='22' y2='12' stroke='${c}' stroke-width='2'/><circle cx='12' cy='12' r='2' fill='${c}'/></svg>`;
-    return `url("data:image/svg+xml,${svg}") 12 12, crosshair`;
+    // Dot cursor: small filled circle (no plus arms — crosshair lines are drawn on canvas)
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><circle cx='8' cy='8' r='4' fill='${c}' stroke='rgba(0,0,0,0.5)' stroke-width='1.5'/></svg>`;
+    return `url("data:image/svg+xml,${svg}") 8 8, crosshair`;
   }, [activeCursorColor]);
   // ── Full-screen crosshair overlay state ──────────────────────────────────
   const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
@@ -1575,10 +1587,19 @@ export default function PlanPanel({
       const target = prev.find((r) => r.id === runId);
       if (target) onDeleteRun?.(target.name, currentPage);
       const next = prev.filter((r) => r.id !== runId);
-      if (currentActiveRunId === runId) setCurrentActiveRunId(next[0]?.id ?? "");
-      return next;
+      // Re-number remaining runs sequentially (Run 1, Run 2, ...)
+      const renumbered = next.map((r, i) => {
+        const expectedName = `Run ${i + 1}`;
+        // Only auto-rename if the name matches the default pattern ("Run N")
+        const isDefaultName = /^Run \d+$/.test(r.name);
+        return isDefaultName ? { ...r, name: expectedName } : r;
+      });
+      if (currentActiveRunId === runId) setCurrentActiveRunId(renumbered[0]?.id ?? "");
+      // Clear paused state if the paused run was deleted
+      if (pausedRunId === runId) setPausedRunId(null);
+      return renumbered;
     });
-  }, [currentActiveRunId, setCurrentRuns, setCurrentActiveRunId, onDeleteRun]);
+  }, [currentActiveRunId, pausedRunId, setCurrentRuns, setCurrentActiveRunId, onDeleteRun]);
 
   // ── Push to calculator ─────────────────────────────────────────────────────
   const handlePush = () => {
@@ -1664,22 +1685,33 @@ export default function PlanPanel({
         <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-card border border-border rounded-xl shadow-2xl p-5 max-w-xs w-full mx-4 space-y-4">
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-destructive">Confirm Delete</h3>
-              <p className="text-sm text-muted-foreground">
-                Delete <strong>{deleteConfirm.name ?? "this run"}</strong>? This cannot be undone.
-              </p>
+              {deleteConfirm.name === "scale" ? (
+                <>
+                  <h3 className="text-sm font-bold text-foreground">Reset Scale?</h3>
+                  <p className="text-sm text-muted-foreground">
+                    This will clear the scale for this page. You’ll need to re-set it before measuring.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-sm font-bold text-destructive">Confirm Delete</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Delete <strong>{deleteConfirm.name ?? "this run"}</strong>? This cannot be undone.
+                  </p>
+                </>
+              )}
             </div>
             <div className="flex gap-2">
               <Button
                 size="sm"
-                variant="destructive"
-                className="flex-1"
+                variant={deleteConfirm.name === "scale" ? "default" : "destructive"}
+                className={cn("flex-1", deleteConfirm.name === "scale" ? "bg-[#F5C518] text-black hover:bg-[#F5C518]/90" : "")}
                 onClick={() => {
                   deleteConfirm.onConfirm();
                   setDeleteConfirm(null);
                 }}
               >
-                Yes, Delete
+                {deleteConfirm.name === "scale" ? "Reset Scale" : "Yes, Delete"}
               </Button>
               <Button
                 size="sm"
@@ -1769,10 +1801,12 @@ export default function PlanPanel({
           const entry = pageScaleMap[pageIdx];
           const hasScale = scaleRatio !== null && scaleRatio > 0;
           const scaleLabel = (() => {
-            if (!entry?.knownFt || !entry?.pxDist) return hasScale ? "✓ Scale set" : "Set Scale";
+            if (isEditingScale) return "Setting Scale…";
+            if (!hasScale) return "Set Scale";
+            if (!entry?.knownFt || !entry?.pxDist) return "Reset Scale";
             const ftPerIn = (162 * entry.knownFt) / entry.pxDist;
             const rounded = ftPerIn >= 10 ? Math.round(ftPerIn) : Math.round(ftPerIn * 2) / 2;
-            return `${entry.knownFt} ft ref  ·  1 in = ${rounded} ft`;
+            return `${entry.knownFt} ft  ·  1 in = ${rounded} ft`;
           })();
           return (
             <Button
@@ -1782,7 +1816,7 @@ export default function PlanPanel({
                 isEditingScale
                   ? "bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
                   : hasScale
-                    ? "bg-muted/40 text-muted-foreground border-border hover:bg-muted/60"
+                    ? "bg-muted/40 text-muted-foreground border-border hover:bg-destructive/20 hover:text-destructive"
                     : ""
               )}
               variant={isEditingScale ? "default" : "outline"}
@@ -1793,16 +1827,29 @@ export default function PlanPanel({
                   setMode("none");
                   modeRef.current = "none";
                   toast.info("Scale edit cancelled.");
+                } else if (hasScale) {
+                  // Confirm before resetting an existing scale
+                  setDeleteConfirm({
+                    count: 0,
+                    name: "scale",
+                    onConfirm: () => {
+                      setScalePoints([]);
+                      setScaleRatio(null, undefined);
+                      setMode("set-scale-p1");
+                      modeRef.current = "set-scale-p1";
+                      toast.info("Scale reset — click the START of your reference line.");
+                    },
+                  });
                 } else {
-                  // Enter edit mode
+                  // Enter edit mode for first-time scale setting
                   setScalePoints([]);
                   setMode("set-scale-p1");
                   modeRef.current = "set-scale-p1";
-                  toast.info(hasScale ? "Re-setting scale — click the START of your reference line." : "Click the START of your known-distance reference line.");
+                  toast.info("Click the START of your known-distance reference line.");
                 }
               }}
               disabled={!pdfFile}
-              title={isEditingScale ? "Cancel scale edit" : hasScale ? "Scale locked — click to re-set" : "Set scale"}
+              title={isEditingScale ? "Cancel scale edit" : hasScale ? "Reset scale for this page" : "Set scale"}
             >
               {isEditingScale ? (
                 <><Pencil size={11} className="mr-1" />Setting Scale…</>
@@ -1829,55 +1876,101 @@ export default function PlanPanel({
 
         <div className="w-px h-4 bg-border shrink-0" />
 
-        {/* Measure */}
-        <Button
-          size="sm"
-          className="h-7 text-xs px-2 shrink-0"
-          variant={mode === "measure" ? "default" : "outline"}
-          onClick={() => {
-            if (mode === "measure") {
-              // Toggle off — finish current run
-              setMode("none");
-              modeRef.current = "none";
-              toast.info("Measurement paused. Click Measure to start a new run.");
-              return;
-            }
-            // Scale is required before measuring — show the prompt instead of just a toast
-            if (!scaleRatio) {
-              setShowScalePrompt(true);
-              return;
-            }
-            // If there's a paused run, resume it instead of creating a new one
-            if (pausedRunId) {
-              const pausedRun = currentRuns.find(r => r.id === pausedRunId);
-              if (pausedRun) {
-                setCurrentActiveRunId(pausedRunId);
-                setPausedRunId(null);
-                setMode("measure");
-                modeRef.current = "measure";
-                toast.success(`Resumed "${pausedRun.name}" — continue clicking to extend.`);
+        {/* Measure / Pause / Finish / Resume buttons — context-aware */}
+        {mode === "measure" ? (
+          // Currently measuring: show Pause and Finish side by side
+          <>
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
+              variant="outline"
+              onClick={() => {
+                // Pause: mark run as paused, exit measure mode
+                if (activeRun) {
+                  setCurrentRuns((prev) => prev.map((r) => r.id === activeRun.id ? { ...r, status: "paused" } : r));
+                  setPausedRunId(activeRun.id);
+                }
+                setMode("none");
+                modeRef.current = "none";
+                toast.info(`"${activeRun?.name}" paused — click Resume to continue or start a new run.`);
+              }}
+              title="Pause this run — you can resume it later"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" className="mr-1"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              Pause
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
+              variant="default"
+              onClick={() => {
+                // Finish: mark run as finished, exit measure mode
+                if (activeRun) {
+                  setCurrentRuns((prev) => prev.map((r) => r.id === activeRun.id ? { ...r, status: "finished" } : r));
+                }
+                setMode("none");
+                modeRef.current = "none";
+                toast.success(`"${activeRun?.name}" finished — ${activeRun?.totalFeet ?? 0} ft.`);
+              }}
+              title="Finish this run"
+            >
+              <Check size={11} className="mr-1" />
+              Finish
+            </Button>
+          </>
+        ) : (
+          // Not measuring: show Measure button (or Resume if there's a paused run)
+          <Button
+            size="sm"
+            className={cn(
+              "h-7 text-xs px-2 shrink-0",
+              pausedRunId && currentRuns.find(r => r.id === pausedRunId)
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
+                : ""
+            )}
+            variant="outline"
+            onClick={() => {
+              // Scale is required before measuring — show the prompt instead of just a toast
+              if (!scaleRatio) {
+                setShowScalePrompt(true);
                 return;
               }
-              setPausedRunId(null); // stale — fall through to create new run
-            }
-            // Auto-create a new run and immediately start measuring it
-            const id = nanoid6();
-            const runNum = currentRuns.length + 1;
-            const name = `Run ${runNum}`;
-            const color = BASE_PALETTE[(runNum - 1) % BASE_PALETTE.length];
-            const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "1/2" };
-            setCurrentRuns((prev) => [...prev, newRun]);
-            setCurrentActiveRunId(id);
-            setMode("measure");
-            modeRef.current = "measure";
-            toast.info(`"${name}" started — click points along the path. Click Done or press Esc to finish.`);
-          }}
-          disabled={!pdfFile}
-          title="Measure — starts a new run automatically"
-        >
-          <Ruler size={12} className="mr-1" />
-          {mode === "measure" ? "Done" : "Measure"}
-        </Button>
+              // If there's a paused run, resume it instead of creating a new one
+              if (pausedRunId) {
+                const pausedRun = currentRuns.find(r => r.id === pausedRunId);
+                if (pausedRun) {
+                  setCurrentActiveRunId(pausedRunId);
+                  setCurrentRuns((prev) => prev.map((r) => r.id === pausedRunId ? { ...r, status: "active" } : r));
+                  setPausedRunId(null);
+                  setMode("measure");
+                  modeRef.current = "measure";
+                  toast.success(`Resumed "${pausedRun.name}" — continue clicking to extend.`);
+                  return;
+                }
+                setPausedRunId(null); // stale — fall through to create new run
+              }
+              // Auto-create a new run and immediately start measuring it
+              const id = nanoid6();
+              const runNum = currentRuns.length + 1;
+              const name = `Run ${runNum}`;
+              const color = BASE_PALETTE[(runNum - 1) % BASE_PALETTE.length];
+              const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "1/2", status: "active" };
+              setCurrentRuns((prev) => [...prev, newRun]);
+              setCurrentActiveRunId(id);
+              setMode("measure");
+              modeRef.current = "measure";
+              toast.info(`"${name}" started — click points along the path.`);
+            }}
+            disabled={!pdfFile}
+            title={pausedRunId && currentRuns.find(r => r.id === pausedRunId) ? "Resume paused run" : "Measure — starts a new run automatically"}
+          >
+            {pausedRunId && currentRuns.find(r => r.id === pausedRunId) ? (
+              <><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" className="mr-1"><polygon points="5,3 19,12 5,21"/></svg>Resume</>
+            ) : (
+              <><Ruler size={12} className="mr-1" />Measure</>
+            )}
+          </Button>
+        )}
 
 
         <div className="w-px h-4 bg-border shrink-0" />
@@ -1949,25 +2042,6 @@ export default function PlanPanel({
             title={`Clear all pins on page ${currentPage}`}
           >
             <X size={13} />
-          </Button>
-        )}
-
-        {scaleRatio && (
-          <Button
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            variant="ghost"
-            onClick={() => {
-              setScalePoints([]);
-              setScaleRatio(null, undefined);
-              setMode("none");
-              modeRef.current = "none";
-              toast.info("Scale reset for this page.");
-            }}
-            disabled={!pdfFile}
-            title="Reset scale for this page"
-          >
-            <Lock size={11} />
           </Button>
         )}
 
@@ -2077,7 +2151,24 @@ export default function PlanPanel({
                 runColor={runColor}
                 canDelete={true}
                 savedColors={savedColors}
-                onActivate={() => { setCurrentActiveRunId(run.id); setPausedRunId(null); }}
+                onActivate={() => {
+                  setCurrentActiveRunId(run.id);
+                  if (run.status === "paused") {
+                    // Clicking a paused run chip: mark it as the paused run so Resume button appears
+                    setPausedRunId(run.id);
+                  } else if (run.status === "finished") {
+                    // Clicking a finished run: just select it, don't re-enter measure mode
+                    setPausedRunId(null);
+                  } else {
+                    // Active run: select and enter measure mode if scale is set
+                    setPausedRunId(null);
+                    if (scaleRatio) {
+                      setCurrentRuns((prev) => prev.map((r) => r.id === run.id ? { ...r, status: "active" } : r));
+                      setMode("measure");
+                      modeRef.current = "measure";
+                    }
+                  }
+                }}
                 onRename={(name) => renameRun(run.id, name)}
                 onDelete={() => deleteRun(run.id)}
                 onColorChange={(c) => setRunColor(run.id, c)}
@@ -2116,7 +2207,7 @@ export default function PlanPanel({
           {mode === "set-scale-p1" && "Click the START of your reference line."}
           {mode === "set-scale-p2" && scalePoints.length < 2 && "Click the END of the reference line."}
           {mode === "set-scale-p2" && scalePoints.length >= 2 && "Enter real-world distance (ft) → Confirm."}
-          {mode === "measure" && `Measuring: ${activeRun?.name} · Click to add points · U=undo · Esc=done`}
+          {mode === "measure" && `Measuring: ${activeRun?.name} · Click to add points · Pause or Finish when done · U=undo`}
           {mode === "count" && `Unit Count · Click=place pin · Right-click=remove · U=undo · ${activeCountSession ? activeCountSession.pins.length + " total" : "No session selected"}`}
           {mode === "none" && `Page ${currentPage}/${numPages || "–"} · Scroll=zoom · ←/→=page · M=measure`}
         </span>

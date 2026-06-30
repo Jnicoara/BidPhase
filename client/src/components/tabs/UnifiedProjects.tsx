@@ -397,6 +397,8 @@ function RunCard({
   onRemove: (id: string) => void;
 }) {
   const [showFittings, setShowFittings] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const isWire = (run.runType ?? "conduit") === "wire";
 
   // ── Jacketed / Romex defaults & calculations ─────────────────────────────────
@@ -423,8 +425,39 @@ function RunCard({
 
   return (
     <div className="bp-card overflow-hidden">
-      {/* Run header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/10">
+      {/* Delete confirmation overlay */}
+      {confirmDelete && (
+        <div className="absolute inset-0 z-10 bg-background/90 backdrop-blur-sm flex items-center justify-center rounded-lg">
+          <div className="bg-card border border-border rounded-xl shadow-xl p-4 max-w-[240px] w-full space-y-3">
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-destructive">Remove Run?</h3>
+              <p className="text-xs text-muted-foreground">
+                Remove <strong>{run.name}</strong> from the right panel? The measurement on the plan is not affected.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { onRemove(run.id); setConfirmDelete(false); }}
+                className="flex-1 py-1.5 rounded text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+              >
+                Remove
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-1.5 rounded text-xs font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Run header — click to collapse/expand */}
+      <div
+        className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/10 cursor-pointer select-none"
+        onClick={() => setIsCollapsed((v) => !v)}
+      >
         <div className="flex items-center gap-2">
           <div
             className="w-2 h-2 rounded-full shrink-0"
@@ -448,18 +481,32 @@ function RunCard({
               pg {run.pageNumber}
             </span>
           )}
+          {isCollapsed && (
+            <span className="text-[10px] font-mono text-[#F5C518] bg-[#F5C518]/10 px-1.5 py-0.5 rounded">
+              {run.feet} ft
+            </span>
+          )}
         </div>
-        <button
-          onClick={() => onRemove(run.id)}
-          className="text-muted-foreground hover:text-destructive transition-colors"
-          title="Remove run"
-        >
-          <Minus size={12} />
-        </button>
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => setIsCollapsed((v) => !v)}
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            title={isCollapsed ? "Expand" : "Collapse"}
+          >
+            {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+          </button>
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="p-1 text-muted-foreground/50 hover:text-destructive transition-colors rounded hover:bg-destructive/10"
+            title="Remove run"
+          >
+            <X size={13} />
+          </button>
+        </div>
       </div>
 
-      {/* Run body */}
-      <div className="p-4 space-y-4">
+      {/* Run body — hidden when collapsed */}
+      <div className={cn("p-4 space-y-4", isCollapsed ? "hidden" : "")}>
         {/* Measured Takeoff row + Conductors (conduit only) */}
         <div className={isWire ? "space-y-1.5" : "grid grid-cols-2 gap-3"}>
           <div className="space-y-1.5">
