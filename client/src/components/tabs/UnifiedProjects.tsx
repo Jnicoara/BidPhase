@@ -1346,6 +1346,57 @@ function CivilEditor({
     [runs, syncRuns]
   );
 
+  // ── Page-scoped clear + total reset state ────────────────────────────────
+  // confirmClear: what destructive action is pending confirmation
+  //   { type: "page-runs" | "page-counts" | "total-reset" }
+  const [confirmClear, setConfirmClear] = useState<
+    { type: "page-runs" } | { type: "page-counts" } | { type: "total-reset" } | null
+  >(null);
+  // Undo snapshot for total reset
+  const [resetUndo, setResetUndo] = useState<{ runs: RunItem[]; countSessions: CountSession[] } | null>(null);
+  const [resetUndoTimer, setResetUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear all runs on the current page
+  const handleClearPageRuns = useCallback(() => {
+    const next = runs.filter((r) => (r.pageNumber ?? 1) !== activePage);
+    syncRuns(next);
+    toast.info(`Cleared all runs on page ${activePage}.`);
+  }, [runs, activePage, syncRuns]);
+
+  // Clear all count pins on the current page (across all sessions)
+  const handleClearPageAllCounts = useCallback(() => {
+    const updated = countSessions.map((cs) => ({
+      ...cs,
+      pins: cs.pins.filter((p) => (p.pageNumber ?? 1) !== activePage),
+    }));
+    setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
+    toast.info(`Cleared all count pins on page ${activePage}.`);
+  }, [countSessions, activePage, s, runs, activeCountSessionId, setCivilState]);
+
+  // Total reset: wipe all runs and all count pins across all pages
+  const handleTotalReset = useCallback(() => {
+    // Save undo snapshot
+    setResetUndo({ runs, countSessions });
+    if (resetUndoTimer) clearTimeout(resetUndoTimer);
+    const t = setTimeout(() => setResetUndo(null), 10000); // 10s undo window
+    setResetUndoTimer(t);
+    // Clear everything
+    const clearedSessions = countSessions.map((cs) => ({ ...cs, pins: [] }));
+    syncRuns([]);
+    setCivilState({ ...s, runs: [], countSessions: clearedSessions, activeCountSessionId });
+    toast.info("All marks cleared.");
+  }, [runs, countSessions, s, activeCountSessionId, syncRuns, setCivilState, resetUndoTimer]);
+
+  // Undo total reset
+  const handleUndoTotalReset = useCallback(() => {
+    if (!resetUndo) return;
+    syncRuns(resetUndo.runs);
+    setCivilState({ ...s, runs: resetUndo.runs, countSessions: resetUndo.countSessions, activeCountSessionId });
+    setResetUndo(null);
+    if (resetUndoTimer) clearTimeout(resetUndoTimer);
+    toast.success("All marks restored.");
+  }, [resetUndo, s, activeCountSessionId, syncRuns, setCivilState, resetUndoTimer]);
+
   // These are computed for potential future use in the header strip
   const totalWire = runs.reduce((acc, r) => {
     const isWireRun = (r.runType ?? "conduit") === "wire";
@@ -1465,6 +1516,17 @@ function CivilEditor({
                     )}
                   </h2>
                   <div className="flex items-center gap-2">
+                    {/* Clear page counts button — only shown when there are pins on this page */}
+                    {countSessions.some((cs) => cs.pins.some((p) => (p.pageNumber ?? 1) === activePage)) && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setConfirmClear({ type: "page-counts" }); }}
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors px-1.5 py-0.5 rounded hover:bg-destructive/10"
+                        title={`Clear all count pins on page ${activePage}`}
+                      >
+                        <Trash2 size={10} />
+                        Clear page
+                      </button>
+                    )}
                     {countSessionsOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
                   </div>
                 </button>
@@ -1600,8 +1662,25 @@ function CivilEditor({
                 </div>}
               </div>
 
+            {/* Runs section header with page-scoped clear */}
+            <div className="flex items-center justify-between px-4 pt-3 pb-1 shrink-0">
+              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Runs — Page {activePage}
+              </span>
+              {pageRuns.length > 0 && (
+                <button
+                  onClick={() => setConfirmClear({ type: "page-runs" })}
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors px-1.5 py-0.5 rounded hover:bg-destructive/10"
+                  title={`Clear all runs on page ${activePage}`}
+                >
+                  <Trash2 size={10} />
+                  Clear page
+                </button>
+              )}
+            </div>
+
             {/* Runs list */}
-            <div className="flex-1 overflow-auto p-4 pb-24 space-y-4">
+            <div className="flex-1 overflow-auto p-4 pt-2 pb-24 space-y-4">
               {pageRuns.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
@@ -1632,10 +1711,89 @@ function CivilEditor({
               {/* Cross-page totals — always visible, shows zeros until runs are added */}
               <CrossPageTotals runs={runs} countSessions={countSessions} />
 
+              {/* Total Reset — clears all runs and count pins across all pages */}
+              {(runs.length > 0 || countSessions.some((cs) => cs.pins.length > 0)) && (
+                <div className="pt-4 border-t border-border/40 mt-4">
+                  <button
+                    onClick={() => setConfirmClear({ type: "total-reset" })}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-destructive/70 hover:text-destructive hover:bg-destructive/10 border border-destructive/20 hover:border-destructive/40 transition-all"
+                    title="Clear all runs and count pins across all pages"
+                  >
+                    <Trash2 size={11} />
+                    Total Reset (all pages)
+                  </button>
+                </div>
+              )}
+
             </div>
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {/* ── Confirmation dialog for destructive clear actions ──────────────────────── */}
+      {confirmClear && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
+            {confirmClear.type === "page-runs" && (
+              <>
+                <h3 className="font-semibold text-foreground mb-2">Clear all runs on page {activePage}?</h3>
+                <p className="text-sm text-muted-foreground mb-5">
+                  This will remove all <span className="font-medium text-foreground">{pageRuns.length} run{pageRuns.length !== 1 ? "s" : ""}</span> from page {activePage}. This cannot be undone.
+                </p>
+              </>
+            )}
+            {confirmClear.type === "page-counts" && (
+              <>
+                <h3 className="font-semibold text-foreground mb-2">Clear all count pins on page {activePage}?</h3>
+                <p className="text-sm text-muted-foreground mb-5">
+                  This will remove all count pins on page {activePage} across all count sessions. This cannot be undone.
+                </p>
+              </>
+            )}
+            {confirmClear.type === "total-reset" && (
+              <>
+                <h3 className="font-semibold text-destructive mb-2">⚠️ Total Reset — are you sure?</h3>
+                <p className="text-sm text-muted-foreground mb-5">
+                  This will clear <span className="font-medium text-foreground">all runs and all count pins across every page</span> of this project. You’ll have 10 seconds to undo.
+                </p>
+              </>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmClear(null)}
+                className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmClear.type === "page-runs") handleClearPageRuns();
+                  else if (confirmClear.type === "page-counts") handleClearPageAllCounts();
+                  else if (confirmClear.type === "total-reset") handleTotalReset();
+                  setConfirmClear(null);
+                }}
+                className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium"
+              >
+                {confirmClear.type === "total-reset" ? "Yes, Reset Everything" : "Clear"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Undo toast for total reset ──────────────────────────────────────────── */}
+      {resetUndo && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl bg-card border border-border shadow-2xl">
+          <span className="text-sm text-foreground">All marks cleared</span>
+          <button
+            onClick={handleUndoTotalReset}
+            className="flex items-center gap-1.5 text-sm font-semibold text-[#F5C518] hover:text-[#F5C518]/80 transition-colors"
+          >
+            <Undo2 size={14} />
+            Undo (10s)
+          </button>
+        </div>
+      )}
     </div>
   );
 }

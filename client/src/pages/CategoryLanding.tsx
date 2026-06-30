@@ -171,27 +171,16 @@ export default function CategoryLanding({
             </p>
           </div>
 
-          {/* New Project CTA */}
-          <div className="flex items-center gap-3 shrink-0">
-            {visibleTrash.length > 0 && (
-              <button
-                onClick={() => window.location.hash = "/trash"}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-lg hover:bg-muted/20 border border-border/50"
-              >
-                <Trash2 size={13} />
-                Trash ({visibleTrash.length})
-              </button>
-            )}
-            {showNew ? null : (
-              <button
-                onClick={() => setShowNew(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#F5C518] text-black text-sm font-bold hover:bg-[#F5C518]/90 active:scale-[0.97] transition-all duration-150"
-              >
-                <Plus size={16} />
-                New Project
-              </button>
-            )}
-          </div>
+          {/* Trash shortcut — only shown when there are trashed projects */}
+          {visibleTrash.length > 0 && (
+            <button
+              onClick={() => window.location.hash = "/trash"}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-lg hover:bg-muted/20 border border-border/50 shrink-0"
+            >
+              <Trash2 size={13} />
+              Trash ({visibleTrash.length})
+            </button>
+          )}
         </div>
 
         {/* Inline new project form */}

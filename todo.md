@@ -147,3 +147,14 @@
 - [x] Deleting a run from right panel also removes it from toolbar strip; remaining runs re-number sequentially
 - [x] Run workflow: Pause button (saves progress, exits measure mode), Resume button (re-enters measure mode for that run), Finish button (completes/locks the run)
 - [x] Clicking a run in the toolbar strip or right panel re-enters measure mode for that run (resume)
+
+## v5.2 — Homepage/Projects Merge + Scoped Delete/Clear/Reset
+
+- [x] Merge homepage and projects page: project list cards appear directly on the home screen (no separate Projects page)
+- [x] Remove the Projects tab from the left sidebar
+- [x] Remove the yellow "New Project" button from the top-right (redundant with Create your first project / inline add)
+- [x] Add a small "New Project" action inline on the home screen (e.g. a card or row at the bottom of the project list)
+- [x] Scope toolbar trash button: only deletes the active run (in Runs mode) or clears pins for the active count session on the current page (in Unit Count mode) — not everything
+- [x] Add page-scoped "Clear page runs" button: removes all runs on the current page with a confirmation dialog
+- [x] Add page-scoped "Clear page counts" button: removes all count pins on the current page with a confirmation dialog
+- [x] Add "Total Reset" button: clears all runs and count pins across all pages; requires confirmation dialog; provides undo (restore previous state)

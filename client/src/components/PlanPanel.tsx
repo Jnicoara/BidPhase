@@ -1987,63 +1987,57 @@ export default function PlanPanel({
           <Undo2 size={13} />
         </Button>
 
-        {/* Clear run points — with confirm if many points */}
+        {/* Trash button — scoped to what you’re actively working with:
+             - In measure mode: clears only the active run’s points on this page
+             - In count mode: clears only the active count session’s pins on this page
+             - In other modes: clears the active run’s points */}
         <Button
           size="icon"
           className="h-7 w-7 shrink-0"
           variant="ghost"
           onClick={() => {
-            const pts = activeRun?.points?.length ?? 0;
-            const pinsOnPage = currentPins.length;
-            const total = pts + pinsOnPage;
-            const doDelete = () => {
-              setCurrentRuns((prev) => prev.map((r) => r.id === currentActiveRunId ? { ...r, points: [], totalFeet: null } : r));
-              if (pinsOnPage > 0 && activeCountSession) {
+            if (mode === "count") {
+              // Count mode: only clear the active count session’s pins on this page
+              if (!activeCountSession) return;
+              const pinsOnPage = currentPins.length;
+              if (pinsOnPage === 0) { toast.info("No pins on this page."); return; }
+              const doDelete = () => {
                 onClearPagePins?.(currentPage);
+                toast.info(`Cleared ${pinsOnPage} pin${pinsOnPage !== 1 ? "s" : ""} from “${activeCountSession.name}” on page ${currentPage}.`);
+              };
+              if (pinsOnPage >= 3) {
+                setDeleteConfirm({
+                  count: pinsOnPage,
+                  name: `“${activeCountSession.name}” pins on page ${currentPage}`,
+                  onConfirm: doDelete,
+                });
+              } else {
+                doDelete();
               }
-              setMode("none");
-              modeRef.current = "none";
-              toast.info("Cleared. Scale preserved.");
-            };
-            if (pts >= 3 || (pts > 0 && pinsOnPage > 0)) {
-              setDeleteConfirm({ count: pts, name: activeRun?.name, onConfirm: doDelete });
             } else {
-              doDelete();
+              // Measure / other modes: only clear the active run’s points
+              const pts = activeRun?.points?.length ?? 0;
+              if (pts === 0) { toast.info("No points on active run."); return; }
+              const doDelete = () => {
+                setCurrentRuns((prev) => prev.map((r) => r.id === currentActiveRunId ? { ...r, points: [], totalFeet: null } : r));
+                setMode("none");
+                modeRef.current = "none";
+                toast.info(`Cleared “${activeRun?.name ?? "run"}”. Scale preserved.`);
+              };
+              if (pts >= 3) {
+                setDeleteConfirm({ count: pts, name: activeRun?.name, onConfirm: doDelete });
+              } else {
+                doDelete();
+              }
             }
           }}
           disabled={!pdfFile}
-          title="Clear run points and page pins (scale preserved)"
+          title={mode === "count"
+            ? `Clear “${activeCountSession?.name ?? "active session"}” pins on page ${currentPage}`
+            : `Clear “${activeRun?.name ?? "active run"}” points (scale preserved)`}
         >
           <Trash2 size={13} />
         </Button>
-
-        {/* Clear Page Pins — only visible in Unit Count mode when there are pins on this page */}
-        {mode === "count" && currentPins.length > 0 && (
-          <Button
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            variant="ghost"
-            onClick={() => {
-              if (!activeCountSession) return;
-              if (currentPins.length >= 3) {
-                setDeleteConfirm({
-                  count: currentPins.length,
-                  name: `${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}`,
-                  onConfirm: () => {
-                    onClearPagePins?.(currentPage);
-                    toast.info(`Cleared ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}.`);
-                  },
-                });
-              } else {
-                onClearPagePins?.(currentPage);
-                toast.info(`Cleared ${currentPins.length} pin${currentPins.length !== 1 ? "s" : ""} on page ${currentPage}.`);
-              }
-            }}
-            title={`Clear all pins on page ${currentPage}`}
-          >
-            <X size={13} />
-          </Button>
-        )}
 
         {/* Zoom — right-aligned */}
         <div className="ml-auto flex items-center gap-0 shrink-0">

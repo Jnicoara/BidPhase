@@ -161,6 +161,8 @@ export default function BidPhaseShell() {
   }, [navigate, currentCategory]);
 
   // ── Content renderer ───────────────────────────────────────────────────────
+  // The home/landing screen IS the projects list (CategoryLanding).
+  // Navigating to a category route opens that project workspace directly.
   const renderContent = () => {
     if (isInMaterial)  return <MaterialListPage onBack={closeMaterialList} />;
     if (isOnLanding)   return (
@@ -172,7 +174,7 @@ export default function BidPhaseShell() {
     if (isInTrash)     return <TrashPage onBack={goBack} />;
     if (isInSettings)  return <SettingsTab onBack={goBack} />;
     if (isInEstimate)  return <EstimateEnginePage onBack={goBack} />;
-    // In a category
+    // In a category — show the workspace
     return <UnifiedProjects category={currentCategory} />;
   };
 
@@ -234,16 +236,8 @@ export default function BidPhaseShell() {
           </span>
         </div>
 
-        {/* Nav items — top section */}
+        {/* Nav items — top section (Projects tab removed — home IS the projects list) */}
         <nav className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
-          {/* Single "Electrical" entry — combines all 4 legacy categories */}
-          <NavBtn
-            onClick={() => navigate("civil")}
-            isActive={isInCategory}
-            icon={ElectricalPanelIcon}
-            label="Projects"
-          />
-
           {/* Estimate Engine — hidden for now, backend intact */}
           {/* <div className="my-1 border-t border-sidebar-border/50" />
           <NavBtn
@@ -316,18 +310,7 @@ export default function BidPhaseShell() {
 
       {/* ── Mobile Bottom Nav ────────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex bg-sidebar border-t border-border">
-        {/* Single Electrical entry in mobile nav */}
-        <button
-          onClick={() => navigate("civil")}
-          className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-            isInCategory ? "text-[#F5C518]" : "text-muted-foreground"
-          )}
-        >
-          <ElectricalPanelIcon size={18} className={isInCategory ? "text-[#F5C518]" : ""} />
-          <span className="text-[9px]">Projects</span>
-          {isInCategory && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
-        </button>
+        {/* Projects tab removed — home IS the projects list; BP logo returns to home */}
         {/* Estimate Engine mobile button — hidden for now */}
         {/* <button
           onClick={() => navigate("estimate")}
