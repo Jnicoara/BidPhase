@@ -1148,7 +1148,7 @@ function CivilEditor({
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [countSessionsOpen, setCountSessionsOpen] = useState(true);
-  const [runsOpen, setRunsOpen] = useState(true);
+  // runsOpen removed — runs list is always visible
   const [countModeRequest, setCountModeRequest] = useState(0);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
@@ -1436,17 +1436,7 @@ function CivilEditor({
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-      {/* Floating expand button — appears on the right edge when the panel is collapsed */}
-      {rightPanelCollapsed && (
-        <button
-          onClick={toggleRightPanel}
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center gap-1 w-6 h-20 bg-card border border-border border-r-0 rounded-l-lg shadow-lg text-muted-foreground hover:text-[#F5C518] hover:border-[#F5C518]/40 transition-all"
-          title="Expand panel"
-        >
-          <ChevronLeft size={12} />
-          <span className="text-[8px] font-semibold uppercase tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>Panel</span>
-        </button>
-      )}
+
       <ResizablePanelGroup direction="horizontal" className="h-full overflow-hidden">
         {/* ── Plan Panel — always gets at least 55% so the right panel can never cover the PDF ── */}
         <ResizablePanel defaultSize={60} minSize={55} maxSize={80}>
@@ -1460,15 +1450,24 @@ function CivilEditor({
             onPinAdded={handleCountPinAdded}
             onPinRemoved={handleCountPinRemoved}
             onClearPagePins={handleClearPageCountPins}
+            onClearPageAll={(page) => {
+              handleClearPageRuns();
+              handleClearPageAllCounts();
+            }}
+            onPdfReplaced={() => {
+              // Silently clear all runs and count pins when PDF is replaced
+              const clearedSessions = countSessions.map((cs) => ({ ...cs, pins: [] }));
+              syncRuns([]);
+              setCivilState({ ...s, runs: [], countSessions: clearedSessions, activeCountSessionId });
+            }}
             onUnitCountToggle={(open) => {
               setCountSessionsOpen(open);
               // When Unit Count opens, collapse Runs to give it space
-              if (open) setRunsOpen(false);
+
             }}
             countModeRequest={countModeRequest}
             onMeasureStart={() => {
               // Switch right panel to Runs tab, collapse Unit Count
-              setRunsOpen(true);
               setCountSessionsOpen(false);
               // Expand the right panel if it was collapsed
               if (rightPanelCollapsed) toggleRightPanel();
@@ -1489,7 +1488,6 @@ function CivilEditor({
                 updateSessions(countSessions, countSessions[0].id);
               }
               setCountSessionsOpen(true);
-              setRunsOpen(false);
             }}
           />
         </ResizablePanel>
@@ -1503,11 +1501,20 @@ function CivilEditor({
           minSize={20}
           maxSize={45}
           collapsible
-          collapsedSize={0}
+          collapsedSize={3}
           onCollapse={() => setRightPanelCollapsed(true)}
           onExpand={() => setRightPanelCollapsed(false)}
         >
           <div className="flex flex-col h-full overflow-hidden">
+            {/* Thin strip shown when panel is collapsed */}
+            {rightPanelCollapsed && (
+              <div className="flex flex-col items-center justify-center h-full gap-3 bg-card border-l border-border cursor-pointer" onClick={toggleRightPanel} title="Expand panel">
+                <div className="w-6 h-6 rounded bg-[#F5C518]/15 flex items-center justify-center">
+                  <span className="font-bold text-[#F5C518] text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+                </div>
+                <ChevronLeft size={12} className="text-muted-foreground" />
+              </div>
+            )}
             {/* Header */}
             <div className="px-4 pt-3 pb-3 border-b border-border bg-card shrink-0">
               <div className="flex items-center gap-2.5">
@@ -1683,36 +1690,20 @@ function CivilEditor({
               </div>
 
             <div className="flex flex-col">
-            {/* Runs section header — collapsible */}
+            {/* Runs section header */}
             <div className="bp-card overflow-hidden shrink-0">
-              <button
-                onClick={() => setRunsOpen((v) => !v)}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
-              >
+              <div className="w-full flex items-center justify-between px-4 py-3">
                 <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                   Runs — Page {activePage}
                   {pageRuns.length > 0 && (
                     <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{pageRuns.length} run{pageRuns.length !== 1 ? 's' : ''}</span>
                   )}
                 </h2>
-                <div className="flex items-center gap-2">
-                  {runsOpen && pageRuns.length > 0 && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setConfirmClear({ type: "page-runs" }); }}
-                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors px-1.5 py-0.5 rounded hover:bg-destructive/10"
-                      title={`Clear all runs on page ${activePage}`}
-                    >
-                      <Trash2 size={10} />
-                      Clear page
-                    </button>
-                  )}
-                  {runsOpen ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-                </div>
-              </button>
+              </div>
             </div>
 
-            {/* Runs list */}
-            {runsOpen && <div className="flex-1 overflow-auto p-4 pt-2 pb-24 space-y-4">
+            {/* Runs list — always visible */}
+            <div className="flex-1 overflow-auto p-4 pt-2 pb-24 space-y-4">
               {pageRuns.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
@@ -1757,7 +1748,7 @@ function CivilEditor({
                 </div>
               )}
 
-            </div>}
+            </div>
             </div>
           </div>
         </ResizablePanel>
@@ -2035,8 +2026,7 @@ function CompactCountConfig({
           );
         })}
 
-        {/* Active color swatch preview */}
-        <span className="ml-auto w-4 h-4 rounded border border-border/50 shrink-0" style={{ backgroundColor: color }} />
+
       </div>
 
       {/* Expanded size row */}

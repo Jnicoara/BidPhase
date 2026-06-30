@@ -182,3 +182,12 @@
 - [x] Right panel: fully collapsible to a thin strip (like left sidebar), easy expand button
 - [x] Toolbar Runs button: switches right panel to Runs tab, collapses Unit Count tab
 - [x] Toolbar Unit Count button: switches right panel to Unit Count tab, starts counting immediately
+
+## v5.7 — Trash/Clear/Panel/PDF UX
+
+- [x] Trash button: delete active pins (count mode) OR active run points (measure mode) — whichever is active
+- [x] Clear All: clears both pins AND runs on the current page (not separate buttons)
+- [x] Remove the weird square/swatch preview to the right of the color swatches in Unit Count
+- [x] Runs list: always visible (remove the collapsible dropdown, show runs directly)
+- [x] Right panel: collapse to a very thin strip like the left sidebar, expand back with a button
+- [x] PDF upload: ask user to confirm before loading a new PDF; warn that all pins/runs/scale will be cleared

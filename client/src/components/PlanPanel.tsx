@@ -320,6 +320,9 @@ interface PlanPanelProps {
   allCountSessions?: CountSession[];
   /** Called when user clears all pins on the current page for the active session */
   onClearPagePins?: (pageNumber: number) => void;
+  /** Called when user clears ALL runs AND pins on the current page */
+  onClearPageAll?: (pageNumber: number) => void;
+  onPdfReplaced?: () => void;
   /** Called when the Unit Count toolbar button is toggled — passes the new open state */
   onUnitCountToggle?: (open: boolean) => void;
   /** Increment this to programmatically activate count mode from the right panel */
@@ -340,6 +343,8 @@ export default function PlanPanel({
   onPinRemoved,
   allCountSessions = [],
   onClearPagePins,
+  onClearPageAll,
+  onPdfReplaced,
   onUnitCountToggle,
   countModeRequest = 0,
   onRequestCountSession,
@@ -406,6 +411,8 @@ export default function PlanPanel({
   const dragPointRef = useRef<{ type: 'scale' | 'run'; index: number; runId?: string } | null>(null);
   // ── Delete confirm dialog ─────────────────────────────────────────────────
   const [deleteConfirm, setDeleteConfirm] = useState<{ count: number; name?: string; onConfirm: () => void } | null>(null);
+  // ── PDF replace confirmation ──────────────────────────────────────────────
+  const [pendingPdfFile, setPendingPdfFile] = useState<{ dataUrl: string; hash: string } | null>(null);
   // ── Right-click context menu ──────────────────────────────────────────────
   // Shown when user right-clicks in measure mode; lets them continue a run from
   // the clicked point. { x, y } are viewport pixel coordinates for positioning.
@@ -1050,10 +1057,29 @@ export default function PlanPanel({
   useEffect(() => { if (mode === "none") setCrosshair(null); }, [mode]);
 
   // ── File upload ────────────────────────────────────────────────────────────
+  const applyPdfLoad = useCallback((dataUrl: string, hash: string) => {
+    setPdfHash(hash);
+    setPdfFile(dataUrl);
+    // Reset per-page runs, scale, and go to page 1
+    setPageRunsMap({});
+    setPageActiveRunMap({});
+    setPageScaleMap({});
+    setCurrentPage(1);
+    setMode("none");
+    modeRef.current = "none";
+    pageSizeRef.current = null;
+    setPageReady(false);
+    // Notify parent to clear count pins and sessions
+    onPdfReplaced?.();
+    toast.success("PDF loaded. Set scale before measuring.");
+  }, [setPdfHash, setPdfFile, setPageRunsMap, setPageActiveRunMap, setPageScaleMap, setCurrentPage, setPageReady, onPdfReplaced]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== "application/pdf") { toast.error("Please upload a PDF file."); return; }
+    // Reset the input so the same file can be re-selected
+    e.target.value = "";
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
@@ -1061,17 +1087,12 @@ export default function PlanPanel({
       let h = 0;
       for (let i = 0; i < sample.length; i++) { h = (Math.imul(31, h) + sample.charCodeAt(i)) | 0; }
       const hash = (h >>> 0).toString(16);
-      setPdfHash(hash);
-      setPdfFile(dataUrl);
-      // Reset per-page runs and go to page 1
-      setPageRunsMap({});
-      setPageActiveRunMap({});
-      setCurrentPage(1);
-      setMode("none");
-      modeRef.current = "none";
-      pageSizeRef.current = null;
-      setPageReady(false);
-      toast.success("PDF loaded. Scale auto-restored if previously set.");
+      if (pdfFile) {
+        // A PDF is already loaded — ask for confirmation before replacing
+        setPendingPdfFile({ dataUrl, hash });
+      } else {
+        applyPdfLoad(dataUrl, hash);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -1730,6 +1751,43 @@ export default function PlanPanel({
         </div>
       )}
 
+      {/* ── PDF Replace Confirmation Dialog ─────────────────────────────── */}
+      {pendingPdfFile && (
+        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4 space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-sm font-bold text-destructive">Replace PDF?</h3>
+              <p className="text-sm text-muted-foreground">
+                Loading a new PDF will <strong>clear all runs, pins, and scale</strong> on this project.
+                You'll need to set the scale again before measuring.
+              </p>
+              <p className="text-xs text-muted-foreground/70">This cannot be undone.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="destructive"
+                className="flex-1"
+                onClick={() => {
+                  applyPdfLoad(pendingPdfFile.dataUrl, pendingPdfFile.hash);
+                  setPendingPdfFile(null);
+                }}
+              >
+                Yes, Replace PDF
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setPendingPdfFile(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPageOverview && pdfFile && numPages > 0 && (
         <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
@@ -2075,25 +2133,29 @@ export default function PlanPanel({
           <Trash2 size={13} />
         </Button>
 
-        {/* Clear Page Counts — visible in count mode when there are pins on this page */}
-        {mode === "count" && currentPins.length > 0 && (
+        {/* Clear Page — unified button: clears both runs AND pins on the current page */}
+        {(currentRuns.length > 0 || currentPins.length > 0) && (
           <Button
             size="sm"
             className="h-7 text-xs px-2 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
             variant="ghost"
             onClick={() => {
-              if (!activeCountSession) return;
-              const pinsOnPage = currentPins.length;
+              const runsCount = currentRuns.length;
+              const pinsCount = currentPins.length;
+              const parts: string[] = [];
+              if (runsCount > 0) parts.push(`${runsCount} run${runsCount !== 1 ? "s" : ""}`);
+              if (pinsCount > 0) parts.push(`${pinsCount} pin${pinsCount !== 1 ? "s" : ""}`);
               setDeleteConfirm({
-                count: pinsOnPage,
-                name: `all count pins on page ${currentPage}`,
+                count: runsCount + pinsCount,
+                name: `all marks on page ${currentPage} (${parts.join(" and ")})`,
                 onConfirm: () => {
-                  onClearPagePins?.(currentPage);
-                  toast.info(`Cleared ${pinsOnPage} pin${pinsOnPage !== 1 ? "s" : ""} on page ${currentPage}.`);
+                  onClearPageAll?.(currentPage);
+                  toast.info(`Cleared page ${currentPage}: ${parts.join(" and ")}.`);
                 },
               });
             }}
-            title={`Clear all count pins on page ${currentPage}`}
+            title={`Clear all runs and pins on page ${currentPage}`}
+            disabled={!pdfFile}
           >
             <Trash2 size={11} className="mr-1" />
             Clear page
