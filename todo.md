@@ -220,3 +220,8 @@
 
 - [x] Fix: expand arrow (ChevronLeft) not visible on the collapsed right panel thin strip
 - [x] Toolbar: when panel is narrow or collapsed, toolbar buttons/shapes wrap to next line so all tools remain accessible
+
+## v5.14 — Run Continuity & Panel Toggle
+
+- [x] Delete run: auto-create a replacement run (same number/color) so measuring can continue immediately without interruption
+- [x] Right panel: replace separate collapse/expand arrows with a single toggle button that works in both states

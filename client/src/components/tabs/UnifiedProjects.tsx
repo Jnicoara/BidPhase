@@ -1358,14 +1358,52 @@ function CivilEditor({
   };
 
   const removeRun = (id: string) => {
-    syncRuns(runs.filter((r) => r.id !== id));
+    const remaining = runs.filter((r) => r.id !== id);
+    if (remaining.length === 0) {
+      // Auto-create a fresh Run 1 so measuring can continue immediately
+      const newRun: RunItem = {
+        id: `run-${Date.now().toString(36)}`,
+        name: "Run 1",
+        feet: 0,
+        conduitSize: "3/4",
+        conduitType: "EMT",
+        conductors: 3,
+        conductorMaterial: "CU",
+        conductorSize: "12",
+        runType: "conduit",
+        fittings: defaultFittings(),
+        numPullPoints: 2,
+      };
+      syncRuns([newRun]);
+    } else {
+      syncRuns(remaining);
+    }
   };
 
   // Called when a run is deleted from PlanPanel's run strip
   const handleDeleteRun = useCallback(
     (runName: string, pageNumber?: number) => {
       // If pageNumber is provided, only delete the run on that specific page
-      syncRuns(runs.filter((r) => !(r.name === runName && (pageNumber == null || r.pageNumber === pageNumber))));
+      const remaining = runs.filter((r) => !(r.name === runName && (pageNumber == null || r.pageNumber === pageNumber)));
+      if (remaining.length === 0) {
+        // Auto-create a fresh Run 1 so measuring can continue immediately
+        const newRun: RunItem = {
+          id: `run-${Date.now().toString(36)}`,
+          name: "Run 1",
+          feet: 0,
+          conduitSize: "3/4",
+          conduitType: "EMT",
+          conductors: 3,
+          conductorMaterial: "CU",
+          conductorSize: "12",
+          runType: "conduit",
+          fittings: defaultFittings(),
+          numPullPoints: 2,
+        };
+        syncRuns([newRun]);
+      } else {
+        syncRuns(remaining);
+      }
     },
     [runs, syncRuns]
   );
@@ -1524,18 +1562,21 @@ function CivilEditor({
             {/* ── Thin strip shown when panel is collapsed ── */}
             {rightPanelCollapsed && (
               <div
-                className="flex flex-col items-center justify-center h-full bg-card border-l border-border cursor-pointer hover:bg-[#F5C518]/5 transition-colors gap-2"
+                className="flex flex-col items-center justify-center h-full bg-card border-l border-border cursor-pointer hover:bg-[#F5C518]/5 transition-colors gap-3"
                 onClick={toggleRightPanel}
                 title="Expand panel"
               >
                 {/* BP badge */}
-                <div className="w-5 h-5 rounded bg-[#F5C518]/15 flex items-center justify-center shrink-0">
-                  <span className="font-bold text-[#F5C518] text-[8px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+                <div className="w-6 h-6 rounded-md bg-[#F5C518]/15 flex items-center justify-center shrink-0">
+                  <span className="font-bold text-[#F5C518] text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
                 </div>
-                {/* LEFT-pointing arrow — only visible when collapsed */}
-                <div className="w-5 h-5 rounded bg-[#F5C518]/20 border border-[#F5C518]/40 flex items-center justify-center shrink-0">
-                  <ChevronLeft size={11} className="text-[#F5C518]" />
-                </div>
+                {/* Single toggle button — same icon/style as the header button */}
+                <button
+                  className="w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/15 border border-[#F5C518]/40 text-[#F5C518] hover:bg-[#F5C518]/25 transition-colors shrink-0"
+                  title="Expand panel"
+                >
+                  <ChevronLeft size={13} />
+                </button>
               </div>
             )}
 
@@ -1567,10 +1608,10 @@ function CivilEditor({
                         <line x1="9" y1="3" x2="9" y2="21" />
                       </svg>
                     </button>
-                    {/* Only the RIGHT-pointing arrow shows when expanded — click to collapse */}
+                    {/* Single toggle button — collapses the panel; same style as the strip expand button */}
                     <button
                       onClick={toggleRightPanel}
-                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-[#F5C518] hover:bg-[#F5C518]/10 border border-transparent hover:border-[#F5C518]/30 transition-colors"
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
                       title="Collapse panel"
                     >
                       <ChevronRight size={14} />
