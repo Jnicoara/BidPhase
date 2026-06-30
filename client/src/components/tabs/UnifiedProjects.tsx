@@ -41,7 +41,7 @@ import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
-  Plus, Minus, ChevronLeft, ChevronDown, ChevronUp,
+  Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Link2, Trash2, Pencil, Check, X, Undo2, Save,
 } from "lucide-react";
 import type { CatalogItem } from "@/lib/materialCatalog";
@@ -960,7 +960,8 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
         className="text-xs font-semibold text-[#F5C518] uppercase tracking-wider mb-1 flex items-center gap-2"
         style={{ fontFamily: "'Space Grotesk', sans-serif" }}
       >
-        ∑ Labor & Material
+        <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-[#F5C518]/20 text-[#F5C518] font-bold text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+        Labor & Material
         {pages.length > 0 && (
           <span className="text-[10px] font-mono text-muted-foreground normal-case tracking-normal">
             {runs.length} run{runs.length !== 1 ? "s" : ""} · {pages.length} page{pages.length !== 1 ? "s" : ""}
@@ -1149,6 +1150,17 @@ function CivilEditor({
   const [countSessionsOpen, setCountSessionsOpen] = useState(true);
   const [countModeRequest, setCountModeRequest] = useState(0);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+
+  const toggleRightPanel = () => {
+    const rp = rightPanelRef.current;
+    if (!rp) return;
+    if (rightPanelCollapsed) {
+      rp.expand();
+    } else {
+      rp.collapse();
+    }
+  };
 
   const updateSessions = useCallback(
     (sessions: CountSession[], activeId?: string) => {
@@ -1422,7 +1434,19 @@ function CivilEditor({
         <span className="text-xs font-medium text-foreground">{projectName}</span>
       </div>
 
-      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
+      {/* Floating expand button — appears on the right edge when the panel is collapsed */}
+      {rightPanelCollapsed && (
+        <button
+          onClick={toggleRightPanel}
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center justify-center gap-1 w-6 h-20 bg-card border border-border border-r-0 rounded-l-lg shadow-lg text-muted-foreground hover:text-[#F5C518] hover:border-[#F5C518]/40 transition-all"
+          title="Expand panel"
+        >
+          <ChevronLeft size={12} />
+          <span className="text-[8px] font-semibold uppercase tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>Panel</span>
+        </button>
+      )}
+      <ResizablePanelGroup direction="horizontal" className="h-full overflow-hidden">
         {/* ── Plan Panel — always gets at least 55% so the right panel can never cover the PDF ── */}
         <ResizablePanel defaultSize={60} minSize={55} maxSize={80}>
           <PlanPanel
@@ -1460,26 +1484,43 @@ function CivilEditor({
         <ResizableHandle withHandle />
 
         {/* ── Calculator / Runs — max 45% so it stays to the right of the PDF ── */}
-        <ResizablePanel ref={rightPanelRef} defaultSize={40} minSize={20} maxSize={45}>
+        <ResizablePanel
+          ref={rightPanelRef}
+          defaultSize={40}
+          minSize={20}
+          maxSize={45}
+          collapsible
+          collapsedSize={0}
+          onCollapse={() => setRightPanelCollapsed(true)}
+          onExpand={() => setRightPanelCollapsed(false)}
+        >
           <div className="flex flex-col h-full overflow-hidden">
             {/* Header */}
-            <div className="px-5 pt-4 pb-3 border-b border-border bg-card shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center">
-                  <CivilIcon size={16} className="text-[#F5C518]" />
+            <div className="px-4 pt-3 pb-3 border-b border-border bg-card shrink-0">
+              <div className="flex items-center gap-2.5">
+                {/* BP logo badge */}
+                <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center shrink-0">
+                  <span className="font-bold text-[#F5C518] text-xs" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <h1
-                    className="text-base font-bold text-foreground"
+                    className="text-sm font-bold text-foreground truncate"
                     style={{ fontFamily: "'Space Grotesk', sans-serif" }}
                   >
                     {projectName}
                   </h1>
-                  <p className="text-xs text-muted-foreground">{categoryLabel}</p>
                 </div>
                 <span className="shrink-0 text-xs font-mono px-2 py-0.5 rounded bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30">
-                  Page {activePage}
+                  Pg {activePage}
                 </span>
+                {/* Collapse toggle */}
+                <button
+                  onClick={toggleRightPanel}
+                  className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors"
+                  title={rightPanelCollapsed ? "Expand panel" : "Collapse panel"}
+                >
+                  {rightPanelCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+                </button>
               </div>
             </div>
 
@@ -1729,6 +1770,7 @@ function CivilEditor({
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+      </div>{/* end relative wrapper */}
 
       {/* ── Confirmation dialog for destructive clear actions ──────────────────────── */}
       {confirmClear && (

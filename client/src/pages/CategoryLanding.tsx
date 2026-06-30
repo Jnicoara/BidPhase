@@ -251,7 +251,7 @@ export default function CategoryLanding({
                     key={proj.id}
                     onClick={() => { if (!isEditing) handleOpen(proj); }}
                     className={cn(
-                      "group relative rounded-xl border bg-card flex flex-col cursor-pointer",
+                      "group relative rounded-xl border bg-card flex flex-col cursor-pointer min-h-[160px]",
                       "transition-all duration-150 hover:shadow-lg",
                       isActive
                         ? "border-[#F5C518]/60 shadow-[0_0_0_1px_rgba(245,197,24,0.2)]"
@@ -259,42 +259,34 @@ export default function CategoryLanding({
                     )}
                   >
                     {/* Card body */}
-                    <div className="flex-1 px-5 pt-5 pb-3">
-                      <div className="flex items-start gap-3">
-                        <div className={cn(
-                          "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                          isActive ? "bg-[#F5C518]/15" : "bg-muted/30"
-                        )}>
-                          <FolderOpen size={18} className={isActive ? "text-[#F5C518]" : "text-muted-foreground"} />
-                        </div>
-                        <div className="flex-1 min-w-0 pt-0.5">
-                          {isEditing ? (
-                            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                              <input
-                                autoFocus
-                                value={editName}
-                                onChange={(e) => setEditName(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") handleRename(proj);
-                                  if (e.key === "Escape") setEditingId(null);
-                                }}
-                                onBlur={() => handleRename(proj)}
-                                className="flex-1 min-w-0 bg-transparent border-b border-[#F5C518] text-sm text-foreground outline-none font-medium pb-0.5"
-                              />
-                              <button
-                                onMouseDown={(e) => { e.preventDefault(); handleRename(proj); }}
-                                className="text-[#F5C518] text-xs px-1.5 py-0.5 rounded hover:bg-[#F5C518]/10 shrink-0"
-                              >✓</button>
-                            </div>
-                          ) : (
-                            <h3 className="text-sm font-semibold text-foreground truncate leading-snug">
-                              {proj.name}
-                            </h3>
-                          )}
-                          <p className="text-[11px] text-muted-foreground mt-1">
-                            {proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ""}
-                          </p>
-                        </div>
+                    <div className="flex-1 px-5 pt-6 pb-4">
+                      <div className="flex-1 min-w-0">
+                        {isEditing ? (
+                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              autoFocus
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleRename(proj);
+                                if (e.key === "Escape") setEditingId(null);
+                              }}
+                              onBlur={() => handleRename(proj)}
+                              className="flex-1 min-w-0 bg-transparent border-b border-[#F5C518] text-lg text-foreground outline-none font-bold pb-0.5"
+                            />
+                            <button
+                              onMouseDown={(e) => { e.preventDefault(); handleRename(proj); }}
+                              className="text-[#F5C518] text-xs px-1.5 py-0.5 rounded hover:bg-[#F5C518]/10 shrink-0"
+                            >✓</button>
+                          </div>
+                        ) : (
+                          <h3 className="text-xl font-bold text-foreground leading-snug" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                            {proj.name}
+                          </h3>
+                        )}
+                        <p className="text-[11px] text-muted-foreground mt-2">
+                          {proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ""}
+                        </p>
                       </div>
                     </div>
 
@@ -346,7 +338,7 @@ export default function CategoryLanding({
                   className={cn(
                     "rounded-xl border-2 border-dashed border-border hover:border-[#F5C518]/40",
                     "bg-transparent hover:bg-[#F5C518]/5 transition-all duration-150",
-                    "flex flex-col items-center justify-center gap-2 p-6 min-h-[140px]",
+                    "flex flex-col items-center justify-center gap-2 p-6 min-h-[160px]",
                     "text-muted-foreground hover:text-[#F5C518]"
                   )}
                 >

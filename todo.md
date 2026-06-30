@@ -158,3 +158,10 @@
 - [x] Add page-scoped "Clear page runs" button: removes all runs on the current page with a confirmation dialog
 - [x] Add page-scoped "Clear page counts" button: removes all count pins on the current page with a confirmation dialog
 - [x] Add "Total Reset" button: clears all runs and count pins across all pages; requires confirmation dialog; provides undo (restore previous state)
+
+## v5.3 — Card/Panel Polish
+
+- [x] Project cards: remove folder icon, make project name text larger, make cards taller/bigger
+- [x] Right panel: collapsible with intuitive expand/collapse toggle (chevron or drag handle)
+- [x] Right panel header: remove "Infrastructure" category label, replace yellow icon with BP logo
+- [x] Material/labor summary: replace the weird symbol with the BP logo
