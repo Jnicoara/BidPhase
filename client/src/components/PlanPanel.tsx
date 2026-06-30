@@ -2153,6 +2153,12 @@ export default function PlanPanel({
                 count: runsCount + pinsCount,
                 name: `all marks on page ${currentPage} (${parts.join(" and ")})`,
                 onConfirm: () => {
+                  // Clear local canvas runs for this page
+                  setCurrentRuns([]);
+                  setCurrentActiveRunId("");
+                  setMode("none");
+                  modeRef.current = "none";
+                  // Notify parent to clear its run list + count pins
                   onClearPageAll?.(currentPage);
                   toast.info(`Cleared page ${currentPage}: ${parts.join(" and ")}.`);
                 },

@@ -225,3 +225,8 @@
 
 - [x] Delete run: auto-create a replacement run (same number/color) so measuring can continue immediately without interruption
 - [x] Right panel: replace separate collapse/expand arrows with a single toggle button that works in both states
+
+## v5.16 — Clear Page & Single Toggle
+
+- [x] Fix: "Clear Page" does not remove all pins and runs on the current page
+- [x] Fix: two collapse/expand buttons still visible in the right panel (strip + header)
