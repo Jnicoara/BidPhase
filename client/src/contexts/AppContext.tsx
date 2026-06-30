@@ -120,10 +120,10 @@ export interface RunItem {
   id: string;
   name: string;
   pageNumber?: number;        // which PDF page this run came from
-  feet: number;
-  /** "conduit" = EMT/IMC/RMC/PVC etc. with pipe sticks + fittings; "wire" = bare conductor only */
+  feet: number;              // Measured Takeoff (base linear footage from plan)
+  /** "conduit" = EMT/IMC/RMC/PVC etc. with pipe sticks + fittings; "wire" = Jacketed/Romex bare conductor */
   runType?: "conduit" | "wire";
-  conduitSize: string;        // e.g. "3/4"
+  conduitSize: string;        // e.g. "1/2"
   conduitType: CivilConduitType;
   conductors: number;
   conductorMaterial: ConductorMaterial;
@@ -133,9 +133,30 @@ export interface RunItem {
   wireTypeId?: string;
   /** Whether to use stranded form (only applies when wireType.hasStrandedChoice === true) */
   wireStranded?: boolean;
-  /** Slack % added to wire length calculation (default 10) */
+
+  // ── Jacketed / Romex module fields ─────────────────────────────────────────────
+  /** Fixed length added per termination/box (ft). Default 2 ft. */
+  makeupAllowance?: number;
+  /** Fixed length added per run for intentional service loop (ft). Default 3 ft. */
+  serviceLoop?: number;
+  /** Number of terminations/boxes on this run. Default 2. */
+  numTerminations?: number;
+  /** Waste factor % for scrap and routing (Jacketed/Romex). Default 10. */
+  wirewasteFactor?: number;
+
+  // ── Conduit module fields ──────────────────────────────────────────────────────────
+  /** Conduit waste factor % for pipe cutting scrap. Default 10. */
+  conduitWasteFactor?: number;
+  /** Wire makeup allowance per termination/pull point (ft). Default 2 ft. */
+  wireTermMakeup?: number;
+  /** Wire waste factor % for pulling waste and head scrap. Default 10. */
+  wireWasteFactor?: number;
+  /** Number of terminations/pull points for conduit wire calc. Default 2. */
+  numPullPoints?: number;
+
+  /** @deprecated Use wirewasteFactor / wireWasteFactor instead */
   wireSlackPct?: number;
-  /** Slack % added to conduit length in conduit (default 10) */
+  /** @deprecated Use conduitWasteFactor instead */
   conduitSlackPct?: number;
 }
 

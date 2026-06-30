@@ -76,3 +76,14 @@
 - [x] App audit: verify all toolbar buttons interact correctly with each other
 - [x] App audit: verify all delete/trash tools work as expected
 - [x] App audit: document any issues or suggestions found
+
+## v4.5 — Color-Matched Dots & Professional Calc Terminology
+
+- [x] Color-matched run dots: endpoint dots use the active run's color instead of red
+- [x] Color-matched cursor: crosshair is yellow when measuring, run-color when dropping run points
+- [x] Jacketed/Romex module: add Measured Takeoff, Makeup Allowance, Service Loop, Waste Factor, Terminations, Runs inputs
+- [x] Jacketed/Romex module: implement Net Length and Total Billable Wire calculation
+- [x] Conduit module: add Measured Takeoff, Conduit Waste Factor, Wire Makeup Allowance, Wire Waste Factor, Terminations inputs
+- [x] Conduit module: implement Total Billable Conduit, Net Wire Length per conductor, Total Billable Wire calculation
+- [x] Update AppContext RunItem data model with all new professional estimating fields
+- [x] Remove old wireSlackPct/conduitSlackPct (replaced by Waste Factor terminology)

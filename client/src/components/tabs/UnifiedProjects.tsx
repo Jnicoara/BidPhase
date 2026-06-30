@@ -183,11 +183,41 @@ function defaultFittings(): FittingCounts {
   return { connector: 0, coupling: 0, lb: 0, elbow90: 0, elbow45: 0, sweep: 0, offset: 0 };
 }
 
-function calcWire(feet: number, conductors: number, slackPct = 10) {
-  return parseFloat((feet * conductors * (1 + slackPct / 100)).toFixed(1));
+// ── Jacketed / Romex wire calculation ────────────────────────────────────────
+// Net Length = feet + (makeupAllowance × numTerminations) + serviceLoop
+// Total Billable Wire = Net Length × (1 + wirewasteFactor/100)
+function calcWire(
+  feet: number,
+  conductors: number,
+  makeupAllowance = 2,
+  serviceLoop = 3,
+  numTerminations = 2,
+  wirewasteFactor = 10,
+) {
+  const netLength = feet + makeupAllowance * numTerminations + serviceLoop;
+  return parseFloat((netLength * (1 + wirewasteFactor / 100)).toFixed(1));
 }
+
+// ── Conduit calculations ──────────────────────────────────────────────────────
+// Total Billable Conduit = feet × (1 + conduitWasteFactor/100)
+// Net Wire Length = feet + (wireTermMakeup × numPullPoints)
+// Total Billable Wire (per conductor) = Net Wire Length × (1 + wireWasteFactor/100)
+function calcConduitBillable(feet: number, conduitWasteFactor = 10) {
+  return parseFloat((feet * (1 + conduitWasteFactor / 100)).toFixed(1));
+}
+function calcConduitWire(
+  feet: number,
+  conductors: number,
+  wireTermMakeup = 2,
+  numPullPoints = 2,
+  wireWasteFactor = 10,
+) {
+  const netWireLength = feet + wireTermMakeup * numPullPoints;
+  return parseFloat((netWireLength * (1 + wireWasteFactor / 100) * conductors).toFixed(1));
+}
+/** @deprecated Use calcConduitBillable instead */
 function calcConduitWithSlack(feet: number, slackPct = 10) {
-  return parseFloat((feet * (1 + slackPct / 100)).toFixed(1));
+  return calcConduitBillable(feet, slackPct);
 }
 
 function conductorLabel(mat: ConductorMaterial, size: ConductorSize) {
@@ -338,11 +368,22 @@ function RunCard({
 }) {
   const [showFittings, setShowFittings] = useState(false);
   const isWire = (run.runType ?? "conduit") === "wire";
-  const wireSlack = run.wireSlackPct ?? 10;
-  const conduitSlack = run.conduitSlackPct ?? 10;
-  const sticks = calcSticks(run.feet);
-  const conduitWithSlack = calcConduitWithSlack(run.feet, conduitSlack);
-  const wire = calcWire(run.feet, run.conductors, wireSlack);
+
+  // ── Jacketed / Romex defaults & calculations ─────────────────────────────────
+  const makeupAllowance  = run.makeupAllowance  ?? 2;
+  const serviceLoop      = run.serviceLoop      ?? 3;
+  const numTerminations  = run.numTerminations  ?? 2;
+  const wirewasteFactor  = run.wirewasteFactor  ?? 10;
+  const wireNetLength    = run.feet + makeupAllowance * numTerminations + serviceLoop;
+  const wireBillable     = calcWire(run.feet, run.conductors, makeupAllowance, serviceLoop, numTerminations, wirewasteFactor);
+
+  // ── Conduit defaults & calculations ──────────────────────────────────────────
+  const conduitWasteFactor = run.conduitWasteFactor ?? 10;
+  const wireTermMakeup     = run.wireTermMakeup     ?? 2;
+  const wireWasteFactor    = run.wireWasteFactor    ?? 10;
+  const numPullPoints      = run.numPullPoints      ?? 2;
+  const conduitBillable    = calcConduitBillable(run.feet, conduitWasteFactor);
+  const conduitWireBillable = calcConduitWire(run.feet, run.conductors, wireTermMakeup, numPullPoints, wireWasteFactor);
 
   const updateFitting = (key: FittingId, val: number) => {
     onUpdate(run.id, { fittings: { ...run.fittings, [key]: val } });
@@ -368,7 +409,7 @@ function RunCard({
             {run.name}
           </span>
           <span className="text-[10px] font-mono text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
-            {(run.runType ?? "conduit") === "wire"
+            {isWire
               ? `Wire · ${run.conductors}c`
               : `${run.conduitType ?? "EMT"} ${run.conduitSize}"`}
           </span>
@@ -389,10 +430,10 @@ function RunCard({
 
       {/* Run body */}
       <div className="p-4 space-y-4">
-        {/* Distance row — full width for wire runs, half for conduit */}
+        {/* Measured Takeoff row + Conductors (conduit only) */}
         <div className={isWire ? "space-y-1.5" : "grid grid-cols-2 gap-3"}>
           <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Distance (ft)</Label>
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Measured Takeoff (ft)</Label>
             <Input
               type="number"
               min={0}
@@ -434,13 +475,14 @@ function RunCard({
                     : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
                 )}
               >
-                {rt}
+                {rt === "wire" ? "Jacketed / Romex" : "Conduit"}
               </button>
             ))}
           </div>
         </div>
-                {/* Conduit type + size — only shown for conduit runs */}
-        {(run.runType ?? "conduit") === "conduit" && (
+
+        {/* Conduit type + size — only shown for conduit runs */}
+        {!isWire && (
           <>
             <div className="space-y-1.5">
               <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Type</Label>
@@ -482,8 +524,9 @@ function RunCard({
             </div>
           </>
         )}
+
         {/* Wire Type Picker — only shown for wire runs */}
-        {(run.runType ?? "conduit") === "wire" && (
+        {isWire && (
           <WireTypePicker
             value={run.wireTypeId}
             stranded={run.wireStranded}
@@ -535,58 +578,143 @@ function RunCard({
           </div>
         </div>
 
-        {/* Slack controls */}
-        <div className="space-y-2">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Slack</Label>
-          <div className={cn("grid gap-3", isWire ? "grid-cols-1" : "grid-cols-2")}>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground">{isWire ? "Wire Slack" : "Wire Slack"}</span>
-                <span className="text-xs font-bold font-mono text-[#F5C518]">{wireSlack}%</span>
+        {/* ── Jacketed / Romex estimating inputs ───────────────────────────────────── */}
+        {isWire && (
+          <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Makeup Allowance (ft/term)</Label>
+                <Input
+                  type="number" min={0} step={0.5}
+                  value={makeupAllowance}
+                  onChange={(e) => onUpdate(run.id, { makeupAllowance: parseFloat(e.target.value) || 0 })}
+                  className="h-7 font-mono text-xs bg-input border-border"
+                />
               </div>
-              <Slider
-                min={0} max={50} step={1}
-                value={[wireSlack]}
-                onValueChange={([v]) => onUpdate(run.id, { wireSlackPct: v })}
-                className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
-              />
-            </div>
-            {!isWire && (
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Service Loop (ft)</Label>
+                <Input
+                  type="number" min={0} step={0.5}
+                  value={serviceLoop}
+                  onChange={(e) => onUpdate(run.id, { serviceLoop: parseFloat(e.target.value) || 0 })}
+                  className="h-7 font-mono text-xs bg-input border-border"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">No. of Terminations</Label>
+                <Input
+                  type="number" min={1} step={1}
+                  value={numTerminations}
+                  onChange={(e) => onUpdate(run.id, { numTerminations: parseInt(e.target.value) || 1 })}
+                  className="h-7 font-mono text-xs bg-input border-border"
+                />
+              </div>
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">Conduit Slack</span>
-                  <span className="text-xs font-bold font-mono text-[#F5C518]">{conduitSlack}%</span>
+                  <Label className="text-[10px] text-muted-foreground">Waste Factor</Label>
+                  <span className="text-[10px] font-bold font-mono text-[#F5C518]">{wirewasteFactor}%</span>
                 </div>
                 <Slider
                   min={0} max={50} step={1}
-                  value={[conduitSlack]}
-                  onValueChange={([v]) => onUpdate(run.id, { conduitSlackPct: v })}
+                  value={[wirewasteFactor]}
+                  onValueChange={([v]) => onUpdate(run.id, { wirewasteFactor: v })}
                   className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
                 />
               </div>
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Calculated outputs */}
-        <div className="grid grid-cols-2 gap-2">
-          {!isWire && (
+        {/* ── Conduit estimating inputs ─────────────────────────────────────────────── */}
+        {!isWire && (
+          <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] text-muted-foreground">Conduit Waste Factor</Label>
+                  <span className="text-[10px] font-bold font-mono text-[#F5C518]">{conduitWasteFactor}%</span>
+                </div>
+                <Slider
+                  min={0} max={50} step={1}
+                  value={[conduitWasteFactor]}
+                  onValueChange={([v]) => onUpdate(run.id, { conduitWasteFactor: v })}
+                  className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] text-muted-foreground">Wire Waste Factor</Label>
+                  <span className="text-[10px] font-bold font-mono text-[#F5C518]">{wireWasteFactor}%</span>
+                </div>
+                <Slider
+                  min={0} max={50} step={1}
+                  value={[wireWasteFactor]}
+                  onValueChange={([v]) => onUpdate(run.id, { wireWasteFactor: v })}
+                  className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Wire Makeup / Pull Point (ft)</Label>
+                <Input
+                  type="number" min={0} step={0.5}
+                  value={wireTermMakeup}
+                  onChange={(e) => onUpdate(run.id, { wireTermMakeup: parseFloat(e.target.value) || 0 })}
+                  className="h-7 font-mono text-xs bg-input border-border"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">No. of Pull Points</Label>
+                <Input
+                  type="number" min={1} step={1}
+                  value={numPullPoints}
+                  onChange={(e) => onUpdate(run.id, { numPullPoints: parseInt(e.target.value) || 1 })}
+                  className="h-7 font-mono text-xs bg-input border-border"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Calculated outputs ─────────────────────────────────────────────────────────── */}
+        {isWire ? (
+          <div className="grid grid-cols-2 gap-2">
             <div className="bg-muted/20 rounded-lg p-2.5">
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                <ConduitPipeIcon size={10} /> Pipe Sticks
+                <StrippedWireIcon size={10} /> Net Length
               </div>
-              <div className="text-xl font-bold font-mono text-foreground">{calcSticks(conduitWithSlack)}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">10-ft sticks ({conduitSlack}% slack)</div>
+              <div className="text-xl font-bold font-mono text-foreground">{wireNetLength.toFixed(1)}</div>
+              <div className="text-[10px] text-muted-foreground font-mono">ft before waste</div>
             </div>
-          )}
-          <div className="bg-muted/20 rounded-lg p-2.5">
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-              <StrippedWireIcon size={10} /> Wire Length
+            <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
+              <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
+                <StrippedWireIcon size={10} /> Billable Wire
+              </div>
+              <div className="text-xl font-bold font-mono text-[#F5C518]">{wireBillable}</div>
+              <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wirewasteFactor}% waste</div>
             </div>
-            <div className="text-xl font-bold font-mono text-foreground">{wire}</div>
-            <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wireSlack}% slack</div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
+              <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
+                <ConduitPipeIcon size={10} /> Billable Conduit
+              </div>
+              <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitBillable}</div>
+              <div className="text-[10px] text-muted-foreground font-mono">
+                ft → {calcSticks(conduitBillable)} sticks
+              </div>
+            </div>
+            <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
+              <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
+                <StrippedWireIcon size={10} /> Billable Wire
+              </div>
+              <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitWireBillable}</div>
+              <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wireWasteFactor}% waste</div>
+            </div>
+          </div>
+        )}
 
                 {/* Fittings toggle — only for conduit runs */}
         {(run.runType ?? "conduit") === "conduit" && (
@@ -655,12 +783,13 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
   for (const r of runs) {
     if ((r.runType ?? "conduit") === "wire") continue; // wire runs handled separately
     const key = `${r.conduitType ?? "EMT"} ${r.conduitSize}"`;
+    const billableFt = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10);
     const existing = conduitMap.get(key);
     if (existing) {
-      existing.feet   += r.feet;
-      existing.sticks += calcSticks(r.feet);
+      existing.feet   += billableFt;
+      existing.sticks += calcSticks(billableFt);
     } else {
-      conduitMap.set(key, { type: r.conduitType ?? "EMT", size: r.conduitSize, feet: r.feet, sticks: calcSticks(r.feet) });
+      conduitMap.set(key, { type: r.conduitType ?? "EMT", size: r.conduitSize, feet: billableFt, sticks: calcSticks(billableFt) });
     }
   }
   const conduitRows = Array.from(conduitMap.entries()).sort(([a], [b]) => a.localeCompare(b));
@@ -670,10 +799,28 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
   const wireMap = new Map<WireKey, { label: string; qty: number; feet: number }>();
   for (const r of runs) {
     if (r.conductors < 1) continue;
+    const isWireRun = (r.runType ?? "conduit") === "wire";
     const mat  = r.conductorMaterial ?? "CU";
     const size = r.conductorSize ?? "12";
     const label = conductorLabel(mat as ConductorMaterial, size as ConductorSize);
-    const wireFt = calcWire(r.feet, r.conductors);
+    // Use per-run estimating parameters for accurate billable totals
+    let wireFt: number;
+    if (isWireRun) {
+      wireFt = calcWire(
+        r.feet, r.conductors,
+        r.makeupAllowance ?? 2,
+        r.serviceLoop ?? 3,
+        r.numTerminations ?? 2,
+        r.wirewasteFactor ?? 10,
+      );
+    } else {
+      wireFt = calcConduitWire(
+        r.feet, r.conductors,
+        r.wireTermMakeup ?? 2,
+        r.numPullPoints ?? 2,
+        r.wireWasteFactor ?? 10,
+      );
+    }
     const existing = wireMap.get(label);
     if (existing) {
       existing.feet += wireFt;
@@ -707,8 +854,17 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
   );
 
   const totalFeet   = runs.reduce((a, r) => a + r.feet, 0);
-  const totalSticks = runs.reduce((a, r) => a + calcSticks(r.feet), 0);
-  const totalWire   = runs.reduce((a, r) => a + calcWire(r.feet, r.conductors), 0);
+  const totalSticks = runs.reduce((a, r) => {
+    if ((r.runType ?? "conduit") === "wire") return a;
+    return a + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10));
+  }, 0);
+  const totalWire   = runs.reduce((a, r) => {
+    const isWireRun = (r.runType ?? "conduit") === "wire";
+    if (isWireRun) {
+      return a + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10);
+    }
+    return a + calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
+  }, 0);
 
   const SectionHeader = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
     <div className="flex items-center gap-2 mt-4 mb-2 pb-1 border-b border-border/40">
@@ -801,7 +957,7 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
                 <span className="font-mono text-foreground font-semibold">{row.label}</span>
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-[#F5C518]">{row.feet.toFixed(1)} ft</span>
-                  <span className="font-mono text-muted-foreground text-[10px]">w/ 10% slack</span>
+                  <span className="font-mono text-muted-foreground text-[10px]">billable ft</span>
                 </div>
               </div>
             ))}
@@ -1072,6 +1228,16 @@ function CivilEditor({
           conductorMaterial: "CU",
           conductorSize: "12",
           fittings: defaultFittings(),
+          // Jacketed / Romex defaults
+          makeupAllowance: 2,
+          serviceLoop: 3,
+          numTerminations: 2,
+          wirewasteFactor: 10,
+          // Conduit defaults
+          conduitWasteFactor: 10,
+          wireTermMakeup: 2,
+          wireWasteFactor: 10,
+          numPullPoints: 2,
         };
         syncRuns([newRun, ...runs]);
         const pageLabel = pageNumber ? ` from page ${pageNumber}` : "";
@@ -1103,8 +1269,16 @@ function CivilEditor({
     [runs, syncRuns]
   );
 
-  const totalWire = runs.reduce((acc, r) => acc + calcWire(r.feet, r.conductors), 0);
-  const totalSticks = runs.reduce((acc, r) => acc + calcSticks(r.feet), 0);
+  // These are computed for potential future use in the header strip
+  const totalWire = runs.reduce((acc, r) => {
+    const isWireRun = (r.runType ?? "conduit") === "wire";
+    if (isWireRun) return acc + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10);
+    return acc + calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
+  }, 0);
+  const totalSticks = runs.reduce((acc, r) => {
+    if ((r.runType ?? "conduit") === "wire") return acc;
+    return acc + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10));
+  }, 0);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

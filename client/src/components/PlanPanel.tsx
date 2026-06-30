@@ -25,6 +25,7 @@ import {
   useRef,
   useCallback,
   useEffect,
+  useMemo,
 } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -461,6 +462,23 @@ export default function PlanPanel({
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
+
+  // ── Dynamic color-matched cursor ──────────────────────────────────────────────
+  // Generates a data-URI SVG crosshair in the active color so the cursor
+  // matches the line being drawn: yellow for scale/measure, run-color for runs.
+  const activeCursorColor = useMemo(() => {
+    if (mode === "set-scale-p1" || mode === "set-scale-p2") return "#F5C518"; // scale = yellow
+    if (mode === "measure") return activeRunColor; // run-point dropping = run color
+    return null; // no custom cursor needed
+  }, [mode, activeRunColor]);
+
+  const svgCursor = useMemo(() => {
+    if (!activeCursorColor) return undefined;
+    const c = encodeURIComponent(activeCursorColor);
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><line x1='12' y1='2' x2='12' y2='22' stroke='${c}' stroke-width='2'/><line x1='2' y1='12' x2='22' y2='12' stroke='${c}' stroke-width='2'/><circle cx='12' cy='12' r='2' fill='${c}'/></svg>`;
+    return `url("data:image/svg+xml,${svg}") 12 12, crosshair`;
+  }, [activeCursorColor]);
+
   // Legacy panRef alias (scroll-based pan no longer used)
   const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
 
@@ -735,7 +753,7 @@ export default function PlanPanel({
         }
       }
 
-      // Dots — solid red, white outline, always visible against any background
+      // Dots — color-matched to the run line, white halo for contrast
       const dotR = (isActive ? 5 : 4) * S;
       pts.forEach((p, i) => {
         // White halo for contrast
@@ -745,17 +763,17 @@ export default function PlanPanel({
         ctx.globalAlpha = 0.9;
         ctx.fill();
         ctx.globalAlpha = 1;
-        // Solid red fill
+        // Color-matched fill (same as the run line)
         ctx.beginPath();
         ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = "#e53e3e";
+        ctx.fillStyle = color;
         ctx.fill();
         // Thin dark ring
         ctx.strokeStyle = "rgba(0,0,0,0.55)";
         ctx.lineWidth = 1 * S;
         ctx.stroke();
         if (isActive && (i === 0 || i === pts.length - 1)) {
-          ctx.fillStyle = "#e53e3e";
+          ctx.fillStyle = color;
           ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
           ctx.fillText(i === 0 ? "▶" : "■", p.x + 7 * S, p.y - 6 * S);
         }
@@ -939,16 +957,16 @@ export default function PlanPanel({
       ctx.globalAlpha = 0.9;
       ctx.fill();
       ctx.globalAlpha = 1;
-      // Solid red fill
+      // Yellow fill — matches the scale line color
       ctx.beginPath();
       ctx.arc(p.x, p.y, 6 * S, 0, Math.PI * 2);
-      ctx.fillStyle = "#e53e3e";
+      ctx.fillStyle = "#F5C518";
       ctx.fill();
       ctx.strokeStyle = "rgba(0,0,0,0.55)";
       ctx.lineWidth = 1.5 * S;
       ctx.stroke();
       // Label
-      ctx.fillStyle = "#e53e3e";
+      ctx.fillStyle = "#F5C518";
       ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
       ctx.fillText(`S${i + 1}`, p.x + 9 * S, p.y - 7 * S);
     });
@@ -1997,7 +2015,7 @@ export default function PlanPanel({
         ref={viewportRef}
         className="flex-1 relative overflow-hidden"
         style={{
-          cursor: isPanning ? "grabbing" : mode !== "none" ? "crosshair" : "grab",
+          cursor: isPanning ? "grabbing" : svgCursor ?? (mode !== "none" ? "crosshair" : "grab"),
         }}
         onContextMenu={(e) => { if (mode !== "count") e.preventDefault(); }}
         onMouseDown={(e) => {
@@ -2090,7 +2108,7 @@ export default function PlanPanel({
                     left: 0,
                     pointerEvents: "auto",
                     zIndex: 10,
-                    cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : mode === "none" ? "inherit" : "crosshair",
+                    cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : mode === "none" ? "inherit" : (svgCursor ?? "crosshair"),
                   }}
                   onClick={handleCanvasClick}
                   onContextMenu={handleCanvasContextMenu}
