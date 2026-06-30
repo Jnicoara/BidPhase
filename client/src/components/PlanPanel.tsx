@@ -1850,7 +1850,8 @@ export default function PlanPanel({
       )}
 
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-card shrink-0 overflow-x-auto">
+      {/* flex-wrap: buttons drop to the next line when the panel is narrow */}
+      <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-border bg-card shrink-0">
         {/* Load PDF */}
         <label className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium cursor-pointer bg-secondary text-secondary-foreground hover:bg-accent transition-colors shrink-0" title="Load PDF">
           <Upload size={12} />

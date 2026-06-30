@@ -1155,6 +1155,7 @@ function CivilEditor({
   const [countModeRequest, setCountModeRequest] = useState(0);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [rightPanelSize, setRightPanelSize] = useState(40);
 
   const toggleRightPanel = () => {
     const rp = rightPanelRef.current;
@@ -1512,21 +1513,28 @@ function CivilEditor({
           collapsedSize={3}
           onCollapse={() => setRightPanelCollapsed(true)}
           onExpand={() => setRightPanelCollapsed(false)}
+          onResize={(size) => {
+            setRightPanelSize(size);
+            // Treat anything at or below collapsedSize+1 as collapsed
+            if (size <= 4) setRightPanelCollapsed(true);
+            else if (size > 10) setRightPanelCollapsed(false);
+          }}
         >
-          <div className="flex flex-col h-full overflow-hidden">
+          <div className="flex flex-col h-full overflow-hidden relative">
             {/* ── Thin strip shown when panel is collapsed ── */}
             {rightPanelCollapsed && (
               <div
-                className="flex flex-col items-center justify-center h-full py-4 bg-card border-l border-border cursor-pointer hover:bg-[#F5C518]/5 transition-colors gap-3"
+                className="flex flex-col items-center justify-center h-full bg-card border-l border-border cursor-pointer hover:bg-[#F5C518]/5 transition-colors gap-2"
                 onClick={toggleRightPanel}
                 title="Expand panel"
               >
-                <div className="w-6 h-6 rounded bg-[#F5C518]/15 flex items-center justify-center">
-                  <span className="font-bold text-[#F5C518] text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+                {/* BP badge */}
+                <div className="w-5 h-5 rounded bg-[#F5C518]/15 flex items-center justify-center shrink-0">
+                  <span className="font-bold text-[#F5C518] text-[8px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
                 </div>
-                {/* Only the LEFT-pointing arrow shows when collapsed */}
-                <div className="w-6 h-6 rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 flex items-center justify-center">
-                  <ChevronLeft size={13} className="text-[#F5C518]" />
+                {/* LEFT-pointing arrow — only visible when collapsed */}
+                <div className="w-5 h-5 rounded bg-[#F5C518]/20 border border-[#F5C518]/40 flex items-center justify-center shrink-0">
+                  <ChevronLeft size={11} className="text-[#F5C518]" />
                 </div>
               </div>
             )}
@@ -1979,8 +1987,8 @@ function CompactCountConfig({
 
   return (
     <div className="space-y-1.5">
-      {/* Single row: color swatches | divider | shape family icons */}
-      <div className="flex items-center gap-1">
+      {/* Color swatches + shape family icons — wraps to next line when panel is narrow */}
+      <div className="flex flex-wrap items-center gap-1">
         {/* Color swatches — compact */}
         {PIN_COLORS.map((c) => (
           <button

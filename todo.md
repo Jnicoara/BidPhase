@@ -215,3 +215,8 @@
 
 - [x] Material Summary: remove the "Material Summary" heading, move the section inline below Runs in the scrollable area (grows with content, not pinned to bottom)
 - [x] Fix: toolbar/tools disappear after loading a new PDF into an existing project
+
+## v5.13 — Panel Expand Arrow & Toolbar Wrap
+
+- [x] Fix: expand arrow (ChevronLeft) not visible on the collapsed right panel thin strip
+- [x] Toolbar: when panel is narrow or collapsed, toolbar buttons/shapes wrap to next line so all tools remain accessible
