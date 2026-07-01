@@ -512,6 +512,9 @@ export default function PlanPanel({
   // Legacy panRef alias (scroll-based pan no longer used)
   const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
 
+  // Track both-buttons-pressed for pen-lift gesture (left+right click simultaneously)
+  const bothButtonsRef = useRef<{ pending: boolean; timer: ReturnType<typeof setTimeout> | null }>({ pending: false, timer: null });
+
   // ── Fit-to-page zoom ─────────────────────────────────────────────────────
   const fitZoomRef = useRef<number>(0.40);
   const [fitZoom, setFitZoom] = useState<number>(0.40);
@@ -1097,6 +1100,12 @@ export default function PlanPanel({
     setShowScalePrompt(false);
     setDeleteConfirm(null);
     setScalePoints([]);
+    // Reset all transient cursor/pan state so cursor and tools work after new PDF loads
+    dragRef.current = null;
+    dragPointRef.current = null;
+    setIsPanning(false);
+    setMousePos(null);
+    setCrosshair(null);
     // Notify parent to clear count pins and sessions
     onPdfReplaced?.();
     toast.success("PDF loaded. Set scale before measuring.");
@@ -1333,6 +1342,34 @@ export default function PlanPanel({
 
   // ── Canvas mouse down: start drag if near a point, else click-to-place ───────
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Both-button pen-lift: if user presses left while right is held (or right while left is held)
+    // in measure mode, insert a PEN_LIFT to start a disconnected segment
+    if (modeRef.current === "measure" && currentActiveRunId) {
+      // e.buttons is a bitmask: 1=left, 2=right. If both are pressed, bitmask includes both.
+      const bothHeld = (e.buttons & 1) && (e.buttons & 2);
+      if (bothHeld) {
+        e.preventDefault();
+        e.stopPropagation();
+        const coords = getCanvasCoords(e);
+        if (coords) {
+          const pt = canvasToNorm(coords.cx, coords.cy);
+          if (pt) {
+            setCurrentRuns((prev) =>
+              prev.map((r) =>
+                r.id === currentActiveRunId
+                  ? { ...r, points: [...r.points, PEN_LIFT, pt] }
+                  : r
+              )
+            );
+            toast.info("Pen lifted \u2014 click to start new segment.", { duration: 1200 });
+          }
+        }
+        // Cancel any pending pan that may have started from the right-click
+        dragRef.current = null;
+        setIsPanning(false);
+        return;
+      }
+    }
     if (e.button !== 0) return;
     const coords = getCanvasCoords(e);
     if (!coords) return;
@@ -1526,24 +1563,8 @@ export default function PlanPanel({
       return;
     }
 
-  if (m === "measure") {
-      // Single right-click = pen lift: insert PEN_LIFT sentinel so next click starts a disconnected segment
-      if (!currentActiveRunId) return;
-      const coords = getCanvasCoords(e);
-      if (!coords) return;
-      const { cx, cy } = coords;
-      const pt = canvasToNorm(cx, cy);
-      if (!pt) return;
-      setCurrentRuns((prev) =>
-        prev.map((r) =>
-          r.id === currentActiveRunId
-            ? { ...r, points: [...r.points, PEN_LIFT, pt] }
-            : r
-        )
-      );
-      toast.info("Pen lifted — click to start new segment.", { duration: 1200 });
-      return;
-    }
+    // Measure mode: pen-lift is now handled by simultaneous left+right click (see handleCanvasMouseDown)
+    // Right-click in measure mode is a no-op (panning is handled by viewport)
   }, [normToCanvas, onPinRemoved, canvasToNorm]);
 
   // ── Canvas mouse move (drag only) ────────────────────────────────────────
@@ -2218,7 +2239,7 @@ export default function PlanPanel({
           {mode === "set-scale-p1" && "Click the START of your reference line."}
           {mode === "set-scale-p2" && scalePoints.length < 2 && "Click the END of the reference line."}
           {mode === "set-scale-p2" && scalePoints.length >= 2 && "Enter real-world distance (ft) → Confirm."}
-          {mode === "measure" && `Measuring: ${activeRun?.name} · Click to add points · Pause or Finish when done · U=undo`}
+          {mode === "measure" && `Measuring: ${activeRun?.name} · Click=add point · Both buttons=pen lift · Dbl-click=new segment · U=undo`}
           {mode === "count" && `Unit Count · Click=place pin · Right-click=remove · U=undo · ${activeCountSession ? activeCountSession.pins.length + " total" : "No session selected"}`}
           {mode === "none" && `Page ${currentPage}/${numPages || "–"} · Scroll=zoom · ←/→=page · M=measure`}
         </span>
@@ -2376,7 +2397,11 @@ export default function PlanPanel({
         {/* ── Page Overview Overlay ─────────────────────────────────────── */}
         {/* ── Scale Prompt Overlay ─────────────────────────────────────────── */}
         {showScalePrompt && (
-          <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center">
+          <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center"
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 space-y-4">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-lg bg-yellow-400/15 border border-yellow-400/30 flex items-center justify-center shrink-0 mt-0.5">
@@ -2425,7 +2450,11 @@ export default function PlanPanel({
 
         {/* ── Delete Confirm Dialog ─────────────────────────────────────────── */}
         {deleteConfirm && (
-          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center"
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="bg-card border border-border rounded-xl shadow-2xl p-5 max-w-xs w-full mx-4 space-y-4">
               <div className="space-y-1">
                 {deleteConfirm.name === "scale" ? (
@@ -2471,7 +2500,11 @@ export default function PlanPanel({
 
         {/* ── PDF Replace Confirmation Dialog ─────────────────────────────── */}
         {pendingPdfFile && (
-          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center"
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="bg-card border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4 space-y-4">
               <div className="space-y-2">
                 <h3 className="text-sm font-bold text-destructive">Replace PDF?</h3>
@@ -2507,7 +2540,11 @@ export default function PlanPanel({
         )}
 
         {showPageOverview && pdfFile && numPages > 0 && (
-          <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col">
+          <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col"
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
               <span className="text-sm font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 All Pages — {numPages} total

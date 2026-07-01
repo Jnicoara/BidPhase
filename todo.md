@@ -268,3 +268,9 @@
 - [x] Restore Upload PDF button in measure and count mode toolbars (always accessible); keep confirmation dialog
 - [x] Fix undo glitch: PEN_LIFT sentinel now removed atomically with its paired point
 - [x] Fix Clear Page cursor glitch: reset dragRef, isPanning, mousePos, crosshair on all Clear Page confirms
+
+## v5.22 — Critical Cursor & Tool Fixes
+
+- [x] Fix: cursor disappears after clicking Confirm in Clear Page dialog (stopPropagation on all overlay dialogs)
+- [x] Fix: cursor disappears after clicking Confirm in PDF Replace dialog; tools stop working after new PDF loads (reset dragRef/isPanning/mousePos/crosshair in applyPdfLoad + stopPropagation on overlay)
+- [x] Replace right-click pen-lift with simultaneous left+right click pen-lift (both-button detection in handleCanvasMouseDown)
