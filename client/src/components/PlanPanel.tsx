@@ -37,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
   Upload,
+  FileUp,
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -419,8 +420,7 @@ export default function PlanPanel({
   // ── Right-click context menu ──────────────────────────────────────────────
   // Shown when user right-clicks in measure mode; lets them continue a run from
   // the clicked point. { x, y } are viewport pixel coordinates for positioning.
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; normPt: NormPoint } | null>(null);
-  const lastRightClickRef = useRef<{ time: number; x: number; y: number } | null>(null);
+
   // ── Paused run tracking ───────────────────────────────────────────────────
   // When the user switches to Unit Count mid-run, we save the active run id so
   // we can resume it automatically when they switch back to Measure mode.
@@ -1275,7 +1275,6 @@ export default function PlanPanel({
         }
       }
       if (e.key === "Escape") {
-        setCtxMenu(null);
         setMode("none");
         modeRef.current = "none";
       }
@@ -1527,27 +1526,22 @@ export default function PlanPanel({
       return;
     }
 
-    if (m === "measure") {
-      // Double-right-click to open "Continue run from here" menu
-      const now = Date.now();
-      const prev = lastRightClickRef.current;
-      const DOUBLE_THRESHOLD = 400; // ms
-      const DIST_THRESHOLD = 20; // px
-      const dx = prev ? Math.abs(e.clientX - prev.x) : 999;
-      const dy = prev ? Math.abs(e.clientY - prev.y) : 999;
-      const isDouble = prev && (now - prev.time) < DOUBLE_THRESHOLD && dx < DIST_THRESHOLD && dy < DIST_THRESHOLD;
-      lastRightClickRef.current = { time: now, x: e.clientX, y: e.clientY };
-      if (!isDouble) return; // single right-click — ignore
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const cx = (e.clientX - rect.left) * scaleX;
-      const cy = (e.clientY - rect.top)  * scaleY;
-      const normPt = canvasToNorm(cx, cy);
-      if (!normPt) return;
-      setCtxMenu({ x: e.clientX, y: e.clientY, normPt });
+  if (m === "measure") {
+      // Single right-click = pen lift: insert PEN_LIFT sentinel so next click starts a disconnected segment
+      if (!currentActiveRunId) return;
+      const coords = getCanvasCoords(e);
+      if (!coords) return;
+      const { cx, cy } = coords;
+      const pt = canvasToNorm(cx, cy);
+      if (!pt) return;
+      setCurrentRuns((prev) =>
+        prev.map((r) =>
+          r.id === currentActiveRunId
+            ? { ...r, points: [...r.points, PEN_LIFT, pt] }
+            : r
+        )
+      );
+      toast.info("Pen lifted — click to start new segment.", { duration: 1200 });
       return;
     }
   }, [normToCanvas, onPinRemoved, canvasToNorm]);
@@ -1704,285 +1698,372 @@ export default function PlanPanel({
   return (
     <div className="flex flex-col h-full bg-background border-r border-border relative">
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
-      {/* flex-wrap: buttons drop to the next line when the panel is narrow */}
+      {/* Contextual toolbar: buttons shown depend on the current mode */}
       <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-border bg-card shrink-0">
-        {/* Load PDF */}
-        <label className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium cursor-pointer bg-secondary text-secondary-foreground hover:bg-accent transition-colors shrink-0" title="Load PDF">
-          <Upload size={12} />
-          <span>PDF</span>
-          <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
-        </label>
 
-        <div className="w-px h-4 bg-border shrink-0" />
+        {/* ── DEFAULT MODE: PDF + Scale + Measure + Count ── */}
+        {(mode === "none" || mode === "set-scale-p1" || mode === "set-scale-p2") && (
+          <>
+            {/* Load PDF */}
+            <label className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium cursor-pointer bg-secondary text-secondary-foreground hover:bg-accent transition-colors shrink-0" title="Load PDF">
+              <Upload size={12} />
+              <span>PDF</span>
+              <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
+            </label>
 
-                {/* Scale group — yellow when editing, dark/locked when set */}
-        {(() => {
-          const isEditingScale = mode === "set-scale-p1" || mode === "set-scale-p2";
-          const entry = pageScaleMap[pageIdx];
-          const hasScale = scaleRatio !== null && scaleRatio > 0;
-          const scaleLabel = (() => {
-            if (isEditingScale) return "Setting Scale…";
-            if (!hasScale) return "Set Scale";
-            if (!entry?.knownFt || !entry?.pxDist) return "Reset Scale";
-            const ftPerIn = (162 * entry.knownFt) / entry.pxDist;
-            const rounded = ftPerIn >= 10 ? Math.round(ftPerIn) : Math.round(ftPerIn * 2) / 2;
-            return `${entry.knownFt} ft  ·  1 in = ${rounded} ft`;
-          })();
-          return (
-            <Button
-              size="sm"
-              className={cn(
-                "h-7 text-xs px-2 shrink-0 transition-all",
-                isEditingScale
-                  ? "bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
-                  : hasScale
-                    ? "bg-muted/40 text-muted-foreground border-border hover:bg-destructive/20 hover:text-destructive"
-                    : ""
-              )}
-              variant={isEditingScale ? "default" : "outline"}
-              onClick={() => {
-                if (isEditingScale) {
-                  // Cancel back to locked state (keep previous scale if any)
-                  setScalePoints([]);
-                  setMode("none");
-                  modeRef.current = "none";
-                  toast.info("Scale edit cancelled.");
-                } else if (hasScale) {
-                  // Confirm before resetting — returns to dark inactive state, NOT scale mode
-                  setDeleteConfirm({
-                    count: 0,
-                    name: "scale",
-                    onConfirm: () => {
+            <div className="w-px h-4 bg-border shrink-0" />
+
+            {/* Scale group — yellow when editing, dark/locked when set */}
+            {(() => {
+              const isEditingScale = mode === "set-scale-p1" || mode === "set-scale-p2";
+              const entry = pageScaleMap[pageIdx];
+              const hasScale = scaleRatio !== null && scaleRatio > 0;
+              const scaleLabel = (() => {
+                if (isEditingScale) return "Setting Scale…";
+                if (!hasScale) return "Set Scale";
+                if (!entry?.knownFt || !entry?.pxDist) return "Reset Scale";
+                const ftPerIn = (162 * entry.knownFt) / entry.pxDist;
+                const rounded = ftPerIn >= 10 ? Math.round(ftPerIn) : Math.round(ftPerIn * 2) / 2;
+                return `${entry.knownFt} ft  ·  1 in = ${rounded} ft`;
+              })();
+              return (
+                <Button
+                  size="sm"
+                  className={cn(
+                    "h-7 text-xs px-2 shrink-0 transition-all",
+                    isEditingScale
+                      ? "bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
+                      : hasScale
+                        ? "bg-muted/40 text-muted-foreground border-border hover:bg-destructive/20 hover:text-destructive"
+                        : ""
+                  )}
+                  variant={isEditingScale ? "default" : "outline"}
+                  onClick={() => {
+                    if (isEditingScale) {
                       setScalePoints([]);
-                      setScaleRatio(null, undefined);
                       setMode("none");
                       modeRef.current = "none";
-                      toast.info("Scale cleared. Press \"Set Scale\" when ready to re-measure.");
-                    },
-                  });
+                      toast.info("Scale edit cancelled.");
+                    } else if (hasScale) {
+                      setDeleteConfirm({
+                        count: 0,
+                        name: "scale",
+                        onConfirm: () => {
+                          setScalePoints([]);
+                          setScaleRatio(null, undefined);
+                          setMode("none");
+                          modeRef.current = "none";
+                          toast.info("Scale cleared. Press \"Set Scale\" when ready to re-measure.");
+                        },
+                      });
+                    } else {
+                      setScalePoints([]);
+                      setMode("set-scale-p1");
+                      modeRef.current = "set-scale-p1";
+                      toast.info("Click the START of your known-distance reference line.");
+                    }
+                  }}
+                  disabled={!pdfFile}
+                  title={isEditingScale ? "Cancel scale edit" : hasScale ? "Reset scale for this page" : "Set scale"}
+                >
+                  {isEditingScale ? (
+                    <><Pencil size={11} className="mr-1" />Setting Scale…</>
+                  ) : (
+                    scaleLabel
+                  )}
+                </Button>
+              );
+            })()}
+
+            {mode === "set-scale-p2" && scalePoints.length >= 2 && (
+              <div className="flex items-center gap-1 shrink-0">
+                <Input
+                  type="number"
+                  placeholder="ft"
+                  value={knownDistance}
+                  onChange={(e) => setKnownDistance(e.target.value)}
+                  className="w-16 h-7 text-xs"
+                  onKeyDown={(e) => { if (e.key === "Enter") confirmScale(); }}
+                />
+                <Button size="sm" className="h-7 text-xs px-2" onClick={confirmScale}>OK</Button>
+              </div>
+            )}
+
+            <div className="w-px h-4 bg-border shrink-0" />
+
+            {/* Measure button */}
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 transition-all"
+              variant="outline"
+              onClick={() => {
+                if (!scaleRatio) { setShowScalePrompt(true); return; }
+                onMeasureStart?.();
+                const id = nanoid6();
+                const runNum = currentRuns.length + 1;
+                const name = `Run ${runNum}`;
+                const color = BASE_PALETTE[(runNum - 1) % BASE_PALETTE.length];
+                const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "1/2", status: "active" };
+                setCurrentRuns((prev) => [...prev, newRun]);
+                setCurrentActiveRunId(id);
+                setMode("measure");
+                modeRef.current = "measure";
+                toast.info(`"${name}" started — click to measure. Right-click to lift pen & start a new segment.`);
+              }}
+              disabled={!pdfFile}
+              title="Measure [M] — starts a new run automatically"
+            >
+              <Ruler size={12} className="mr-1" />
+              Measure
+            </Button>
+
+            {/* Unit Count button */}
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 transition-all"
+              variant="outline"
+              onClick={() => {
+                onRequestCountSession?.();
+                setMode("count");
+                modeRef.current = "count";
+                toast.info("Unit Count: click to place a pin · right-click to remove.");
+              }}
+              disabled={!pdfFile}
+              title="Unit Count [C] — click to place pins"
+            >
+              <Hash size={12} className="mr-1" />
+              Unit Count
+            </Button>
+
+            {/* Undo + Clear Page (idle) */}
+            {(currentRuns.length > 0 || currentPins.length > 0) && (
+              <>
+                <div className="w-px h-4 bg-border shrink-0" />
+                <Button
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  variant="ghost"
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  title="Undo [U]"
+                >
+                  <Undo2 size={13} />
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 text-xs px-2 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  variant="ghost"
+                  onClick={() => {
+                    const runsCount = currentRuns.length;
+                    const pinsCount = currentPins.length;
+                    const parts: string[] = [];
+                    if (runsCount > 0) parts.push(`${runsCount} run${runsCount !== 1 ? "s" : ""}`);
+                    if (pinsCount > 0) parts.push(`${pinsCount} pin${pinsCount !== 1 ? "s" : ""}`);
+                    setDeleteConfirm({
+                      count: runsCount + pinsCount,
+                      name: `all marks on page ${currentPage} (${parts.join(" and ")})`,
+                      onConfirm: () => {
+                        setCurrentRuns([]);
+                        setCurrentActiveRunId("");
+                        setMode("none");
+                        modeRef.current = "none";
+                        onClearPageAll?.(currentPage);
+                        toast.info(`Cleared page ${currentPage}: ${parts.join(" and ")}.`);
+                      },
+                    });
+                  }}
+                  title={`Clear all runs and pins on page ${currentPage} [Shift+Del]`}
+                  disabled={!pdfFile}
+                >
+                  <Trash2 size={11} className="mr-1" />
+                  Clear page
+                </Button>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── MEASURE MODE: Stop + Undo + Trash run + Clear page ── */}
+        {mode === "measure" && (
+          <>
+            {/* Active run indicator */}
+            <div className="flex items-center gap-1.5 shrink-0 mr-1">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: activeRun?.color ?? "#F5C518" }}
+              />
+              <span className="text-xs font-medium text-foreground truncate max-w-[120px]">
+                {activeRun?.name ?? "Measuring"}
+              </span>
+            </div>
+            <div className="w-px h-4 bg-border shrink-0" />
+            {/* Stop measuring */}
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90 transition-all"
+              variant="default"
+              onClick={() => {
+                setMode("none");
+                modeRef.current = "none";
+              }}
+              title="Stop measuring [M]"
+            >
+              <Ruler size={12} className="mr-1" />
+              Stop
+            </Button>
+            {/* Undo */}
+            <Button
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              variant="ghost"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title="Undo last point [U]"
+            >
+              <Undo2 size={13} />
+            </Button>
+            {/* Trash active run */}
+            <Button
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              variant="ghost"
+              onClick={() => {
+                const pts = activeRun?.points?.length ?? 0;
+                if (pts === 0) { toast.info("No points on active run."); return; }
+                const doDelete = () => {
+                  setCurrentRuns((prev) => prev.map((r) => r.id === currentActiveRunId ? { ...r, points: [], totalFeet: null } : r));
+                  setMode("none");
+                  modeRef.current = "none";
+                  toast.info(`Cleared "${activeRun?.name ?? "run"}". Scale preserved.`);
+                };
+                if (pts >= 3) {
+                  setDeleteConfirm({ count: pts, name: activeRun?.name, onConfirm: doDelete });
                 } else {
-                  // Enter edit mode for first-time scale setting
-                  setScalePoints([]);
-                  setMode("set-scale-p1");
-                  modeRef.current = "set-scale-p1";
-                  toast.info("Click the START of your known-distance reference line.");
+                  doDelete();
                 }
               }}
               disabled={!pdfFile}
-              title={isEditingScale ? "Cancel scale edit" : hasScale ? "Reset scale for this page" : "Set scale"}
+              title={`Clear "${activeRun?.name ?? "active run"}" points (scale preserved)`}
             >
-              {isEditingScale ? (
-                <><Pencil size={11} className="mr-1" />Setting Scale…</>
-              ) : (
-                scaleLabel
-              )}
+              <Trash2 size={13} />
             </Button>
-          );
-        })()}
-
-        {mode === "set-scale-p2" && scalePoints.length >= 2 && (
-          <div className="flex items-center gap-1 shrink-0">
-            <Input
-              type="number"
-              placeholder="ft"
-              value={knownDistance}
-              onChange={(e) => setKnownDistance(e.target.value)}
-              className="w-16 h-7 text-xs"
-              onKeyDown={(e) => { if (e.key === "Enter") confirmScale(); }}
-            />
-            <Button size="sm" className="h-7 text-xs px-2" onClick={confirmScale}>OK</Button>
-          </div>
+            {/* Clear page */}
+            {(currentRuns.length > 0 || currentPins.length > 0) && (
+              <Button
+                size="sm"
+                className="h-7 text-xs px-2 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                variant="ghost"
+                onClick={() => {
+                  const runsCount = currentRuns.length;
+                  const pinsCount = currentPins.length;
+                  const parts: string[] = [];
+                  if (runsCount > 0) parts.push(`${runsCount} run${runsCount !== 1 ? "s" : ""}`);
+                  if (pinsCount > 0) parts.push(`${pinsCount} pin${pinsCount !== 1 ? "s" : ""}`);
+                  setDeleteConfirm({
+                    count: runsCount + pinsCount,
+                    name: `all marks on page ${currentPage} (${parts.join(" and ")})`,
+                    onConfirm: () => {
+                      setCurrentRuns([]);
+                      setCurrentActiveRunId("");
+                      setMode("none");
+                      modeRef.current = "none";
+                      onClearPageAll?.(currentPage);
+                      toast.info(`Cleared page ${currentPage}: ${parts.join(" and ")}.`);
+                    },
+                  });
+                }}
+                title={`Clear all runs and pins on page ${currentPage} [Shift+Del]`}
+                disabled={!pdfFile}
+              >
+                <Trash2 size={11} className="mr-1" />
+                Clear page
+              </Button>
+            )}
+          </>
         )}
 
-        <div className="w-px h-4 bg-border shrink-0" />
-
-        {/* Measure button — toggles measure mode on/off; auto-creates a new run when starting */}
-        <Button
-          size="sm"
-          className={cn(
-            "h-7 text-xs px-2 shrink-0 transition-all",
-            mode === "measure"
-              ? "bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
-              : ""
-          )}
-          variant={mode === "measure" ? "default" : "outline"}
-          onClick={() => {
-            if (mode === "measure") {
-              // Toggle off — just exit measure mode, keep the run as-is
-              setMode("none");
-              modeRef.current = "none";
-              return;
-            }
-            // Scale is required before measuring
-            if (!scaleRatio) {
-              setShowScalePrompt(true);
-              return;
-            }
-            // Notify parent to switch right panel to Runs tab
-            onMeasureStart?.();
-            // Auto-create a new run and immediately start measuring it
-            const id = nanoid6();
-            const runNum = currentRuns.length + 1;
-            const name = `Run ${runNum}`;
-            const color = BASE_PALETTE[(runNum - 1) % BASE_PALETTE.length];
-            const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "1/2", status: "active" };
-            setCurrentRuns((prev) => [...prev, newRun]);
-            setCurrentActiveRunId(id);
-            setMode("measure");
-            modeRef.current = "measure";
-            toast.info(`"${name}" started — click points along the path. Double-click to start a new segment.`);
-          }}
-          disabled={!pdfFile}
-          title={mode === "measure" ? "Stop measuring" : "Measure — starts a new run automatically"}
-        >
-          <Ruler size={12} className="mr-1" />
-          {mode === "measure" ? "Stop" : "Measure"}
-        </Button>
-
-
-        {/* Unit Count button — enters count mode immediately */}
-        <Button
-          size="sm"
-          className={cn(
-            "h-7 text-xs px-2 shrink-0 transition-all",
-            mode === "count"
-              ? "bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
-              : ""
-          )}
-          variant={mode === "count" ? "default" : "outline"}
-          onClick={() => {
-            if (mode === "count") {
-              // Toggle off count mode
-              setMode("none");
-              modeRef.current = "none";
-              return;
-            }
-            // Bootstrap session if needed and enter count mode
-            onRequestCountSession?.();
-            setMode("count");
-            modeRef.current = "count";
-            toast.info("Unit Count: click to place a pin · right-click to remove.");
-          }}
-          disabled={!pdfFile}
-          title="Unit Count — click to place pins"
-        >
-          <Hash size={12} className="mr-1" />
-          Unit Count
-        </Button>
-
-        <div className="w-px h-4 bg-border shrink-0" />
-
-        {/* Undo — icon only with tooltip */}
-        <Button
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          variant="ghost"
-          onClick={handleUndo}
-          disabled={!canUndo}
-          title="Undo (U)"
-        >
-          <Undo2 size={13} />
-        </Button>
-
-        {/* Trash button — scoped to what you’re actively working with:
-             - In measure mode: clears only the active run’s points on this page
-             - In count mode: clears only the active count session’s pins on this page
-             - In other modes: clears the active run’s points */}
-        <Button
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          variant="ghost"
-          onClick={() => {
-            if (mode === "count") {
-              // Count mode: only clear the active count session’s pins on this page
-              if (!activeCountSession) return;
-              const pinsOnPage = currentPins.length;
-              if (pinsOnPage === 0) { toast.info("No pins on this page."); return; }
-              const doDelete = () => {
-                onClearPagePins?.(currentPage);
-                toast.info(`Cleared ${pinsOnPage} pin${pinsOnPage !== 1 ? "s" : ""} from “${activeCountSession.name}” on page ${currentPage}.`);
-              };
-              if (pinsOnPage >= 3) {
-                setDeleteConfirm({
-                  count: pinsOnPage,
-                  name: `“${activeCountSession.name}” pins on page ${currentPage}`,
-                  onConfirm: doDelete,
-                });
-              } else {
-                doDelete();
-              }
-            } else {
-              // Measure / other modes: only clear the active run’s points
-              const pts = activeRun?.points?.length ?? 0;
-              if (pts === 0) { toast.info("No points on active run."); return; }
-              const doDelete = () => {
-                setCurrentRuns((prev) => prev.map((r) => r.id === currentActiveRunId ? { ...r, points: [], totalFeet: null } : r));
+        {/* ── COUNT MODE: Stop + Undo + Trash pins ── */}
+        {mode === "count" && (
+          <>
+            {/* Active session indicator */}
+            <div className="flex items-center gap-1.5 shrink-0 mr-1">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: activeCountSession?.color ?? "#F5C518" }}
+              />
+              <span className="text-xs font-medium text-foreground truncate max-w-[120px]">
+                {activeCountSession?.name ?? "Counting"}
+              </span>
+            </div>
+            <div className="w-px h-4 bg-border shrink-0" />
+            {/* Stop count */}
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90 transition-all"
+              variant="default"
+              onClick={() => {
                 setMode("none");
                 modeRef.current = "none";
-                toast.info(`Cleared “${activeRun?.name ?? "run"}”. Scale preserved.`);
-              };
-              if (pts >= 3) {
-                setDeleteConfirm({ count: pts, name: activeRun?.name, onConfirm: doDelete });
-              } else {
-                doDelete();
-              }
-            }
-          }}
-          disabled={!pdfFile}
-          title={mode === "count"
-            ? `Clear “${activeCountSession?.name ?? "active session"}” pins on page ${currentPage}`
-            : `Clear “${activeRun?.name ?? "active run"}” points (scale preserved)`}
-        >
-          <Trash2 size={13} />
-        </Button>
-
-        {/* Clear Page — unified button: clears both runs AND pins on the current page */}
-        {(currentRuns.length > 0 || currentPins.length > 0) && (
-          <Button
-            size="sm"
-            className="h-7 text-xs px-2 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            variant="ghost"
-            onClick={() => {
-              const runsCount = currentRuns.length;
-              const pinsCount = currentPins.length;
-              const parts: string[] = [];
-              if (runsCount > 0) parts.push(`${runsCount} run${runsCount !== 1 ? "s" : ""}`);
-              if (pinsCount > 0) parts.push(`${pinsCount} pin${pinsCount !== 1 ? "s" : ""}`);
-              setDeleteConfirm({
-                count: runsCount + pinsCount,
-                name: `all marks on page ${currentPage} (${parts.join(" and ")})`,
-                onConfirm: () => {
-                  // Clear local canvas runs for this page
-                  setCurrentRuns([]);
-                  setCurrentActiveRunId("");
-                  setMode("none");
-                  modeRef.current = "none";
-                  // Notify parent to clear its run list + count pins
-                  onClearPageAll?.(currentPage);
-                  toast.info(`Cleared page ${currentPage}: ${parts.join(" and ")}.`);
-                },
-              });
-            }}
-            title={`Clear all runs and pins on page ${currentPage}`}
-            disabled={!pdfFile}
-          >
-            <Trash2 size={11} className="mr-1" />
-            Clear page
-          </Button>
+              }}
+              title="Stop Unit Count [C]"
+            >
+              <Hash size={12} className="mr-1" />
+              Stop
+            </Button>
+            {/* Undo */}
+            <Button
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              variant="ghost"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title="Undo last pin [U]"
+            >
+              <Undo2 size={13} />
+            </Button>
+            {/* Trash session pins */}
+            <Button
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              variant="ghost"
+              onClick={() => {
+                if (!activeCountSession) return;
+                const pinsOnPage = currentPins.length;
+                if (pinsOnPage === 0) { toast.info("No pins on this page."); return; }
+                const doDelete = () => {
+                  onClearPagePins?.(currentPage);
+                  toast.info(`Cleared ${pinsOnPage} pin${pinsOnPage !== 1 ? "s" : ""} from "${activeCountSession.name}" on page ${currentPage}.`);
+                };
+                if (pinsOnPage >= 3) {
+                  setDeleteConfirm({
+                    count: pinsOnPage,
+                    name: `"${activeCountSession.name}" pins on page ${currentPage}`,
+                    onConfirm: doDelete,
+                  });
+                } else {
+                  doDelete();
+                }
+              }}
+              disabled={!pdfFile}
+              title={`Clear "${activeCountSession?.name ?? "active session"}" pins on page ${currentPage}`}
+            >
+              <Trash2 size={13} />
+            </Button>
+          </>
         )}
 
-        {/* Zoom — right-aligned */}
+        {/* Zoom — always right-aligned */}
         <div className="ml-auto flex items-center gap-0 shrink-0">
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={zoomOut} title="Zoom out (-)">
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={zoomOut} title="Zoom out [-]">
             <ZoomOut size={13} />
           </Button>
           <span className="text-[10px] font-mono w-9 text-center tabular-nums">
             {Math.round(displayZoom * 100)}%
           </span>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={zoomIn} title="Zoom in (+)">
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={zoomIn} title="Zoom in [+]">
             <ZoomIn size={13} />
           </Button>
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={zoomReset} title="Reset zoom (0)">
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={zoomReset} title="Reset zoom [0]">
             <RotateCcw size={12} />
           </Button>
         </div>
@@ -2149,6 +2230,49 @@ export default function PlanPanel({
         )}
       </div>
 
+      {/* ── Page Thumbnail Strip ─────────────────────────────────────────── */}
+      {/* Only shown when PDF has 2+ pages */}
+      {pdfFile && numPages > 1 && (
+        <div
+          className="flex items-end gap-1.5 px-2 py-1.5 border-b border-border bg-muted/10 shrink-0 overflow-x-auto"
+          style={{ scrollbarWidth: "none" } as React.CSSProperties}
+        >
+          {Array.from({ length: numPages }, (_, i) => {
+            const pNum = i + 1;
+            const isActive = pNum === currentPage;
+            return (
+              <button
+                key={i}
+                onClick={() => goToPage(pNum)}
+                className={cn(
+                  "relative flex-shrink-0 rounded border overflow-hidden transition-all",
+                  isActive
+                    ? "border-[#F5C518] ring-1 ring-[#F5C518]/40"
+                    : "border-border hover:border-[#F5C518]/50 opacity-60 hover:opacity-100"
+                )}
+                title={`Go to page ${pNum}`}
+              >
+                <Document file={pdfFile} loading={<div className="w-10 h-14 bg-muted/30" />}>
+                  <Page
+                    pageNumber={pNum}
+                    width={48}
+                    renderAnnotationLayer={false}
+                    renderTextLayer={false}
+                  />
+                </Document>
+                {/* Page number badge */}
+                <div className={cn(
+                  "absolute bottom-0 left-0 right-0 text-center text-[9px] font-mono font-semibold py-0.5",
+                  isActive ? "bg-[#F5C518] text-black" : "bg-black/60 text-white"
+                )}>
+                  {pNum}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* ── Viewport (overflow:hidden, free-drag pan) ───────────────────── */}
       <div
         ref={viewportRef}
@@ -2186,13 +2310,36 @@ export default function PlanPanel({
             Loading…
           </div>
         ) : !pdfFile ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-            <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center">
-              <Upload size={24} className="text-muted-foreground" />
+          <div className="flex flex-col items-center justify-center h-full gap-6 select-none">
+            {/* Large icon */}
+            <div className="w-24 h-24 rounded-2xl bg-muted/60 border-2 border-dashed border-border flex items-center justify-center">
+              <FileUp size={40} className="text-muted-foreground/60" />
             </div>
-            <p className="text-sm font-medium">No Plan Loaded</p>
-            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-400 text-black text-xs font-semibold cursor-pointer hover:bg-yellow-300 transition-colors">
-              <Upload size={13} />
+            {/* Heading + instructions */}
+            <div className="text-center space-y-1.5">
+              <p className="text-base font-semibold text-foreground">Upload a Construction Plan</p>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                Load a PDF to start measuring conduit runs and placing unit count pins.
+              </p>
+            </div>
+            {/* Steps */}
+            <div className="flex flex-col gap-2 text-xs text-muted-foreground max-w-xs w-full px-4">
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-yellow-400/20 text-yellow-400 flex items-center justify-center font-bold text-[10px]">1</span>
+                <span>Click <strong className="text-foreground">Load PDF</strong> below or use the toolbar button to upload your plan.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-yellow-400/20 text-yellow-400 flex items-center justify-center font-bold text-[10px]">2</span>
+                <span>Set the <strong className="text-foreground">Scale</strong> by clicking two points on a known-length reference line.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-yellow-400/20 text-yellow-400 flex items-center justify-center font-bold text-[10px]">3</span>
+                <span>Press <strong className="text-foreground">Measure [M]</strong> and click along conduit runs to record footage.</span>
+              </div>
+            </div>
+            {/* CTA button */}
+            <label className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-yellow-400 text-black text-sm font-semibold cursor-pointer hover:bg-yellow-300 active:scale-95 transition-all shadow-md">
+              <FileUp size={15} />
               Load PDF
               <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
             </label>
@@ -2506,55 +2653,7 @@ export default function PlanPanel({
       </div>
 
       {/* ── Right-click context menu ─────────────────────────────────────────── */}
-      {ctxMenu && (
-        <>
-          {/* Invisible backdrop — click anywhere to dismiss */}
-          <div
-            className="fixed inset-0 z-[100]"
-            onClick={() => setCtxMenu(null)}
-          />
-          {/* Menu */}
-          <div
-            className="fixed z-[101] min-w-[180px] rounded-lg border border-border bg-card shadow-xl overflow-hidden"
-            style={{ left: ctxMenu.x, top: ctxMenu.y }}
-          >
-            <div className="px-3 py-2 border-b border-border/50">
-              <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wide">
-                Run: {currentRuns.find(r => r.id === currentActiveRunId)?.name ?? "Active Run"}
-              </p>
-            </div>
-            <button
-              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-[#F5C518]/10 hover:text-[#F5C518] transition-colors text-left"
-              onClick={() => {
-                // Append the right-clicked point to the active run and keep measuring
-                setCurrentRuns((prev) =>
-                  prev.map((r) =>
-                    r.id === currentActiveRunId
-                      ? { ...r, points: [...r.points, ctxMenu.normPt] }
-                      : r
-                  )
-                );
-                setCtxMenu(null);
-                toast.success("Continued run from this point — keep clicking to extend.");
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-              Continue run from here
-            </button>
-            <button
-              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted/30 transition-colors text-left"
-              onClick={() => setCtxMenu(null)}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-              Cancel
-            </button>
-          </div>
-        </>
-      )}
+
     </div>
   );
 }

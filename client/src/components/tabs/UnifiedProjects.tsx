@@ -42,7 +42,7 @@ import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
   Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Link2, Trash2, Pencil, Check, X, Undo2, Maximize2,
+  Link2, Trash2, Pencil, Check, X, Undo2, Maximize2, Download,
 } from "lucide-react";
 import type { CatalogItem } from "@/lib/materialCatalog";
 import type { SavedMaterialRow } from "@/contexts/AppContext";
@@ -372,6 +372,97 @@ function WireTypePicker({
   );
 }
 
+// ─── Compact Run Row ─────────────────────────────────────────────────────────
+/**
+ * CompactRunRow — a single table row for a conduit run in the compact table view.
+ * Shows: color dot + name (click to rename) | footage | conduit type+size | remove
+ */
+function CompactRunRow({
+  run,
+  index,
+  onUpdate,
+  onRemove,
+}: {
+  run: RunItem;
+  index: number;
+  onUpdate: (id: string, partial: Partial<RunItem>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(run.name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const isWire = (run.runType ?? "conduit") === "wire";
+  const palette = ["#22C55E","#3B82F6","#F97316","#A855F7","#EC4899","#14B8A6"];
+
+  const startEditName = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNameInput(run.name);
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.select(), 30);
+  };
+  const commitName = () => {
+    const trimmed = nameInput.trim();
+    if (trimmed) onUpdate(run.id, { name: trimmed });
+    setEditingName(false);
+  };
+
+  return (
+    <tr className="border-b border-border/20 hover:bg-muted/10 transition-colors group">
+      {/* Name cell */}
+      <td className="px-4 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <span
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: palette[index % palette.length] }}
+          />
+          {editingName ? (
+            <input
+              ref={nameInputRef}
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitName();
+                if (e.key === "Escape") setEditingName(false);
+              }}
+              className="text-xs font-medium bg-transparent border-b border-[#F5C518] outline-none text-foreground w-24"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span
+              className="text-xs font-medium text-foreground cursor-text hover:text-[#F5C518] transition-colors truncate max-w-[100px]"
+              onClick={startEditName}
+              title="Click to rename"
+            >
+              {run.name}
+            </span>
+          )}
+        </div>
+      </td>
+      {/* Footage cell */}
+      <td className="px-2 py-1.5 text-right">
+        <span className="font-mono text-[#F5C518] font-semibold">{run.feet > 0 ? run.feet.toFixed(0) : "—"}</span>
+      </td>
+      {/* Type cell */}
+      <td className="px-2 py-1.5">
+        <span className="text-[10px] font-mono text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded">
+          {isWire ? `Wire ${run.conductors}c` : `${run.conduitType ?? "EMT"} ${run.conduitSize}"`}
+        </span>
+      </td>
+      {/* Remove cell */}
+      <td className="px-2 py-1.5 w-6">
+        <button
+          onClick={() => onRemove(run.id)}
+          className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground/50 hover:text-destructive transition-all rounded hover:bg-destructive/10"
+          title="Remove run"
+        >
+          <X size={11} />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 // ─── Run Card ─────────────────────────────────────────────────────────────────
 /**
  * RunCard — editable card for a single conduit run pushed from PlanPanel.
@@ -399,6 +490,21 @@ function RunCard({
   const [showFittings, setShowFittings] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(run.name);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const startEditName = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNameInput(run.name);
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.select(), 30);
+  };
+  const commitName = () => {
+    const trimmed = nameInput.trim();
+    if (trimmed) onUpdate(run.id, { name: trimmed });
+    setEditingName(false);
+  };
   const isWire = (run.runType ?? "conduit") === "wire";
 
   // ── Jacketed / Romex defaults & calculations ─────────────────────────────────
@@ -465,12 +571,27 @@ function RunCard({
               background: ["#22C55E","#3B82F6","#F97316","#A855F7","#EC4899","#14B8A6"][index % 6],
             }}
           />
-          <span
-            className="text-sm font-semibold text-foreground"
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-          >
-            {run.name}
-          </span>
+          {editingName ? (
+            <input
+              ref={nameInputRef}
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => { if (e.key === "Enter") commitName(); if (e.key === "Escape") setEditingName(false); }}
+              className="text-sm font-semibold bg-transparent border-b border-[#F5C518] outline-none text-foreground w-28"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span
+              className="text-sm font-semibold text-foreground cursor-text hover:text-[#F5C518] transition-colors"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              onClick={startEditName}
+              title="Click to rename"
+            >
+              {run.name}
+            </span>
+          )}
           <span className="text-[10px] font-mono text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
             {isWire
               ? `Wire · ${run.conductors}c`
@@ -849,6 +970,42 @@ function RunCard({
  * when the right panel is filtered to a single page — it intentionally shows
  * the whole-project picture, not just the current page.
  */
+// ─── Summary Strip (with flash animation on change) ──────────────────────────
+function SummaryStrip({ totalFeet, totalSticks, totalWire }: { totalFeet: number; totalSticks: number; totalWire: number }) {
+  const feetKey = useFlashKey(totalFeet);
+  const sticksKey = useFlashKey(totalSticks);
+  const wireKey = useFlashKey(totalWire);
+  return (
+    <div className="grid grid-cols-3 gap-2 mb-1 mt-3">
+      <div className="bg-muted/20 rounded p-2 text-center">
+        <div key={feetKey} className="text-lg font-bold font-mono text-[#F5C518] num-flash">{totalFeet.toFixed(0)}</div>
+        <div className="text-[9px] text-muted-foreground font-mono uppercase">Total ft</div>
+      </div>
+      <div className="bg-muted/20 rounded p-2 text-center">
+        <div key={sticksKey} className="text-lg font-bold font-mono text-[#F5C518] num-flash">{totalSticks}</div>
+        <div className="text-[9px] text-muted-foreground font-mono uppercase">Sticks</div>
+      </div>
+      <div className="bg-muted/20 rounded p-2 text-center">
+        <div key={wireKey} className="text-lg font-bold font-mono text-[#F5C518] num-flash">{totalWire.toFixed(0)}</div>
+        <div className="text-[9px] text-muted-foreground font-mono uppercase">Wire ft</div>
+      </div>
+    </div>
+  );
+}
+
+// Helper: flash a key when a numeric value changes
+function useFlashKey(value: number): string {
+  const prevRef = useRef(value);
+  const [flashKey, setFlashKey] = useState(0);
+  useEffect(() => {
+    if (prevRef.current !== value) {
+      prevRef.current = value;
+      setFlashKey((k) => k + 1);
+    }
+  }, [value]);
+  return String(flashKey);
+}
+
 function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countSessions?: CountSession[] }) {
   const { setShowMaterialList } = useApp();
 
@@ -974,20 +1131,7 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
 
       {/* Summary strip — only shown once runs exist */}
       {runs.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 mb-1 mt-3">
-          <div className="bg-muted/20 rounded p-2 text-center">
-            <div className="text-lg font-bold font-mono text-[#F5C518]">{totalFeet.toFixed(0)}</div>
-            <div className="text-[9px] text-muted-foreground font-mono uppercase">Total ft</div>
-          </div>
-          <div className="bg-muted/20 rounded p-2 text-center">
-            <div className="text-lg font-bold font-mono text-[#F5C518]">{totalSticks}</div>
-            <div className="text-[9px] text-muted-foreground font-mono uppercase">Sticks</div>
-          </div>
-          <div className="bg-muted/20 rounded p-2 text-center">
-            <div className="text-lg font-bold font-mono text-[#F5C518]">{totalWire.toFixed(0)}</div>
-            <div className="text-[9px] text-muted-foreground font-mono uppercase">Wire ft</div>
-          </div>
-        </div>
+        <SummaryStrip totalFeet={totalFeet} totalSticks={totalSticks} totalWire={totalWire} />
       )}
 
       {/* ── Labor & Material Summary ── */}
@@ -1547,6 +1691,62 @@ function CivilEditor({
                     </span>
                   </>
                 )}
+                {/* Export CSV button — only visible when expanded and there are runs */}
+                {!rightPanelCollapsed && runs.length > 0 && (
+                  <button
+                    onClick={() => {
+                      // Build a focused CSV for this project's runs + count sessions
+                      const rows: string[][] = [];
+                      rows.push(["BidPhase — Material Export", "", "", "", "", "", ""]);
+                      rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", ""]);
+                      rows.push([`Project: ${projectName}`, "", "", "", "", "", ""]);
+                      rows.push([]);
+                      rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft)"]);
+                      for (const run of runs) {
+                        rows.push([
+                          run.name,
+                          run.pageNumber != null ? String(run.pageNumber) : "",
+                          run.conduitType ?? "EMT",
+                          `${run.conduitSize}"`,
+                          String(run.feet),
+                          String(Math.ceil(run.feet / 10)),
+                          String(parseFloat((run.feet * (run.conductors || 1) * 1.1).toFixed(1))),
+                        ]);
+                      }
+                      const totalFt = runs.reduce((a, r) => a + r.feet, 0);
+                      const totalSticks = runs.reduce((a, r) => a + Math.ceil(r.feet / 10), 0);
+                      rows.push(["TOTAL", "", "", "", String(totalFt.toFixed(0)), String(totalSticks), ""]);
+                      // Count sessions
+                      const activeSessions = countSessions.filter((cs) => cs.pins.length > 0);
+                      if (activeSessions.length > 0) {
+                        rows.push([]);
+                        rows.push(["Unit Count", "", "", "", "", "", ""]);
+                        rows.push(["Session", "EA", "Count", "", "", "", ""]);
+                        for (const cs of activeSessions) {
+                          rows.push([cs.name, "EA", String(cs.pins.length), "", "", "", ""]);
+                        }
+                      }
+                      const csv = rows.map((row) => row.map((v) => {
+                        const s = String(v);
+                        return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
+                      }).join(",")).join("\n");
+                      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `${projectName.replace(/[^a-z0-9]/gi, "_")}_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                      toast.success("Exported as CSV.");
+                    }}
+                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
+                    title="Export runs as CSV"
+                  >
+                    <Download size={12} />
+                  </button>
+                )}
                 {/* Reset-size button — only visible when expanded, snaps panel back to 40% */}
                 {!rightPanelCollapsed && (
                   <button
@@ -1721,9 +1921,9 @@ function CivilEditor({
                       {activeSection === "runs" ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
                     </button>
                     {activeSection === "runs" && (
-                      <div className="px-4 pb-4 space-y-4">
+                      <div className="pb-2">
                         {pageRuns.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center h-32 text-center gap-3">
+                          <div className="flex flex-col items-center justify-center h-32 text-center gap-3 px-4">
                             <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
                               <Link2 size={20} className="text-muted-foreground" />
                             </div>
@@ -1733,9 +1933,30 @@ function CivilEditor({
                             </div>
                           </div>
                         ) : (
-                          pageRuns.map((run, i) => (
-                            <RunCard key={run.id} run={run} index={i} onUpdate={updateRun} onRemove={removeRun} />
-                          ))
+                          <>
+                            {/* Compact runs table */}
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-border/40">
+                                  <th className="text-left px-4 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Run</th>
+                                  <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">ft</th>
+                                  <th className="text-left px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
+                                  <th className="px-2 py-1.5 w-6"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {pageRuns.map((run, i) => (
+                                  <CompactRunRow
+                                    key={run.id}
+                                    run={run}
+                                    index={i}
+                                    onUpdate={updateRun}
+                                    onRemove={removeRun}
+                                  />
+                                ))}
+                              </tbody>
+                            </table>
+                          </>
                         )}
                       </div>
                     )}

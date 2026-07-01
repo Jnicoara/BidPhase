@@ -246,3 +246,16 @@
 - [x] Double-left-click on canvas in measure mode: drop a disconnected start point (lifts the pen) so user can start a new segment on the same run without connecting to the last endpoint
 - [x] Remove Pause and Finish buttons from the measuring toolbar
 - [x] Unit count sessions: remove the pencil rename button; make the session name label itself inline-editable on click
+
+## v5.20 — UX Simplification & Feature Polish
+
+- [x] Right-click pen-lift: right-click in measure mode lifts the pen (disconnects next segment); remove old right-click context menu
+- [x] Run name inline edit: click run name in right panel to rename it directly (same as session rename)
+- [x] Keyboard shortcut hints: small key labels on toolbar buttons (M=Measure, C=Count, Esc=exit, U=undo)
+- [x] Empty state canvas: when no PDF loaded, show a clear upload prompt in the canvas area
+- [x] Scale indicator: always show current scale ratio as a persistent badge in the toolbar
+- [x] Contextual toolbar: show only relevant tools per mode (Measure mode / Count mode / Neutral)
+- [x] Run list as compact table: Name | Length | Type columns, easier to scan (compact table with inline rename)
+- [x] Material Summary highlight: briefly animate the row that changed when a run/pin is added (num-flash on totals)
+- [x] Page thumbnails strip: horizontal strip of page thumbnails below hint bar for multi-page PDFs
+- [x] Export button: CSV export of all runs + count sessions in right panel header (Download icon)
