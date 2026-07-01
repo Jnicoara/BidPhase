@@ -1657,198 +1657,6 @@ export default function PlanPanel({
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full bg-background border-r border-border relative">
-
-      {/* ── Page Overview Overlay ─────────────────────────────────────── */}
-      {/* ── Scale Prompt Overlay ─────────────────────────────────────────── */}
-      {showScalePrompt && (
-        <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-yellow-400/15 border border-yellow-400/30 flex items-center justify-center shrink-0 mt-0.5">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F5C518" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-base font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Scale Not Set for This Page</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">You must set the scale before measuring or adding runs. Draw a line over a known distance on the plan to calibrate.</p>
-              </div>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-3 text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">How to set scale:</p>
-              <ol className="list-decimal list-inside space-y-0.5">
-                <li>Click <strong>Set Scale Now</strong> below</li>
-                <li>Click the start of a known-length line on the plan</li>
-                <li>Click the end of that line</li>
-                <li>Enter the real-world distance in feet and click OK</li>
-              </ol>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                className="flex-1 bg-yellow-400 text-black hover:bg-yellow-300"
-                onClick={() => {
-                  setShowScalePrompt(false);
-                  setScalePoints([]);
-                  setMode("set-scale-p1");
-                  modeRef.current = "set-scale-p1";
-                  toast.info("Click the START of your known-distance reference line.");
-                }}
-              >
-                Set Scale Now
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowScalePrompt(false)}
-                title="Dismiss — you can set scale later from the toolbar"
-              >
-                Dismiss
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Delete Confirm Dialog ─────────────────────────────────────────── */}
-      {deleteConfirm && (
-        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-card border border-border rounded-xl shadow-2xl p-5 max-w-xs w-full mx-4 space-y-4">
-            <div className="space-y-1">
-              {deleteConfirm.name === "scale" ? (
-                <>
-                  <h3 className="text-sm font-bold text-foreground">Reset Scale?</h3>
-                  <p className="text-sm text-muted-foreground">
-                    This will clear the scale for this page. You’ll need to re-set it before measuring.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h3 className="text-sm font-bold text-destructive">Confirm Delete</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Delete <strong>{deleteConfirm.name ?? "this run"}</strong>? This cannot be undone.
-                  </p>
-                </>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={deleteConfirm.name === "scale" ? "default" : "destructive"}
-                className={cn("flex-1", deleteConfirm.name === "scale" ? "bg-[#F5C518] text-black hover:bg-[#F5C518]/90" : "")}
-                onClick={() => {
-                  deleteConfirm.onConfirm();
-                  setDeleteConfirm(null);
-                }}
-              >
-                {deleteConfirm.name === "scale" ? "Reset Scale" : "Yes, Delete"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setDeleteConfirm(null)}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── PDF Replace Confirmation Dialog ─────────────────────────────── */}
-      {pendingPdfFile && (
-        <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="bg-card border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4 space-y-4">
-            <div className="space-y-2">
-              <h3 className="text-sm font-bold text-destructive">Replace PDF?</h3>
-              <p className="text-sm text-muted-foreground">
-                Loading a new PDF will <strong>clear all runs, pins, and scale</strong> on this project.
-                You'll need to set the scale again before measuring.
-              </p>
-              <p className="text-xs text-muted-foreground/70">This cannot be undone.</p>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="destructive"
-                className="flex-1"
-                onClick={() => {
-                  applyPdfLoad(pendingPdfFile.dataUrl, pendingPdfFile.hash);
-                  setPendingPdfFile(null);
-                }}
-              >
-                Yes, Replace PDF
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setPendingPdfFile(null)}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showPageOverview && pdfFile && numPages > 0 && (
-        <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-            <span className="text-sm font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-              All Pages — {numPages} total
-            </span>
-            <button
-              onClick={() => setShowPageOverview(false)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <X size={16} />
-            </button>
-          </div>
-          <div className="flex-1 overflow-auto p-3" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: numPages }, (_, i) => {
-                const pNum = i + 1;
-                const isActive = pNum === currentPage;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => { goToPage(pNum); setShowPageOverview(false); }}
-                    className={cn(
-                      "relative flex flex-col rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60",
-                      isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border bg-card hover:bg-muted/20"
-                    )}
-                  >
-                    {/* PDF thumbnail — full width */}
-                    <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden">
-                      <Document file={pdfFile} loading={<div className="h-32 w-full" />}>
-                        <Page
-                          pageNumber={pNum}
-                          width={440}
-                          renderAnnotationLayer={false}
-                          renderTextLayer={false}
-                        />
-                      </Document>
-                    </div>
-                    {/* Page number only */}
-                    <div className={cn(
-                      "px-3 py-1.5 text-center",
-                      isActive ? "bg-[#F5C518]/10" : "bg-card"
-                    )}>
-                      <span className={cn(
-                        "text-xs font-semibold font-mono",
-                        isActive ? "text-[#F5C518]" : "text-muted-foreground"
-                      )}>
-                        {isActive ? "▶ " : ""}Page {pNum}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
       {/* flex-wrap: buttons drop to the next line when the panel is narrow */}
       <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-border bg-card shrink-0">
@@ -2458,6 +2266,198 @@ export default function PlanPanel({
                   onMouseLeave={() => { handleCanvasDragEnd(); setCrosshair(null); setMousePos(null); }}
                 />
               )}
+            </div>
+          </div>
+        )}
+
+
+        {/* ── Page Overview Overlay ─────────────────────────────────────── */}
+        {/* ── Scale Prompt Overlay ─────────────────────────────────────────── */}
+        {showScalePrompt && (
+          <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center">
+            <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-yellow-400/15 border border-yellow-400/30 flex items-center justify-center shrink-0 mt-0.5">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F5C518" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Scale Not Set for This Page</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">You must set the scale before measuring or adding runs. Draw a line over a known distance on the plan to calibrate.</p>
+                </div>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-3 text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground">How to set scale:</p>
+                <ol className="list-decimal list-inside space-y-0.5">
+                  <li>Click <strong>Set Scale Now</strong> below</li>
+                  <li>Click the start of a known-length line on the plan</li>
+                  <li>Click the end of that line</li>
+                  <li>Enter the real-world distance in feet and click OK</li>
+                </ol>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1 bg-yellow-400 text-black hover:bg-yellow-300"
+                  onClick={() => {
+                    setShowScalePrompt(false);
+                    setScalePoints([]);
+                    setMode("set-scale-p1");
+                    modeRef.current = "set-scale-p1";
+                    toast.info("Click the START of your known-distance reference line.");
+                  }}
+                >
+                  Set Scale Now
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowScalePrompt(false)}
+                  title="Dismiss — you can set scale later from the toolbar"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Delete Confirm Dialog ─────────────────────────────────────────── */}
+        {deleteConfirm && (
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="bg-card border border-border rounded-xl shadow-2xl p-5 max-w-xs w-full mx-4 space-y-4">
+              <div className="space-y-1">
+                {deleteConfirm.name === "scale" ? (
+                  <>
+                    <h3 className="text-sm font-bold text-foreground">Reset Scale?</h3>
+                    <p className="text-sm text-muted-foreground">
+                      This will clear the scale for this page. You’ll need to re-set it before measuring.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-sm font-bold text-destructive">Confirm Delete</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Delete <strong>{deleteConfirm.name ?? "this run"}</strong>? This cannot be undone.
+                    </p>
+                  </>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={deleteConfirm.name === "scale" ? "default" : "destructive"}
+                  className={cn("flex-1", deleteConfirm.name === "scale" ? "bg-[#F5C518] text-black hover:bg-[#F5C518]/90" : "")}
+                  onClick={() => {
+                    deleteConfirm.onConfirm();
+                    setDeleteConfirm(null);
+                  }}
+                >
+                  {deleteConfirm.name === "scale" ? "Reset Scale" : "Yes, Delete"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setDeleteConfirm(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── PDF Replace Confirmation Dialog ─────────────────────────────── */}
+        {pendingPdfFile && (
+          <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="bg-card border border-border rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4 space-y-4">
+              <div className="space-y-2">
+                <h3 className="text-sm font-bold text-destructive">Replace PDF?</h3>
+                <p className="text-sm text-muted-foreground">
+                  Loading a new PDF will <strong>clear all runs, pins, and scale</strong> on this project.
+                  You'll need to set the scale again before measuring.
+                </p>
+                <p className="text-xs text-muted-foreground/70">This cannot be undone.</p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => {
+                    applyPdfLoad(pendingPdfFile.dataUrl, pendingPdfFile.hash);
+                    setPendingPdfFile(null);
+                  }}
+                >
+                  Yes, Replace PDF
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setPendingPdfFile(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showPageOverview && pdfFile && numPages > 0 && (
+          <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+              <span className="text-sm font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                All Pages — {numPages} total
+              </span>
+              <button
+                onClick={() => setShowPageOverview(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-3" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+              <div className="flex flex-col gap-2">
+                {Array.from({ length: numPages }, (_, i) => {
+                  const pNum = i + 1;
+                  const isActive = pNum === currentPage;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => { goToPage(pNum); setShowPageOverview(false); }}
+                      className={cn(
+                        "relative flex flex-col rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60",
+                        isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border bg-card hover:bg-muted/20"
+                      )}
+                    >
+                      {/* PDF thumbnail — full width */}
+                      <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden">
+                        <Document file={pdfFile} loading={<div className="h-32 w-full" />}>
+                          <Page
+                            pageNumber={pNum}
+                            width={440}
+                            renderAnnotationLayer={false}
+                            renderTextLayer={false}
+                          />
+                        </Document>
+                      </div>
+                      {/* Page number only */}
+                      <div className={cn(
+                        "px-3 py-1.5 text-center",
+                        isActive ? "bg-[#F5C518]/10" : "bg-card"
+                      )}>
+                        <span className={cn(
+                          "text-xs font-semibold font-mono",
+                          isActive ? "text-[#F5C518]" : "text-muted-foreground"
+                        )}>
+                          {isActive ? "▶ " : ""}Page {pNum}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

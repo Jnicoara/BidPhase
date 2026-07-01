@@ -1526,50 +1526,41 @@ function CivilEditor({
             else if (size > 10) setRightPanelCollapsed(false);
           }}
         >
-          <div className="flex flex-col h-full overflow-hidden relative">
-            {/* ── Thin strip shown when panel is collapsed ── */}
-            {rightPanelCollapsed && (
-              <div
-                className="flex flex-col items-center justify-center h-full bg-card border-l border-border cursor-pointer hover:bg-[#F5C518]/5 transition-colors gap-3"
-                onClick={toggleRightPanel}
-                title="Expand panel"
-              >
+          <div className="flex flex-col h-full relative">
+            {/* ── Always-visible header bar with toggle button ── */}
+            <div className="px-3 pt-2 pb-2 border-b border-border bg-card shrink-0">
+              <div className="flex items-center gap-2">
                 {/* BP badge */}
-                <div className="w-6 h-6 rounded-md bg-[#F5C518]/15 flex items-center justify-center shrink-0">
-                  <span className="font-bold text-[#F5C518] text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+                <div className="w-7 h-7 rounded-lg bg-[#F5C518]/15 flex items-center justify-center shrink-0">
+                  <span className="font-bold text-[#F5C518] text-[10px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
                 </div>
-                {/* Expand chevron — the entire strip is clickable, this is just a visual cue */}
-                <ChevronLeft size={14} className="text-[#F5C518]" />
-              </div>
-            )}
-
-            {/* ── Full panel content — hidden when collapsed ── */}
-            {!rightPanelCollapsed && (
-              <>
-                {/* Header */}
-                <div className="px-4 pt-3 pb-3 border-b border-border bg-card shrink-0">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-[#F5C518]/15 flex items-center justify-center shrink-0">
-                      <span className="font-bold text-[#F5C518] text-xs" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
-                    </div>
+                {/* Project name + page — only when expanded */}
+                {!rightPanelCollapsed && (
+                  <>
                     <div className="flex-1 min-w-0">
                       <h1 className="text-sm font-bold text-foreground truncate" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                         {projectName}
                       </h1>
                     </div>
                     <span className="shrink-0 text-xs font-mono px-2 py-0.5 rounded bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30">
-                      Pg {activePage}
+                      Page {activePage}
                     </span>
-                    {/* Single toggle button — collapses the panel */}
-                    <button
-                      onClick={toggleRightPanel}
-                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
-                      title="Collapse panel"
-                    >
-                      <ChevronRight size={14} />
-                    </button>
-                  </div>
-                </div>
+                  </>
+                )}
+                {/* Single toggle button — shows left arrow when expanded (to collapse), right arrow when collapsed (to expand) */}
+                <button
+                  onClick={toggleRightPanel}
+                  className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
+                  title={rightPanelCollapsed ? "Expand panel" : "Collapse panel"}
+                >
+                  {rightPanelCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+                </button>
+              </div>
+            </div>
+
+            {/* ── Full panel content — hidden when collapsed ── */}
+            {!rightPanelCollapsed && (
+              <>
 
                 {/* ── Scrollable accordion body ── */}
                 <div className="flex-1 overflow-auto">

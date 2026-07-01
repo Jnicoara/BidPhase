@@ -230,3 +230,8 @@
 
 - [x] Fix: "Clear Page" does not remove all pins and runs on the current page
 - [x] Fix: two collapse/expand buttons still visible in the right panel (strip + header)
+
+## v5.17 — Header Arrows, Page Label, PDF Tool Fix
+- [x] Right panel header: add a left-pointing arrow (expand) next to the right-pointing arrow (collapse) so both directions are always available in the header
+- [x] Right panel header: change "Pg N" badge to "Page N" (spell out "Page")
+- [x] Fix: tools and cursor do not appear after replacing a PDF in the viewer (z-index / overlay not cleared properly)
