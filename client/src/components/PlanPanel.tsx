@@ -358,6 +358,8 @@ export default function PlanPanel({
   const { value: pdfFile, setValue: setPdfFile, loading: pdfLoading } = useIndexedDB<string | null>(`bp_pdf_${tabKey}`, null);
   const [pdfHash, setPdfHash] = useLocalStorage<string | null>(`bp_pdfhash_${tabKey}`, null);
   const [numPages, setNumPages] = useState<number>(0);
+  // Counter that increments on every PDF load to force Document remount even if hash is the same
+  const [pdfLoadId, setPdfLoadId] = useState(0);
 
   // ── Current page (1-indexed) ───────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useLocalStorage<number>(`bp_page_${tabKey}`, 1);
@@ -1087,6 +1089,7 @@ export default function PlanPanel({
   const applyPdfLoad = useCallback((dataUrl: string, hash: string) => {
     setPdfHash(hash);
     setPdfFile(dataUrl);
+    setPdfLoadId((c) => c + 1); // Force Document remount via unique key
     // Reset per-page runs, scale, and go to page 1
     setPageRunsMap({});
     setPageActiveRunMap({});
@@ -2270,7 +2273,9 @@ export default function PlanPanel({
         ref={viewportRef}
         className="flex-1 relative overflow-hidden"
         style={{
-          cursor: isPanning ? "grabbing" : activeCursorColor ? "none" : (mode !== "none" ? "crosshair" : "grab"),
+          cursor: (pendingPdfFile || deleteConfirm || showScalePrompt || !pageReady)
+            ? "default"
+            : isPanning ? "grabbing" : activeCursorColor ? "none" : (mode !== "none" ? "crosshair" : "grab"),
         }}
         onContextMenu={(e) => { if (mode !== "count") e.preventDefault(); }}
         onMouseDown={(e) => {
@@ -2353,7 +2358,7 @@ export default function PlanPanel({
             {/* Inner wrapper rendered at renderZoom — no gutter needed since we can pan freely */}
             <div style={{ position: "relative", display: "inline-block" }}>
               <Document
-                key={pdfHash || "default"}
+                key={`${pdfHash || "default"}-${pdfLoadId}`}
                 file={pdfFile}
                 onLoadSuccess={({ numPages: n }) => {
                   setNumPages(n);
@@ -2407,6 +2412,7 @@ export default function PlanPanel({
         {/* ── Scale Prompt Overlay ─────────────────────────────────────────── */}
         {showScalePrompt && (
           <div className="absolute inset-0 z-50 bg-background/90 backdrop-blur-sm flex items-center justify-center"
+            style={{ cursor: "default" }}
             onMouseDown={(e) => e.stopPropagation()}
             onMouseUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
@@ -2460,6 +2466,7 @@ export default function PlanPanel({
         {/* ── Delete Confirm Dialog ─────────────────────────────────────────── */}
         {deleteConfirm && (
           <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center"
+            style={{ cursor: "default" }}
             onMouseDown={(e) => e.stopPropagation()}
             onMouseUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
@@ -2510,6 +2517,7 @@ export default function PlanPanel({
         {/* ── PDF Replace Confirmation Dialog ─────────────────────────────── */}
         {pendingPdfFile && (
           <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center"
+            style={{ cursor: "default" }}
             onMouseDown={(e) => e.stopPropagation()}
             onMouseUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
@@ -2550,6 +2558,7 @@ export default function PlanPanel({
 
         {showPageOverview && pdfFile && numPages > 0 && (
           <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex flex-col"
+            style={{ cursor: "default" }}
             onMouseDown={(e) => e.stopPropagation()}
             onMouseUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
