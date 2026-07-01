@@ -1601,16 +1601,24 @@ export default function PlanPanel({
         toast.info("No pins to undo on this page.");
       }
     } else if (activeRun && activeRun.points.length > 0) {
+      // Undo: if the last point is a PEN_LIFT sentinel, remove both the sentinel AND the point before it
+      // (right-click pen-lift inserts [PEN_LIFT, pt] together, so undo must remove both atomically)
       setCurrentRuns((prev) =>
-        prev.map((r) =>
-          r.id === currentActiveRunId
-            ? { ...r, points: r.points.slice(0, -1) }
-            : r
-        )
+        prev.map((r) => {
+          if (r.id !== currentActiveRunId) return r;
+          const pts = r.points;
+          // If last two points are [PEN_LIFT, pt], remove both
+          if (pts.length >= 2 && isPenLift(pts[pts.length - 2])) {
+            return { ...r, points: pts.slice(0, -2) };
+          }
+          // Otherwise remove just the last point
+          return { ...r, points: pts.slice(0, -1) };
+        })
       );
+      const remaining = activeRun.points.length - 1;
       toast.info(
-        activeRun.points.length > 1
-          ? `Removed last point (${activeRun.points.length - 1} remaining).`
+        remaining > 0
+          ? `Removed last point (${remaining} remaining).`
           : "All points cleared from this run."
       );
     } else {
@@ -1867,6 +1875,11 @@ export default function PlanPanel({
                         setCurrentActiveRunId("");
                         setMode("none");
                         modeRef.current = "none";
+                        // Reset all transient cursor/pan state so cursor doesn't get stuck
+                        dragRef.current = null;
+                        setIsPanning(false);
+                        setMousePos(null);
+                        setCrosshair(null);
                         onClearPageAll?.(currentPage);
                         toast.info(`Cleared page ${currentPage}: ${parts.join(" and ")}.`);
                       },
@@ -1883,9 +1896,16 @@ export default function PlanPanel({
           </>
         )}
 
-        {/* ── MEASURE MODE: Stop + Undo + Trash run + Clear page ── */}
+        {/* ── MEASURE MODE: PDF + Active run indicator + Undo + Trash run + Clear page ── */}
         {mode === "measure" && (
           <>
+            {/* Load PDF — always accessible */}
+            <label className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium cursor-pointer bg-secondary text-secondary-foreground hover:bg-accent transition-colors shrink-0" title="Load PDF">
+              <Upload size={12} />
+              <span>PDF</span>
+              <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
+            </label>
+            <div className="w-px h-4 bg-border shrink-0" />
             {/* Active run indicator */}
             <div className="flex items-center gap-1.5 shrink-0 mr-1">
               <span
@@ -1897,20 +1917,6 @@ export default function PlanPanel({
               </span>
             </div>
             <div className="w-px h-4 bg-border shrink-0" />
-            {/* Stop measuring */}
-            <Button
-              size="sm"
-              className="h-7 text-xs px-2 shrink-0 bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90 transition-all"
-              variant="default"
-              onClick={() => {
-                setMode("none");
-                modeRef.current = "none";
-              }}
-              title="Stop measuring [M]"
-            >
-              <Ruler size={12} className="mr-1" />
-              Stop
-            </Button>
             {/* Undo */}
             <Button
               size="icon"
@@ -1967,6 +1973,11 @@ export default function PlanPanel({
                       setCurrentActiveRunId("");
                       setMode("none");
                       modeRef.current = "none";
+                      // Reset all transient cursor/pan state so cursor doesn't get stuck
+                      dragRef.current = null;
+                      setIsPanning(false);
+                      setMousePos(null);
+                      setCrosshair(null);
                       onClearPageAll?.(currentPage);
                       toast.info(`Cleared page ${currentPage}: ${parts.join(" and ")}.`);
                     },
@@ -1982,9 +1993,16 @@ export default function PlanPanel({
           </>
         )}
 
-        {/* ── COUNT MODE: Stop + Undo + Trash pins ── */}
+        {/* ── COUNT MODE: PDF + Active session indicator + Undo + Trash pins ── */}
         {mode === "count" && (
           <>
+            {/* Load PDF — always accessible */}
+            <label className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium cursor-pointer bg-secondary text-secondary-foreground hover:bg-accent transition-colors shrink-0" title="Load PDF">
+              <Upload size={12} />
+              <span>PDF</span>
+              <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
+            </label>
+            <div className="w-px h-4 bg-border shrink-0" />
             {/* Active session indicator */}
             <div className="flex items-center gap-1.5 shrink-0 mr-1">
               <span
@@ -1996,20 +2014,6 @@ export default function PlanPanel({
               </span>
             </div>
             <div className="w-px h-4 bg-border shrink-0" />
-            {/* Stop count */}
-            <Button
-              size="sm"
-              className="h-7 text-xs px-2 shrink-0 bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90 transition-all"
-              variant="default"
-              onClick={() => {
-                setMode("none");
-                modeRef.current = "none";
-              }}
-              title="Stop Unit Count [C]"
-            >
-              <Hash size={12} className="mr-1" />
-              Stop
-            </Button>
             {/* Undo */}
             <Button
               size="icon"
@@ -2098,7 +2102,7 @@ export default function PlanPanel({
             <ChevronLeft size={14} />
           </button>
 
-          {/* Page number chips */}
+          {/* Page number chips — labeled "Pg N" so numbers are clearly page numbers */}
           <div className="flex items-center gap-0.5 overflow-x-auto">
             {Array.from({ length: numPages }, (_, i) => {
               const pNum = i + 1;
@@ -2109,14 +2113,14 @@ export default function PlanPanel({
                   key={i}
                   onClick={() => goToPage(pNum)}
                   className={cn(
-                    "relative flex items-center justify-center min-w-[28px] h-7 px-1.5 rounded text-[11px] font-mono font-semibold transition-all shrink-0",
+                    "relative flex items-center justify-center h-7 px-2 rounded text-[11px] font-mono font-semibold transition-all shrink-0",
                     isActive
                       ? "bg-[#F5C518] text-black"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
                   )}
                   title={`Page ${pNum}${runCount > 0 ? ` · ${runCount} run${runCount !== 1 ? "s" : ""}` : ""}`}
                 >
-                  {pNum}
+                  <span className="opacity-60 mr-0.5">Pg</span>{pNum}
                   {runCount > 0 && (
                     <span className={cn(
                       "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full",
@@ -2230,48 +2234,7 @@ export default function PlanPanel({
         )}
       </div>
 
-      {/* ── Page Thumbnail Strip ─────────────────────────────────────────── */}
-      {/* Only shown when PDF has 2+ pages */}
-      {pdfFile && numPages > 1 && (
-        <div
-          className="flex items-end gap-1.5 px-2 py-1.5 border-b border-border bg-muted/10 shrink-0 overflow-x-auto"
-          style={{ scrollbarWidth: "none" } as React.CSSProperties}
-        >
-          {Array.from({ length: numPages }, (_, i) => {
-            const pNum = i + 1;
-            const isActive = pNum === currentPage;
-            return (
-              <button
-                key={i}
-                onClick={() => goToPage(pNum)}
-                className={cn(
-                  "relative flex-shrink-0 rounded border overflow-hidden transition-all",
-                  isActive
-                    ? "border-[#F5C518] ring-1 ring-[#F5C518]/40"
-                    : "border-border hover:border-[#F5C518]/50 opacity-60 hover:opacity-100"
-                )}
-                title={`Go to page ${pNum}`}
-              >
-                <Document file={pdfFile} loading={<div className="w-10 h-14 bg-muted/30" />}>
-                  <Page
-                    pageNumber={pNum}
-                    width={48}
-                    renderAnnotationLayer={false}
-                    renderTextLayer={false}
-                  />
-                </Document>
-                {/* Page number badge */}
-                <div className={cn(
-                  "absolute bottom-0 left-0 right-0 text-center text-[9px] font-mono font-semibold py-0.5",
-                  isActive ? "bg-[#F5C518] text-black" : "bg-black/60 text-white"
-                )}>
-                  {pNum}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* Thumbnail strip removed — page navigation is in the page selector bar above */}
 
       {/* ── Viewport (overflow:hidden, free-drag pan) ───────────────────── */}
       <div

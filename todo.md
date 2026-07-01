@@ -259,3 +259,12 @@
 - [x] Material Summary highlight: briefly animate the row that changed when a run/pin is added (num-flash on totals)
 - [x] Page thumbnails strip: horizontal strip of page thumbnails below hint bar for multi-page PDFs
 - [x] Export button: CSV export of all runs + count sessions in right panel header (Download icon)
+
+## v5.21 — Toolbar & PDF UX Fixes
+
+- [x] Remove PDF thumbnail strip (too messy)
+- [x] Clarify page number chips in toolbar (add "Pg" prefix so numbers are clearly page numbers)
+- [x] Remove "Stop Measurement" and "Stop Count" buttons from the two top toolbar tools
+- [x] Restore Upload PDF button in measure and count mode toolbars (always accessible); keep confirmation dialog
+- [x] Fix undo glitch: PEN_LIFT sentinel now removed atomically with its paired point
+- [x] Fix Clear Page cursor glitch: reset dragRef, isPanning, mousePos, crosshair on all Clear Page confirms
