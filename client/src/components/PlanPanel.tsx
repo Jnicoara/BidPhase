@@ -835,40 +835,41 @@ export default function PlanPanel({
       const shape = (pin.iconId ?? DEFAULT_ICON_ID) as string;
       const color = pin.color;
 
-      // Pin sizes are FIXED in canvas pixels regardless of zoom.
-      // S = RENDER_BASE_ZOOM / displayZoom, so sizes stay constant on screen.
+      // Pin sizes scale WITH zoom (no S compensation) so they shrink as the user zooms out.
+      // Fixed canvas pixel values — at RENDER_BASE_ZOOM=1.5 and displayZoom=0.40 these look
+      // like ~5-18px on screen, and proportionally smaller/larger as the user zooms.
       // ── Dots (solid filled) — SM / MD / LG / XL
-      const DOT_SM = 3 * S;
-      const DOT_MD = 5 * S;
-      const DOT_LG = 8 * S;
-      const DOT_XL = 11 * S;
+      const DOT_SM = 4;
+      const DOT_MD = 7;
+      const DOT_LG = 11;
+      const DOT_XL = 16;
       // ── Circles (stroke-only rings) — SM / MD / LG / XL
-      const CIR_SM = 8 * S;
-      const CIR_MD = 11 * S;
-      const CIR_LG = 14 * S;
-      const CIR_XL = 18 * S;
+      const CIR_SM = 10;
+      const CIR_MD = 15;
+      const CIR_LG = 20;
+      const CIR_XL = 27;
       // ── Squares (half-side) — SM / MD / LG / XL
-      const SQ_SM  = 7 * S;
-      const SQ_MD  = 10 * S;
-      const SQ_LG  = 14 * S;
-      const SQ_XL  = 18 * S;
+      const SQ_SM  = 9;
+      const SQ_MD  = 13;
+      const SQ_LG  = 18;
+      const SQ_XL  = 25;
       // ── Triangles (half-base) — SM / MD / LG / XL
-      const TRI_SM = 7 * S;
-      const TRI_MD = 10 * S;
-      const TRI_LG = 14 * S;
-      const TRI_XL = 18 * S;
+      const TRI_SM = 9;
+      const TRI_MD = 13;
+      const TRI_LG = 18;
+      const TRI_XL = 25;
 
       ctx.save();
       ctx.strokeStyle = color;
       ctx.fillStyle = color;
-      ctx.lineWidth = 2 * S;
+      ctx.lineWidth = 2;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.setLineDash([]);
 
       // Drop shadow for visibility against any background
       ctx.shadowColor = "rgba(0,0,0,0.70)";
-      ctx.shadowBlur = 4 * S;
+      ctx.shadowBlur = 4;
 
       const drawTriangle = (half: number) => {
         const h = half * 1.73; // equilateral height
@@ -957,14 +958,13 @@ export default function PlanPanel({
         if (shape === "triangle-xl") return TRI_XL;
         return DOT_MD; // fallback
       })();
-      // Badge font: 6px for SM, 8px for MD, 10px for LG, 12px for XL (in screen px)
-      const badgePx = shape.endsWith("-sm") ? 6 : shape.endsWith("-md") ? 8 : shape.endsWith("-lg") ? 10 : 12;
-      const badgeSize = Math.round(badgePx * S);
+      // Badge font: fixed canvas px (scales with zoom naturally)
+      const badgeSize = shape.endsWith("-sm") ? 8 : shape.endsWith("-md") ? 11 : shape.endsWith("-lg") ? 14 : 17;
       ctx.font = `bold ${badgeSize}px 'JetBrains Mono', monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.fillStyle = color;
-      ctx.fillText(String(idx + 1), px.x, px.y + shapeRadius + 2 * S);
+      ctx.fillText(String(idx + 1), px.x, px.y + shapeRadius + 2);
     });
 
     // Draw all inactive runs first, then active on top

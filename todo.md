@@ -235,3 +235,9 @@
 - [x] Right panel header: add a left-pointing arrow (expand) next to the right-pointing arrow (collapse) so both directions are always available in the header
 - [x] Right panel header: change "Pg N" badge to "Page N" (spell out "Page")
 - [x] Fix: tools and cursor do not appear after replacing a PDF in the viewer (z-index / overlay not cleared properly)
+
+## v5.18 — Panel Controls & Pin Size Fix
+- [x] Remove Total Reset button from under the material summary section in the right panel
+- [x] Add reset-to-default-size button in the right panel header (next to the toggle arrow) to snap panel back to 40% width
+- [x] Dot shape: when panel collapses, the dot should drop into the shape list (not stay in header)
+- [x] Pin shapes: scale with zoom — shrink as user zooms out so they don't clutter the drawing

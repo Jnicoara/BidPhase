@@ -42,7 +42,7 @@ import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
   Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Link2, Trash2, Pencil, Check, X, Undo2,
+  Link2, Trash2, Pencil, Check, X, Undo2, Maximize2,
 } from "lucide-react";
 import type { CatalogItem } from "@/lib/materialCatalog";
 import type { SavedMaterialRow } from "@/contexts/AppContext";
@@ -1547,7 +1547,17 @@ function CivilEditor({
                     </span>
                   </>
                 )}
-                {/* Single toggle button — shows left arrow when expanded (to collapse), right arrow when collapsed (to expand) */}
+                {/* Reset-size button — only visible when expanded, snaps panel back to 40% */}
+                {!rightPanelCollapsed && (
+                  <button
+                    onClick={() => rightPanelRef.current?.resize(40)}
+                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
+                    title="Reset panel to default size"
+                  >
+                    <Maximize2 size={12} />
+                  </button>
+                )}
+                {/* Toggle button — collapse when expanded, expand when collapsed */}
                 <button
                   onClick={toggleRightPanel}
                   className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
@@ -1733,18 +1743,7 @@ function CivilEditor({
                   <div className="bp-card overflow-hidden border-t border-border/40">
                     <div className="px-4 py-3 space-y-3">
                       <CrossPageTotals runs={runs} countSessions={countSessions} />
-                      {(runs.length > 0 || countSessions.some((cs) => cs.pins.length > 0)) && (
-                        <div className="pt-2 border-t border-border/40">
-                          <button
-                            onClick={() => setConfirmClear({ type: "total-reset" })}
-                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs text-destructive/70 hover:text-destructive hover:bg-destructive/10 border border-destructive/20 hover:border-destructive/40 transition-all"
-                            title="Clear all runs and count pins across all pages"
-                          >
-                            <Trash2 size={11} />
-                            Total Reset (all pages)
-                          </button>
-                        </div>
-                      )}
+
                     </div>
                   </div>
 
@@ -1971,9 +1970,8 @@ function CompactCountConfig({
 
   return (
     <div className="space-y-1.5">
-      {/* Color swatches + shape family icons — wraps to next line when panel is narrow */}
+      {/* Row 1: Color swatches */}
       <div className="flex flex-wrap items-center gap-1">
-        {/* Color swatches — compact */}
         {PIN_COLORS.map((c) => (
           <button
             key={c.hex}
@@ -1992,10 +1990,10 @@ function CompactCountConfig({
             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
           <span className="flex items-center justify-center w-full h-full text-[7px] text-muted-foreground">+</span>
         </label>
+      </div>
 
-        <div className="w-px h-4 bg-border shrink-0 mx-0.5" />
-
-        {/* Shape family icons */}
+      {/* Row 2: Shape family icons — always on their own line so all 4 stay together */}
+      <div className="flex items-center gap-1">
         {ICON_CATEGORIES.map((cat) => {
           const icons = COUNT_ICONS.filter((ic) => ic.category === cat);
           const repIcon = icons.find((ic) => ic.id.endsWith("-md")) ?? icons[0];
