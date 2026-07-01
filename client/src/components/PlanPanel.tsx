@@ -641,15 +641,17 @@ export default function PlanPanel({
     const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
     setCurrentRuns((prev) =>
       prev.map((run) => {
-        // Skip pen-lift sentinels when computing total distance
+        // Skip pen-lift sentinels when computing total distance.
+        // Simply sum distance for every consecutive pair where NEITHER point is a pen-lift.
+        // PEN_LIFT acts as a segment break — the pair (realPt → PEN_LIFT) and
+        // (PEN_LIFT → realPt) are both skipped, so only real point-to-point
+        // distances within each segment are counted.
         const realPts = run.points.filter(p => !isPenLift(p));
         if (realPts.length < 2) return { ...run, totalFeet: null };
         let totalPx = 0;
-        let prevWasLift = false;
         for (let i = 1; i < run.points.length; i++) {
-          if (isPenLift(run.points[i]) || isPenLift(run.points[i - 1])) { prevWasLift = true; continue; }
-          if (!prevWasLift) totalPx += normDist(run.points[i - 1], run.points[i]);
-          prevWasLift = false;
+          if (isPenLift(run.points[i]) || isPenLift(run.points[i - 1])) continue;
+          totalPx += normDist(run.points[i - 1], run.points[i]);
         }
         return { ...run, totalFeet: parseFloat((totalPx / pxPerFt).toFixed(2)) };
       })
