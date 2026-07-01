@@ -105,13 +105,13 @@ export default function CategoryLanding({
 
   function handleNew() {
     if (!newName.trim()) return;
-    // Default new projects to "civil" category
+    // Default new projects to "civil" category (category is just a storage bucket now, not user-facing)
     addCivilCatProject(newName.trim());
     setNewName("");
     setShowNew(false);
-    // Navigate to the new project after a tick
+    // Navigate directly to the PDF tool with the new project
     setTimeout(() => {
-      onSelect?.("civil");
+      window.location.hash = `/civil/__new__`;
     }, 80);
   }
 
@@ -122,7 +122,8 @@ export default function CategoryLanding({
 
   function handleOpen(proj: ProjectLike) {
     getSwitchAction(proj.category)(proj.id);
-    onSelect?.(proj.category, proj.id);
+    // Navigate directly to the PDF tool with this project (skip intermediate page)
+    window.location.hash = `/${proj.category}/${proj.id}`;
   }
 
   function handleTrashClick(proj: ProjectLike) {

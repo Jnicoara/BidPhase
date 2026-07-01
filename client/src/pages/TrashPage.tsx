@@ -9,12 +9,7 @@ import { useState } from "react";
 
 const MS_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-const CATEGORY_LABELS: Record<string, string> = {
-  civil: "Infrastructure",
-  commercial: "Commercial",
-  residential: "Residential",
-  industrial: "Industrial",
-};
+// Category labels removed — projects are no longer categorized in the UI
 
 export default function TrashPage({ onBack }: { onBack: () => void }) {
   const { trashedProjects, restoreProject, permanentlyDeleteProject } = useApp();
@@ -75,7 +70,7 @@ export default function TrashPage({ onBack }: { onBack: () => void }) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-foreground truncate">{pname}</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {CATEGORY_LABELS[p.category] ?? p.category}
+                        Deleted {new Date(p.deletedAt).toLocaleDateString()}
                       </p>
                     </div>
                     <span

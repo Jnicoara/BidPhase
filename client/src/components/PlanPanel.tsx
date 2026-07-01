@@ -1928,7 +1928,7 @@ export default function PlanPanel({
           </>
         )}
 
-        {/* ── MEASURE MODE: PDF + Active run indicator + Undo + Trash run + Clear page ── */}
+        {/* ── MEASURE MODE: PDF + Mode switches + Active run indicator + Undo + Trash run + Clear page ── */}
         {mode === "measure" && (
           <>
             {/* Load PDF — always accessible */}
@@ -1938,6 +1938,36 @@ export default function PlanPanel({
               <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
             </label>
             <div className="w-px h-4 bg-border shrink-0" />
+
+            {/* Mode switch buttons — always visible */}
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 bg-[#F5C518]/20 border-[#F5C518]/50 text-[#F5C518]"
+              variant="outline"
+              disabled
+              title="Currently measuring"
+            >
+              <Ruler size={12} className="mr-1" />
+              Measure
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 transition-all"
+              variant="outline"
+              onClick={() => {
+                onRequestCountSession?.();
+                setMode("count");
+                modeRef.current = "count";
+                toast.info("Unit Count: click to place a pin \u00b7 right-click to remove.");
+              }}
+              disabled={!pdfFile}
+              title="Switch to Unit Count [C]"
+            >
+              <Hash size={12} className="mr-1" />
+              Unit Count
+            </Button>
+            <div className="w-px h-4 bg-border shrink-0" />
+
             {/* Active run indicator */}
             <div className="flex items-center gap-1.5 shrink-0 mr-1">
               <span
@@ -2025,7 +2055,7 @@ export default function PlanPanel({
           </>
         )}
 
-        {/* ── COUNT MODE: PDF + Active session indicator + Undo + Trash pins ── */}
+        {/* ── COUNT MODE: PDF + Mode switches + Active session indicator + Undo + Trash pins ── */}
         {mode === "count" && (
           <>
             {/* Load PDF — always accessible */}
@@ -2035,6 +2065,44 @@ export default function PlanPanel({
               <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
             </label>
             <div className="w-px h-4 bg-border shrink-0" />
+
+            {/* Mode switch buttons — always visible */}
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 transition-all"
+              variant="outline"
+              onClick={() => {
+                if (!scaleRatio) { setShowScalePrompt(true); return; }
+                onMeasureStart?.();
+                const id = nanoid6();
+                const runNum = currentRuns.length + 1;
+                const name = `Run ${runNum}`;
+                const color = BASE_PALETTE[(runNum - 1) % BASE_PALETTE.length];
+                const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "1/2", status: "active" };
+                setCurrentRuns((prev) => [...prev, newRun]);
+                setCurrentActiveRunId(id);
+                setMode("measure");
+                modeRef.current = "measure";
+                toast.info(`"${name}" started \u2014 click to measure.`);
+              }}
+              disabled={!pdfFile}
+              title="Switch to Measure [M]"
+            >
+              <Ruler size={12} className="mr-1" />
+              Measure
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0 bg-[#F5C518]/20 border-[#F5C518]/50 text-[#F5C518]"
+              variant="outline"
+              disabled
+              title="Currently counting"
+            >
+              <Hash size={12} className="mr-1" />
+              Unit Count
+            </Button>
+            <div className="w-px h-4 bg-border shrink-0" />
+
             {/* Active session indicator */}
             <div className="flex items-center gap-1.5 shrink-0 mr-1">
               <span
@@ -2134,7 +2202,7 @@ export default function PlanPanel({
             <ChevronLeft size={14} />
           </button>
 
-          {/* Page number chips — labeled "Pg N" so numbers are clearly page numbers */}
+          {/* Page number chips */}
           <div className="flex items-center gap-0.5 overflow-x-auto">
             {Array.from({ length: numPages }, (_, i) => {
               const pNum = i + 1;
@@ -2152,7 +2220,7 @@ export default function PlanPanel({
                   )}
                   title={`Page ${pNum}${runCount > 0 ? ` · ${runCount} run${runCount !== 1 ? "s" : ""}` : ""}`}
                 >
-                  <span className="opacity-60 mr-0.5">Pg</span>{pNum}
+                  {pNum}
                   {runCount > 0 && (
                     <span className={cn(
                       "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full",

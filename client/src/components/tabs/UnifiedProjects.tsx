@@ -2294,12 +2294,8 @@ function CompactCountConfig({
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-const CATEGORY_LABELS: Record<string, string> = {
-  civil: "Infrastructure",
-  commercial: "Commercial Assembly",
-  residential: "Residential Rough-In",
-  industrial: "Industrial",
-};
+// Category labels removed — projects are no longer categorized in the UI
+const CATEGORY_LABELS: Record<string, string> = {};
 export default function UnifiedProjects({ category = "civil" }: { category?: "civil" | "commercial" | "residential" | "industrial" }) {
   const {
     civilCatProjects,
@@ -2339,7 +2335,7 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
   const renameCivilProject = category === "civil" ? renameCivilCatProject : category === "commercial" ? renameCommercialCatProject : category === "industrial" ? renameIndustrialCatProject : renameResidentialCatProject;
   const deleteCivilProject = category === "civil" ? deleteCivilCatProject : category === "commercial" ? deleteCommercialCatProject : category === "industrial" ? deleteIndustrialCatProject : deleteResidentialCatProject;
   const switchCivilProject = category === "civil" ? switchCivilCatProject : category === "commercial" ? switchCommercialCatProject : category === "industrial" ? switchIndustrialCatProject : switchResidentialCatProject;
-    const categoryLabel = CATEGORY_LABELS[category] ?? "Projects";
+    const categoryLabel = "Projects";
 
   // ── Hash-based sub-routing so browser back/forward works ──────────────────
   // Hash format: #/residential/project-id  (project list = #/residential)

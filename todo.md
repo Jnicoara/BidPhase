@@ -274,3 +274,11 @@
 - [x] Fix: cursor disappears after clicking Confirm in Clear Page dialog (stopPropagation on all overlay dialogs)
 - [x] Fix: cursor disappears after clicking Confirm in PDF Replace dialog; tools stop working after new PDF loads (root cause: Document component not remounting + useEffect race condition resetting pageReady after onRenderSuccess. Fixed with key={pdfHash} on Document, removed pdfFile from useEffect deps, added cursor reset in onPageRenderSuccess)
 - [x] Replace right-click pen-lift with simultaneous left+right click pen-lift (both-button detection in handleCanvasMouseDown)
+
+## v5.23 — Navigation & UI Cleanup
+
+- [x] Remove intermediate page between homepage and PDF tool (go directly from project list to PDF viewer)
+- [x] Rework homepage to show projects directly with professional/clean design
+- [x] Revert page numbers from "Pg N" back to plain numbers (cleaner)
+- [x] Remove all residential/commercial/industrial/civil & underground verbiage (including trash view)
+- [x] Ensure Measure and Count buttons always visible in top toolbar (easy to switch between modes)

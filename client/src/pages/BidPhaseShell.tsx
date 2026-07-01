@@ -65,12 +65,8 @@ const CATEGORY_ICONS = {
   industrial:  IndustrialIcon,
 } as const;
 
-const CATEGORY_LABELS = {
-  residential: "Residential",
-  commercial:  "Commercial",
-  civil:       "Infrastructure",
-  industrial:  "Industrial",
-} as const;
+// Category labels removed — no longer user-facing
+const CATEGORY_LABELS = {} as Record<string, string>;
 
 // Ordered: Residential, Commercial, Industrial, Infrastructure (civil last)
 const CATEGORY_ORDER = ["residential", "commercial", "industrial", "civil"] as const;
@@ -293,7 +289,7 @@ export default function BidPhaseShell() {
                 : isInSettings ? "Settings"
                 : isInEstimate ? "Estimate Engine"
                 : isInMaterial ? "Labor & Material"
-                : CATEGORY_LABELS[currentCategory]}
+                : "Project"}
             </span>
           </div>
         </header>
