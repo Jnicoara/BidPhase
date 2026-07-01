@@ -241,3 +241,8 @@
 - [x] Add reset-to-default-size button in the right panel header (next to the toggle arrow) to snap panel back to 40% width
 - [x] Dot shape: when panel collapses, the dot should drop into the shape list (not stay in header)
 - [x] Pin shapes: scale with zoom — shrink as user zooms out so they don't clutter the drawing
+
+## v5.19 — Measurement & UX Polish
+- [x] Double-left-click on canvas in measure mode: drop a disconnected start point (lifts the pen) so user can start a new segment on the same run without connecting to the last endpoint
+- [x] Remove Pause and Finish buttons from the measuring toolbar
+- [x] Unit count sessions: remove the pencil rename button; make the session name label itself inline-editable on click

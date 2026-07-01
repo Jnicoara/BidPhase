@@ -93,6 +93,9 @@ type PageActiveRunMap = Record<number, string>;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const BASE_DPI = 1.5;
+/** Sentinel NormPoint inserted on double-click to "lift the pen" between segments of the same run */
+const PEN_LIFT: NormPoint = { pageIndex: -1, nx: -2, ny: -2 };
+const isPenLift = (p: NormPoint) => p.nx === -2 && p.ny === -2;
 const MIN_ZOOM = 0.10; // absolute floor — fit-to-page will be the effective min
 const MAX_ZOOM = 10.0; // 1000%
 // 5% increments from 10% → 1000%
@@ -632,10 +635,15 @@ export default function PlanPanel({
     const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
     setCurrentRuns((prev) =>
       prev.map((run) => {
-        if (run.points.length < 2) return { ...run, totalFeet: null };
+        // Skip pen-lift sentinels when computing total distance
+        const realPts = run.points.filter(p => !isPenLift(p));
+        if (realPts.length < 2) return { ...run, totalFeet: null };
         let totalPx = 0;
+        let prevWasLift = false;
         for (let i = 1; i < run.points.length; i++) {
-          totalPx += normDist(run.points[i - 1], run.points[i]);
+          if (isPenLift(run.points[i]) || isPenLift(run.points[i - 1])) { prevWasLift = true; continue; }
+          if (!prevWasLift) totalPx += normDist(run.points[i - 1], run.points[i]);
+          prevWasLift = false;
         }
         return { ...run, totalFeet: parseFloat((totalPx / pxPerFt).toFixed(2)) };
       })
@@ -666,57 +674,69 @@ export default function PlanPanel({
 
     // ── Draw a run (polyline + dots + per-segment labels) ──────────────────
     const drawRun = (run: MeasureRun, color: string, isActive: boolean) => {
-      const pts = run.points.map(normToCanvas).filter(Boolean) as { x: number; y: number }[];
+      // Split points at PEN_LIFT sentinels into independent segments
+      const segments: { x: number; y: number }[][] = [];
+      let seg: { x: number; y: number }[] = [];
+      for (const p of run.points) {
+        if (isPenLift(p)) {
+          if (seg.length > 0) { segments.push(seg); seg = []; }
+        } else {
+          const canvas = normToCanvas(p);
+          if (canvas) seg.push(canvas);
+        }
+      }
+      if (seg.length > 0) segments.push(seg);
+      // Flatten for dot rendering and label calculations
+      const pts = segments.flat();
       if (pts.length === 0) return;
+
+      // Helper: draw all segments as independent polylines
+      const strokeSegments = () => {
+        for (const s of segments) {
+          if (s.length < 2) continue;
+          ctx.beginPath();
+          ctx.moveTo(s[0].x, s[0].y);
+          for (let i = 1; i < s.length; i++) ctx.lineTo(s[i].x, s[i].y);
+          ctx.stroke();
+        }
+      };
 
       // Outer glow halo — wide, low-opacity bloom
       if (pts.length >= 2) {
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.strokeStyle = color;
         ctx.lineWidth = (isActive ? 14 : 10) * S;
         ctx.setLineDash([]);
         ctx.globalAlpha = isActive ? 0.22 : 0.14;
-        ctx.stroke();
+        strokeSegments();
         ctx.globalAlpha = 1;
       }
 
       // Mid glow — tighter, brighter
       if (pts.length >= 2) {
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.strokeStyle = color;
         ctx.lineWidth = (isActive ? 6 : 4) * S;
         ctx.setLineDash([]);
         ctx.globalAlpha = isActive ? 0.45 : 0.30;
-        ctx.stroke();
+        strokeSegments();
         ctx.globalAlpha = 1;
       }
 
       // Dark outline for contrast on light plans
       if (pts.length >= 2) {
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.strokeStyle = "rgba(0,0,0,0.55)";
         ctx.lineWidth = (isActive ? 4.5 : 3.5) * S;
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
-        ctx.stroke();
+        strokeSegments();
       }
 
       // Crisp bright core line
       if (pts.length >= 2) {
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.strokeStyle = color;
         ctx.lineWidth = (isActive ? 2.5 : 1.8) * S;
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
-        ctx.stroke();
+        strokeSegments();
       }
 
       // Labels — per-segment or collapsed run total depending on zoom
@@ -726,12 +746,14 @@ export default function PlanPanel({
         const fontSize = Math.max(6, Math.round(9 * RENDER_BASE_ZOOM));
         ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
 
-        // Collapse threshold: if any segment's screen-pixel length < 40px, show run total only
+        // Collapse threshold: if any sub-segment's screen-pixel length < 40px, show run total only
         const MIN_SEG_SCREEN_PX = 40;
         const showPerSeg = pts.length < 2 ? false : (() => {
-          for (let i = 1; i < pts.length; i++) {
-            const screenLen = dist2D(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y) * dz / RENDER_BASE_ZOOM;
-            if (screenLen < MIN_SEG_SCREEN_PX) return false;
+          for (const s of segments) {
+            for (let i = 1; i < s.length; i++) {
+              const screenLen = dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y) * dz / RENDER_BASE_ZOOM;
+              if (screenLen < MIN_SEG_SCREEN_PX) return false;
+            }
           }
           return true;
         })();
@@ -760,20 +782,23 @@ export default function PlanPanel({
         };
 
         if (showPerSeg) {
-          // Per-segment labels
-          for (let i = 1; i < pts.length; i++) {
-            const a = pts[i - 1];
-            const b = pts[i];
-            const segPx = dist2D(a.x, a.y, b.x, b.y);
-            const segFt = segPx / pxPerFt;
-            const mx = (a.x + b.x) / 2;
-            const my = (a.y + b.y) / 2;
-            const angle = Math.atan2(b.y - a.y, b.x - a.x);
-            drawLabel(`${segFt.toFixed(1)}'`, mx, my, angle);
+          // Per-segment labels — iterate each sub-segment independently
+          for (const s of segments) {
+            for (let i = 1; i < s.length; i++) {
+              const a = s[i - 1];
+              const b = s[i];
+              const segPx = dist2D(a.x, a.y, b.x, b.y);
+              const segFt = segPx / pxPerFt;
+              const mx = (a.x + b.x) / 2;
+              const my = (a.y + b.y) / 2;
+              const angle = Math.atan2(b.y - a.y, b.x - a.x);
+              drawLabel(`${segFt.toFixed(1)}'`, mx, my, angle);
+            }
           }
         } else if (pts.length >= 2) {
-          // Collapsed: show run total near midpoint of whole run
-          const totalPx = pts.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(pts[i-1].x, pts[i-1].y, pts[i].x, pts[i].y), 0);
+          // Collapsed: show run total (sum of all sub-segments) near midpoint
+          const totalPx = segments.reduce((runSum, s) =>
+            runSum + s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0), 0);
           const totalFt = totalPx / pxPerFt;
           const mid = pts[Math.floor(pts.length / 2)];
           drawLabel(`${totalFt.toFixed(1)}' total`, mid.x, mid.y, 0);
@@ -1446,6 +1471,27 @@ export default function PlanPanel({
     }
   }, [getCanvasCoords, canvasToNorm, setScalePoints, setCurrentRuns, currentActiveRunId, activeCountSession, currentPage, onPinAdded, scalePoints, hitTestPoint, activeRun]);
 
+  // ── Canvas double-click: lift pen (start disconnected segment on same run) ──────────
+  const handleCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    if (modeRef.current !== "measure") return;
+    if (!currentActiveRunId) return;
+    const coords = getCanvasCoords(e);
+    if (!coords) return;
+    const { cx, cy } = coords;
+    const pt = canvasToNorm(cx, cy);
+    if (!pt) return;
+    // Insert PEN_LIFT then the new start point so the next segment begins here
+    setCurrentRuns((prev) =>
+      prev.map((r) =>
+        r.id === currentActiveRunId
+          ? { ...r, points: [...r.points, PEN_LIFT, pt] }
+          : r
+      )
+    );
+    toast.info("New segment started — continuing same run.", { duration: 1500 });
+  }, [getCanvasCoords, canvasToNorm, setCurrentRuns, currentActiveRunId]);
+
   // ── Canvas right-click ────────────────────────────────────────────────────
   // • In "count" mode: remove nearest pin
   // • In "measure" mode: show "Continue run from here" context menu
@@ -1750,103 +1796,48 @@ export default function PlanPanel({
 
         <div className="w-px h-4 bg-border shrink-0" />
 
-        {/* Measure / Pause / Finish / Resume buttons — context-aware */}
-        {mode === "measure" ? (
-          // Currently measuring: show Pause and Finish side by side
-          <>
-            <Button
-              size="sm"
-              className="h-7 text-xs px-2 shrink-0 bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
-              variant="outline"
-              onClick={() => {
-                // Pause: mark run as paused, exit measure mode
-                if (activeRun) {
-                  setCurrentRuns((prev) => prev.map((r) => r.id === activeRun.id ? { ...r, status: "paused" } : r));
-                  setPausedRunId(activeRun.id);
-                }
-                setMode("none");
-                modeRef.current = "none";
-                toast.info(`"${activeRun?.name}" paused — click Resume to continue or start a new run.`);
-              }}
-              title="Pause this run — you can resume it later"
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" className="mr-1"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-              Pause
-            </Button>
-            <Button
-              size="sm"
-              className="h-7 text-xs px-2 shrink-0 bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
-              variant="default"
-              onClick={() => {
-                // Finish: mark run as finished, exit measure mode
-                if (activeRun) {
-                  setCurrentRuns((prev) => prev.map((r) => r.id === activeRun.id ? { ...r, status: "finished" } : r));
-                }
-                setMode("none");
-                modeRef.current = "none";
-                toast.success(`"${activeRun?.name}" finished — ${activeRun?.totalFeet ?? 0} ft.`);
-              }}
-              title="Finish this run"
-            >
-              <Check size={11} className="mr-1" />
-              Finish
-            </Button>
-          </>
-        ) : (
-          // Not measuring: show Measure button (or Resume if there's a paused run)
-          <Button
-            size="sm"
-            className={cn(
-              "h-7 text-xs px-2 shrink-0",
-              pausedRunId && currentRuns.find(r => r.id === pausedRunId)
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
-                : ""
-            )}
-            variant="outline"
-            onClick={() => {
-              // Scale is required before measuring — show the prompt instead of just a toast
-              if (!scaleRatio) {
-                setShowScalePrompt(true);
-                return;
-              }
-              // Notify parent to switch right panel to Runs tab
-              onMeasureStart?.();
-              // If there's a paused run, resume it instead of creating a new one
-              if (pausedRunId) {
-                const pausedRun = currentRuns.find(r => r.id === pausedRunId);
-                if (pausedRun) {
-                  setCurrentActiveRunId(pausedRunId);
-                  setCurrentRuns((prev) => prev.map((r) => r.id === pausedRunId ? { ...r, status: "active" } : r));
-                  setPausedRunId(null);
-                  setMode("measure");
-                  modeRef.current = "measure";
-                  toast.success(`Resumed "${pausedRun.name}" — continue clicking to extend.`);
-                  return;
-                }
-                setPausedRunId(null); // stale — fall through to create new run
-              }
-              // Auto-create a new run and immediately start measuring it
-              const id = nanoid6();
-              const runNum = currentRuns.length + 1;
-              const name = `Run ${runNum}`;
-              const color = BASE_PALETTE[(runNum - 1) % BASE_PALETTE.length];
-              const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "1/2", status: "active" };
-              setCurrentRuns((prev) => [...prev, newRun]);
-              setCurrentActiveRunId(id);
-              setMode("measure");
-              modeRef.current = "measure";
-              toast.info(`"${name}" started — click points along the path.`);
-            }}
-            disabled={!pdfFile}
-            title={pausedRunId && currentRuns.find(r => r.id === pausedRunId) ? "Resume paused run" : "Measure — starts a new run automatically"}
-          >
-            {pausedRunId && currentRuns.find(r => r.id === pausedRunId) ? (
-              <><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" className="mr-1"><polygon points="5,3 19,12 5,21"/></svg>Resume</>
-            ) : (
-              <><Ruler size={12} className="mr-1" />Measure</>
-            )}
-          </Button>
-        )}
+        {/* Measure button — toggles measure mode on/off; auto-creates a new run when starting */}
+        <Button
+          size="sm"
+          className={cn(
+            "h-7 text-xs px-2 shrink-0 transition-all",
+            mode === "measure"
+              ? "bg-[#F5C518] text-black border-[#F5C518] hover:bg-[#F5C518]/90"
+              : ""
+          )}
+          variant={mode === "measure" ? "default" : "outline"}
+          onClick={() => {
+            if (mode === "measure") {
+              // Toggle off — just exit measure mode, keep the run as-is
+              setMode("none");
+              modeRef.current = "none";
+              return;
+            }
+            // Scale is required before measuring
+            if (!scaleRatio) {
+              setShowScalePrompt(true);
+              return;
+            }
+            // Notify parent to switch right panel to Runs tab
+            onMeasureStart?.();
+            // Auto-create a new run and immediately start measuring it
+            const id = nanoid6();
+            const runNum = currentRuns.length + 1;
+            const name = `Run ${runNum}`;
+            const color = BASE_PALETTE[(runNum - 1) % BASE_PALETTE.length];
+            const newRun: MeasureRun = { id, name, color, points: [], totalFeet: null, conduitSize: "1/2", status: "active" };
+            setCurrentRuns((prev) => [...prev, newRun]);
+            setCurrentActiveRunId(id);
+            setMode("measure");
+            modeRef.current = "measure";
+            toast.info(`"${name}" started — click points along the path. Double-click to start a new segment.`);
+          }}
+          disabled={!pdfFile}
+          title={mode === "measure" ? "Stop measuring" : "Measure — starts a new run automatically"}
+        >
+          <Ruler size={12} className="mr-1" />
+          {mode === "measure" ? "Stop" : "Measure"}
+        </Button>
 
 
         {/* Unit Count button — enters count mode immediately */}
@@ -2259,6 +2250,7 @@ export default function PlanPanel({
                     cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : mode === "none" ? "inherit" : (activeCursorColor ? "none" : "crosshair"),
                   }}
                   onClick={handleCanvasClick}
+                  onDoubleClick={handleCanvasDoubleClick}
                   onContextMenu={handleCanvasContextMenu}
                   onMouseMove={(e) => { handleCanvasMouseMove(e); handleCanvasDragMove(e); }}
                   onMouseDown={handleCanvasMouseDown}

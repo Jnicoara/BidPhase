@@ -1642,7 +1642,12 @@ function CivilEditor({
                                       onClick={(e) => e.stopPropagation()}
                                       className="flex-1 bg-transparent border-b border-[#F5C518] text-xs text-foreground outline-none font-mono" />
                                   ) : (
-                                    <span className="flex-1 text-xs text-foreground font-medium truncate">{cs.name}</span>
+                                    // Click the name directly to start editing
+                                    <span
+                                      className="flex-1 text-xs text-foreground font-medium truncate cursor-text hover:text-[#F5C518] transition-colors"
+                                      title="Click to rename"
+                                      onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }}
+                                    >{cs.name}</span>
                                   )}
                                   {cs.unitCost != null && cs.unitCost > 0 && (
                                     <span className="text-[9px] font-mono text-muted-foreground shrink-0">${cs.unitCost.toFixed(2)}/ea</span>
@@ -1654,10 +1659,7 @@ function CivilEditor({
                                       <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(null); }} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
                                     </>
                                   ) : (
-                                    <>
-                                      <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }} className="text-muted-foreground hover:text-foreground" title="Rename session"><Pencil size={11} /></button>
-                                      <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive" title="Delete session"><Trash2 size={11} /></button>
-                                    </>
+                                    <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive" title="Delete session"><Trash2 size={11} /></button>
                                   )}
                                 </div>
                               );
