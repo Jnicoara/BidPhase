@@ -592,13 +592,14 @@ export default function PlanPanel({
     return () => ro.disconnect();
   }, []);
 
-  // Reset page render state when page changes
+  // Reset page render state when page changes (NOT on pdfFile change — that's handled by applyPdfLoad
+  // and the Document key={pdfHash} remount. Including pdfFile here would race with onRenderSuccess.)
   useEffect(() => {
     pageSizeRef.current = null;
     setPageReady(false);
     setMode("none");
     modeRef.current = "none";
-  }, [currentPage, pdfFile]);
+  }, [currentPage]);
 
   // ── NormPoint → canvas pixel coords (single-page: pageIndex always 0) ─────
   const normToCanvas = useCallback(
@@ -1138,6 +1139,13 @@ export default function PlanPanel({
   const onPageRenderSuccess = useCallback((page: { width: number; height: number }) => {
     pageSizeRef.current = { w: page.width, h: page.height };
     setPageReady(true);
+    // Always reset transient pointer/pan state when a new page renders
+    // This is the safety net that ensures cursor and tools work after PDF replacement
+    dragRef.current = null;
+    dragPointRef.current = null;
+    setIsPanning(false);
+    setMousePos(null);
+    setCrosshair(null);
   }, []);
 
   // Dismiss scale prompt when scale is set (e.g. after user completes set-scale flow)
@@ -2345,6 +2353,7 @@ export default function PlanPanel({
             {/* Inner wrapper rendered at renderZoom — no gutter needed since we can pan freely */}
             <div style={{ position: "relative", display: "inline-block" }}>
               <Document
+                key={pdfHash || "default"}
                 file={pdfFile}
                 onLoadSuccess={({ numPages: n }) => {
                   setNumPages(n);
