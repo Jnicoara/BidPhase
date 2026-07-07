@@ -1280,26 +1280,14 @@ export default function PlanPanel({
       if (e.touches.length === 2 && pinchRef.current) {
         e.preventDefault();
         const { dist: curDist, mid: curMid } = getTouchInfo(e);
-        const { prevDist, prevMid } = pinchRef.current;
+        const { prevDist } = pinchRef.current;
 
-        // Incremental zoom: multiply current zoom by the ratio of this frame vs last
+        // Incremental zoom: multiply current zoom by the ratio of this frame vs last.
+        // applyZoom's focal-point math keeps the pinch midpoint fixed in page space,
+        // which naturally handles panning as the midpoint moves — no separate pan needed.
         const zoomRatio = curDist / prevDist;
         const newZoom = clamp(displayZoomRef.current * zoomRatio, MIN_ZOOM, MAX_ZOOM);
-
-        // Apply zoom centered on the pinch midpoint
         applyZoom(newZoom, curMid.x, curMid.y);
-
-        // Also apply the midpoint translation as a pan (zoom-corrected)
-        const dx = curMid.x - prevMid.x;
-        const dy = curMid.y - prevMid.y;
-        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-          const newOffset = {
-            x: panOffsetRef.current.x + dx,
-            y: panOffsetRef.current.y + dy,
-          };
-          panOffsetRef.current = newOffset;
-          setPanOffset(newOffset);
-        }
 
         // Update reference for next frame
         pinchRef.current = { prevDist: curDist, prevMid: curMid };
