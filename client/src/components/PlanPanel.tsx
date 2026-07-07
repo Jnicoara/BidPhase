@@ -794,8 +794,9 @@ export default function PlanPanel({
         };
 
         if (showPerSeg) {
-          // Per-segment labels — iterate each sub-segment independently
+          // When zoomed in: show individual line-segment distances AND segment-group totals
           for (const s of segments) {
+            // Individual line distances along each sub-segment
             for (let i = 1; i < s.length; i++) {
               const a = s[i - 1];
               const b = s[i];
@@ -807,13 +808,33 @@ export default function PlanPanel({
               drawLabel(`${segFt.toFixed(1)}'`, mx, my, angle);
             }
           }
+          // If multiple segments (pen-lifted), also show each segment group's total
+          if (segments.length > 1) {
+            for (const s of segments) {
+              const groupPx = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0);
+              const groupFt = groupPx / pxPerFt;
+              const mid = s[Math.floor(s.length / 2)];
+              if (mid) drawLabel(`∑${groupFt.toFixed(1)}'`, mid.x, mid.y - 18 * S, 0);
+            }
+          }
         } else if (pts.length >= 2) {
-          // Collapsed: show run total (sum of all sub-segments) near midpoint
-          const totalPx = segments.reduce((runSum, s) =>
-            runSum + s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0), 0);
-          const totalFt = totalPx / pxPerFt;
-          const mid = pts[Math.floor(pts.length / 2)];
-          drawLabel(`${totalFt.toFixed(1)}' total`, mid.x, mid.y, 0);
+          // Zoomed out: show each segment group's total over its midpoint
+          if (segments.length > 1) {
+            // Multiple segments: label each group separately
+            for (const s of segments) {
+              const groupPx = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0);
+              const groupFt = groupPx / pxPerFt;
+              const mid = s[Math.floor(s.length / 2)];
+              if (mid) drawLabel(`${groupFt.toFixed(1)}'`, mid.x, mid.y, 0);
+            }
+          } else {
+            // Single segment: show run total near midpoint
+            const totalPx = segments.reduce((runSum, s) =>
+              runSum + s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0), 0);
+            const totalFt = totalPx / pxPerFt;
+            const mid = pts[Math.floor(pts.length / 2)];
+            drawLabel(`${totalFt.toFixed(1)}'`, mid.x, mid.y, 0);
+          }
         }
       }
 
@@ -1248,13 +1269,14 @@ export default function PlanPanel({
   }, [applyZoom]);
 
   // ── Pinch zoom + simultaneous pan ────────────────────────────────────────────
-  // Uses incremental approach: each frame compares to the PREVIOUS frame (not start).
-  // This gives smooth zoom+pan together without fighting the mouse pan handler.
+  // KEY DESIGN: During the pinch gesture, we apply the CSS transform DIRECTLY to
+  // the DOM node (bypassing React state) to avoid render-cycle jitter at 60fps.
+  // React state is only synced when the pinch ends.
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
 
-    const getTouchInfo = (e: TouchEvent) => ({
+    const getInfo = (e: TouchEvent) => ({
       dist: Math.hypot(
         e.touches[1].clientX - e.touches[0].clientX,
         e.touches[1].clientY - e.touches[0].clientY
@@ -1265,38 +1287,69 @@ export default function PlanPanel({
       },
     });
 
+    // Apply transform directly to DOM — no React re-render
+    const applyTransformDirect = (zoom: number, ox: number, oy: number) => {
+      const el = pagesContainerRef.current;
+      if (el) el.style.transform = `translate(${ox}px, ${oy}px) scale(${zoom / RENDER_BASE_ZOOM})`;
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       isTouchingRef.current = true;
-      // Cancel any active mouse pan so they don't fight
       dragRef.current = null;
       setIsPanning(false);
       if (e.touches.length === 2) {
-        const { dist, mid } = getTouchInfo(e);
+        const { dist, mid } = getInfo(e);
         pinchRef.current = { prevDist: dist, prevMid: mid };
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && pinchRef.current) {
-        e.preventDefault();
-        const { dist: curDist, mid: curMid } = getTouchInfo(e);
-        const { prevDist } = pinchRef.current;
+      if (e.touches.length !== 2 || !pinchRef.current) return;
+      e.preventDefault();
 
-        // Incremental zoom: multiply current zoom by the ratio of this frame vs last.
-        // applyZoom's focal-point math keeps the pinch midpoint fixed in page space,
-        // which naturally handles panning as the midpoint moves — no separate pan needed.
-        const zoomRatio = curDist / prevDist;
-        const newZoom = clamp(displayZoomRef.current * zoomRatio, MIN_ZOOM, MAX_ZOOM);
-        applyZoom(newZoom, curMid.x, curMid.y);
+      const { dist: curDist, mid: curMid } = getInfo(e);
+      const { prevDist, prevMid } = pinchRef.current;
 
-        // Update reference for next frame
-        pinchRef.current = { prevDist: curDist, prevMid: curMid };
+      // ── Zoom: incremental ratio this frame ──
+      const effectiveMin = Math.max(fitZoomRef.current * 0.50, MIN_ZOOM);
+      const newZoom = clamp(displayZoomRef.current * (curDist / prevDist), effectiveMin, MAX_ZOOM);
+
+      // ── Pan: keep the pinch midpoint fixed in page space ──
+      // 1. Where is the midpoint in page-space right now?
+      const ox = panOffsetRef.current.x;
+      const oy = panOffsetRef.current.y;
+      const oldZoom = displayZoomRef.current;
+      const pageX = (curMid.x - ox) / oldZoom;
+      const pageY = (curMid.y - oy) / oldZoom;
+      // 2. New offset so the same page point stays under the NEW midpoint
+      let newOx = curMid.x - pageX * newZoom;
+      let newOy = curMid.y - pageY * newZoom;
+      // 3. Also translate by midpoint movement (pan while pinching)
+      newOx += curMid.x - prevMid.x;
+      newOy += curMid.y - prevMid.y;
+
+      // ── Clamp ──
+      const nat = pageNatSize();
+      const MARGIN = 80;
+      if (nat) {
+        newOx = clamp(newOx, -(nat.w * newZoom - MARGIN), vp.clientWidth - MARGIN);
+        newOy = clamp(newOy, -(nat.h * newZoom - MARGIN), vp.clientHeight - MARGIN);
       }
+
+      // ── Write to refs (no React setState — avoids render jitter) ──
+      displayZoomRef.current = newZoom;
+      panOffsetRef.current = { x: newOx, y: newOy };
+      applyTransformDirect(newZoom, newOx, newOy);
+
+      pinchRef.current = { prevDist: curDist, prevMid: curMid };
     };
 
     const onTouchEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) {
         pinchRef.current = null;
+        // Sync React state once the gesture ends so the rest of the app is consistent
+        setDisplayZoom(displayZoomRef.current);
+        setPanOffset({ ...panOffsetRef.current });
       }
       if (e.touches.length === 0) {
         isTouchingRef.current = false;
@@ -1311,7 +1364,8 @@ export default function PlanPanel({
       vp.removeEventListener("touchmove", onTouchMove);
       vp.removeEventListener("touchend", onTouchEnd);
     };
-  }, [applyZoom]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageNatSize]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {

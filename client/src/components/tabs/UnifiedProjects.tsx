@@ -439,20 +439,9 @@ function CompactRunRow({
           )}
         </div>
       </td>
-      {/* Footage cell */}
+      {/* Footage cell — total only; per-segment breakdown shows on canvas */}
       <td className="px-2 py-1.5 text-right">
-        {run.segmentFeet && run.segmentFeet.length > 1 ? (
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="font-mono text-[#F5C518] font-semibold text-xs">{run.feet.toFixed(0)}'</span>
-            <span className="font-mono text-[10px] text-muted-foreground leading-tight">
-              {run.segmentFeet.map((s, i) => (
-                <span key={i}>{i > 0 ? ' + ' : ''}{s.toFixed(0)}'</span>
-              ))}
-            </span>
-          </div>
-        ) : (
-          <span className="font-mono text-[#F5C518] font-semibold">{run.feet > 0 ? `${run.feet.toFixed(0)}'` : "—"}</span>
-        )}
+        <span className="font-mono text-[#F5C518] font-semibold">{run.feet > 0 ? `${run.feet.toFixed(0)}'` : "—"}</span>
       </td>
       {/* Type cell */}
       <td className="px-2 py-1.5">
