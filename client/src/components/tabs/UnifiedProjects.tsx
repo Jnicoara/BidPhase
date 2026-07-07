@@ -441,7 +441,18 @@ function CompactRunRow({
       </td>
       {/* Footage cell */}
       <td className="px-2 py-1.5 text-right">
-        <span className="font-mono text-[#F5C518] font-semibold">{run.feet > 0 ? run.feet.toFixed(0) : "—"}</span>
+        {run.segmentFeet && run.segmentFeet.length > 1 ? (
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="font-mono text-[#F5C518] font-semibold text-xs">{run.feet.toFixed(0)}'</span>
+            <span className="font-mono text-[10px] text-muted-foreground leading-tight">
+              {run.segmentFeet.map((s, i) => (
+                <span key={i}>{i > 0 ? ' + ' : ''}{s.toFixed(0)}'</span>
+              ))}
+            </span>
+          </div>
+        ) : (
+          <span className="font-mono text-[#F5C518] font-semibold">{run.feet > 0 ? `${run.feet.toFixed(0)}'` : "—"}</span>
+        )}
       </td>
       {/* Type cell */}
       <td className="px-2 py-1.5">
@@ -1449,12 +1460,12 @@ function CivilEditor({
   );
 
   const handlePush = useCallback(
-    (ft: number, runName: string, conduitSize?: string, pageNumber?: number) => {
+    (ft: number, runName: string, conduitSize?: string, pageNumber?: number, segmentFeet?: number[]) => {
       const existingIdx = runs.findIndex((r) => r.name === runName && r.pageNumber === pageNumber);
       if (existingIdx !== -1) {
         const updated = runs.map((r) =>
           (r.name === runName && r.pageNumber === pageNumber)
-            ? { ...r, feet: ft, conduitSize: conduitSize ?? r.conduitSize }
+            ? { ...r, feet: ft, conduitSize: conduitSize ?? r.conduitSize, segmentFeet }
             : r
         );
         syncRuns(updated);
@@ -1466,6 +1477,7 @@ function CivilEditor({
           name: runName,
           pageNumber,
           feet: ft,
+          segmentFeet,
           runType: "conduit",
           conduitSize: conduitSize ?? "1/2",
           conduitType: "EMT",
@@ -1603,7 +1615,7 @@ function CivilEditor({
         <ResizablePanel defaultSize={60} minSize={55} maxSize={80}>
           <PlanPanel
             tabKey={`unified_${projectId}`}
-            onPushDistance={(ft: number, runName: string, conduitSize?: string, pageNumber?: number) => handlePush(ft, runName, conduitSize, pageNumber)}
+            onPushDistance={(ft, runName, conduitSize, pageNumber, segmentFeet) => handlePush(ft, runName, conduitSize, pageNumber, segmentFeet)}
             onDeleteRun={(name, page) => handleDeleteRun(name, page)}
             onCurrentPageChange={(page) => setActivePage(page)}
             activeCountSession={activeCountSession}

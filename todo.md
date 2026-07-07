@@ -282,3 +282,9 @@
 - [x] Revert page numbers from "Pg N" back to plain numbers (cleaner)
 - [x] Remove all residential/commercial/industrial/civil & underground verbiage (including trash view)
 - [x] Ensure Measure and Count buttons always visible in top toolbar (easy to switch between modes)
+
+## v5.25 — Measurement UX Improvements
+
+- [x] Show per-segment subtotals in run panel for multi-segment runs (e.g. "45' + 32'" breakdown below total)
+- [x] Lower zoom threshold for segment distance labels (MIN_SEG_SCREEN_PX: 40 -> 25)
+- [x] Smooth pinch-to-zoom: incremental approach, simultaneous zoom+pan, isTouchingRef guard prevents mouse/touch conflict

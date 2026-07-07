@@ -121,6 +121,7 @@ export interface RunItem {
   name: string;
   pageNumber?: number;        // which PDF page this run came from
   feet: number;              // Measured Takeoff (base linear footage from plan)
+  segmentFeet?: number[];     // Per-segment footage breakdown (when run has multiple pen-lift segments)
   /** "conduit" = EMT/IMC/RMC/PVC etc. with pipe sticks + fittings; "wire" = Jacketed/Romex bare conductor */
   runType?: "conduit" | "wire";
   conduitSize: string;        // e.g. "1/2"

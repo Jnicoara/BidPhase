@@ -311,7 +311,7 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
 
 interface PlanPanelProps {
   tabKey: string;
-  onPushDistance?: (ft: number, runName: string, conduitSize?: string, pageNumber?: number) => void;
+  onPushDistance?: (ft: number, runName: string, conduitSize?: string, pageNumber?: number, segmentFeet?: number[]) => void;
   onDeleteRun?: (runName: string, pageNumber?: number) => void;
   onCurrentPageChange?: (page: number) => void;
   /** The currently active count session (passed from parent, owns all pins) */
@@ -491,7 +491,10 @@ export default function PlanPanel({
   const pagesContainerRef = useRef<HTMLDivElement>(null);
   const pageSizeRef = useRef<{ w: number; h: number } | null>(null);
   const [pageReady, setPageReady] = useState(false);
-  const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
+  // Incremental pinch state: stores the previous frame's distance and midpoint
+  const pinchRef = useRef<{ prevDist: number; prevMid: { x: number; y: number } } | null>(null);
+  // Flag to prevent mouse pan handler from firing during touch events
+  const isTouchingRef = useRef(false);
   // Free-drag pan state — stored as translate offsets (px)
   const panOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -754,8 +757,9 @@ export default function PlanPanel({
         const fontSize = Math.max(6, Math.round(9 * RENDER_BASE_ZOOM));
         ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
 
-        // Collapse threshold: if any sub-segment's screen-pixel length < 40px, show run total only
-        const MIN_SEG_SCREEN_PX = 40;
+        // Collapse threshold: if any sub-segment's screen-pixel length < 25px, show run total only
+        // (25px is the sweet spot — labels appear noticeably sooner without cluttering at low zoom)
+        const MIN_SEG_SCREEN_PX = 25;
         const showPerSeg = pts.length < 2 ? false : (() => {
           for (const s of segments) {
             for (let i = 1; i < s.length; i++) {
@@ -1243,31 +1247,75 @@ export default function PlanPanel({
     return () => vp.removeEventListener("wheel", onWheel);
   }, [applyZoom]);
 
-  // ── Pinch zoom ─────────────────────────────────────────────────────────────
+  // ── Pinch zoom + simultaneous pan ────────────────────────────────────────────
+  // Uses incremental approach: each frame compares to the PREVIOUS frame (not start).
+  // This gives smooth zoom+pan together without fighting the mouse pan handler.
   useEffect(() => {
     const vp = viewportRef.current;
     if (!vp) return;
-    const getTouchDist = (e: TouchEvent) => Math.hypot(
-      e.touches[1].clientX - e.touches[0].clientX,
-      e.touches[1].clientY - e.touches[0].clientY
-    );
+
+    const getTouchInfo = (e: TouchEvent) => ({
+      dist: Math.hypot(
+        e.touches[1].clientX - e.touches[0].clientX,
+        e.touches[1].clientY - e.touches[0].clientY
+      ),
+      mid: {
+        x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+      },
+    });
+
     const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2)
-        pinchRef.current = { startDist: getTouchDist(e), startZoom: displayZoomRef.current };
+      isTouchingRef.current = true;
+      // Cancel any active mouse pan so they don't fight
+      dragRef.current = null;
+      setIsPanning(false);
+      if (e.touches.length === 2) {
+        const { dist, mid } = getTouchInfo(e);
+        pinchRef.current = { prevDist: dist, prevMid: mid };
+      }
     };
+
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 2 && pinchRef.current) {
         e.preventDefault();
-        const ratio = getTouchDist(e) / pinchRef.current.startDist;
-        const mid = {
-          x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-          y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
-        };
-        applyZoom(clamp(pinchRef.current.startZoom * ratio, MIN_ZOOM, MAX_ZOOM), mid.x, mid.y);
+        const { dist: curDist, mid: curMid } = getTouchInfo(e);
+        const { prevDist, prevMid } = pinchRef.current;
+
+        // Incremental zoom: multiply current zoom by the ratio of this frame vs last
+        const zoomRatio = curDist / prevDist;
+        const newZoom = clamp(displayZoomRef.current * zoomRatio, MIN_ZOOM, MAX_ZOOM);
+
+        // Apply zoom centered on the pinch midpoint
+        applyZoom(newZoom, curMid.x, curMid.y);
+
+        // Also apply the midpoint translation as a pan (zoom-corrected)
+        const dx = curMid.x - prevMid.x;
+        const dy = curMid.y - prevMid.y;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+          const newOffset = {
+            x: panOffsetRef.current.x + dx,
+            y: panOffsetRef.current.y + dy,
+          };
+          panOffsetRef.current = newOffset;
+          setPanOffset(newOffset);
+        }
+
+        // Update reference for next frame
+        pinchRef.current = { prevDist: curDist, prevMid: curMid };
       }
     };
-    const onTouchEnd = () => { pinchRef.current = null; };
-    vp.addEventListener("touchstart", onTouchStart, { passive: true });
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        pinchRef.current = null;
+      }
+      if (e.touches.length === 0) {
+        isTouchingRef.current = false;
+      }
+    };
+
+    vp.addEventListener("touchstart", onTouchStart, { passive: false });
     vp.addEventListener("touchmove", onTouchMove, { passive: false });
     vp.addEventListener("touchend", onTouchEnd, { passive: true });
     return () => {
@@ -1716,7 +1764,27 @@ export default function PlanPanel({
     const ft = activeRun?.totalFeet;
     if (!ft || ft <= 0) { toast.error("No measurement on active run."); return; }
     if (!activeRun) return;
-    onPushDistance?.(ft, activeRun.name, activeRun.conduitSize, currentPage);
+    // Compute per-segment footage for the breakdown display in the right panel
+    const pxPerFt = scaleRatio ? scaleRatio * RENDER_BASE_ZOOM : null;
+    let segFeet: number[] | undefined;
+    if (pxPerFt && activeRun.points.length >= 2) {
+      const segs: number[] = [];
+      let segPx = 0;
+      let inSeg = false;
+      for (let i = 1; i < activeRun.points.length; i++) {
+        const prev = activeRun.points[i - 1];
+        const curr = activeRun.points[i];
+        if (isPenLift(curr) || isPenLift(prev)) {
+          if (inSeg && segPx > 0) { segs.push(parseFloat((segPx / pxPerFt).toFixed(2))); segPx = 0; inSeg = false; }
+          continue;
+        }
+        segPx += normDist(prev, curr);
+        inSeg = true;
+      }
+      if (inSeg && segPx > 0) segs.push(parseFloat((segPx / pxPerFt).toFixed(2)));
+      if (segs.length > 1) segFeet = segs;
+    }
+    onPushDistance?.(ft, activeRun.name, activeRun.conduitSize, currentPage, segFeet);
     toast.success(`${ft} ft pushed from "${activeRun.name}" (page ${currentPage}).`);
   };
 
@@ -2349,6 +2417,8 @@ export default function PlanPanel({
         }}
         onContextMenu={(e) => { if (mode !== "count") e.preventDefault(); }}
         onMouseDown={(e) => {
+          // Ignore mouse events during touch (prevents mouse/touch conflict)
+          if (isTouchingRef.current) return;
           // Both left-click (idle mode) and right-click always pan
           if (e.button === 2 || (e.button === 0 && mode === "none")) {
             dragRef.current = {
