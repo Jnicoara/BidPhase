@@ -1,390 +1,384 @@
 /**
- * ProjectsPage — v5.46
- * Classic card-grid layout for project management.
- * - Dashed "+" card at end of grid to create a new project (name only)
+ * ProjectsPage — v5.47
+ * Classic card-grid layout using the legacy AppContext project store.
+ * Opening or creating a project routes directly to the PDF workspace (/#/civil/:id).
+ * - Dashed "+" card at end of grid to create a new project (name only, inline)
  * - Existing project cards: large name, created date, Open / Rename / Delete action row
- * - Search bar at top for filtering
  */
-import { useState, useMemo, useRef, useEffect } from "react";
-import { trpc } from "@/lib/trpc";
-import {
-  Plus, Search, Pencil, Trash2, Loader2, FolderOpen, X, Check,
-  User, MapPin, Calendar,
-} from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Pencil, Trash2, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { useApp } from "@/contexts/AppContext";
+import type { CivilProject } from "@/contexts/AppContext";
 
-type ProjectStatus = "Bidding" | "Won" | "In Progress" | "Lost";
-
-const STATUS_STYLES: Record<ProjectStatus, string> = {
-  Bidding:       "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
-  Won:           "bg-green-500/20 text-green-400 border border-green-500/30",
-  "In Progress": "bg-blue-500/20 text-blue-400 border border-blue-500/30",
-  Lost:          "bg-zinc-600/40 text-zinc-400 border border-zinc-600/30",
-};
-
-interface ProjectsPageProps {
-  onOpenProject: (projectId: number) => void;
+interface ProjectLike {
+  id: string;
+  name: string;
+  createdAt: number;
+  category: "civil" | "commercial" | "residential" | "industrial";
 }
 
-export default function ProjectsPage({ onOpenProject }: ProjectsPageProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showNewInput, setShowNewInput] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [editingId, setEditingId] = useState<number | null>(null);
+export default function ProjectsPage() {
+  const {
+    civilCatProjects,
+    commercialCatProjects,
+    residentialCatProjects,
+    industrialCatProjects,
+    addCivilCatProject,
+    renameCivilCatProject,
+    renameCommercialCatProject,
+    renameResidentialCatProject,
+    renameIndustrialCatProject,
+    deleteCivilCatProject,
+    deleteCommercialCatProject,
+    deleteResidentialCatProject,
+    deleteIndustrialCatProject,
+    switchCivilCatProject,
+    switchCommercialCatProject,
+    switchResidentialCatProject,
+    switchIndustrialCatProject,
+    trashedProjects,
+    trashProject,
+    restoreProject,
+    activeCivilCatId,
+    activeCommercialCatId,
+    activeResidentialCatId,
+    activeIndustrialCatId,
+  } = useApp();
+
+  // Merge all projects into one flat list, newest first
+  const allProjects: ProjectLike[] = [
+    ...civilCatProjects.map((p) => ({ ...p, category: "civil" as const })),
+    ...commercialCatProjects.map((p) => ({ ...p, category: "commercial" as const })),
+    ...residentialCatProjects.map((p) => ({ ...p, category: "residential" as const })),
+    ...industrialCatProjects.map((p) => ({ ...p, category: "industrial" as const })),
+  ].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const newInputRef = useRef<HTMLInputElement>(null);
+  const [showNew, setShowNew] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [pendingTrashId, setPendingTrashId] = useState<string | null>(null);
+  const [undoId, setUndoId] = useState<string | null>(null);
+  const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data: allProjects = [], isLoading, refetch } = trpc.projects.list.useQuery();
+  const now = Date.now();
+  const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+  const visibleTrash = trashedProjects.filter((t) => now - t.deletedAt < THIRTY_DAYS);
 
-  const createProject = trpc.projects.create.useMutation({
-    onSuccess: (project) => {
-      toast.success("Project created");
-      refetch();
-      setShowNewInput(false);
-      setNewName("");
-      onOpenProject(project.id);
-    },
-    onError: (e) => toast.error(e.message),
-  });
+  function getRenameAction(cat: ProjectLike["category"]) {
+    if (cat === "civil") return renameCivilCatProject;
+    if (cat === "commercial") return renameCommercialCatProject;
+    if (cat === "industrial") return renameIndustrialCatProject;
+    return renameResidentialCatProject;
+  }
+  function getDeleteAction(cat: ProjectLike["category"]) {
+    if (cat === "civil") return deleteCivilCatProject;
+    if (cat === "commercial") return deleteCommercialCatProject;
+    if (cat === "industrial") return deleteIndustrialCatProject;
+    return deleteResidentialCatProject;
+  }
+  function getSwitchAction(cat: ProjectLike["category"]) {
+    if (cat === "civil") return switchCivilCatProject;
+    if (cat === "commercial") return switchCommercialCatProject;
+    if (cat === "industrial") return switchIndustrialCatProject;
+    return switchResidentialCatProject;
+  }
+  function getActiveId(cat: ProjectLike["category"]) {
+    if (cat === "civil") return activeCivilCatId;
+    if (cat === "commercial") return activeCommercialCatId;
+    if (cat === "industrial") return activeIndustrialCatId;
+    return activeResidentialCatId;
+  }
 
-  const updateProject = trpc.projects.update.useMutation({
-    onSuccess: () => { refetch(); setEditingId(null); },
-    onError: (e) => toast.error(e.message),
-  });
+  function handleNew() {
+    if (!newName.trim()) return;
+    addCivilCatProject(newName.trim());
+    setNewName("");
+    setShowNew(false);
+    // Navigate directly to the PDF workspace with the new project
+    setTimeout(() => {
+      window.location.hash = `/civil/__new__`;
+    }, 80);
+  }
 
-  const deleteProject = trpc.projects.delete.useMutation({
-    onSuccess: () => { refetch(); setDeletingId(null); toast.success("Project deleted"); },
-    onError: (e) => toast.error(e.message),
-  });
+  function handleRename(proj: ProjectLike) {
+    if (editName.trim()) getRenameAction(proj.category)(proj.id, editName.trim());
+    setEditingId(null);
+  }
 
-  // Focus the new-project input when it appears
+  function handleOpen(proj: ProjectLike) {
+    getSwitchAction(proj.category)(proj.id);
+    window.location.hash = `/${proj.category}/${proj.id}`;
+  }
+
+  function handleTrashClick(proj: ProjectLike) {
+    setPendingTrashId(proj.id);
+  }
+
+  function confirmTrash(id: string) {
+    const proj = allProjects.find((p) => p.id === id);
+    if (!proj) return;
+    trashProject(proj as unknown as CivilProject, proj.category);
+    getDeleteAction(proj.category)(id);
+    setPendingTrashId(null);
+    setUndoId(id);
+    if (undoTimer) clearTimeout(undoTimer);
+    const t = setTimeout(() => setUndoId(null), 5000);
+    setUndoTimer(t);
+  }
+
+  function handleUndo() {
+    if (!undoId) return;
+    restoreProject(undoId);
+    setUndoId(null);
+    if (undoTimer) clearTimeout(undoTimer);
+  }
+
   useEffect(() => {
-    if (showNewInput) {
-      setTimeout(() => newInputRef.current?.focus(), 50);
-    }
-  }, [showNewInput]);
+    return () => { if (undoTimer) clearTimeout(undoTimer); };
+  }, [undoTimer]);
 
-  const filteredProjects = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return allProjects;
-    return allProjects.filter(p =>
-      (p.name ?? "").toLowerCase().includes(q) ||
-      (p.customerName ?? "").toLowerCase().includes(q) ||
-      (p.address ?? "").toLowerCase().includes(q)
-    );
-  }, [allProjects, searchQuery]);
-
-  const handleCreate = () => {
-    const name = newName.trim();
-    if (!name) return;
-    createProject.mutate({ name });
-  };
-
-  const handleRename = (id: number) => {
-    const name = editName.trim();
-    if (!name) { setEditingId(null); return; }
-    updateProject.mutate({ id, name });
-  };
-
-  const handleDelete = (id: number) => {
-    if (deletingId === id) {
-      deleteProject.mutate({ id });
-    } else {
-      setDeletingId(id);
-      // Auto-cancel confirm after 3 s
-      setTimeout(() => setDeletingId(prev => prev === id ? null : prev), 3000);
-    }
-  };
+  const pendingProj = allProjects.find((p) => p.id === pendingTrashId);
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="flex flex-col h-full bg-background relative overflow-hidden">
       {/* ── Header ── */}
-      <div className="border-b border-border/40 px-6 py-5 flex items-center justify-between gap-4 shrink-0">
-        <div>
-          <h1
-            className="text-2xl font-bold tracking-tight"
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-          >
-            Projects
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {allProjects.length} project{allProjects.length !== 1 ? "s" : ""}
-          </p>
+      <div className="shrink-0 px-8 pt-8 pb-5 border-b border-border/40">
+        <div className="max-w-5xl mx-auto flex items-end justify-between gap-4">
+          <div>
+            <h1
+              className="text-3xl font-black tracking-tight text-foreground leading-none"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            >
+              Projects
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1.5">
+              {allProjects.length} project{allProjects.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+
+          {/* Trash shortcut */}
+          {visibleTrash.length > 0 && (
+            <button
+              onClick={() => { window.location.hash = "/trash"; }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-lg hover:bg-muted/20 border border-border/50 shrink-0"
+            >
+              <Trash2 size={13} />
+              Trash ({visibleTrash.length})
+            </button>
+          )}
         </div>
 
-        {/* Search */}
-        <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search projects…"
-            className={cn(
-              "w-full h-10 pl-9 pr-8 text-sm rounded-lg",
-              "bg-card border border-border/60 text-foreground placeholder:text-muted-foreground",
-              "focus:border-[#F5C518]/60 focus:outline-none focus:ring-1 focus:ring-[#F5C518]/20",
-              "transition-colors duration-150"
-            )}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X size={14} />
-            </button>
+        {/* Inline new project form */}
+        {showNew && (
+          <div className="max-w-5xl mx-auto mt-4">
+            <div className="flex items-center gap-3 p-4 rounded-xl border border-[#F5C518]/40 bg-card">
+              <div className="w-9 h-9 rounded-lg bg-[#F5C518]/10 flex items-center justify-center shrink-0">
+                <Plus size={16} className="text-[#F5C518]" />
+              </div>
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleNew();
+                  if (e.key === "Escape") { setShowNew(false); setNewName(""); }
+                }}
+                placeholder="Project name…"
+                className="flex-1 h-9 text-sm bg-background border border-border rounded-md px-3 text-foreground focus:border-[#F5C518]/60 outline-none"
+              />
+              <button
+                onClick={handleNew}
+                className="px-4 py-2 rounded-md bg-[#F5C518] text-black text-xs font-bold hover:bg-[#F5C518]/90 transition-colors shrink-0"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => { setShowNew(false); setNewName(""); }}
+                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Project Grid ── */}
+      <div className="flex-1 overflow-auto px-8 py-6">
+        <div className="max-w-5xl mx-auto">
+          {allProjects.length === 0 ? (
+            /* Empty state */
+            <div className="flex flex-col items-center justify-center py-24 gap-5 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-[#F5C518]/10 flex items-center justify-center">
+                <span className="font-bold text-[#F5C518] text-2xl" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+              </div>
+              <div>
+                <p className="text-base font-semibold text-foreground">No projects yet</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Upload a PDF plan and start measuring in under a minute.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowNew(true)}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#F5C518] text-black text-sm font-bold hover:bg-[#F5C518]/90 active:scale-[0.97] transition-all duration-150"
+              >
+                <Plus size={16} />
+                Create your first project
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {allProjects.map((proj) => {
+                const isActive = proj.id === getActiveId(proj.category);
+                const isEditing = editingId === proj.id;
+                return (
+                  <div
+                    key={proj.id}
+                    onClick={() => { if (!isEditing) handleOpen(proj); }}
+                    className={cn(
+                      "group relative rounded-xl border bg-card flex flex-col cursor-pointer min-h-[160px]",
+                      "transition-all duration-150 hover:shadow-lg hover:shadow-black/20",
+                      isActive
+                        ? "border-[#F5C518]/60 shadow-[0_0_0_1px_rgba(245,197,24,0.2)]"
+                        : "border-border hover:border-border/80"
+                    )}
+                  >
+                    {/* Card body */}
+                    <div className="flex-1 px-5 pt-6 pb-4">
+                      <div className="flex-1 min-w-0">
+                        {isEditing ? (
+                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              autoFocus
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") handleRename(proj);
+                                if (e.key === "Escape") setEditingId(null);
+                              }}
+                              onBlur={() => handleRename(proj)}
+                              className="flex-1 min-w-0 bg-transparent border-b border-[#F5C518] text-lg text-foreground outline-none font-bold pb-0.5"
+                            />
+                            <button
+                              onMouseDown={(e) => { e.preventDefault(); handleRename(proj); }}
+                              className="text-[#F5C518] text-xs px-1.5 py-0.5 rounded hover:bg-[#F5C518]/10 shrink-0"
+                            >✓</button>
+                          </div>
+                        ) : (
+                          <h3 className="text-xl font-bold text-foreground leading-snug" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                            {proj.name}
+                          </h3>
+                        )}
+                        <p className="text-[11px] text-muted-foreground mt-2">
+                          {proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Action row */}
+                    <div
+                      className="flex items-center justify-between px-4 py-3 border-t border-border/50 gap-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        onClick={() => handleOpen(proj)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-[#F5C518] hover:bg-[#F5C518]/10 transition-colors border border-[#F5C518]/20 hover:border-[#F5C518]/40"
+                      >
+                        Open
+                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => {
+                            if (editingId === proj.id) {
+                              setEditingId(null);
+                            } else {
+                              setEditingId(proj.id);
+                              setEditName(proj.name);
+                            }
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors border border-transparent hover:border-border/50"
+                          title="Rename"
+                        >
+                          <Pencil size={13} />
+                          <span>Rename</span>
+                        </button>
+                        <button
+                          onClick={() => handleTrashClick(proj)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors border border-transparent hover:border-destructive/30"
+                          title="Delete"
+                        >
+                          <Trash2 size={13} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Dashed new project card */}
+              {!showNew && (
+                <button
+                  onClick={() => setShowNew(true)}
+                  className={cn(
+                    "rounded-xl border-2 border-dashed border-border hover:border-[#F5C518]/40",
+                    "bg-transparent hover:bg-[#F5C518]/5 transition-all duration-150",
+                    "flex flex-col items-center justify-center gap-2 p-6 min-h-[160px]",
+                    "text-muted-foreground hover:text-[#F5C518] active:scale-[0.98]"
+                  )}
+                >
+                  <Plus size={28} />
+                  <span className="text-sm font-medium" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    New Project
+                  </span>
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      {/* ── Content ── */}
-      <div className="flex-1 overflow-auto px-6 py-6">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-24 text-muted-foreground gap-3">
-            <Loader2 size={22} className="animate-spin" />
-            <span>Loading projects…</span>
-          </div>
-        ) : filteredProjects.length === 0 && !searchQuery ? (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center py-24 gap-5 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-[#F5C518]/10 border border-[#F5C518]/20 flex items-center justify-center">
-              <span
-                className="font-bold text-[#F5C518] text-2xl"
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              >BP</span>
-            </div>
-            <div>
-              <p className="text-base font-semibold text-foreground">No projects yet</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Upload a PDF plan and start measuring in under a minute.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowNewInput(true)}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#F5C518] text-black text-sm font-bold hover:bg-[#F5C518]/90 active:scale-[0.97] transition-all duration-150"
-            >
-              <Plus size={16} />
-              Create your first project
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredProjects.map(project => {
-              const isEditing = editingId === project.id;
-              const isConfirmingDelete = deletingId === project.id;
-              const status = (project.status ?? "Bidding") as ProjectStatus;
-
-              return (
-                <div
-                  key={project.id}
-                  className={cn(
-                    "group relative rounded-xl border bg-card flex flex-col cursor-pointer min-h-[160px]",
-                    "transition-all duration-150 hover:shadow-lg hover:shadow-black/20",
-                    "border-border hover:border-border/80"
-                  )}
-                  onClick={() => { if (!isEditing) onOpenProject(project.id); }}
-                >
-                  {/* Card body */}
-                  <div className="flex-1 px-5 pt-5 pb-3">
-                    {/* Status badge */}
-                    <div className="mb-3">
-                      <span className={cn(
-                        "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold",
-                        STATUS_STYLES[status]
-                      )}>
-                        {status}
-                      </span>
-                    </div>
-
-                    {/* Project name */}
-                    {isEditing ? (
-                      <div
-                        className="flex items-center gap-1.5"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <input
-                          autoFocus
-                          value={editName}
-                          onChange={e => setEditName(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter") handleRename(project.id);
-                            if (e.key === "Escape") setEditingId(null);
-                          }}
-                          onBlur={() => handleRename(project.id)}
-                          className="flex-1 min-w-0 bg-transparent border-b border-[#F5C518] text-lg text-foreground outline-none font-bold pb-0.5"
-                        />
-                        <button
-                          onMouseDown={e => { e.preventDefault(); handleRename(project.id); }}
-                          className="text-[#F5C518] p-1 rounded hover:bg-[#F5C518]/10"
-                        >
-                          <Check size={14} />
-                        </button>
-                      </div>
-                    ) : (
-                      <h3
-                        className="text-xl font-bold text-foreground leading-snug line-clamp-2"
-                        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                      >
-                        {project.name}
-                      </h3>
-                    )}
-
-                    {/* Meta info */}
-                    <div className="mt-2 space-y-1">
-                      {project.customerName && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <User size={11} className="shrink-0" />
-                          <span className="truncate">{project.customerName}</span>
-                        </div>
-                      )}
-                      {project.address && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <MapPin size={11} className="shrink-0" />
-                          <span className="truncate">{project.address}</span>
-                        </div>
-                      )}
-                      {project.bidDate && (
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Calendar size={11} className="shrink-0" />
-                          <span>{new Date(project.bidDate).toLocaleDateString()}</span>
-                        </div>
-                      )}
-                      {!project.customerName && !project.address && !project.bidDate && (
-                        <p className="text-[11px] text-muted-foreground/40 italic">
-                          {project.createdAt ? new Date(project.createdAt).toLocaleDateString() : ""}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Action row */}
-                  <div
-                    className="flex items-center justify-between px-4 py-3 border-t border-border/50 gap-2"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <button
-                      onClick={() => onOpenProject(project.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-[#F5C518] hover:bg-[#F5C518]/10 transition-colors border border-[#F5C518]/20 hover:border-[#F5C518]/40"
-                    >
-                      Open
-                    </button>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => {
-                          if (isEditing) {
-                            setEditingId(null);
-                          } else {
-                            setEditingId(project.id);
-                            setEditName(project.name);
-                          }
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors"
-                        title="Rename"
-                      >
-                        <Pencil size={12} />
-                        <span>Rename</span>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(project.id)}
-                        disabled={deleteProject.isPending && deletingId === project.id}
-                        className={cn(
-                          "flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs transition-colors",
-                          isConfirmingDelete
-                            ? "text-red-400 bg-red-500/10 border border-red-500/30 font-semibold"
-                            : "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                        )}
-                        title={isConfirmingDelete ? "Click again to confirm delete" : "Delete"}
-                      >
-                        {deleteProject.isPending && deletingId === project.id ? (
-                          <Loader2 size={12} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={12} />
-                        )}
-                        <span>{isConfirmingDelete ? "Confirm?" : "Delete"}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* ── New project dashed card ── */}
-            {!showNewInput && !searchQuery && (
+      {/* ── Trash confirmation dialog ── */}
+      {pendingTrashId && pendingProj && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
+            <h3 className="font-semibold text-foreground mb-2">Move to Trash?</h3>
+            <p className="text-sm text-muted-foreground mb-5">
+              Move <span className="font-medium text-foreground">"{pendingProj.name}"</span> to trash? You can restore it within 30 days.
+            </p>
+            <div className="flex gap-3 justify-end">
               <button
-                onClick={() => setShowNewInput(true)}
-                className={cn(
-                  "rounded-xl border-2 border-dashed border-border hover:border-[#F5C518]/40",
-                  "bg-transparent hover:bg-[#F5C518]/5 transition-all duration-150",
-                  "flex flex-col items-center justify-center gap-2 p-6 min-h-[160px]",
-                  "text-muted-foreground hover:text-[#F5C518] active:scale-[0.98]"
-                )}
+                onClick={() => setPendingTrashId(null)}
+                className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors"
               >
-                <Plus size={28} />
-                <span
-                  className="text-sm font-medium"
-                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                >
-                  New Project
-                </span>
+                Cancel
               </button>
-            )}
-
-            {/* ── Inline new project input (replaces the dashed card) ── */}
-            {showNewInput && !searchQuery && (
-              <div className={cn(
-                "rounded-xl border-2 border-[#F5C518]/40 bg-card",
-                "flex flex-col items-center justify-center gap-3 p-6 min-h-[160px]"
-              )}>
-                <input
-                  ref={newInputRef}
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") handleCreate();
-                    if (e.key === "Escape") { setShowNewInput(false); setNewName(""); }
-                  }}
-                  placeholder="Project name…"
-                  className={cn(
-                    "w-full h-10 px-3 text-sm rounded-lg",
-                    "bg-background border border-border/60 text-foreground placeholder:text-muted-foreground",
-                    "focus:border-[#F5C518]/60 focus:outline-none focus:ring-1 focus:ring-[#F5C518]/20"
-                  )}
-                />
-                <div className="flex gap-2 w-full">
-                  <button
-                    onClick={handleCreate}
-                    disabled={!newName.trim() || createProject.isPending}
-                    className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#F5C518] hover:bg-[#e6b800] text-black text-xs font-bold disabled:opacity-50 transition-colors"
-                  >
-                    {createProject.isPending ? <Loader2 size={14} className="animate-spin" /> : (
-                      <>
-                        <Check size={14} />
-                        Create
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => { setShowNewInput(false); setNewName(""); }}
-                    className="h-9 px-3 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
+              <button
+                onClick={() => confirmTrash(pendingTrashId)}
+                className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium"
+              >
+                Move to Trash
+              </button>
+            </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* No search results */}
-        {searchQuery && filteredProjects.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <FolderOpen size={40} className="text-muted-foreground/30 mb-3" />
-            <p className="text-base font-medium text-muted-foreground">No projects match "{searchQuery}"</p>
-          </div>
-        )}
-      </div>
+      {/* ── Undo toast ── */}
+      {undoId && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl bg-card border border-border shadow-2xl">
+          <span className="text-sm text-foreground">Project moved to trash</span>
+          <button
+            onClick={handleUndo}
+            className="flex items-center gap-1.5 text-sm font-semibold text-[#F5C518] hover:text-[#F5C518]/80 transition-colors"
+          >
+            <RotateCcw size={14} />
+            Undo
+          </button>
+        </div>
+      )}
     </div>
   );
 }

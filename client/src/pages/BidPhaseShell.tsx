@@ -168,7 +168,7 @@ export default function BidPhaseShell() {
     if (isInMaterial)       return <MaterialListPage onBack={closeMaterialList} />;
     if (isInMatDb)          return <MaterialDatabasePage onBack={goBack} />;
     if (isOnHome)           return <BidPhaseHomePage onGoToProjects={() => navigate("projects")} />;
-    if (isOnProjects)       return <ProjectsPage onOpenProject={(id) => navigate("project-detail", id)} />;
+    if (isOnProjects)       return <ProjectsPage />;
     if (isOnProjectDetail && activeProjectId) return (
       <ProjectDetailPage
         projectId={activeProjectId}
