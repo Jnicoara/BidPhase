@@ -332,3 +332,8 @@
 - [x] Added: Lighting (48 items: LED wafers, vapor tights, exit/emergency, outdoor, commercial), Low Voltage & Data (26 items: structured wiring, patch panels), Civil & Misc expanded (69 items: ground rods, grounding, marking tape, site materials), additional Distribution (252 total), Conduit Fittings (219 total), Wire & Cable (127 total)
 - [x] Fixed all Unicode inch symbol and escaped-quote issues in description strings
 - [x] TypeScript: 0 errors, dev server: clean
+
+## v5.35 — Smart Fuzzy Search with Trade Slang
+- [x] Build shared smartSearch utility: fuzzy matching + trade alias/synonym map covering boxes, conduit, wire, breakers, devices, fittings, and civil slang
+- [x] Wire smartSearch into CatalogPicker (Unit Count) replacing current filter
+- [x] Wire smartSearch into MaterialDatabasePage replacing current filter

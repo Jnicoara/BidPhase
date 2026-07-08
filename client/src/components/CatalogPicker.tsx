@@ -16,7 +16,9 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Search, X, ChevronDown, Tag, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CATALOG, CATALOG_CATEGORIES, searchCatalog, getCatalogItem } from "@/lib/materialCatalog";
+import { CATALOG, CATALOG_CATEGORIES, getCatalogItem } from "@/lib/materialCatalog";
+import { smartSearch } from "@/lib/smartSearch";
+import type { SearchableItem } from "@/lib/smartSearch";
 import type { CatalogItem } from "@/lib/materialCatalog";
 import { trpc } from "@/lib/trpc";
 
@@ -141,22 +143,15 @@ export default function CatalogPicker({
     onChange(null);
   };
 
-  // Filtered results — either from static catalog or user DB
-  const results = useMemo(() => {
-    if (showUserDb) {
-      if (query.trim()) {
-        const q = query.toLowerCase();
-        return userDbItems.filter(
-          (i) => i.description.toLowerCase().includes(q) || i.category.toLowerCase().includes(q)
-        ).slice(0, 40);
-      }
-      return activeCategory
-        ? userDbItems.filter((i) => i.category === activeCategory).slice(0, 40)
-        : userDbItems.slice(0, 40);
+  // Filtered results — either from static catalog or user DB, using smart search
+  const results = useMemo((): CatalogItem[] => {
+    const source: CatalogItem[] = showUserDb ? userDbItems : CATALOG;
+    if (query.trim()) {
+      // Smart search: fuzzy + trade slang expansion, no category filter when searching
+      return smartSearch<CatalogItem & SearchableItem>(source as (CatalogItem & SearchableItem)[], query, 50) as CatalogItem[];
     }
-    if (query.trim()) return searchCatalog(query, 40);
-    if (activeCategory) return CATALOG.filter((i) => i.category === activeCategory).slice(0, 40);
-    return CATALOG.slice(0, 20);
+    if (activeCategory) return source.filter((i) => i.category === activeCategory).slice(0, 50);
+    return source.slice(0, 30);
   }, [showUserDb, query, activeCategory, userDbItems]);
 
   // User DB categories

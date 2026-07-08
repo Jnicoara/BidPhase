@@ -19,6 +19,8 @@ import {
   ArrowLeft, FileSpreadsheet, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { smartSearch } from "@/lib/smartSearch";
+import type { SearchableItem } from "@/lib/smartSearch";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -658,13 +660,13 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
   // ── Grouped materials ─────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     if (!search.trim()) return materials;
-    const q = search.toLowerCase();
-    return materials.filter(
-      (m) =>
-        m.description.toLowerCase().includes(q) ||
-        (m.category ?? "").toLowerCase().includes(q) ||
-        (m.itemCode ?? "").toLowerCase().includes(q)
-    );
+    // Use smartSearch for trade slang + fuzzy matching; cast to SearchableItem shape
+    type MaterialAsSearchable = typeof materials[number] & SearchableItem;
+    return smartSearch<MaterialAsSearchable>(
+      materials as MaterialAsSearchable[],
+      search,
+      500 // large limit — show all matches in the full table view
+    ) as typeof materials;
   }, [materials, search]);
 
   const grouped = useMemo(() => {
