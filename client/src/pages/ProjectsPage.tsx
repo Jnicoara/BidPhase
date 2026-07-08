@@ -5,8 +5,8 @@
  * - Dashed "+" card at end of grid to create a new project (name only, inline)
  * - Existing project cards: large name, created date, Open / Rename / Delete action row
  */
-import { useState, useEffect } from "react";
-import { Plus, Pencil, Trash2, RotateCcw, X } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Plus, Pencil, Trash2, RotateCcw, X, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import type { CivilProject } from "@/contexts/AppContext";
@@ -54,6 +54,7 @@ export default function ProjectsPage() {
     ...industrialCatProjects.map((p) => ({ ...p, category: "industrial" as const })),
   ].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 
+  const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -65,6 +66,12 @@ export default function ProjectsPage() {
   const now = Date.now();
   const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
   const visibleTrash = trashedProjects.filter((t) => now - t.deletedAt < THIRTY_DAYS);
+
+  const filteredProjects = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return allProjects;
+    return allProjects.filter((p) => p.name.toLowerCase().includes(q));
+  }, [allProjects, searchQuery]);
 
   function getRenameAction(cat: ProjectLike["category"]) {
     if (cat === "civil") return renameCivilCatProject;
@@ -170,6 +177,32 @@ export default function ProjectsPage() {
           )}
         </div>
 
+        {/* Search bar */}
+        <div className="max-w-5xl mx-auto mt-4">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search projects…"
+              className="w-full h-9 pl-9 pr-9 text-sm bg-muted/20 border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:border-[#F5C518]/60 focus:bg-muted/30 outline-none transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+          {searchQuery && (
+            <p className="text-[11px] text-muted-foreground mt-1.5 ml-1">
+              {filteredProjects.length} result{filteredProjects.length !== 1 ? "s" : ""} for "{searchQuery}"
+            </p>
+          )}
+        </div>
+
         {/* Inline new project form */}
         {showNew && (
           <div className="max-w-5xl mx-auto mt-4">
@@ -208,7 +241,22 @@ export default function ProjectsPage() {
       {/* ── Project Grid ── */}
       <div className="flex-1 overflow-auto px-8 py-6">
         <div className="max-w-5xl mx-auto">
-          {allProjects.length === 0 ? (
+          {filteredProjects.length === 0 && searchQuery ? (
+            /* No search results */
+            <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+              <Search size={32} className="text-muted-foreground/30" />
+              <div>
+                <p className="text-base font-semibold text-foreground">No projects match "{searchQuery}"</p>
+                <p className="text-sm text-muted-foreground mt-1">Try a different name or clear the search.</p>
+              </div>
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-sm text-[#F5C518] hover:text-[#F5C518]/80 transition-colors"
+              >
+                Clear search
+              </button>
+            </div>
+          ) : allProjects.length === 0 ? (
             /* Empty state */
             <div className="flex flex-col items-center justify-center py-24 gap-5 text-center">
               <div className="w-16 h-16 rounded-2xl bg-[#F5C518]/10 flex items-center justify-center">
@@ -230,7 +278,7 @@ export default function ProjectsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {allProjects.map((proj) => {
+              {filteredProjects.map((proj) => {
                 const isActive = proj.id === getActiveId(proj.category);
                 const isEditing = editingId === proj.id;
                 return (

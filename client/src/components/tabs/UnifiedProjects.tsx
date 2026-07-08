@@ -809,6 +809,83 @@ function RunCard({
           )}
         </div>
 
+        {/* Equipment Grounding Conductor (EGC) — directly below Current Carrying Conductors */}
+        {!isWire && (
+          <div className={cn(
+            "rounded-lg border px-3 py-2.5 transition-all",
+            run.includeGround
+              ? "border-green-500/60 bg-green-500/8"
+              : "border-border/50 bg-muted/10"
+          )}>
+            {/* Header row: label + toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <div className={cn(
+                  "text-[11px] font-semibold uppercase tracking-wide",
+                  run.includeGround ? "text-green-400" : "text-muted-foreground"
+                )}>Equipment Grounding Conductor (EGC)</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">Add bare/green EGC to this run</div>
+              </div>
+              <button
+                onClick={() => onUpdate(run.id, { includeGround: !run.includeGround })}
+                className={cn(
+                  "relative w-9 h-5 rounded-full border transition-all ml-3 shrink-0",
+                  run.includeGround
+                    ? "bg-green-500 border-green-500"
+                    : "bg-muted/40 border-border"
+                )}
+              >
+                <span className={cn(
+                  "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
+                  run.includeGround ? "left-4" : "left-0.5"
+                )} />
+              </button>
+            </div>
+
+            {/* EGC options — only when enabled */}
+            {run.includeGround && (
+              <div className="mt-3 space-y-2.5">
+                {/* Cu / Al material toggle */}
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">EGC Material</Label>
+                  <div className="flex gap-2">
+                    {CONDUCTOR_MATERIALS.map((cm) => (
+                      <button key={cm.id}
+                        onClick={() => onUpdate(run.id, { groundMaterial: cm.id as ConductorMaterial })}
+                        className={cn(
+                          "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
+                          (run.groundMaterial ?? "CU") === cm.id
+                            ? "bg-green-500 text-black border-green-500"
+                            : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
+                        )}>
+                        {cm.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* EGC size grid */}
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">EGC Size (AWG)</Label>
+                  <div className="grid grid-cols-5 gap-1">
+                    {(["14","12","10","8","6","4","2","1/0","2/0","3/0","4/0"] as const).map((sz) => (
+                      <button key={sz}
+                        onClick={() => onUpdate(run.id, { groundSize: sz })}
+                        className={cn(
+                          "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                          (run.groundSize ?? "12") === sz
+                            ? "bg-green-500 text-black border-green-500"
+                            : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
+                        )}>
+                        {sz}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Run type toggle: Conduit vs Wire Only */}
         <div className="space-y-1.5">
           <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Run Type</Label>
@@ -929,83 +1006,6 @@ function RunCard({
                   </div>
                 </div>
               </>
-            )}
-
-            {/* Equipment Grounding Conductor (EGC) — shown after conductor section, hidden in conduit-only mode */}
-            {!conduitOnly && (
-              <div className={cn(
-                "rounded-lg border px-3 py-2.5 transition-all",
-                run.includeGround
-                  ? "border-green-500/60 bg-green-500/8"
-                  : "border-border/50 bg-muted/10"
-              )}>
-                {/* Header row: label + toggle */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className={cn(
-                      "text-[11px] font-semibold uppercase tracking-wide",
-                      run.includeGround ? "text-green-400" : "text-muted-foreground"
-                    )}>Equipment Grounding Conductor (EGC)</div>
-                    <div className="text-[10px] text-muted-foreground mt-0.5">Add bare/green EGC to this run</div>
-                  </div>
-                  <button
-                    onClick={() => onUpdate(run.id, { includeGround: !run.includeGround })}
-                    className={cn(
-                      "relative w-9 h-5 rounded-full border transition-all ml-3 shrink-0",
-                      run.includeGround
-                        ? "bg-green-500 border-green-500"
-                        : "bg-muted/40 border-border"
-                    )}
-                  >
-                    <span className={cn(
-                      "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
-                      run.includeGround ? "left-4" : "left-0.5"
-                    )} />
-                  </button>
-                </div>
-
-                {/* EGC options — only when enabled */}
-                {run.includeGround && (
-                  <div className="mt-3 space-y-2.5">
-                    {/* Cu / Al material toggle */}
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">EGC Material</Label>
-                      <div className="flex gap-2">
-                        {CONDUCTOR_MATERIALS.map((cm) => (
-                          <button key={cm.id}
-                            onClick={() => onUpdate(run.id, { groundMaterial: cm.id as ConductorMaterial })}
-                            className={cn(
-                              "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
-                              (run.groundMaterial ?? "CU") === cm.id
-                                ? "bg-green-500 text-black border-green-500"
-                                : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
-                            )}>
-                            {cm.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {/* EGC size grid */}
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">EGC Size (AWG)</Label>
-                      <div className="grid grid-cols-5 gap-1">
-                        {(["14","12","10","8","6","4","2","1/0","2/0","3/0","4/0"] as const).map((sz) => (
-                          <button key={sz}
-                            onClick={() => onUpdate(run.id, { groundSize: sz })}
-                            className={cn(
-                              "py-1 rounded text-[10px] font-mono font-medium border transition-all",
-                              (run.groundSize ?? "12") === sz
-                                ? "bg-green-500 text-black border-green-500"
-                                : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
-                            )}>
-                            {sz}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
             )}
 
             {/* Conduit Estimating Inputs */}
