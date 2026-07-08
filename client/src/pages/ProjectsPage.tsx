@@ -6,15 +6,19 @@
  * - Existing project cards: large name, created date, Open / Rename / Delete action row
  */
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Pencil, Trash2, RotateCcw, X, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, RotateCcw, X, Search, ChevronDown, ChevronUp, Building2, MapPin, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import type { CivilProject } from "@/contexts/AppContext";
 
-interface ProjectLike {
-  id: string;
-  name: string;
-  createdAt: number;
+const STATUS_OPTIONS: { value: CivilProject["status"]; label: string; color: string }[] = [
+  { value: "bidding",     label: "Bidding",     color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
+  { value: "won",         label: "Won",         color: "bg-green-500/20 text-green-400 border-green-500/30" },
+  { value: "in-progress", label: "In Progress", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+  { value: "lost",        label: "Lost",        color: "bg-muted/30 text-muted-foreground border-border" },
+];
+
+interface ProjectLike extends CivilProject {
   category: "civil" | "commercial" | "residential" | "industrial";
 }
 
@@ -44,6 +48,7 @@ export default function ProjectsPage() {
     activeCommercialCatId,
     activeResidentialCatId,
     activeIndustrialCatId,
+    updateProjectMeta,
   } = useApp();
 
   // Merge all projects into one flat list, newest first
@@ -62,6 +67,8 @@ export default function ProjectsPage() {
   const [pendingTrashId, setPendingTrashId] = useState<string | null>(null);
   const [undoId, setUndoId] = useState<string | null>(null);
   const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  // Which card has its meta fields expanded
+  const [expandedMetaId, setExpandedMetaId] = useState<string | null>(null);
 
   const now = Date.now();
   const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
@@ -294,7 +301,30 @@ export default function ProjectsPage() {
                     )}
                   >
                     {/* Card body */}
-                    <div className="flex-1 px-5 pt-6 pb-4">
+                    <div className="flex-1 px-5 pt-5 pb-3">
+                      {/* Status badge row */}
+                      <div className="flex items-center justify-between mb-3" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={proj.status ?? ""}
+                          onChange={(e) => updateProjectMeta(proj.id, { status: (e.target.value || undefined) as CivilProject["status"] })}
+                          className={cn(
+                            "text-[10px] font-semibold px-2 py-0.5 rounded-full border outline-none cursor-pointer bg-transparent transition-colors",
+                            proj.status
+                              ? (STATUS_OPTIONS.find((s) => s.value === proj.status)?.color ?? "bg-muted/20 text-muted-foreground border-border")
+                              : "text-muted-foreground border-border/50 hover:border-[#F5C518]/40"
+                          )}
+                        >
+                          <option value="">No Status</option>
+                          {STATUS_OPTIONS.map((s) => (
+                            <option key={s.value} value={s.value!}>{s.label}</option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ""}
+                        </span>
+                      </div>
+
+                      {/* Project name */}
                       <div className="flex-1 min-w-0">
                         {isEditing ? (
                           <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -319,10 +349,75 @@ export default function ProjectsPage() {
                             {proj.name}
                           </h3>
                         )}
-                        <p className="text-[11px] text-muted-foreground mt-2">
-                          {proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ""}
-                        </p>
                       </div>
+
+                      {/* Meta preview (customer / address / bid date) */}
+                      {(proj.customerName || proj.address || proj.bidDate) && (
+                        <div className="mt-2 space-y-0.5">
+                          {proj.customerName && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                              <Building2 size={10} className="shrink-0" />
+                              <span className="truncate">{proj.customerName}</span>
+                            </div>
+                          )}
+                          {proj.address && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                              <MapPin size={10} className="shrink-0" />
+                              <span className="truncate">{proj.address}</span>
+                            </div>
+                          )}
+                          {proj.bidDate && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                              <Calendar size={10} className="shrink-0" />
+                              <span>{new Date(proj.bidDate + "T12:00:00").toLocaleDateString()}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Expand/collapse meta edit fields */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setExpandedMetaId(expandedMetaId === proj.id ? null : proj.id); }}
+                        className="mt-2.5 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {expandedMetaId === proj.id ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                        {expandedMetaId === proj.id ? "Hide details" : "Add details"}
+                      </button>
+
+                      {/* Meta edit fields */}
+                      {expandedMetaId === proj.id && (
+                        <div className="mt-2.5 space-y-2" onClick={(e) => e.stopPropagation()}>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wide block mb-0.5">Customer Name</label>
+                            <input
+                              type="text"
+                              value={proj.customerName ?? ""}
+                              onChange={(e) => updateProjectMeta(proj.id, { customerName: e.target.value || undefined })}
+                              placeholder="e.g. Acme Corp"
+                              className="w-full h-7 px-2 text-xs bg-muted/20 border border-border rounded text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#F5C518]/60 transition-colors"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wide block mb-0.5">Address / Site</label>
+                            <input
+                              type="text"
+                              value={proj.address ?? ""}
+                              onChange={(e) => updateProjectMeta(proj.id, { address: e.target.value || undefined })}
+                              placeholder="e.g. 123 Main St"
+                              className="w-full h-7 px-2 text-xs bg-muted/20 border border-border rounded text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#F5C518]/60 transition-colors"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wide block mb-0.5">Bid Date</label>
+                            <input
+                              type="date"
+                              value={proj.bidDate ?? ""}
+                              onChange={(e) => updateProjectMeta(proj.id, { bidDate: e.target.value || undefined })}
+                              className="w-full h-7 px-2 text-xs bg-muted/20 border border-border rounded text-foreground outline-none focus:border-[#F5C518]/60 transition-colors"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Action row */}

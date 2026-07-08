@@ -486,3 +486,11 @@
 - [x] Existing project cards: project name large, created date small, Open / Rename / Delete action row
 - [x] Sidebar nav: add "Projects" nav item pointing to /projects
 - [x] TypeScript: 0 errors after all changes
+
+## v5.49 — Project Meta Fields + EGC in L&M Panel + Clear Page Reorder
+- [x] Add customerName, address, bidDate, status optional fields to CivilProject interface in AppContext
+- [x] Add updateProjectMeta function to AppContext to update those fields per project
+- [x] Update ProjectsPage cards to show status badge, customer, address, bid date and allow inline editing via expand/collapse
+- [x] Add EGC running total section to CrossPageTotals right panel (after Conductors, before Per-Page Breakdown) — shows billable footage per EGC size/material
+- [x] Move Clear Page button to immediately after Unit Count button in idle toolbar (before Undo)
+- [x] TypeScript: 0 errors

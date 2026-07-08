@@ -1295,6 +1295,24 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
   }
   const wireRows = Array.from(wireMap.entries()).sort(([a], [b]) => a.localeCompare(b));
 
+  // ── EGC breakdown by size+material ─────────────────────────────────────────
+  const egcMap = new Map<string, { label: string; feet: number }>();
+  for (const r of runs) {
+    if ((r.runType ?? "conduit") === "wire") continue;
+    if (!r.includeGround) continue;
+    const mat = (r.groundMaterial ?? "CU") as ConductorMaterial;
+    const size = (r.groundSize ?? "12") as ConductorSize;
+    const label = conductorLabel(mat, size) + " EGC";
+    const egcFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+    const existing = egcMap.get(label);
+    if (existing) {
+      existing.feet += egcFt;
+    } else {
+      egcMap.set(label, { label, feet: egcFt });
+    }
+  }
+  const egcRows = Array.from(egcMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
   // ── Fittings breakdown by type ───────────────────────────────────────────────
   // Group by conduit type+size so you know which fittings go where
   type FittingKey = string; // e.g. "EMT 3/4" — Connectors"
@@ -1467,6 +1485,24 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
           <SectionHeader icon={<StrippedWireIcon size={11} />} title="Conductors" />
           <div className="space-y-1">
             {wireRows.map(([key, row]) => (
+              <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
+                <span className="font-mono text-foreground font-semibold">{row.label}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[#F5C518]">{row.feet.toFixed(1)} ft</span>
+                  <span className="font-mono text-muted-foreground text-[10px]">billable ft</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ── EGC ── */}
+      {egcRows.length > 0 && (
+        <>
+          <SectionHeader icon={<StrippedWireIcon size={11} />} title="EGC" />
+          <div className="space-y-1">
+            {egcRows.map(([key, row]) => (
               <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
                 <span className="font-mono text-foreground font-semibold">{row.label}</span>
                 <div className="flex items-center gap-3">

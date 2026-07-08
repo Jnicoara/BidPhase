@@ -2068,20 +2068,10 @@ export default function PlanPanel({
               Unit Count
             </Button>
 
-            {/* Undo + Clear Page (idle) */}
+            {/* Undo + Clear Page (idle) — Clear Page sits right after Unit Count */}
             {(currentRuns.length > 0 || currentPins.length > 0) && (
               <>
                 <div className="w-px h-4 bg-border shrink-0" />
-                <Button
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  variant="ghost"
-                  onClick={handleUndo}
-                  disabled={!canUndo}
-                  title="Undo [U]"
-                >
-                  <Undo2 size={13} />
-                </Button>
                 <Button
                   size="sm"
                   className="h-7 text-xs px-2 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
@@ -2100,7 +2090,6 @@ export default function PlanPanel({
                         setCurrentActiveRunId("");
                         setMode("none");
                         modeRef.current = "none";
-                        // Reset all transient cursor/pan state so cursor doesn't get stuck
                         dragRef.current = null;
                         setIsPanning(false);
                         setMousePos(null);
@@ -2115,6 +2104,16 @@ export default function PlanPanel({
                 >
                   <Trash2 size={11} className="mr-1" />
                   Clear page
+                </Button>
+                <Button
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  variant="ghost"
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  title="Undo [U]"
+                >
+                  <Undo2 size={13} />
                 </Button>
               </>
             )}

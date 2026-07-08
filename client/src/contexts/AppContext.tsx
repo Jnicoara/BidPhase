@@ -212,6 +212,11 @@ export interface CivilProject {
   name: string;
   state: CivilState;
   createdAt: number;
+  // Optional project metadata
+  customerName?: string;
+  address?: string;
+  bidDate?: string;   // ISO date string e.g. "2026-07-15"
+  status?: "bidding" | "won" | "in-progress" | "lost";
 }
 
 // ─── Commercial Assembly ─────────────────────────────────────────────────────
@@ -365,6 +370,9 @@ interface AppContextValue {
   renameIndustrialCatProject: (id: string, name: string) => void;
   deleteIndustrialCatProject: (id: string) => void;
   switchIndustrialCatProject: (id: string) => void;
+
+  // ── Project meta update (works across all cat stores by id) ────────────────
+  updateProjectMeta: (id: string, meta: Partial<Pick<CivilProject, "customerName" | "address" | "bidDate" | "status">>) => void;
 
   // ── Civil projects ──────────────────────────────────────────────────────────
   civilProjects: CivilProject[];
@@ -799,6 +807,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         renameIndustrialCatProject:   industrialCatStore().rename,
         deleteIndustrialCatProject:   industrialCatStore().remove,
         switchIndustrialCatProject:   industrialCatStore().switchTo,
+        // Project meta update — patches meta fields across all cat stores by project id
+        updateProjectMeta: (id: string, meta: Partial<Pick<CivilProject, "customerName" | "address" | "bidDate" | "status">>) => {
+          const patcher = (prev: CivilProject[]) =>
+            prev.map((p) => (p.id === id ? { ...p, ...meta } : p));
+          setCivilCatProjects(patcher);
+          setCommercialCatProjects(patcher);
+          setResidentialCatProjects(patcher);
+          setIndustrialCatProjects(patcher);
+        },
         // Unified projects
         unifiedProjects: safeUP,
         activeUnifiedId,
