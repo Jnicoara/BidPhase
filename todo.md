@@ -396,3 +396,11 @@
 - [x] Fix double-count bug in conduit mode: calcConduitWire already multiplies by conductors internally; removed redundant * r.conductors in CrossPageTotals cost aggregation
 - [x] Audit measurement tool: math chain confirmed correct (round-trip cancels); scale display formula verified (162 px/in = 72 points × scale 2.25)
 - [x] TypeScript: 0 errors after all changes
+
+## v5.42 — EGC Reposition + Calc Bug Fixes
+- [x] Fix wire footage bug: 235 ft × 3 conductors × 0% waste should equal exactly 705 ft — changed wireTermMakeup/numPullPoints defaults from 2 to 0 in RunCard and CrossPageTotals
+- [x] Fix conduit pricing bug: conduit cost is coming in way too high — findUserPrice now prefers per-foot rows and normalizes per-stick entries by dividing by stick length
+- [x] Move EGC (grounding conductor) toggle to a prominent position in RunCard — now appears after conductor size section, before Estimating Inputs
+- [x] Make EGC conductor material toggleable (Cu / Al) — added groundMaterial field to RunItem interface; Cu/Al toggle shown when EGC is enabled
+- [x] EGC footage must be included in the total wire footage display and cost aggregation — added to totalWire in CrossPageTotals and cost uses groundMaterial
+- [x] TypeScript: 0 errors after all changes

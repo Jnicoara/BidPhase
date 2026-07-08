@@ -1391,16 +1391,45 @@ function userRowEffectivePrice(m: UserMaterialRow): number {
  * Search user materials for a row whose description matches the given keywords.
  * Returns the effective price if found, otherwise null.
  * Matching is case-insensitive and requires ALL keywords to appear in the description.
+ *
+ * For conduit lookups: if the matched row is a per-stick entry (description contains
+ * "10ft stick" or "10 ft stick", or unit is "EA" with a stick-length in description),
+ * the price is automatically divided by the stick length to get a per-foot price.
  */
 function findUserPrice(userMaterials: UserMaterialRow[], ...keywords: string[]): number | null {
   const kws = keywords.map((k) => k.toLowerCase());
+
+  // Prefer per-foot rows first (description contains "per ft" or "per foot" or unit is FT)
+  const perFtMatch = userMaterials.find((m) => {
+    const desc = m.description.toLowerCase();
+    if (!kws.every((k) => desc.includes(k))) return false;
+    const unit = (m.unit ?? "").toUpperCase();
+    return unit === "FT" || desc.includes("per ft") || desc.includes("per foot") || desc.includes("/ft");
+  });
+  if (perFtMatch) {
+    const price = userRowEffectivePrice(perFtMatch);
+    return price > 0 ? price : null;
+  }
+
+  // Fall back to any matching row — if it looks like a per-stick entry, normalize to per-foot
   const match = userMaterials.find((m) => {
     const desc = m.description.toLowerCase();
     return kws.every((k) => desc.includes(k));
   });
   if (!match) return null;
   const price = userRowEffectivePrice(match);
-  return price > 0 ? price : null;
+  if (price <= 0) return null;
+
+  // Detect per-stick entries and normalize: "10ft stick", "10 ft", "10-ft", or unit=EA with length in desc
+  const desc = match.description.toLowerCase();
+  const stickMatch = desc.match(/(\d+)\s*(?:ft|foot|feet)\s*stick/) ||
+                     (match.unit?.toUpperCase() === "EA" && desc.match(/(\d+)\s*(?:ft|foot|feet)/));
+  if (stickMatch) {
+    const stickLength = parseInt(stickMatch[1], 10);
+    if (stickLength > 1) return parseFloat((price / stickLength).toFixed(4));
+  }
+
+  return price;
 }
 
 /**

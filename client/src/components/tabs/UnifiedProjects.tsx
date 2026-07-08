@@ -576,8 +576,8 @@ function RunCard({
   // ── Conduit mode calculations ──
   const conduitWasteFactor  = run.conduitWasteFactor ?? 10;
   const wireWasteFactor     = run.wireWasteFactor    ?? 10;  // separate from conduit
-  const wireTermMakeup      = run.wireTermMakeup     ?? 2;
-  const numPullPoints       = run.numPullPoints      ?? 2;
+  const wireTermMakeup      = run.wireTermMakeup     ?? 0;   // default 0 — user sets per-job
+  const numPullPoints       = run.numPullPoints      ?? 0;   // default 0 — user sets per-job
   const conduitBillable     = calcConduitBillable(run.feet, conduitWasteFactor);
   const conduitWireBillable = conduitOnly
     ? 0
@@ -891,49 +891,6 @@ function RunCard({
               </button>
             </div>
 
-            {/* Grounding Conductor toggle + size picker */}
-            {!conduitOnly && (
-              <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/10 px-3 py-2">
-                <div className="flex-1">
-                  <div className="text-[11px] font-medium text-foreground">Grounding Conductor (EGC)</div>
-                  <div className="text-[10px] text-muted-foreground">Include equipment grounding conductor</div>
-                  {run.includeGround && (
-                    <div className="mt-2 space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Ground Size (AWG)</Label>
-                      <div className="grid grid-cols-5 gap-1">
-                        {(["14","12","10","8","6","4","2","1/0","2/0","3/0","4/0"] as const).map((sz) => (
-                          <button key={sz}
-                            onClick={() => onUpdate(run.id, { groundSize: sz })}
-                            className={cn(
-                              "py-1 rounded text-[10px] font-mono font-medium border transition-all",
-                              (run.groundSize ?? "12") === sz
-                                ? "bg-green-500 text-black border-green-500"
-                                : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
-                            )}>
-                            {sz}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={() => onUpdate(run.id, { includeGround: !run.includeGround })}
-                  className={cn(
-                    "relative w-9 h-5 rounded-full border transition-all ml-3 shrink-0",
-                    run.includeGround
-                      ? "bg-green-500 border-green-500"
-                      : "bg-muted/40 border-border"
-                  )}
-                >
-                  <span className={cn(
-                    "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
-                    run.includeGround ? "left-4" : "left-0.5"
-                  )} />
-                </button>
-              </div>
-            )}
-
             {/* Wire type + conductor material/size — hidden in conduit-only mode */}
             {!conduitOnly && (
               <>
@@ -972,6 +929,83 @@ function RunCard({
                   </div>
                 </div>
               </>
+            )}
+
+            {/* Equipment Grounding Conductor (EGC) — shown after conductor section, hidden in conduit-only mode */}
+            {!conduitOnly && (
+              <div className={cn(
+                "rounded-lg border px-3 py-2.5 transition-all",
+                run.includeGround
+                  ? "border-green-500/60 bg-green-500/8"
+                  : "border-border/50 bg-muted/10"
+              )}>
+                {/* Header row: label + toggle */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className={cn(
+                      "text-[11px] font-semibold uppercase tracking-wide",
+                      run.includeGround ? "text-green-400" : "text-muted-foreground"
+                    )}>Equipment Grounding Conductor (EGC)</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Add bare/green EGC to this run</div>
+                  </div>
+                  <button
+                    onClick={() => onUpdate(run.id, { includeGround: !run.includeGround })}
+                    className={cn(
+                      "relative w-9 h-5 rounded-full border transition-all ml-3 shrink-0",
+                      run.includeGround
+                        ? "bg-green-500 border-green-500"
+                        : "bg-muted/40 border-border"
+                    )}
+                  >
+                    <span className={cn(
+                      "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
+                      run.includeGround ? "left-4" : "left-0.5"
+                    )} />
+                  </button>
+                </div>
+
+                {/* EGC options — only when enabled */}
+                {run.includeGround && (
+                  <div className="mt-3 space-y-2.5">
+                    {/* Cu / Al material toggle */}
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">EGC Material</Label>
+                      <div className="flex gap-2">
+                        {CONDUCTOR_MATERIALS.map((cm) => (
+                          <button key={cm.id}
+                            onClick={() => onUpdate(run.id, { groundMaterial: cm.id as ConductorMaterial })}
+                            className={cn(
+                              "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
+                              (run.groundMaterial ?? "CU") === cm.id
+                                ? "bg-green-500 text-black border-green-500"
+                                : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
+                            )}>
+                            {cm.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* EGC size grid */}
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">EGC Size (AWG)</Label>
+                      <div className="grid grid-cols-5 gap-1">
+                        {(["14","12","10","8","6","4","2","1/0","2/0","3/0","4/0"] as const).map((sz) => (
+                          <button key={sz}
+                            onClick={() => onUpdate(run.id, { groundSize: sz })}
+                            className={cn(
+                              "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                              (run.groundSize ?? "12") === sz
+                                ? "bg-green-500 text-black border-green-500"
+                                : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
+                            )}>
+                            {sz}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Conduit Estimating Inputs */}
@@ -1246,8 +1280,8 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       // calcConduitWire already includes conductors
       wireFt = calcConduitWire(
         r.feet, r.conductors,
-        r.wireTermMakeup ?? 2,
-        r.numPullPoints ?? 2,
+        r.wireTermMakeup ?? 0,
+        r.numPullPoints ?? 0,
         r.wireWasteFactor ?? 10,
       );
     }
@@ -1290,12 +1324,19 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
   }, 0);
   const totalWire   = runs.reduce((a, r) => {
     const isWireRun = (r.runType ?? "conduit") === "wire";
+    let runWire: number;
     if (isWireRun) {
       // calcWire returns per-conductor footage — multiply by conductors for total
-      return a + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10) * r.conductors;
+      runWire = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10) * r.conductors;
+    } else {
+      // calcConduitWire already includes conductors
+      runWire = r.conduitOnly ? 0 : calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
     }
-    // calcConduitWire already includes conductors
-    return a + calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
+    // Add EGC footage when enabled (1 conductor, same waste factor as wire)
+    if (!isWireRun && !r.conduitOnly && r.includeGround) {
+      runWire += calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+    }
+    return a + runWire;
   }, 0);
 
   // ── Live material cost aggregation ──────────────────────────────────────────
@@ -1323,9 +1364,10 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
         }
         // Grounding conductor cost
         if (r.includeGround) {
-          const groundCpf = getWirePricePerFoot("thhn", r.groundSize ?? "12", r.conductorMaterial ?? "CU", userMaterials, undefined);
+          // Use groundMaterial for EGC pricing (defaults to CU if not set)
+          const groundCpf = getWirePricePerFoot("thhn", r.groundSize ?? "12", r.groundMaterial ?? "CU", userMaterials, undefined);
           if (groundCpf != null) {
-            const wireFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
+            const wireFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
             runCost += groundCpf * wireFt;
           }
         }
