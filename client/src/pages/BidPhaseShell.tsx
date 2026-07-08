@@ -1,11 +1,12 @@
 /**
- * BidPhaseShell — Main layout shell
+ * BidPhaseShell — Main layout shell v5.46
  * Desktop: fixed left sidebar (icon-only 64px, expands to 220px on hover)
  * Mobile:  fixed bottom navigation bar
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
  *
  * Routing (hash-based):
- *   /           → Projects home (search + grid)
+ *   /           → BidPhase Homepage (BP logo destination)
+ *   /projects   → Projects card grid
  *   /project/:id → Project detail (editable header + tabs)
  *   /residential → Residential estimating workspace (legacy)
  *   /commercial  → Commercial estimating workspace (legacy)
@@ -19,21 +20,21 @@
  */
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
-import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, IndustrialIcon, ElectricalIcon, ElectricalPanelIcon } from "@/components/tabs/UnifiedProjects";
+import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, IndustrialIcon } from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
-import ExportButton from "@/components/ExportButton";
 import MaterialListPage from "@/pages/MaterialListPage";
 import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
-import CategoryLanding from "@/pages/CategoryLanding";
 import TrashPage from "@/pages/TrashPage";
 import EstimateEnginePage from "@/pages/EstimateEnginePage";
-import ProjectsHomePage from "@/pages/ProjectsHomePage";
+import BidPhaseHomePage from "@/pages/BidPhaseHomePage";
+import ProjectsPage from "@/pages/ProjectsPage";
 import ProjectDetailPage from "@/pages/ProjectDetailPage";
-import { Settings, Trash2, ChevronRight, Zap, Database, Home } from "lucide-react";
+import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Route =
   | "home"
+  | "projects"
   | "project-detail"
   | "landing"
   | "civil"
@@ -52,7 +53,8 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   const parts = full.split("/");
   const p = parts[0];
 
-  if (p === "home") return { route: "home" };
+  if (p === "" || p === "home") return { route: "home" };
+  if (p === "projects") return { route: "projects" };
   if (p === "project" && parts[1]) {
     const id = parseInt(parts[1]);
     if (!isNaN(id)) return { route: "project-detail", projectId: id };
@@ -66,7 +68,7 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   if (p === "estimate") return { route: "estimate" };
   if (p === "settings") return { route: "settings" };
   if (p === "trash") return { route: "trash" };
-  // Default: show projects home
+  // Default: show homepage
   return { route: "home" };
 }
 
@@ -75,16 +77,6 @@ function getCurrentRouteState(): { route: Route; projectId?: number } {
   if (hash && hash.length > 1) return pathToRoute(hash);
   return pathToRoute(window.location.pathname);
 }
-
-// ── Nav config ──────────────────────────────────────────────────────────────
-const CATEGORY_ICONS = {
-  residential: ResidentialIcon,
-  commercial:  CommercialIcon,
-  civil:       CivilIcon,
-  industrial:  IndustrialIcon,
-} as const;
-
-const CATEGORY_ORDER = ["residential", "commercial", "industrial", "civil"] as const;
 
 export default function BidPhaseShell() {
   const {
@@ -105,6 +97,8 @@ export default function BidPhaseShell() {
   const navigate = useCallback((r: Route, id?: number) => {
     if (r === "home") {
       window.location.hash = "/home";
+    } else if (r === "projects") {
+      window.location.hash = "/projects";
     } else if (r === "project-detail" && id) {
       window.location.hash = `/project/${id}`;
     } else {
@@ -149,15 +143,15 @@ export default function BidPhaseShell() {
   }, [setActiveCategory, setActiveTab, setShowMaterialList]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
-  const isOnHome       = route === "home";
-  const isOnLanding    = route === "landing";
+  const isOnHome          = route === "home";
+  const isOnProjects      = route === "projects";
   const isOnProjectDetail = route === "project-detail";
-  const isInCategory   = route === "civil" || route === "commercial" || route === "residential" || route === "industrial";
-  const isInSettings   = route === "settings";
-  const isInTrash      = route === "trash";
-  const isInEstimate   = route === "estimate";
-  const isInMaterial   = route === "material";
-  const isInMatDb      = route === "matdb";
+  const isInCategory      = route === "civil" || route === "commercial" || route === "residential" || route === "industrial";
+  const isInSettings      = route === "settings";
+  const isInTrash         = route === "trash";
+  const isInEstimate      = route === "estimate";
+  const isInMaterial      = route === "material";
+  const isInMatDb         = route === "matdb";
 
   const currentCategory = isInCategory
     ? (route as "civil" | "commercial" | "residential" | "industrial")
@@ -171,23 +165,20 @@ export default function BidPhaseShell() {
 
   // ── Content renderer ───────────────────────────────────────────────────────
   const renderContent = () => {
-    if (isInMaterial)  return <MaterialListPage onBack={closeMaterialList} />;
-    if (isInMatDb)     return <MaterialDatabasePage onBack={goBack} />;
-    if (isOnHome || isOnLanding) return (
-      <ProjectsHomePage
-        onOpenProject={(id) => navigate("project-detail", id)}
-      />
-    );
+    if (isInMaterial)       return <MaterialListPage onBack={closeMaterialList} />;
+    if (isInMatDb)          return <MaterialDatabasePage onBack={goBack} />;
+    if (isOnHome)           return <BidPhaseHomePage onGoToProjects={() => navigate("projects")} />;
+    if (isOnProjects)       return <ProjectsPage onOpenProject={(id) => navigate("project-detail", id)} />;
     if (isOnProjectDetail && activeProjectId) return (
       <ProjectDetailPage
         projectId={activeProjectId}
-        onBack={() => navigate("home")}
+        onBack={() => navigate("projects")}
         onOpenMaterialList={openMaterialList}
       />
     );
-    if (isInTrash)     return <TrashPage onBack={goBack} />;
-    if (isInSettings)  return <SettingsTab onBack={goBack} />;
-    if (isInEstimate)  return <EstimateEnginePage onBack={goBack} />;
+    if (isInTrash)    return <TrashPage onBack={goBack} />;
+    if (isInSettings) return <SettingsTab onBack={goBack} />;
+    if (isInEstimate) return <EstimateEnginePage onBack={goBack} />;
     // Legacy category workspace
     return <UnifiedProjects category={currentCategory} />;
   };
@@ -230,11 +221,11 @@ export default function BidPhaseShell() {
         className="hidden md:flex flex-col shrink-0 w-16 hover:w-56 transition-[width] duration-200 ease-out
                    bg-sidebar border-r border-sidebar-border overflow-hidden group z-20"
       >
-        {/* Logo — click returns to home */}
+        {/* Logo — click returns to homepage */}
         <div
           onClick={() => navigate("home")}
           className="flex items-center justify-center gap-2 px-3 py-4 h-16 border-b border-sidebar-border shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-          title="Back to home"
+          title="BidPhase Home"
         >
           <span
             className="font-bold text-[#F5C518] text-sm shrink-0 group-hover:hidden"
@@ -254,8 +245,15 @@ export default function BidPhaseShell() {
         <nav className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
           <NavBtn
             onClick={() => navigate("home")}
-            isActive={isOnHome || isOnLanding || isOnProjectDetail}
+            isActive={isOnHome}
             icon={Home}
+            label="Home"
+            title="Home"
+          />
+          <NavBtn
+            onClick={() => navigate("projects")}
+            isActive={isOnProjects || isOnProjectDetail}
+            icon={FolderOpen}
             label="Projects"
             title="Projects"
           />
@@ -289,7 +287,7 @@ export default function BidPhaseShell() {
           <span
             className="text-[10px] text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 font-mono"
           >
-            v5.45 · Field Edition
+            v5.46 · Field Edition
           </span>
         </div>
       </aside>
@@ -308,12 +306,13 @@ export default function BidPhaseShell() {
           <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground font-mono">
             <ChevronRight size={12} />
             <span className="capitalize">
-              {isOnHome || isOnLanding ? "Projects"
+              {isOnHome        ? "Home"
+                : isOnProjects     ? "Projects"
                 : isOnProjectDetail ? "Project"
-                : isInTrash ? "Trash"
-                : isInSettings ? "Settings"
-                : isInEstimate ? "Estimate Engine"
-                : isInMaterial ? "Labor & Material"
+                : isInTrash        ? "Trash"
+                : isInSettings     ? "Settings"
+                : isInEstimate     ? "Estimate Engine"
+                : isInMaterial     ? "Labor & Material"
                 : "Workspace"}
             </span>
           </div>
@@ -334,11 +333,21 @@ export default function BidPhaseShell() {
           onClick={() => navigate("home")}
           className={cn(
             "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-            isOnHome || isOnProjectDetail ? "text-[#F5C518]" : "text-muted-foreground"
+            isOnHome ? "text-[#F5C518]" : "text-muted-foreground"
           )}
         >
-          <Home size={18} className={isOnHome || isOnProjectDetail ? "text-[#F5C518]" : ""} />
-          {(isOnHome || isOnProjectDetail) && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
+          <Home size={18} className={isOnHome ? "text-[#F5C518]" : ""} />
+          {isOnHome && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
+        </button>
+        <button
+          onClick={() => navigate("projects")}
+          className={cn(
+            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
+            (isOnProjects || isOnProjectDetail) ? "text-[#F5C518]" : "text-muted-foreground"
+          )}
+        >
+          <FolderOpen size={18} className={(isOnProjects || isOnProjectDetail) ? "text-[#F5C518]" : ""} />
+          {(isOnProjects || isOnProjectDetail) && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
         </button>
         <button
           onClick={() => navigate("settings")}
@@ -361,11 +370,6 @@ export default function BidPhaseShell() {
           {isInTrash && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
         </button>
       </nav>
-
-      {/* ── Floating Export Button ───────────────────────────────── */}
-      {!isInMaterial && !isOnHome && !isOnLanding && !isInTrash && !isInEstimate && !isInMatDb && !isOnProjectDetail && (
-        <ExportButton onOpenMaterialList={openMaterialList} />
-      )}
     </div>
   );
 }

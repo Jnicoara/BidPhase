@@ -475,3 +475,14 @@
 - [x] Vitest: test BOM aggregation (same item across 2 assemblies sums correctly)
 - [x] Vitest: test override/reset (override changes value, reset restores master)
 - [x] TypeScript: 0 errors after all changes
+
+## v5.46 — Dedicated Homepage + Classic Projects Card Layout (COMPLETE)
+
+- [x] Create a new BidPhase Homepage (route: /home) — BP branding, tagline, "Go to Projects" CTA button
+- [x] BP logo in sidebar navigates to /home (not directly to projects)
+- [x] Add a /projects route that shows the classic card-grid layout
+- [x] Projects page: dashed "+" card at end of grid to create a new project
+- [x] New project creation: name-only inline input (no modal, no extra fields required)
+- [x] Existing project cards: project name large, created date small, Open / Rename / Delete action row
+- [x] Sidebar nav: add "Projects" nav item pointing to /projects
+- [x] TypeScript: 0 errors after all changes
