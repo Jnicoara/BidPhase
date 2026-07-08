@@ -304,3 +304,16 @@
 - [x] Fix mouse pan jitter: stop calling setPanOffset during mousemove drag; write directly to DOM via ref, sync React state only on mouseup
 - [x] Fix left sidebar activating during pan: body.bp-dragging class added on mousedown, CSS pointer-events:none on aside during drag; global mouseup listener cleans up if mouse released outside viewport
 - [x] Fix measurement run total label occlusion: refactored drawRun into drawRunGeometry (lines+dots) + drawRunLabels (labels only); main draw loop now does all geometry first then all labels on top
+
+## v5.30 — Material Database Overhaul
+- [x] Schema: add category, userPrice, defaultPrice, lastUpdated columns to userMaterialsDb; push migration
+- [x] Backend: add updatePrice, resetPrice, addSingle procedures to dataRouter; update bulkImport to handle new columns
+- [x] CSV column mapping UI: after file select, show mapping screen before import
+- [x] Replace-database confirmation dialog with stern warning
+- [x] Inline-editable materials table with userPrice cell (saves immediately on blur/enter)
+- [x] Age indicator: color-code lastUpdated text (green <30d, yellow 30-90d, red >90d)
+- [x] Reset-to-default button (undo icon) with confirmation prompt
+- [x] Red-flag empty price cells (both userPrice and defaultPrice null/0)
+- [x] Add Custom Material button + quick-entry form
+- [x] Wire MaterialDatabasePage into BidPhaseShell sidebar nav
+- [x] Update estimating engine fallback: userPrice > defaultPrice, flag if both missing; CatalogPicker now shows user DB items with effective price

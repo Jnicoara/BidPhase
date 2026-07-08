@@ -8,8 +8,12 @@ import * as db from "../db";
 
 const materialItemSchema = z.object({
   itemCode: z.string().max(128).optional(),
+  category: z.string().max(128).optional(),
   description: z.string().min(1).max(512),
   unit: z.string().max(32).default("EA"),
+  defaultPrice: z.number().min(0).optional(),
+  userPrice: z.number().min(0).optional(),
+  // Legacy field — kept for backward compat with CatalogPicker
   unitMaterialCost: z.number().min(0).default(0),
   baseLaborHours: z.number().min(0).default(0),
   phase: z.string().max(128).optional(),
@@ -19,16 +23,19 @@ const materialItemSchema = z.object({
 
 export const dataRouter = router({
   materials: router({
-    /** List all active user materials */
+    /** List all active user materials, ordered by category then description */
     list: protectedProcedure.query(async ({ ctx }) => {
       return db.getUserMaterials(ctx.user.id);
     }),
 
-    /** Bulk import materials from a parsed CSV/JSON upload */
+    /**
+     * Bulk import materials from a parsed CSV upload.
+     * When replaceAll=true, the entire existing database is wiped first.
+     */
     bulkImport: protectedProcedure
       .input(
         z.object({
-          items: z.array(materialItemSchema).min(1).max(5000),
+          items: z.array(materialItemSchema).min(1).max(10000),
           replaceAll: z.boolean().default(false),
         })
       )
@@ -40,11 +47,84 @@ export const dataRouter = router({
           ...item,
           userId: ctx.user.id,
           itemCode: item.itemCode ?? null,
+          category: item.category ?? null,
           phase: item.phase ?? null,
           externalSku: item.externalSku ?? null,
+          defaultPrice: item.defaultPrice ?? null,
+          userPrice: item.userPrice ?? null,
+          // Mirror defaultPrice into unitMaterialCost for backward compat
+          unitMaterialCost: item.defaultPrice ?? item.unitMaterialCost ?? 0,
         }));
         await db.bulkInsertUserMaterials(rows);
         return { success: true, count: rows.length };
+      }),
+
+    /**
+     * Set the userPrice for a single material row.
+     * Automatically stamps lastUpdated to now.
+     * Pass null to clear the userPrice (same as reset but without confirmation).
+     */
+    updatePrice: protectedProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          userPrice: z.number().min(0).nullable(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        await db.updateMaterialPrice(input.id, ctx.user.id, input.userPrice);
+        return { success: true };
+      }),
+
+    /**
+     * Reset userPrice + lastUpdated to null for a single row.
+     * Returns the item to its defaultPrice baseline.
+     */
+    resetPrice: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        await db.resetMaterialPrice(input.id, ctx.user.id);
+        return { success: true };
+      }),
+
+    /**
+     * Add a single custom material row manually (no CSV required).
+     */
+    addSingle: protectedProcedure
+      .input(materialItemSchema)
+      .mutation(async ({ input, ctx }) => {
+        await db.addSingleMaterial({
+          ...input,
+          userId: ctx.user.id,
+          itemCode: input.itemCode ?? null,
+          category: input.category ?? null,
+          phase: input.phase ?? null,
+          externalSku: input.externalSku ?? null,
+          defaultPrice: input.defaultPrice ?? null,
+          userPrice: input.userPrice ?? null,
+          unitMaterialCost: input.defaultPrice ?? input.unitMaterialCost ?? 0,
+        });
+        return { success: true };
+      }),
+
+    /**
+     * Update description/unit/category/itemCode/defaultPrice for a single row.
+     */
+    updateRow: protectedProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          description: z.string().min(1).max(512).optional(),
+          unit: z.string().max(32).optional(),
+          category: z.string().max(128).nullable().optional(),
+          itemCode: z.string().max(128).nullable().optional(),
+          defaultPrice: z.number().min(0).nullable().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const { id, ...patch } = input;
+        await db.updateMaterialRow(id, ctx.user.id, patch as Parameters<typeof db.updateMaterialRow>[2]);
+        return { success: true };
       }),
 
     /** Delete a single material row */

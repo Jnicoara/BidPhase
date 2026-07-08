@@ -20,13 +20,14 @@ import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, Industrial
 import SettingsTab from "@/components/tabs/SettingsTab";
 import ExportButton from "@/components/ExportButton";
 import MaterialListPage from "@/pages/MaterialListPage";
+import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
 import CategoryLanding from "@/pages/CategoryLanding";
 import TrashPage from "@/pages/TrashPage";
 import EstimateEnginePage from "@/pages/EstimateEnginePage";
-import { Settings, Trash2, ChevronRight, Zap } from "lucide-react";
+import { Settings, Trash2, ChevronRight, Zap, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Route = "landing" | "civil" | "commercial" | "residential" | "industrial" | "material" | "settings" | "trash" | "estimate";
+type Route = "landing" | "civil" | "commercial" | "residential" | "industrial" | "material" | "settings" | "trash" | "estimate" | "matdb";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
 function pathToRoute(path: string): Route {
@@ -39,6 +40,7 @@ function pathToRoute(path: string): Route {
   if (p === "civil") return "civil";
   if (p === "industrial") return "industrial";
   if (p === "material") return "material";
+  if (p === "matdb") return "matdb";
   if (p === "estimate") return "estimate";
   if (p === "settings") return "settings";
   if (p === "trash") return "trash";
@@ -136,6 +138,7 @@ export default function BidPhaseShell() {
   const isInTrash      = route === "trash";
   const isInEstimate   = route === "estimate";
   const isInMaterial   = route === "material";
+  const isInMatDb      = route === "matdb";
 
   const currentCategory = isInCategory
     ? (route as "civil" | "commercial" | "residential" | "industrial")
@@ -161,6 +164,7 @@ export default function BidPhaseShell() {
   // Navigating to a category route opens that project workspace directly.
   const renderContent = () => {
     if (isInMaterial)  return <MaterialListPage onBack={closeMaterialList} />;
+    if (isInMatDb)     return <MaterialDatabasePage onBack={goBack} />;
     if (isOnLanding)   return (
       <CategoryLanding onSelect={(cat) => {
         setActiveCategory(cat);
@@ -232,8 +236,15 @@ export default function BidPhaseShell() {
           </span>
         </div>
 
-        {/* Nav items — top section (Projects tab removed — home IS the projects list) */}
+        {/* Nav items — top section */}
         <nav className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
+          <NavBtn
+            onClick={() => navigate("matdb")}
+            isActive={isInMatDb}
+            icon={Database}
+            label="Material Database"
+            title="Material Database"
+          />
           {/* Estimate Engine — hidden for now, backend intact */}
           {/* <div className="my-1 border-t border-sidebar-border/50" />
           <NavBtn
@@ -341,7 +352,7 @@ export default function BidPhaseShell() {
       </nav>
 
       {/* ── Floating Export Button ───────────────────────────────── */}
-      {!isInMaterial && !isOnLanding && !isInTrash && !isInEstimate && (
+      {!isInMaterial && !isOnLanding && !isInTrash && !isInEstimate && !isInMatDb && (
         <ExportButton onOpenMaterialList={openMaterialList} />
       )}
     </div>

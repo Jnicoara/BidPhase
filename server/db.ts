@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -149,7 +149,46 @@ export async function getUserMaterials(userId: number) {
   if (!db) return [];
   return db.select().from(userMaterialsDb)
     .where(and(eq(userMaterialsDb.userId, userId), eq(userMaterialsDb.isActive, true)))
-    .orderBy(userMaterialsDb.description);
+    .orderBy(asc(userMaterialsDb.category), asc(userMaterialsDb.description));
+}
+
+/** Set userPrice for a single material row; auto-stamps lastUpdated to now */
+export async function updateMaterialPrice(id: number, userId: number, userPrice: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(userMaterialsDb)
+    .set({ userPrice, lastUpdated: userPrice !== null ? new Date() : null, updatedAt: new Date() })
+    .where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
+}
+
+/** Reset userPrice + lastUpdated back to null (returns item to defaultPrice baseline) */
+export async function resetMaterialPrice(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(userMaterialsDb)
+    .set({ userPrice: null, lastUpdated: null, updatedAt: new Date() })
+    .where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
+}
+
+/** Add a single custom material row */
+export async function addSingleMaterial(row: InsertUserMaterialsDb) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(userMaterialsDb).values(row);
+  return result[0];
+}
+
+/** Update description/unit/category/defaultPrice for a single row */
+export async function updateMaterialRow(
+  id: number,
+  userId: number,
+  patch: Partial<Pick<InsertUserMaterialsDb, "description" | "unit" | "category" | "defaultPrice" | "itemCode">>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(userMaterialsDb)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
 }
 
 export async function bulkInsertUserMaterials(rows: InsertUserMaterialsDb[]) {

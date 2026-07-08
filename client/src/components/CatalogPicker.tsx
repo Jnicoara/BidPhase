@@ -12,12 +12,24 @@
  *   className    — optional wrapper class
  *   disabled     — disables the trigger
  */
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Search, X, ChevronDown, Tag } from "lucide-react";
+import { Search, X, ChevronDown, Tag, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CATALOG, CATALOG_CATEGORIES, searchCatalog, getCatalogItem } from "@/lib/materialCatalog";
 import type { CatalogItem } from "@/lib/materialCatalog";
+import { trpc } from "@/lib/trpc";
+
+/** Compute the effective price for a user DB material: userPrice > defaultPrice > unitMaterialCost */
+function dbEffectivePrice(m: {
+  userPrice: number | null;
+  defaultPrice: number | null;
+  unitMaterialCost: number | null;
+}): number {
+  if (m.userPrice != null && m.userPrice > 0) return m.userPrice;
+  if (m.defaultPrice != null && m.defaultPrice > 0) return m.defaultPrice;
+  return m.unitMaterialCost ?? 0;
+}
 
 interface CatalogPickerProps {
   value: string | null;
@@ -37,8 +49,28 @@ export default function CatalogPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [showUserDb, setShowUserDb] = useState(false);
   // Position of the dropdown portal
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  // Load user materials DB (only when picker is open)
+  const { data: userMaterials = [] } = trpc.data.materials.list.useQuery(undefined, {
+    enabled: open,
+    staleTime: 30_000,
+  });
+
+  // Convert user DB rows to CatalogItem shape with effective price
+  const userDbItems = useMemo((): CatalogItem[] =>
+    userMaterials.map((m) => ({
+      id: `db-${m.id}`,
+      category: m.category ?? m.phase ?? "My Materials",
+      description: m.description,
+      unit: m.unit ?? "EA",
+      unitPrice: dbEffectivePrice(m as { userPrice: number | null; defaultPrice: number | null; unitMaterialCost: number | null }),
+      notes: m.userPrice != null ? "custom price" : m.defaultPrice != null ? "default price" : undefined,
+    })),
+    [userMaterials]
+  );
 
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -109,12 +141,29 @@ export default function CatalogPicker({
     onChange(null);
   };
 
-  // Filtered results
-  const results = query.trim()
-    ? searchCatalog(query, 40)
-    : activeCategory
-      ? CATALOG.filter((i) => i.category === activeCategory).slice(0, 40)
-      : CATALOG.slice(0, 20);
+  // Filtered results — either from static catalog or user DB
+  const results = useMemo(() => {
+    if (showUserDb) {
+      if (query.trim()) {
+        const q = query.toLowerCase();
+        return userDbItems.filter(
+          (i) => i.description.toLowerCase().includes(q) || i.category.toLowerCase().includes(q)
+        ).slice(0, 40);
+      }
+      return activeCategory
+        ? userDbItems.filter((i) => i.category === activeCategory).slice(0, 40)
+        : userDbItems.slice(0, 40);
+    }
+    if (query.trim()) return searchCatalog(query, 40);
+    if (activeCategory) return CATALOG.filter((i) => i.category === activeCategory).slice(0, 40);
+    return CATALOG.slice(0, 20);
+  }, [showUserDb, query, activeCategory, userDbItems]);
+
+  // User DB categories
+  const userDbCategories = useMemo(() => {
+    const cats = new Set(userDbItems.map((i) => i.category));
+    return Array.from(cats).sort();
+  }, [userDbItems]);
 
   const dropdown = open && dropdownPos ? createPortal(
     <div
@@ -128,6 +177,32 @@ export default function CatalogPicker({
         maxHeight: "360px",
       }}
     >
+      {/* Source toggle: App Catalog vs My Materials */}
+      <div className="flex border-b border-border shrink-0">
+        <button
+          onClick={() => { setShowUserDb(false); setActiveCategory(null); }}
+          className={cn(
+            "flex-1 py-1.5 text-[10px] font-medium transition-colors",
+            !showUserDb ? "bg-[#F5C518]/15 text-[#F5C518]" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          App Catalog
+        </button>
+        <button
+          onClick={() => { setShowUserDb(true); setActiveCategory(null); }}
+          className={cn(
+            "flex-1 py-1.5 text-[10px] font-medium transition-colors flex items-center justify-center gap-1",
+            showUserDb ? "bg-[#F5C518]/15 text-[#F5C518]" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Database size={10} />
+          My Materials
+          {userMaterials.length > 0 && (
+            <span className="ml-1 bg-muted/60 rounded px-1 text-[9px]">{userMaterials.length}</span>
+          )}
+        </button>
+      </div>
+
       {/* Search input */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0">
         <Search size={12} className="text-muted-foreground shrink-0" />
@@ -135,7 +210,7 @@ export default function CatalogPicker({
           ref={inputRef}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setActiveCategory(null); }}
-          placeholder="Search by name, category…"
+          placeholder={showUserDb ? "Search your materials…" : "Search by name, category…"}
           className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none font-mono"
         />
         {query && (
@@ -145,7 +220,7 @@ export default function CatalogPicker({
         )}
       </div>
 
-      {/* Category chips (only shown when no query) — 2-column stacked grid */}
+      {/* Category chips (only shown when no query) */}
       {!query && (
         <div className="px-3 py-2 border-b border-border/50 shrink-0">
           <div className="grid grid-cols-2 gap-1">
@@ -155,7 +230,7 @@ export default function CatalogPicker({
                 !activeCategory ? "bg-[#F5C518] text-black border-[#F5C518]" : "bg-transparent text-muted-foreground border-border hover:border-[#F5C518]/40"
               )}
             >All</button>
-            {CATALOG_CATEGORIES.map((cat) => (
+            {(showUserDb ? userDbCategories : CATALOG_CATEGORIES).map((cat) => (
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
@@ -171,7 +246,11 @@ export default function CatalogPicker({
       {/* Results list */}
       <div className="overflow-y-auto flex-1">
         {results.length === 0 ? (
-          <div className="px-4 py-6 text-center text-xs text-muted-foreground">No items found for "{query}"</div>
+          <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+            {showUserDb && userMaterials.length === 0
+              ? "No materials in your database yet. Import a CSV or add items manually."
+              : `No items found for "${query}"`}
+          </div>
         ) : (
           results.map((item) => (
             <button
@@ -186,11 +265,22 @@ export default function CatalogPicker({
                 <div className={cn("text-xs font-medium truncate", value === item.id ? "text-[#F5C518]" : "text-foreground")}>
                   {item.description}
                 </div>
-                <div className="text-[10px] text-muted-foreground font-mono">{item.category}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground font-mono">{item.category}</span>
+                  {item.notes && (
+                    <span className="text-[9px] px-1 rounded bg-[#F5C518]/15 text-[#F5C518]/80">{item.notes}</span>
+                  )}
+                </div>
               </div>
               <div className="shrink-0 text-right">
-                <div className="text-xs font-bold font-mono text-[#F5C518]">${item.unitPrice.toFixed(2)}</div>
-                <div className="text-[10px] text-muted-foreground font-mono">/{item.unit}</div>
+                {item.unitPrice > 0 ? (
+                  <>
+                    <div className="text-xs font-bold font-mono text-[#F5C518]">${item.unitPrice.toFixed(2)}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono">/{item.unit}</div>
+                  </>
+                ) : (
+                  <div className="text-[10px] text-red-400 font-mono">⚠ no price</div>
+                )}
               </div>
             </button>
           ))
