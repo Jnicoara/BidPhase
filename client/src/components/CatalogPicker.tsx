@@ -267,9 +267,7 @@ export default function CatalogPicker({
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-muted-foreground font-mono">{item.category}</span>
-                  {item.notes && (
-                    <span className="text-[9px] px-1 rounded bg-[#F5C518]/15 text-[#F5C518]/80">{item.notes}</span>
-                  )}
+
                 </div>
               </div>
               <div className="shrink-0 text-right">

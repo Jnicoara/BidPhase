@@ -326,3 +326,9 @@
 - [x] Waste factor: simplified conduit runs to single shared slider (default 10%) for both conduit and wire
 - [x] Auto cost-per-foot: conduit and wire size selection auto-looks up price from catalog via getConduitPricePerFoot/getWirePricePerFoot
 - [x] Run totals show emerald-green material cost breakdown (conduit cost + wire cost + total) with cost/ft × billable ft formula displayed
+
+## v5.32 — Catalog Expansion to 1,021 Items
+- [x] Expanded master electrical catalog from 623 to 1,021 items
+- [x] Added: Lighting (48 items: LED wafers, vapor tights, exit/emergency, outdoor, commercial), Low Voltage & Data (26 items: structured wiring, patch panels), Civil & Misc expanded (69 items: ground rods, grounding, marking tape, site materials), additional Distribution (252 total), Conduit Fittings (219 total), Wire & Cable (127 total)
+- [x] Fixed all Unicode inch symbol and escaped-quote issues in description strings
+- [x] TypeScript: 0 errors, dev server: clean
