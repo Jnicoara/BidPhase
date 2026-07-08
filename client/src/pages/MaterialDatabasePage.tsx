@@ -545,10 +545,49 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
     onError: (err) => toast.error(err.message),
   });
 
+  const restoreSnapshot = trpc.data.materials.restoreSnapshot.useMutation({
+    onSuccess: (res) => {
+      toast.success(res.count > 0 ? `Restored ${res.count} items from your previous database.` : "Database cleared — no previous data to restore.");
+      utils.data.materials.list.invalidate();
+    },
+    onError: (err) => toast.error(`Restore failed: ${err.message}`),
+  });
+
   const seedFromCatalog = trpc.data.materials.seedFromCatalog.useMutation({
     onSuccess: (res) => {
-      toast.success(`Loaded ${res.count} items from the master catalog`);
       utils.data.materials.list.invalidate();
+      // Show a timed Undo toast — the snapshot is held in memory for 15s
+      const snapshot = res.snapshot;
+      toast.success(
+        `Loaded ${res.count} items from the master catalog.`,
+        {
+          duration: 15000,
+          action: snapshot.length > 0 ? {
+            label: "Undo",
+            onClick: () => {
+              restoreSnapshot.mutate({
+                snapshot: snapshot.map((item) => ({
+                  description: item.description,
+                  category: item.category ?? null,
+                  itemCode: item.itemCode ?? null,
+                  unit: item.unit ?? "EA",
+                  defaultPrice: item.defaultPrice ?? null,
+                  userPrice: item.userPrice ?? null,
+                  unitMaterialCost: item.unitMaterialCost ?? 0,
+                  baseLaborHours: item.baseLaborHours ?? 0,
+                  phase: item.phase ?? null,
+                  source: item.source ?? "custom",
+                  externalSku: item.externalSku ?? null,
+                  lastUpdated: item.lastUpdated instanceof Date ? item.lastUpdated.toISOString() : (item.lastUpdated ?? null),
+                })),
+              });
+            },
+          } : undefined,
+          description: snapshot.length > 0
+            ? `Your previous ${snapshot.length} items are saved for 15 seconds — click Undo to restore them.`
+            : undefined,
+        }
+      );
     },
     onError: (err) => toast.error(`Seed failed: ${err.message}`),
   });

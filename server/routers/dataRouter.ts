@@ -150,12 +150,16 @@ export const dataRouter = router({
 
     /**
      * Seed the user's material database from the built-in master catalog.
-     * When replaceAll=true, wipes existing data first.
+     * When replaceAll=true, wipes existing data first and returns a snapshot
+     * of the old data so the client can offer an Undo action.
      */
     seedFromCatalog: protectedProcedure
       .input(z.object({ replaceAll: z.boolean().default(false) }))
       .mutation(async ({ input, ctx }) => {
+        // Capture snapshot BEFORE wiping so the client can undo
+        let snapshot: Awaited<ReturnType<typeof db.getUserMaterials>> = [];
         if (input.replaceAll) {
+          snapshot = await db.getUserMaterials(ctx.user.id);
           await db.clearUserMaterials(ctx.user.id);
         }
         const rows = CATALOG.map((item) => ({
@@ -173,7 +177,54 @@ export const dataRouter = router({
           externalSku: null,
         }));
         await db.bulkInsertUserMaterials(rows);
-        return { success: true, count: rows.length };
+        return { success: true, count: rows.length, snapshot };
+      }),
+
+    /**
+     * Restore a snapshot of user materials (used for Undo after catalog reload).
+     * Wipes current data and re-inserts the snapshot rows.
+     */
+    restoreSnapshot: protectedProcedure
+      .input(
+        z.object({
+          snapshot: z.array(
+            z.object({
+              description: z.string(),
+              category: z.string().nullable(),
+              itemCode: z.string().nullable(),
+              unit: z.string(),
+              defaultPrice: z.number().nullable(),
+              userPrice: z.number().nullable(),
+              unitMaterialCost: z.number(),
+              baseLaborHours: z.number(),
+              phase: z.string().nullable(),
+              source: z.string(),
+              externalSku: z.string().nullable(),
+              lastUpdated: z.string().nullable(),
+            })
+          ),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        await db.clearUserMaterials(ctx.user.id);
+        if (input.snapshot.length > 0) {
+          const rows = input.snapshot.map((item) => ({
+            userId: ctx.user.id,
+            itemCode: item.itemCode,
+            category: item.category,
+            description: item.description,
+            unit: item.unit,
+            defaultPrice: item.defaultPrice,
+            userPrice: item.userPrice,
+            unitMaterialCost: item.unitMaterialCost,
+            baseLaborHours: item.baseLaborHours,
+            phase: item.phase,
+            source: item.source,
+            externalSku: item.externalSku,
+          }));
+          await db.bulkInsertUserMaterials(rows);
+        }
+        return { success: true, count: input.snapshot.length };
       }),
   }),
 });
