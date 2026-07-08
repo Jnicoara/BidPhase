@@ -1426,21 +1426,6 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
         <SummaryStrip totalFeet={totalFeet} totalSticks={totalSticks} totalWire={totalWire} />
       )}
 
-      {/* Live material cost total */}
-      {(runs.length > 0 || countSessions.some(cs => cs.pins.length > 0)) && grandTotalMaterialCost > 0 && (
-        <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
-          <div>
-            <div className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</div>
-            {unitCountCost > 0 && totalMaterialCost > 0 && (
-              <div className="text-[9px] text-muted-foreground font-mono">
-                Runs: ${totalMaterialCost.toFixed(2)} · Count: ${unitCountCost.toFixed(2)}
-              </div>
-            )}
-          </div>
-          <div className="text-xl font-bold font-mono text-emerald-400">${grandTotalMaterialCost.toFixed(2)}</div>
-        </div>
-      )}
-
       {/* ── Labor & Material Summary ── */}
       <SectionHeader icon={<span />} title="Labor & Material Summary" />
       <div className="space-y-1">

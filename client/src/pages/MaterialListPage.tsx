@@ -19,9 +19,123 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
-import type { LaborLine, SavedMaterialRow, CivilProject } from "@/contexts/AppContext";
+import type { LaborLine, SavedMaterialRow, CivilProject, RunItem } from "@/contexts/AppContext";
 import CatalogPicker from "@/components/CatalogPicker";
-import { CATALOG, type CatalogItem } from "@/lib/materialCatalog";
+import { CATALOG, type CatalogItem, getConduitPricePerFoot, getWirePricePerFoot, type UserMaterialRow } from "@/lib/materialCatalog";
+import { trpc } from "@/lib/trpc";
+
+// ── Calc helpers (mirrors UnifiedProjects.tsx) ────────────────────────────────
+function calcConduitBillable(feet: number, conduitWasteFactor = 10) {
+  return parseFloat((feet * (1 + conduitWasteFactor / 100)).toFixed(1));
+}
+function calcConduitWire(feet: number, conductors: number, wireTermMakeup = 0, numPullPoints = 0, wireWasteFactor = 10) {
+  const netWireLength = feet + wireTermMakeup * numPullPoints;
+  return parseFloat((netWireLength * (1 + wireWasteFactor / 100) * conductors).toFixed(1));
+}
+function calcWire(feet: number, conductors: number, makeupAllowance = 0, serviceLoop = 0, numTerminations = 0, wirewasteFactor = 10) {
+  const netLength = feet + makeupAllowance * numTerminations + serviceLoop;
+  return parseFloat((netLength * (1 + wirewasteFactor / 100)).toFixed(1));
+}
+
+/** Expand a single RunItem into one or more MaterialRows with accurate billable qty + price */
+function expandRunToRows(r: RunItem, prefix: string, seenIds: Set<string>, userMaterials: UserMaterialRow[]): MaterialRow[] {
+  const out: MaterialRow[] = []
+  const isWireRun = (r.runType ?? "conduit") === "wire";
+  const runLabel = r.name || "Unnamed";
+
+  if (!isWireRun) {
+    // ── Conduit row ──────────────────────────────────────────────────────────
+    const conduitBillable = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10);
+    const conduitCpf = getConduitPricePerFoot(r.conduitType ?? "EMT", r.conduitSize ?? "1/2", userMaterials);
+    const conduitId = `${prefix}-r-${r.id}-conduit`;
+    if (!seenIds.has(conduitId)) {
+      seenIds.add(conduitId);
+      out.push({
+        id: conduitId,
+        description: `${r.conduitType ?? "EMT"} ${r.conduitSize ?? "1/2"}" Conduit — ${runLabel}`,
+        unit: "FT",
+        qty: conduitBillable,
+        unitCost: conduitCpf ?? 0,
+        notes: `${r.feet.toFixed(1)} ft measured · ${r.conduitWasteFactor ?? 10}% waste`,
+        catalogId: null,
+        source: "run",
+      });
+    }
+
+    // ── Wire rows (skip if conduit-only) ─────────────────────────────────────
+    if (!r.conduitOnly) {
+      const wireTypeStr = r.wireTypeId ? r.wireTypeId.replace(/^wir-/, "") : "thhn";
+      const effectiveWireSize = (wireTypeStr === "MC" || wireTypeStr === "NM")
+        ? (r.wireTypeId?.match(/-([\d/]+(?:-\d+)?)(?:-[a-z])?$/i)?.[1] ?? r.conductorSize ?? "12")
+        : (r.conductorSize ?? "12");
+      const wireBillable = calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+      const wireCpf = getWirePricePerFoot(wireTypeStr, effectiveWireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
+      const wireId = `${prefix}-r-${r.id}-wire`;
+      if (!seenIds.has(wireId)) {
+        seenIds.add(wireId);
+        const matLabel = r.conductorMaterial === "AL" ? "Al" : "Cu";
+        out.push({
+          id: wireId,
+          description: `#${effectiveWireSize} ${matLabel} ${wireTypeStr.toUpperCase()} Wire — ${runLabel}`,
+          unit: "FT",
+          qty: wireBillable,
+          unitCost: wireCpf ?? 0,
+          notes: `${r.conductors} conductor${r.conductors !== 1 ? "s" : ""} · ${r.wireWasteFactor ?? 10}% waste`,
+          catalogId: null,
+          source: "run",
+        });
+      }
+
+      // ── EGC row ──────────────────────────────────────────────────────────────
+      if (r.includeGround) {
+        const egcBillable = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+        const egcCpf = getWirePricePerFoot("thhn", r.groundSize ?? "12", r.groundMaterial ?? "CU", userMaterials, undefined);
+        const egcId = `${prefix}-r-${r.id}-egc`;
+        if (!seenIds.has(egcId)) {
+          seenIds.add(egcId);
+          const egcMatLabel = r.groundMaterial === "AL" ? "Al" : "Cu";
+          out.push({
+            id: egcId,
+            description: `#${r.groundSize ?? "12"} ${egcMatLabel} THHN EGC — ${runLabel}`,
+            unit: "FT",
+            qty: egcBillable,
+            unitCost: egcCpf ?? 0,
+            notes: `EGC · ${r.wireWasteFactor ?? 10}% waste`,
+            catalogId: null,
+            source: "run",
+          });
+        }
+      }
+    }
+  } else {
+    // ── Wire-only run ─────────────────────────────────────────────────────────
+    const wireTypeStr = r.wireTypeId ? r.wireTypeId.replace(/^wir-/, "") : "thhn";
+    const effectiveWireSize = (wireTypeStr === "MC" || wireTypeStr === "NM")
+      ? (r.wireTypeId?.match(/-([\d/]+(?:-\d+)?)(?:-[a-z])?$/i)?.[1] ?? r.conductorSize ?? "12")
+      : (r.conductorSize ?? "12");
+    // calcWire returns per-conductor footage
+    const perConductorFt = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 10);
+    const totalWireFt = parseFloat((perConductorFt * r.conductors).toFixed(1));
+    const wireCpf = getWirePricePerFoot(wireTypeStr, effectiveWireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
+    const wireId = `${prefix}-r-${r.id}-wire`;
+    if (!seenIds.has(wireId)) {
+      seenIds.add(wireId);
+      const matLabel = r.conductorMaterial === "AL" ? "Al" : "Cu";
+      out.push({
+        id: wireId,
+        description: `#${effectiveWireSize} ${matLabel} ${wireTypeStr.toUpperCase()} Wire — ${runLabel}`,
+        unit: "FT",
+        qty: totalWireFt,
+        unitCost: wireCpf ?? 0,
+        notes: `${r.conductors} conductor${r.conductors !== 1 ? "s" : ""} · ${r.wirewasteFactor ?? 10}% waste`,
+        catalogId: null,
+        source: "run",
+      });
+    }
+  }
+
+  return out;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface MaterialRow {
@@ -198,12 +312,16 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
     traineeRate, setTraineeRate,
   } = useApp();
 
+  // Fetch user DB prices so run rows get accurate unit costs
+  const { data: userMaterials = [] } = trpc.data.materials.list.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+
   const goBack = onBack ?? (() => {
-    // Navigate back via hash so browser back/forward history is preserved
     window.history.back();
   });
 
-  // ── Build initial material rows from all three active projects ──────────────
+  // ── Build material rows from all active projects ────────────────────────
   const buildRows = useCallback((): MaterialRow[] => {
     const allRows: MaterialRow[] = [];
     const seenIds = new Set<string>();
@@ -230,13 +348,11 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
         const unitCost = s.priceMode === "total" ? (qty > 0 ? (s.unitCost ?? 0) / qty : 0) : (s.unitCost ?? 0);
         allRows.push({ id, description: s.name || "Unnamed", unit: "EA", qty, unitCost, notes: "", catalogId: null, source: "session" });
       }
-      // Runs
+      // Runs — expanded into individual line items (conduit + wire + EGC) with real prices
       for (const r of st.runs ?? []) {
         if (!r.feet) continue;
-        const id = `${prefix}-r-${r.id}`;
-        if (seenIds.has(id)) continue;
-        seenIds.add(id);
-        allRows.push({ id, description: `Run: ${r.name || "Unnamed"} (${r.conduitType ?? ""} ${r.conduitSize ?? ""})`.trim(), unit: "FT", qty: Math.round(r.feet), unitCost: 0, notes: r.conductors ? `${r.conductors} conductors` : "", catalogId: null, source: "run" });
+        const expanded = expandRunToRows(r, prefix, seenIds, userMaterials);
+        allRows.push(...expanded);
       }
     };
 
@@ -247,7 +363,7 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
     // Legacy projects (fallback for old data / direct access)
     addProjectRows(activeCivilProject, "civil");
     return allRows;
-  }, [activeCivilProject, activeCommercialProject, activeResidentialProject, activeCivilCatProject, activeCommercialCatProject, activeResidentialCatProject]);
+  }, [activeCivilProject, activeCommercialProject, activeResidentialProject, activeCivilCatProject, activeCommercialCatProject, activeResidentialCatProject, userMaterials]);
 
   const [rows, setRows] = useState<MaterialRow[]>(() => buildRows());
   const [manualRows, setManualRows] = useState<MaterialRow[]>([]);
