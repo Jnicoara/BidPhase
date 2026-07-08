@@ -364,3 +364,13 @@
 - [x] Wire type list: derived from user DB (THHN/NM-B/MC/SER/URD/XHHW keywords), falls back to wireTypes catalog
 - [x] Live pricing: cost-per-foot re-reads from user DB on every render (already wired — verify)
 - [x] TypeScript: 0 errors after all changes
+
+## v5.39 — Run Tool Fixes
+- [x] Rename "Conduit" run type button to "Conduit & Wire"
+- [x] Wire Only mode: remove conductor size (AWG) picker — size is embedded in wire type selection
+- [x] Run type: ensure selecting one type clears the other (no dual runType + conduitOnly conflict)
+- [x] Add MC Cable sizes to materialCatalog: 14/2, 14/3, 12/2, 12/3, 10/2, 10/3 (per foot + per 250ft roll)
+- [x] Add MC fittings to materialCatalog: MC connectors (straight, 90°), MC staples, MC straps
+- [x] Add "MC Cable" as a dedicated category tab in WireTypePicker with all MC sizes
+- [x] Fix conduit trade sizes per type: EMT (1/2–4"), RMC (1/2–6"), IMC (1/2–4"), PVC (1/2–6"), FMC (3/8–2"), LFMC (3/8–2"), ENT (1/2–2"), LFNC (3/8–1"), GRC (1/2–4") — only show sizes valid for each type
+- [x] Diagnose and fix pricing calculation bug: MC/NM catalog lookup now uses full wireTypeId (e.g. mc-12-2 → wir-mc-12-2) instead of size-only fallback

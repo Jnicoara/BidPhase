@@ -582,17 +582,96 @@ function RunCard({
     ? 0
     : calcConduitWire(run.feet, run.conductors, wireTermMakeup, numPullPoints, wireWasteFactor);
 
+  // ── Conduit sizes filtered per conduit type ──
+  // Real NEC trade sizes available for each conduit type
+  const CONDUIT_SIZES_BY_TYPE: Record<string, { value: string; label: string }[]> = {
+    EMT:  [
+      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
+      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
+      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
+      { value: "3-1/2", label: '3½"' }, { value: "4",     label: '4"'  },
+    ],
+    RMC:  [
+      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
+      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
+      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
+      { value: "3-1/2", label: '3½"' }, { value: "4",     label: '4"'  },
+    ],
+    IMC:  [
+      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
+      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
+      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
+    ],
+    PVC:  [
+      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
+      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
+      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
+      { value: "3-1/2", label: '3½"' }, { value: "4",     label: '4"'  },
+      { value: "5",     label: '5"'  }, { value: "6",     label: '6"'  },
+    ],
+    FMC:  [
+      { value: "3/8",   label: '⅜"'  }, { value: "1/2",   label: '½"'  },
+      { value: "3/4",   label: '¾"'  }, { value: "1",     label: '1"'  },
+      { value: "1-1/4", label: '1¼"' }, { value: "1-1/2", label: '1½"' },
+      { value: "2",     label: '2"'  },
+    ],
+    LFMC: [
+      { value: "3/8",   label: '⅜"'  }, { value: "1/2",   label: '½"'  },
+      { value: "3/4",   label: '¾"'  }, { value: "1",     label: '1"'  },
+      { value: "1-1/4", label: '1¼"' }, { value: "1-1/2", label: '1½"' },
+      { value: "2",     label: '2"'  },
+    ],
+    LFNC: [
+      { value: "3/8",   label: '⅜"'  }, { value: "1/2",   label: '½"'  },
+      { value: "3/4",   label: '¾"'  }, { value: "1",     label: '1"'  },
+    ],
+    ENT:  [
+      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
+      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
+    ],
+    GRC:  [
+      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
+      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
+      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
+      { value: "3-1/2", label: '3½"' }, { value: "4",     label: '4"'  },
+    ],
+  };
+  const conduitSizesForType = CONDUIT_SIZES_BY_TYPE[run.conduitType ?? "EMT"] ?? CONDUIT_SIZES_BY_TYPE["EMT"];
+
   // ── Cost-per-foot lookup: user DB price > built-in catalog ──
+  // For jacketed cables (MC, NM), parse the AWG size from the wireTypeId (e.g. "mc-12-2" → "12")
+  const parseWireIdSize = (id?: string): string => {
+    if (!id) return "12";
+    // IDs like "mc-12-2", "nm-14-2", "thhn-12-cu" → extract first numeric segment after type prefix
+    const parts = id.split("-");
+    for (const p of parts) {
+      if (/^\d+$/.test(p) || /^\d+\/\d+$/.test(p)) return p;
+    }
+    return "12";
+  };
   const conduitCostPerFt = !isWire
     ? getConduitPricePerFoot(run.conduitType ?? "EMT", run.conduitSize ?? "1/2", userMaterials)
     : null;
-  const wireTypeStr = isWire
-    ? (run.wireTypeId?.includes("NM") || run.wireTypeId?.includes("nm") ? "NM"
-       : run.wireTypeId?.includes("mc") || run.wireTypeId?.includes("MC") ? "MC"
-       : "THHN")
-    : "THHN";
+  const wireTypeStr = (() => {
+    const id = run.wireTypeId ?? "";
+    if (id.startsWith("nm") || id.includes("nm-b") || id.includes("romex")) return "NM";
+    if (id.startsWith("mc") || id.includes("mc-")) return "MC";
+    if (id.startsWith("xhhw")) return "XHHW";
+    if (id.startsWith("bare") || id.startsWith("ground")) return "BARE";
+    return "THHN";
+  })();
+  // For jacketed cables, size comes from wireTypeId; for THHN/XHHW, use conductorSize picker
+  const effectiveWireSize = (wireTypeStr === "MC" || wireTypeStr === "NM")
+    ? parseWireIdSize(run.wireTypeId)
+    : (run.conductorSize ?? "12");
   const wireCostPerFt = (!conduitOnly)
-    ? getWirePricePerFoot(wireTypeStr, run.conductorSize ?? "12", run.conductorMaterial ?? "CU", userMaterials)
+    ? getWirePricePerFoot(wireTypeStr, effectiveWireSize, run.conductorMaterial ?? "CU", userMaterials, run.wireTypeId)
     : null;
 
   const conduitMaterialCost = conduitCostPerFt != null ? conduitCostPerFt * conduitBillable : null;
@@ -770,7 +849,7 @@ function RunCard({
             <div className="space-y-1.5">
               <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Size</Label>
               <div className="grid grid-cols-5 gap-1">
-                {CONDUIT_SIZES.map((cs) => (
+                {conduitSizesForType.map((cs) => (
                   <button key={cs.value}
                     onClick={() => onUpdate(run.id, { conduitSize: cs.value })}
                     className={cn(
@@ -972,26 +1051,7 @@ function RunCard({
               onChange={(id, stranded) => onUpdate(run.id, { wireTypeId: id, wireStranded: stranded })}
             />
 
-            {/* Conductor Size */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Size (AWG)</Label>
-              <div className="grid grid-cols-5 gap-1">
-                {CONDUCTOR_SIZES.map((sz) => (
-                  <button key={sz}
-                    onClick={() => onUpdate(run.id, { conductorSize: sz as ConductorSize })}
-                    className={cn(
-                      "py-1 rounded text-[10px] font-mono font-medium border transition-all",
-                      (run.conductorSize ?? "12") === sz
-                        ? "bg-yellow-400 text-black border-yellow-400"
-                        : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                    )}>
-                    {sz}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Wire-Only Estimating Inputs */}
+            {/* Wire-Only Estimating Inputs — no separate AWG picker; size is embedded in the wire type selection above */}
             <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
               <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
               <div className="grid grid-cols-2 gap-3">

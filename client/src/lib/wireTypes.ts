@@ -23,6 +23,7 @@ export interface WireType {
 
 export type WireCategory =
   | "NM Cable (Romex)"
+  | "MC Cable"
   | "Service Entrance"
   | "THHN / THWN"
   | "XHHW"
@@ -33,6 +34,7 @@ export type WireCategory =
 
 export const WIRE_CATEGORIES: WireCategory[] = [
   "NM Cable (Romex)",
+  "MC Cable",
   "Service Entrance",
   "THHN / THWN",
   "XHHW",
@@ -442,21 +444,23 @@ export const WIRE_TYPES: WireType[] = [
     description: "18 AWG, 5-conductor, HVAC thermostat cable",
   },
 
+  // ── MC Cable ─────────────────────────────────────────────────────────────────
+  { id: "mc-14-2", label: "14/2 MC Cable", category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 14 AWG, 2-conductor + ground, 15A" },
+  { id: "mc-14-3", label: "14/3 MC Cable", category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 14 AWG, 3-conductor + ground, 15A" },
+  { id: "mc-12-2", label: "12/2 MC Cable", category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 12 AWG, 2-conductor + ground, 20A" },
+  { id: "mc-12-3", label: "12/3 MC Cable", category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 12 AWG, 3-conductor + ground, 20A" },
+  { id: "mc-12-4", label: "12/4 MC Cable", category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 12 AWG, 4-conductor + ground, 20A" },
+  { id: "mc-10-2", label: "10/2 MC Cable", category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 10 AWG, 2-conductor + ground, 30A" },
+  { id: "mc-10-3", label: "10/3 MC Cable", category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 10 AWG, 3-conductor + ground, 30A" },
+  { id: "mc-8-2",  label: "8/2 MC Cable",  category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 8 AWG, 2-conductor + ground, 40A" },
+  { id: "mc-8-3",  label: "8/3 MC Cable",  category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 8 AWG, 3-conductor + ground, 40A" },
+  { id: "mc-6-2",  label: "6/2 MC Cable",  category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 6 AWG, 2-conductor + ground, 55A" },
+  { id: "mc-6-3",  label: "6/3 MC Cable",  category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 6 AWG, 3-conductor + ground, 55A" },
+  { id: "mc-4-3",  label: "4/3 MC Cable",  category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 4 AWG, 3-conductor + ground, 70A" },
+  { id: "mc-2-3",  label: "2/3 MC Cable",  category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 2 AWG, 3-conductor + ground, 95A" },
+  { id: "mc-2-4",  label: "2/4 MC Cable",  category: "MC Cable", hasStrandedChoice: false, description: "Metal-clad armored cable, 2 AWG, 4-conductor + ground, 95A" },
+
   // ── Specialty ─────────────────────────────────────────────────────────────
-  {
-    id: "mc-12-2",
-    label: "12/2 MC Cable",
-    category: "Specialty",
-    hasStrandedChoice: false,
-    description: "Metal-clad armored cable, 12 AWG, 2-conductor + ground",
-  },
-  {
-    id: "mc-12-3",
-    label: "12/3 MC Cable",
-    category: "Specialty",
-    hasStrandedChoice: false,
-    description: "Metal-clad armored cable, 12 AWG, 3-conductor + ground",
-  },
   {
     id: "ac-12-2",
     label: "12/2 AC-90 (BX)",

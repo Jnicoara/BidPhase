@@ -561,11 +561,28 @@ export const CATALOG: CatalogItem[] = [
   { id: "wir-mc-2-3",              category: "Wire & Cable", description: "2/3 MC Cable w/Ground (per foot)",                          unit: "FT", unitPrice: 7.50 },
   { id: "wir-mc-2-4",              category: "Wire & Cable", description: "2/4 MC Cable w/Ground (per foot)",                          unit: "FT", unitPrice: 9.50 },
 
-  // ── MC Cable Connectors ───────────────────────────────────────────────────
-  { id: "wir-mc-conn-3/8",         category: "Wire & Cable", description: "3/8\" MC Cable Connector",                                  unit: "EA", unitPrice: 1.25 },
-  { id: "wir-mc-conn-1/2",         category: "Wire & Cable", description: "1/2\" MC Cable Connector",                                  unit: "EA", unitPrice: 1.55 },
-  { id: "wir-mc-conn-3/4",         category: "Wire & Cable", description: "3/4\" MC Cable Connector",                                  unit: "EA", unitPrice: 2.25 },
-  { id: "wir-mc-conn-1",           category: "Wire & Cable", description: "1\" MC Cable Connector",                                    unit: "EA", unitPrice: 3.50 },
+  // ── MC Cable Connectors (straight) ─────────────────────────────────────────
+  { id: "wir-mc-conn-3/8",         category: "Wire & Cable", description: "3/8\" MC Cable Connector Straight",                         unit: "EA", unitPrice: 1.25, searchAliases: "mc connector fitting 3/8 straight set screw" },
+  { id: "wir-mc-conn-1/2",         category: "Wire & Cable", description: "1/2\" MC Cable Connector Straight",                         unit: "EA", unitPrice: 1.55, searchAliases: "mc connector fitting 1/2 straight set screw" },
+  { id: "wir-mc-conn-3/4",         category: "Wire & Cable", description: "3/4\" MC Cable Connector Straight",                         unit: "EA", unitPrice: 2.25, searchAliases: "mc connector fitting 3/4 straight set screw" },
+  { id: "wir-mc-conn-1",           category: "Wire & Cable", description: "1\" MC Cable Connector Straight",                           unit: "EA", unitPrice: 3.50, searchAliases: "mc connector fitting 1 inch straight set screw" },
+  // ── MC Cable Connectors (90°) ─────────────────────────────────────────────
+  { id: "wir-mc-conn90-3/8",       category: "Wire & Cable", description: "3/8\" MC Cable Connector 90 Degree",                        unit: "EA", unitPrice: 1.85, searchAliases: "mc connector 90 degree elbow fitting 3/8" },
+  { id: "wir-mc-conn90-1/2",       category: "Wire & Cable", description: "1/2\" MC Cable Connector 90 Degree",                        unit: "EA", unitPrice: 2.15, searchAliases: "mc connector 90 degree elbow fitting 1/2" },
+  { id: "wir-mc-conn90-3/4",       category: "Wire & Cable", description: "3/4\" MC Cable Connector 90 Degree",                        unit: "EA", unitPrice: 3.25, searchAliases: "mc connector 90 degree elbow fitting 3/4" },
+  { id: "wir-mc-conn90-1",         category: "Wire & Cable", description: "1\" MC Cable Connector 90 Degree",                          unit: "EA", unitPrice: 4.75, searchAliases: "mc connector 90 degree elbow fitting 1 inch" },
+  // ── MC Cable Straps & Staples ─────────────────────────────────────────────
+  { id: "wir-mc-strap-1hole",      category: "Wire & Cable", description: "MC Cable Strap 1-Hole (single cable)",                      unit: "EA", unitPrice: 0.35, searchAliases: "mc strap clamp 1 hole single cable support" },
+  { id: "wir-mc-strap-2hole",      category: "Wire & Cable", description: "MC Cable Strap 2-Hole (single cable)",                      unit: "EA", unitPrice: 0.55, searchAliases: "mc strap clamp 2 hole single cable support" },
+  { id: "wir-mc-staple-1/2",       category: "Wire & Cable", description: "1/2\" MC Cable Staple",                                     unit: "EA", unitPrice: 0.18, searchAliases: "mc staple cable support nail half inch" },
+  { id: "wir-mc-staple-3/4",       category: "Wire & Cable", description: "3/4\" MC Cable Staple",                                     unit: "EA", unitPrice: 0.22, searchAliases: "mc staple cable support nail 3/4 inch" },
+  // ── MC Cable — 250ft Rolls ────────────────────────────────────────────────
+  { id: "wir-mc-14-2-250ft",       category: "Wire & Cable", description: "14/2 MC Cable w/Ground 250ft Roll",                         unit: "RL", unitPrice: 112.50, searchAliases: "mc cable 14/2 roll 250 ft spool" },
+  { id: "wir-mc-14-3-250ft",       category: "Wire & Cable", description: "14/3 MC Cable w/Ground 250ft Roll",                         unit: "RL", unitPrice: 162.50, searchAliases: "mc cable 14/3 roll 250 ft spool" },
+  { id: "wir-mc-12-2-250ft",       category: "Wire & Cable", description: "12/2 MC Cable w/Ground 250ft Roll",                         unit: "RL", unitPrice: 145.00, searchAliases: "mc cable 12/2 roll 250 ft spool" },
+  { id: "wir-mc-12-3-250ft",       category: "Wire & Cable", description: "12/3 MC Cable w/Ground 250ft Roll",                         unit: "RL", unitPrice: 205.00, searchAliases: "mc cable 12/3 roll 250 ft spool" },
+  { id: "wir-mc-10-2-250ft",       category: "Wire & Cable", description: "10/2 MC Cable w/Ground 250ft Roll",                         unit: "RL", unitPrice: 220.00, searchAliases: "mc cable 10/2 roll 250 ft spool" },
+  { id: "wir-mc-10-3-250ft",       category: "Wire & Cable", description: "10/3 MC Cable w/Ground 250ft Roll",                         unit: "RL", unitPrice: 312.50, searchAliases: "mc cable 10/3 roll 250 ft spool" },
 
   // ── Service Entrance / SER Cable ──────────────────────────────────────────
   { id: "wir-ser-100a",            category: "Wire & Cable", description: "100A SER Service Entrance Cable 2-2-2-4 (per foot)",        unit: "FT", unitPrice: 3.85 },
@@ -1435,7 +1452,8 @@ export function getWirePricePerFoot(
   wireType: string,
   conductorSize: string,
   conductorMaterial: string = "CU",
-  userMaterials: UserMaterialRow[] = []
+  userMaterials: UserMaterialRow[] = [],
+  wireTypeId?: string,  // full wireTypeId e.g. "mc-12-2" for exact catalog lookup
 ): number | null {
   const mat = conductorMaterial.toUpperCase() === "AL" ? "al" : "cu";
   const sizeNorm = conductorSize.replace(/\s/g, "").toLowerCase();
@@ -1461,6 +1479,12 @@ export function getWirePricePerFoot(
                       tryUserWire("nm", sizeNorm) ??
                       tryUserWire("romex", sizeNorm);
     if (userPrice != null) return userPrice;
+    // If we have the full wireTypeId (e.g. "nm-14-2"), use it directly
+    if (wireTypeId) {
+      const exactId = `wir-${wireTypeId.replace(/^nm-/, "nmb-")}`; // "nm-14-2" → "wir-nmb-14-2"
+      const exactItem = getCatalogItem(exactId);
+      if (exactItem) return exactItem.unitPrice;
+    }
     const id = `wir-nmb-${sizeNorm}`;
     const item = getCatalogItem(id);
     return item ? item.unitPrice : null;
@@ -1468,6 +1492,13 @@ export function getWirePricePerFoot(
   if (wtUpper.includes("MC")) {
     const userPrice = tryUserWire("mc", sizeNorm);
     if (userPrice != null) return userPrice;
+    // If we have the full wireTypeId (e.g. "mc-12-2"), use it directly for exact catalog match
+    if (wireTypeId) {
+      const exactId = `wir-${wireTypeId}`; // "mc-12-2" → "wir-mc-12-2"
+      const exactItem = getCatalogItem(exactId);
+      if (exactItem) return exactItem.unitPrice;
+    }
+    // Fallback: try size-only lookup (won't match multi-conductor IDs)
     const id = `wir-mc-${sizeNorm}`;
     const item = getCatalogItem(id);
     return item ? item.unitPrice : null;
