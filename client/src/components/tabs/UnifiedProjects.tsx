@@ -566,9 +566,9 @@ function RunCard({
   const availableWireCategories = dbWireCategories.length > 0 ? dbWireCategories : WIRE_CATEGORIES;
 
   // ── Wire-only mode calculations ──
-  const makeupAllowance = run.makeupAllowance ?? 2;
-  const serviceLoop     = run.serviceLoop     ?? 3;
-  const numTerminations = run.numTerminations ?? 2;
+  const makeupAllowance = run.makeupAllowance ?? 0;   // default 0 — user sets per-job
+  const serviceLoop     = run.serviceLoop     ?? 0;   // default 0 — user sets per-job
+  const numTerminations = run.numTerminations ?? 0;   // default 0 — user sets per-job
   const wirewasteFactor = run.wirewasteFactor ?? 10;
   const wireNetLength   = run.feet + makeupAllowance * numTerminations + serviceLoop;
   const wireBillable    = calcWire(run.feet, run.conductors, makeupAllowance, serviceLoop, numTerminations, wirewasteFactor);
@@ -1271,9 +1271,9 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       // calcWire returns per-conductor footage — multiply by conductors for total
       wireFt = calcWire(
         r.feet, r.conductors,
-        r.makeupAllowance ?? 2,
-        r.serviceLoop ?? 3,
-        r.numTerminations ?? 2,
+        r.makeupAllowance ?? 0,
+        r.serviceLoop ?? 0,
+        r.numTerminations ?? 0,
         r.wirewasteFactor ?? 10,
       ) * r.conductors;
     } else {
@@ -1327,7 +1327,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
     let runWire: number;
     if (isWireRun) {
       // calcWire returns per-conductor footage — multiply by conductors for total
-      runWire = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10) * r.conductors;
+      runWire = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 10) * r.conductors;
     } else {
       // calcConduitWire already includes conductors
       runWire = r.conduitOnly ? 0 : calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
@@ -1359,7 +1359,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
         const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
         if (wireCpf != null) {
           // calcConduitWire already multiplies by conductors internally — do NOT multiply again
-          const wireFt = calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
+          const wireFt = calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
           runCost += wireCpf * wireFt;
         }
         // Grounding conductor cost
@@ -1378,7 +1378,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       const wireSize = r.conductorSize ?? "12";
       const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
       if (wireCpf != null) {
-        const wireFt = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10);
+        const wireFt = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 10);
         runCost += wireCpf * wireFt * r.conductors;
       }
     }
