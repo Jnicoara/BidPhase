@@ -294,3 +294,8 @@
 - [x] Fix pinch jitter: bypass React state during gesture — apply CSS transform directly to DOM, sync React state only on touchend
 - [x] Per-segment canvas labels: each segment group shows its total footage over its midpoint; individual line distances show when zoomed in
 - [x] Run total only in toolbar: removed per-segment breakdown from right panel; right panel shows total footage only
+
+## v5.28 — Pinch & Panel Touch Fixes
+- [x] Fix pinch-to-zoom jitter: removed React state from pagesContainerRef transform in JSX; useLayoutEffect now exclusively drives the transform from refs on every render, so React's reconciler can never overwrite the gesture transform with stale state
+- [x] Suppress left panel from opening during touch/pinch gestures: added touchAction:none + userSelect:none to viewport, preventDefault on 2-finger touchstart, and context menu suppression during touch
+- [x] Added single-finger touch pan support (idle mode only) so users can pan on mobile without needing two fingers

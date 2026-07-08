@@ -1247,17 +1247,18 @@ export default function PlanPanel({
     displayZoomRef.current = newZoom;
   }, [pageNatSize]);
 
-  // Guard: if React re-renders during a pinch (any state change), re-apply the
-  // direct DOM transform from refs so React's stale state value doesn't overwrite it.
-  // useLayoutEffect fires synchronously after DOM mutations, before the browser paints.
+  // DEFINITIVE TRANSFORM DRIVER:
+  // The pagesContainerRef div has NO transform in its JSX style.
+  // This useLayoutEffect is the ONLY place that writes the CSS transform.
+  // It runs after every render (no deps array), always reading from refs.
+  // This means React's reconciler can NEVER overwrite the transform with stale state,
+  // because the transform is not in the virtual DOM at all.
   useLayoutEffect(() => {
-    if (isPinchingRef.current) {
-      const el = pagesContainerRef.current;
-      if (el) {
-        const z = displayZoomRef.current;
-        const { x, y } = panOffsetRef.current;
-        el.style.transform = `translate(${x}px, ${y}px) scale(${z / RENDER_BASE_ZOOM})`;
-      }
+    const el = pagesContainerRef.current;
+    if (el) {
+      const z = displayZoomRef.current;
+      const { x, y } = panOffsetRef.current;
+      el.style.transform = `translate(${x}px, ${y}px) scale(${z / RENDER_BASE_ZOOM})`;
     }
   });
 
@@ -1324,18 +1325,47 @@ export default function PlanPanel({
       if (el) el.style.transform = `translate(${ox}px, ${oy}px) scale(${zoom / RENDER_BASE_ZOOM})`;
     };
 
+    // Single-finger pan state
+    let touchPanStart: { x: number; y: number; ox: number; oy: number } | null = null;
+
     const onTouchStart = (e: TouchEvent) => {
       isTouchingRef.current = true;
       dragRef.current = null;
       setIsPanning(false);
       if (e.touches.length === 2) {
+        // Prevent browser from interpreting 2-finger touch as edge-swipe navigation
+        // or pull-to-refresh. touchAction:none on the viewport handles most cases,
+        // but explicit preventDefault is belt-and-suspenders for older browsers.
+        e.preventDefault();
+        touchPanStart = null; // cancel any single-finger pan
         const { dist, mid } = getInfo(e);
         pinchRef.current = { prevDist: dist, prevMid: mid };
         isPinchingRef.current = true;
+      } else if (e.touches.length === 1) {
+        // Single-finger pan — only in idle mode (not measure/count/scale)
+        if (modeRef.current === "none") {
+          touchPanStart = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY,
+            ox: panOffsetRef.current.x,
+            oy: panOffsetRef.current.y,
+          };
+        }
       }
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      // Handle single-finger pan
+      if (e.touches.length === 1 && touchPanStart && !isPinchingRef.current) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - touchPanStart.x;
+        const dy = e.touches[0].clientY - touchPanStart.y;
+        const newOx = touchPanStart.ox + dx;
+        const newOy = touchPanStart.oy + dy;
+        panOffsetRef.current = { x: newOx, y: newOy };
+        applyTransformDirect(displayZoomRef.current, newOx, newOy);
+        return;
+      }
       if (e.touches.length !== 2 || !pinchRef.current) return;
       e.preventDefault();
 
@@ -1379,12 +1409,13 @@ export default function PlanPanel({
       if (e.touches.length < 2) {
         pinchRef.current = null;
         isPinchingRef.current = false;
-        // Sync React state once the gesture ends so the rest of the app is consistent
-        setDisplayZoom(displayZoomRef.current);
-        setPanOffset({ ...panOffsetRef.current });
       }
       if (e.touches.length === 0) {
         isTouchingRef.current = false;
+        touchPanStart = null;
+        // Sync React state once all touches end so the rest of the app is consistent
+        setDisplayZoom(displayZoomRef.current);
+        setPanOffset({ ...panOffsetRef.current });
       }
     };
 
@@ -2488,8 +2519,17 @@ export default function PlanPanel({
           cursor: (pendingPdfFile || deleteConfirm || showScalePrompt || !pageReady)
             ? "default"
             : isPanning ? "grabbing" : activeCursorColor ? "none" : (mode !== "none" ? "crosshair" : "grab"),
+          // Disable ALL browser touch handling (pan, pinch-zoom, pull-to-refresh, edge-swipe).
+          // Our own touch handlers in the useEffect below manage everything.
+          touchAction: "none",
+          userSelect: "none",
+          WebkitUserSelect: "none" as React.CSSProperties["WebkitUserSelect"],
         }}
-        onContextMenu={(e) => { if (mode !== "count") e.preventDefault(); }}
+        onContextMenu={(e) => {
+          // Always suppress context menu during touch (prevents long-press menu on mobile)
+          if (isTouchingRef.current) { e.preventDefault(); return; }
+          if (mode !== "count") e.preventDefault();
+        }}
         onMouseDown={(e) => {
           // Ignore mouse events during touch (prevents mouse/touch conflict)
           if (isTouchingRef.current) return;
@@ -2556,16 +2596,11 @@ export default function PlanPanel({
             </label>
           </div>
         ) : (
-          /* Free-drag page container — positioned via CSS transform */
           <div
             ref={pagesContainerRef}
             style={{
               position: "absolute",
               transformOrigin: "top left",
-              // translate(pan) then scale(zoom) — order matters
-              // PDF renders at RENDER_BASE_ZOOM; CSS scale adjusts to displayZoom
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${displayZoom / RENDER_BASE_ZOOM})`,
-              // will-change: transform tells the browser to promote to its own GPU layer
               willChange: "transform",
             }}
           >
