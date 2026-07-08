@@ -34,6 +34,8 @@ export interface CatalogItem {
   description: string;
   unit: string;
   unitPrice: number;
+  /** Optional trade slang / brand aliases for smart search */
+  searchAliases?: string;
 }
 
 export const CATALOG: CatalogItem[] = [
@@ -43,10 +45,10 @@ export const CATALOG: CatalogItem[] = [
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── Square D QO Load Centers ─────────────────────────────────────────────
-  { id: "dist-sqd-qo-100a-20sp",   category: "Distribution", description: "Square D QO 100A 20-Space 40-Circuit Indoor Load Center",      unit: "EA", unitPrice: 89.00 },
+  { id: "dist-sqd-qo-100a-20sp",   category: "Distribution", description: "Square D QO 100A 20-Space 40-Circuit Indoor Load Center",      unit: "EA", unitPrice: 89.00, searchAliases: "panel breaker panel load center 100 amp QO" },
   { id: "dist-sqd-qo-100a-24sp",   category: "Distribution", description: "Square D QO 100A 24-Space 48-Circuit Indoor Load Center",      unit: "EA", unitPrice: 105.00 },
   { id: "dist-sqd-qo-150a-30sp",   category: "Distribution", description: "Square D QO 150A 30-Space 60-Circuit Indoor Load Center",      unit: "EA", unitPrice: 145.00 },
-  { id: "dist-sqd-qo-200a-40sp",   category: "Distribution", description: "Square D QO 200A 40-Space 80-Circuit Indoor Load Center",      unit: "EA", unitPrice: 185.00 },
+  { id: "dist-sqd-qo-200a-40sp",   category: "Distribution", description: "Square D QO 200A 40-Space 80-Circuit Indoor Load Center",      unit: "EA", unitPrice: 185.00, searchAliases: "panel breaker panel load center 200 amp QO main panel" },
   { id: "dist-sqd-qo-200a-42sp",   category: "Distribution", description: "Square D QO 200A 42-Space 84-Circuit Indoor Load Center",      unit: "EA", unitPrice: 210.00 },
   { id: "dist-sqd-qo-200a-54sp",   category: "Distribution", description: "Square D QO 200A 54-Space Indoor Load Center",                 unit: "EA", unitPrice: 265.00 },
   { id: "dist-sqd-qo-100a-20sp-oh",category: "Distribution", description: "Square D QO 100A 20-Space Overhead/Underground Load Center",   unit: "EA", unitPrice: 115.00 },
@@ -228,9 +230,9 @@ export const CATALOG: CatalogItem[] = [
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── EMT (Electrical Metallic Tubing) — price per foot ────────────────────
-  { id: "cnd-emt-1/2-ft",          category: "Conduit", description: "1/2\" EMT Conduit (per foot)",                                   unit: "FT", unitPrice: 0.38 },
-  { id: "cnd-emt-3/4-ft",          category: "Conduit", description: "3/4\" EMT Conduit (per foot)",                                   unit: "FT", unitPrice: 0.58 },
-  { id: "cnd-emt-1-ft",            category: "Conduit", description: "1\" EMT Conduit (per foot)",                                     unit: "FT", unitPrice: 0.92 },
+  { id: "cnd-emt-1/2-ft",          category: "Conduit", description: "1/2\" EMT Conduit (per foot)",                                   unit: "FT", unitPrice: 0.38, searchAliases: "thin wall thinwall half inch pipe tube" },
+  { id: "cnd-emt-3/4-ft",          category: "Conduit", description: "3/4\" EMT Conduit (per foot)",                                   unit: "FT", unitPrice: 0.58, searchAliases: "thin wall thinwall 3/4 inch pipe tube" },
+  { id: "cnd-emt-1-ft",            category: "Conduit", description: "1\" EMT Conduit (per foot)",                                     unit: "FT", unitPrice: 0.92, searchAliases: "thin wall thinwall one inch pipe tube" },
   { id: "cnd-emt-1-1/4-ft",        category: "Conduit", description: "1-1/4\" EMT Conduit (per foot)",                                 unit: "FT", unitPrice: 1.35 },
   { id: "cnd-emt-1-1/2-ft",        category: "Conduit", description: "1-1/2\" EMT Conduit (per foot)",                                 unit: "FT", unitPrice: 1.72 },
   { id: "cnd-emt-2-ft",            category: "Conduit", description: "2\" EMT Conduit (per foot)",                                     unit: "FT", unitPrice: 2.45 },
@@ -251,7 +253,7 @@ export const CATALOG: CatalogItem[] = [
   { id: "cnd-emt-4-10ft",          category: "Conduit", description: "4\" EMT Conduit 10ft Stick",                                     unit: "EA", unitPrice: 92.00 },
 
   // ── RMC / GRC (Rigid Metal Conduit / Galvanized Rigid) — per foot ─────────
-  { id: "cnd-rmc-1/2-ft",          category: "Conduit", description: "1/2\" RMC Rigid Metal Conduit (per foot)",                       unit: "FT", unitPrice: 1.25 },
+  { id: "cnd-rmc-1/2-ft",          category: "Conduit", description: "1/2\" RMC Rigid Metal Conduit (per foot)",                       unit: "FT", unitPrice: 1.25, searchAliases: "rigid galvanized GRC heavy wall" },
   { id: "cnd-rmc-3/4-ft",          category: "Conduit", description: "3/4\" RMC Rigid Metal Conduit (per foot)",                       unit: "FT", unitPrice: 1.85 },
   { id: "cnd-rmc-1-ft",            category: "Conduit", description: "1\" RMC Rigid Metal Conduit (per foot)",                         unit: "FT", unitPrice: 2.75 },
   { id: "cnd-rmc-1-1/4-ft",        category: "Conduit", description: "1-1/4\" RMC Rigid Metal Conduit (per foot)",                     unit: "FT", unitPrice: 3.85 },
@@ -289,7 +291,7 @@ export const CATALOG: CatalogItem[] = [
 
   // ── FMC (Flexible Metal Conduit) — per foot ───────────────────────────────
   { id: "cnd-fmc-3/8-ft",          category: "Conduit", description: "3/8\" FMC Flexible Metal Conduit (per foot)",                    unit: "FT", unitPrice: 0.28 },
-  { id: "cnd-fmc-1/2-ft",          category: "Conduit", description: "1/2\" FMC Flexible Metal Conduit (per foot)",                    unit: "FT", unitPrice: 0.42 },
+  { id: "cnd-fmc-1/2-ft",          category: "Conduit", description: "1/2\" FMC Flexible Metal Conduit (per foot)",                    unit: "FT", unitPrice: 0.42, searchAliases: "flex greenfield snake" },
   { id: "cnd-fmc-3/4-ft",          category: "Conduit", description: "3/4\" FMC Flexible Metal Conduit (per foot)",                    unit: "FT", unitPrice: 0.65 },
   { id: "cnd-fmc-1-ft",            category: "Conduit", description: "1\" FMC Flexible Metal Conduit (per foot)",                      unit: "FT", unitPrice: 1.05 },
   { id: "cnd-fmc-1-1/4-ft",        category: "Conduit", description: "1-1/4\" FMC Flexible Metal Conduit (per foot)",                  unit: "FT", unitPrice: 1.55 },
@@ -298,7 +300,7 @@ export const CATALOG: CatalogItem[] = [
 
   // ── LFMC (Liquid-Tight Flexible Metal Conduit) — per foot ─────────────────
   { id: "cnd-lfmc-3/8-ft",         category: "Conduit", description: "3/8\" LFMC Liquid-Tight Flexible Metal Conduit (per foot)",      unit: "FT", unitPrice: 0.55 },
-  { id: "cnd-lfmc-1/2-ft",         category: "Conduit", description: "1/2\" LFMC Liquid-Tight Flexible Metal Conduit (per foot)",      unit: "FT", unitPrice: 0.75 },
+  { id: "cnd-lfmc-1/2-ft",         category: "Conduit", description: "1/2\" LFMC Liquid-Tight Flexible Metal Conduit (per foot)",      unit: "FT", unitPrice: 0.75, searchAliases: "sealtite seal-tite liquid tight liquidtight" },
   { id: "cnd-lfmc-3/4-ft",         category: "Conduit", description: "3/4\" LFMC Liquid-Tight Flexible Metal Conduit (per foot)",      unit: "FT", unitPrice: 1.10 },
   { id: "cnd-lfmc-1-ft",           category: "Conduit", description: "1\" LFMC Liquid-Tight Flexible Metal Conduit (per foot)",        unit: "FT", unitPrice: 1.65 },
   { id: "cnd-lfmc-1-1/4-ft",       category: "Conduit", description: "1-1/4\" LFMC Liquid-Tight Flexible Metal Conduit (per foot)",    unit: "FT", unitPrice: 2.35 },
@@ -608,7 +610,7 @@ export const CATALOG: CatalogItem[] = [
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── Single-Gang Outlet Boxes ──────────────────────────────────────────────
-  { id: "box-sg-sw-1900",          category: "Boxes & Enclosures", description: "Single-Gang Steel Switch Box 1-7/8\" Deep",           unit: "EA", unitPrice: 1.25 },
+  { id: "box-sg-sw-1900",          category: "Boxes & Enclosures", description: "Single-Gang Steel Switch Box 1-7/8\" Deep",           unit: "EA", unitPrice: 1.25, searchAliases: "1900 device box outlet box single gang" },
   { id: "box-sg-sw-2-1/2",         category: "Boxes & Enclosures", description: "Single-Gang Steel Switch Box 2-1/2\" Deep",           unit: "EA", unitPrice: 1.45 },
   { id: "box-sg-sw-3-1/2",         category: "Boxes & Enclosures", description: "Single-Gang Steel Switch Box 3-1/2\" Deep",           unit: "EA", unitPrice: 1.65 },
   { id: "box-sg-pvc-1-1/2",        category: "Boxes & Enclosures", description: "Single-Gang PVC Switch Box 1-1/2\" Deep",             unit: "EA", unitPrice: 0.65 },
@@ -623,8 +625,8 @@ export const CATALOG: CatalogItem[] = [
   { id: "box-dg-new-work-nail",     category: "Boxes & Enclosures", description: "Double-Gang New Work Plastic Box with Nails",        unit: "EA", unitPrice: 1.45 },
 
   // ── 4-Inch Square Boxes ───────────────────────────────────────────────────
-  { id: "box-4sq-1-1/2",           category: "Boxes & Enclosures", description: "4\" Square Steel Box 1-1/2\" Deep",                   unit: "EA", unitPrice: 2.85 },
-  { id: "box-4sq-2-1/8",           category: "Boxes & Enclosures", description: "4\" Square Steel Box 2-1/8\" Deep",                   unit: "EA", unitPrice: 3.25 },
+  { id: "box-4sq-1-1/2",           category: "Boxes & Enclosures", description: "4\" Square Steel Box 1-1/2\" Deep",                   unit: "EA", unitPrice: 2.85, searchAliases: "4 square 4s four square 4x4 jbox junction box" },
+  { id: "box-4sq-2-1/8",           category: "Boxes & Enclosures", description: "4\" Square Steel Box 2-1/8\" Deep",                   unit: "EA", unitPrice: 3.25, searchAliases: "4 square 4s four square 4x4 jbox junction box deep" },
   { id: "box-4sq-pvc-1-1/2",       category: "Boxes & Enclosures", description: "4\" Square PVC Box 1-1/2\" Deep",                     unit: "EA", unitPrice: 1.85 },
 
   // ── 4-Inch Square Mud Rings ───────────────────────────────────────────────
@@ -638,12 +640,12 @@ export const CATALOG: CatalogItem[] = [
   { id: "box-mudring-round-1",     category: "Boxes & Enclosures", description: "4\" Square to Round Mud Ring 1\" Raised",             unit: "EA", unitPrice: 1.35 },
 
   // ── 4-11/16\" Square Boxes ────────────────────────────────────────────────
-  { id: "box-4-11/16-2-1/8",       category: "Boxes & Enclosures", description: "4-11/16\" Square Steel Box 2-1/8\" Deep",             unit: "EA", unitPrice: 4.50 },
+  { id: "box-4-11/16-2-1/8",       category: "Boxes & Enclosures", description: "4-11/16\" Square Steel Box 2-1/8\" Deep",             unit: "EA", unitPrice: 4.50, searchAliases: "4 square 4s four square 411 4x4 big square large square jbox junction box" },
   { id: "box-4-11/16-mudring-sg",  category: "Boxes & Enclosures", description: "4-11/16\" to Single-Gang Mud Ring",                   unit: "EA", unitPrice: 1.85 },
   { id: "box-4-11/16-mudring-dg",  category: "Boxes & Enclosures", description: "4-11/16\" to Double-Gang Mud Ring",                   unit: "EA", unitPrice: 2.25 },
 
   // ── Octagon / Round Boxes ─────────────────────────────────────────────────
-  { id: "box-oct-4-1-1/2",         category: "Boxes & Enclosures", description: "4\" Octagon Steel Box 1-1/2\" Deep",                  unit: "EA", unitPrice: 2.25 },
+  { id: "box-oct-4-1-1/2",         category: "Boxes & Enclosures", description: "4\" Octagon Steel Box 1-1/2\" Deep",                  unit: "EA", unitPrice: 2.25, searchAliases: "oct box round box ceiling box fan box pancake" },
   { id: "box-oct-4-2-1/8",         category: "Boxes & Enclosures", description: "4\" Octagon Steel Box 2-1/8\" Deep",                  unit: "EA", unitPrice: 2.65 },
   { id: "box-oct-4-bar-hanger",    category: "Boxes & Enclosures", description: "4\" Octagon Box with Bar Hanger",                     unit: "EA", unitPrice: 4.25 },
   { id: "box-oct-4-pvc",           category: "Boxes & Enclosures", description: "4\" Octagon PVC Box 1-1/2\" Deep",                    unit: "EA", unitPrice: 1.45 },
@@ -662,7 +664,7 @@ export const CATALOG: CatalogItem[] = [
   // ── FS
 
   // ── FS/FD Cast Boxes ──────────────────────────────────────────────────────
-  { id: "box-fs-sg",               category: "Boxes & Enclosures", description: "FS Single-Gang Cast Box",                              unit: "EA", unitPrice: 5.50 },
+  { id: "box-fs-sg",               category: "Boxes & Enclosures", description: "FS Single-Gang Cast Box",                              unit: "EA", unitPrice: 5.50, searchAliases: "cast box surface mount conduit box industrial box" },
   { id: "box-fs-dg",               category: "Boxes & Enclosures", description: "FS Double-Gang Cast Box",                              unit: "EA", unitPrice: 7.50 },
   { id: "box-fd-sg",               category: "Boxes & Enclosures", description: "FD Single-Gang Cast Box (Deep)",                       unit: "EA", unitPrice: 6.50 },
   { id: "box-fd-dg",               category: "Boxes & Enclosures", description: "FD Double-Gang Cast Box (Deep)",                       unit: "EA", unitPrice: 8.50 },
@@ -680,7 +682,7 @@ export const CATALOG: CatalogItem[] = [
   { id: "box-pull-12x12x6-pvc",    category: "Boxes & Enclosures", description: "12\"x12\"x6\" PVC Pull Box",                           unit: "EA", unitPrice: 18.00 },
 
   // ── Handy Boxes ───────────────────────────────────────────────────────────
-  { id: "box-handy-1-1/2",         category: "Boxes & Enclosures", description: "Handy Box 4\" x 2-1/8\" x 1-1/2\" Steel",             unit: "EA", unitPrice: 1.85 },
+  { id: "box-handy-1-1/2",         category: "Boxes & Enclosures", description: "Handy Box 4\" x 2-1/8\" x 1-1/2\" Steel",             unit: "EA", unitPrice: 1.85, searchAliases: "utility box handy 2x4 box" },
   { id: "box-handy-2-1/8",         category: "Boxes & Enclosures", description: "Handy Box 4\" x 2-1/8\" x 2-1/8\" Steel",             unit: "EA", unitPrice: 2.25 },
   { id: "box-handy-cover-blank",   category: "Boxes & Enclosures", description: "Handy Box Blank Cover",                                unit: "EA", unitPrice: 0.85 },
   { id: "box-handy-cover-sg",      category: "Boxes & Enclosures", description: "Handy Box Single-Gang Cover",                          unit: "EA", unitPrice: 0.95 },
@@ -791,8 +793,8 @@ export const CATALOG: CatalogItem[] = [
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── Receptacles ───────────────────────────────────────────────────────────
-  { id: "dev-rec-15a-125v-wh",     category: "Devices & Trim", description: "15A 125V Duplex Receptacle White",                          unit: "EA", unitPrice: 1.85 },
-  { id: "dev-rec-20a-125v-wh",     category: "Devices & Trim", description: "20A 125V Duplex Receptacle White",                          unit: "EA", unitPrice: 2.45 },
+  { id: "dev-rec-15a-125v-wh",     category: "Devices & Trim", description: "15A 125V Duplex Receptacle White",                          unit: "EA", unitPrice: 1.85, searchAliases: "outlet plug duplex 15 amp standard outlet" },
+  { id: "dev-rec-20a-125v-wh",     category: "Devices & Trim", description: "20A 125V Duplex Receptacle White",                          unit: "EA", unitPrice: 2.45, searchAliases: "outlet plug duplex 20 amp T-slot" },
   { id: "dev-rec-15a-125v-iv",     category: "Devices & Trim", description: "15A 125V Duplex Receptacle Ivory",                          unit: "EA", unitPrice: 1.85 },
   { id: "dev-rec-20a-125v-iv",     category: "Devices & Trim", description: "20A 125V Duplex Receptacle Ivory",                          unit: "EA", unitPrice: 2.45 },
   { id: "dev-rec-15a-125v-al",     category: "Devices & Trim", description: "15A 125V Duplex Receptacle Almond",                         unit: "EA", unitPrice: 1.85 },
@@ -810,7 +812,7 @@ export const CATALOG: CatalogItem[] = [
   { id: "dev-rec-usb-ac-wh",       category: "Devices & Trim", description: "15A USB-A+C Duplex Receptacle White",                       unit: "EA", unitPrice: 22.00 },
 
   // ── GFCI Receptacles ──────────────────────────────────────────────────────
-  { id: "dev-gfci-15a-wh",         category: "Devices & Trim", description: "15A GFCI Receptacle White",                                 unit: "EA", unitPrice: 12.00 },
+  { id: "dev-gfci-15a-wh",         category: "Devices & Trim", description: "15A GFCI Receptacle White",                                 unit: "EA", unitPrice: 12.00, searchAliases: "GFI ground fault outlet bathroom kitchen garage" },
   { id: "dev-gfci-20a-wh",         category: "Devices & Trim", description: "20A GFCI Receptacle White",                                 unit: "EA", unitPrice: 14.00 },
   { id: "dev-gfci-15a-iv",         category: "Devices & Trim", description: "15A GFCI Receptacle Ivory",                                 unit: "EA", unitPrice: 12.00 },
   { id: "dev-gfci-20a-iv",         category: "Devices & Trim", description: "20A GFCI Receptacle Ivory",                                 unit: "EA", unitPrice: 14.00 },

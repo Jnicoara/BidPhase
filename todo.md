@@ -337,3 +337,11 @@
 - [x] Build shared smartSearch utility: fuzzy matching + trade alias/synonym map covering boxes, conduit, wire, breakers, devices, fittings, and civil slang
 - [x] Wire smartSearch into CatalogPicker (Unit Count) replacing current filter
 - [x] Wire smartSearch into MaterialDatabasePage replacing current filter
+
+## v5.36 — Trade Slang Aliases, Unit Count Material Picker, Custom Price, Run Tool
+
+- [x] Add searchAliases field to CatalogItem interface; populate key items with trade slang (romex, jbox, 4 square, flex, greenfield, wiremold, etc.)
+- [x] Update smartSearch to also score against searchAliases field
+- [x] Unit Count: when "New Count Session" is clicked (or Count # is created), show a catalog picker inline so user can search and select a material to populate the session name and unit price — replaces the count line instead of creating a new one
+- [x] Unit Count: each session row gets an inline custom price-per-item field (editable number input, saves immediately)
+- [x] Runs panel: restore full run tool card — conduit type/size picker, wire type/AWG picker, waste factor slider (default 10%), material cost display — replacing the compact table view

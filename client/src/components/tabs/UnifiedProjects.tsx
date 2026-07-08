@@ -1411,18 +1411,30 @@ function CivilEditor({
 
   const handleAddCountSessionFromCatalog = useCallback((item: CatalogItem | null) => {
     if (!item) return;
-    const newSession: CountSession = {
-      id: `cs-${Date.now().toString(36)}`,
-      name: item.description,
-      iconId: DEFAULT_ICON_ID,
-      color: DEFAULT_PIN_COLOR,
-      pins: [],
-      unitCost: item.unitPrice,
-      priceMode: "per-unit",
-    };
-    updateSessions([...countSessions, newSession], newSession.id);
-    toast.success(`"${item.description}" added to Unit Count.`);
-  }, [countSessions, updateSessions]);
+    // If there is an active session, update it with the selected material
+    if (activeCountSessionId) {
+      const updated = countSessions.map((cs) =>
+        cs.id === activeCountSessionId
+          ? { ...cs, name: item.description, unitCost: item.unitPrice, priceMode: "per-unit" as const }
+          : cs
+      );
+      updateSessions(updated, activeCountSessionId);
+      toast.success(`Active count updated to "${item.description}" @ $${item.unitPrice.toFixed(2)}/ea.`);
+    } else {
+      // No active session — create a new one
+      const newSession: CountSession = {
+        id: `cs-${Date.now().toString(36)}`,
+        name: item.description,
+        iconId: DEFAULT_ICON_ID,
+        color: DEFAULT_PIN_COLOR,
+        pins: [],
+        unitCost: item.unitPrice,
+        priceMode: "per-unit",
+      };
+      updateSessions([...countSessions, newSession], newSession.id);
+      toast.success(`"${item.description}" added to Unit Count.`);
+    }
+  }, [countSessions, updateSessions, activeCountSessionId]);
 
   const handleDeleteCountSession = (id: string) => {
     const updated = countSessions.filter((cs) => cs.id !== id);
@@ -1859,11 +1871,15 @@ function CivilEditor({
                       <div className="px-4 pb-4 space-y-3">
                         {/* Material search — always visible at top of Unit Count */}
                         <div className="space-y-1">
-                          <Label className="text-xs font-medium text-muted-foreground">Search material</Label>
+                          <Label className="text-xs font-medium text-muted-foreground">
+                            {activeCountSessionId
+                              ? <span>Search material — <span className="text-[#F5C518]">updates active count</span></span>
+                              : "Search material to create a count"}
+                          </Label>
                           <CatalogPicker
                             value={null}
                             onChange={handleAddCountSessionFromCatalog}
-                            placeholder="Search catalog…"
+                            placeholder={activeCountSessionId ? "Search to update active count…" : "Search catalog…"}
                           />
                         </div>
                         {countSessions.length === 0 ? (
@@ -1896,9 +1912,33 @@ function CivilEditor({
                                       onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }}
                                     >{cs.name}</span>
                                   )}
-                                  {cs.unitCost != null && cs.unitCost > 0 && (
-                                    <span className="text-[9px] font-mono text-muted-foreground shrink-0">${cs.unitCost.toFixed(2)}/ea</span>
-                                  )}
+                                  {/* Inline price-per-item field */}
+                                  <div
+                                    className="flex items-center gap-0.5 shrink-0"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title="Custom price per item"
+                                  >
+                                    <span className="text-[9px] text-muted-foreground font-mono">$</span>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={0.01}
+                                      value={cs.unitCost ?? ""}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        updateSessions(
+                                          countSessions.map((s2) =>
+                                            s2.id === cs.id
+                                              ? { ...s2, unitCost: isNaN(val) ? undefined : val, priceMode: "per-unit" as const }
+                                              : s2
+                                          )
+                                        );
+                                      }}
+                                      placeholder="0.00"
+                                      className="w-14 h-5 text-[9px] font-mono bg-transparent border-b border-border/40 focus:border-[#F5C518] outline-none text-muted-foreground focus:text-foreground text-right px-0.5"
+                                    />
+                                    <span className="text-[9px] text-muted-foreground font-mono">/ea</span>
+                                  </div>
                                   <span className="font-mono text-[10px] text-muted-foreground shrink-0">{cs.pins.length} pin{cs.pins.length !== 1 ? "s" : ""}</span>
                                   {isEditing ? (
                                     <>
@@ -1980,30 +2020,17 @@ function CivilEditor({
                             </div>
                           </div>
                         ) : (
-                          <>
-                            {/* Compact runs table */}
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className="border-b border-border/40">
-                                  <th className="text-left px-4 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Run</th>
-                                  <th className="text-right px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">ft</th>
-                                  <th className="text-left px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
-                                  <th className="px-2 py-1.5 w-6"></th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {pageRuns.map((run, i) => (
-                                  <CompactRunRow
-                                    key={run.id}
-                                    run={run}
-                                    index={i}
-                                    onUpdate={updateRun}
-                                    onRemove={removeRun}
-                                  />
-                                ))}
-                              </tbody>
-                            </table>
-                          </>
+                          <div className="space-y-2 px-2 pb-2">
+                            {pageRuns.map((run, i) => (
+                              <RunCard
+                                key={run.id}
+                                run={run}
+                                index={i}
+                                onUpdate={updateRun}
+                                onRemove={removeRun}
+                              />
+                            ))}
+                          </div>
                         )}
                       </div>
                     )}
