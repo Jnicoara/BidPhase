@@ -678,8 +678,10 @@ function RunCard({
     : null;
 
   const conduitMaterialCost = conduitCostPerFt != null ? conduitCostPerFt * conduitBillable : null;
+  // wireBillable (calcWire) returns per-conductor footage — multiply by conductors for total
+  // conduitWireBillable (calcConduitWire) already includes conductors — do NOT multiply again
   const wireMaterialCost    = (!conduitOnly && wireCostPerFt != null)
-    ? wireCostPerFt * (isWire ? wireBillable : conduitWireBillable)
+    ? wireCostPerFt * (isWire ? wireBillable * run.conductors : conduitWireBillable)
     : null;
   const totalMaterialCost   = (conduitMaterialCost ?? 0) + (wireMaterialCost ?? 0);
 
@@ -797,7 +799,7 @@ function RunCard({
           {!isWire && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductors</Label>
+                <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Current Carrying Conductors</Label>
                 <span className="text-sm font-bold text-[#F5C518] font-mono">{run.conductors}</span>
               </div>
               <Slider min={1} max={12} step={1} value={[run.conductors]}
@@ -888,6 +890,49 @@ function RunCard({
                 )} />
               </button>
             </div>
+
+            {/* Grounding Conductor toggle + size picker */}
+            {!conduitOnly && (
+              <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/10 px-3 py-2">
+                <div className="flex-1">
+                  <div className="text-[11px] font-medium text-foreground">Grounding Conductor (EGC)</div>
+                  <div className="text-[10px] text-muted-foreground">Include equipment grounding conductor</div>
+                  {run.includeGround && (
+                    <div className="mt-2 space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Ground Size (AWG)</Label>
+                      <div className="grid grid-cols-5 gap-1">
+                        {(["14","12","10","8","6","4","2","1/0","2/0","3/0","4/0"] as const).map((sz) => (
+                          <button key={sz}
+                            onClick={() => onUpdate(run.id, { groundSize: sz })}
+                            className={cn(
+                              "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                              (run.groundSize ?? "12") === sz
+                                ? "bg-green-500 text-black border-green-500"
+                                : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
+                            )}>
+                            {sz}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => onUpdate(run.id, { includeGround: !run.includeGround })}
+                  className={cn(
+                    "relative w-9 h-5 rounded-full border transition-all ml-3 shrink-0",
+                    run.includeGround
+                      ? "bg-green-500 border-green-500"
+                      : "bg-muted/40 border-border"
+                  )}
+                >
+                  <span className={cn(
+                    "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
+                    run.includeGround ? "left-4" : "left-0.5"
+                  )} />
+                </button>
+              </div>
+            )}
 
             {/* Wire type + conductor material/size — hidden in conduit-only mode */}
             {!conduitOnly && (
@@ -990,29 +1035,17 @@ function RunCard({
                   </div>
                 )}
               </div>
-              {/* Cost breakdown */}
-              {(conduitMaterialCost != null || wireMaterialCost != null) ? (
-                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</span>
-                    <span className="text-base font-bold font-mono text-emerald-400">${totalMaterialCost.toFixed(2)}</span>
-                  </div>
-                  {conduitMaterialCost != null && (
-                    <div className="text-[10px] text-muted-foreground font-mono">
-                      Conduit: ${conduitCostPerFt!.toFixed(3)}/ft × {conduitBillable} ft = ${conduitMaterialCost.toFixed(2)}
-                    </div>
-                  )}
-                  {wireMaterialCost != null && (
-                    <div className="text-[10px] text-muted-foreground font-mono">
-                      Wire: ${wireCostPerFt!.toFixed(3)}/ft × {conduitWireBillable} ft = ${wireMaterialCost.toFixed(2)}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-muted/10 border border-border/30 rounded-lg p-2 text-[10px] text-muted-foreground/60 text-center">
-                  No catalog price for {run.conduitType ?? "EMT"} {run.conduitSize ?? "1/2"}&quot; — update in Material Database
-                </div>
-              )}
+              {/* Compact price indicator — full cost breakdown lives in Labor & Material summary */}
+              <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/70">
+                {conduitCostPerFt != null ? (
+                  <span>{run.conduitType ?? "EMT"} {run.conduitSize}": ${conduitCostPerFt.toFixed(3)}/ft</span>
+                ) : (
+                  <span className="text-muted-foreground/40">No price for {run.conduitType ?? "EMT"} {run.conduitSize}" — set in Material DB</span>
+                )}
+                {!conduitOnly && wireCostPerFt != null && (
+                  <><span className="text-muted-foreground/30">·</span><span>Wire: ${wireCostPerFt.toFixed(3)}/ft</span></>
+                )}
+              </div>
             </div>
 
             {/* Fittings */}
@@ -1096,25 +1129,18 @@ function RunCard({
                   <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
                     <StrippedWireIcon size={10} /> Billable Wire
                   </div>
-                  <div className="text-xl font-bold font-mono text-[#F5C518]">{wireBillable}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wirewasteFactor}% waste</div>
+                  <div className="text-xl font-bold font-mono text-[#F5C518]">{(wireBillable * run.conductors).toFixed(1)}</div>
+                  <div className="text-[10px] text-muted-foreground font-mono">{run.conductors}c × {wireBillable} ft w/ {wirewasteFactor}% waste</div>
                 </div>
               </div>
-              {wireMaterialCost != null ? (
-                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</span>
-                    <span className="text-base font-bold font-mono text-emerald-400">${wireMaterialCost.toFixed(2)}</span>
-                  </div>
-                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                    ${wireCostPerFt!.toFixed(3)}/ft × {wireBillable} ft
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-muted/10 border border-border/30 rounded-lg p-2 text-[10px] text-muted-foreground/60 text-center">
-                  No catalog price for this wire type/size — update in Material Database
-                </div>
-              )}
+              {/* Compact price indicator — full cost breakdown lives in Labor & Material summary */}
+              <div className="text-[10px] font-mono text-muted-foreground/70">
+                {wireCostPerFt != null ? (
+                  <span>Wire: ${wireCostPerFt.toFixed(3)}/ft · total est. ${(wireCostPerFt * wireBillable * run.conductors).toFixed(2)}</span>
+                ) : (
+                  <span className="text-muted-foreground/40">No price for this wire type — set in Material DB</span>
+                )}
+              </div>
             </div>
           </>
         )}
@@ -1174,7 +1200,7 @@ function useFlashKey(value: number): string {
   return String(flashKey);
 }
 
-function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countSessions?: CountSession[] }) {
+function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { runs: RunItem[]; countSessions?: CountSession[]; userMaterials?: UserMaterialRow[] }) {
   const { setShowMaterialList } = useApp();
 
   const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
@@ -1208,14 +1234,16 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
     // Use per-run estimating parameters for accurate billable totals
     let wireFt: number;
     if (isWireRun) {
+      // calcWire returns per-conductor footage — multiply by conductors for total
       wireFt = calcWire(
         r.feet, r.conductors,
         r.makeupAllowance ?? 2,
         r.serviceLoop ?? 3,
         r.numTerminations ?? 2,
         r.wirewasteFactor ?? 10,
-      );
+      ) * r.conductors;
     } else {
+      // calcConduitWire already includes conductors
       wireFt = calcConduitWire(
         r.feet, r.conductors,
         r.wireTermMakeup ?? 2,
@@ -1263,10 +1291,64 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
   const totalWire   = runs.reduce((a, r) => {
     const isWireRun = (r.runType ?? "conduit") === "wire";
     if (isWireRun) {
-      return a + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10);
+      // calcWire returns per-conductor footage — multiply by conductors for total
+      return a + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10) * r.conductors;
     }
+    // calcConduitWire already includes conductors
     return a + calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
   }, 0);
+
+  // ── Live material cost aggregation ──────────────────────────────────────────
+  // Computes total estimated material cost for all runs using user DB prices.
+  // Falls back to catalog prices when no user price is set.
+  const totalMaterialCost = runs.reduce((total, r) => {
+    const isWireRun = (r.runType ?? "conduit") === "wire";
+    let runCost = 0;
+    if (!isWireRun) {
+      // Conduit cost
+      const conduitCpf = getConduitPricePerFoot(r.conduitType ?? "EMT", r.conduitSize ?? "1/2", userMaterials);
+      if (conduitCpf != null) {
+        const billable = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10);
+        runCost += conduitCpf * billable;
+      }
+      // Wire cost (skip if conduit-only)
+      if (!r.conduitOnly) {
+        const wireTypeStr = r.wireTypeId ? r.wireTypeId.replace(/^wir-/, "") : "thhn";
+        const wireSize = r.conductorSize ?? "12";
+        const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
+        if (wireCpf != null) {
+          // calcConduitWire already multiplies by conductors internally — do NOT multiply again
+          const wireFt = calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
+          runCost += wireCpf * wireFt;
+        }
+        // Grounding conductor cost
+        if (r.includeGround) {
+          const groundCpf = getWirePricePerFoot("thhn", r.groundSize ?? "12", r.conductorMaterial ?? "CU", userMaterials, undefined);
+          if (groundCpf != null) {
+            const wireFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
+            runCost += groundCpf * wireFt;
+          }
+        }
+      }
+    } else {
+      // Wire-only run
+      const wireTypeStr = r.wireTypeId ? r.wireTypeId.replace(/^wir-/, "") : "thhn";
+      const wireSize = r.conductorSize ?? "12";
+      const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
+      if (wireCpf != null) {
+        const wireFt = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10);
+        runCost += wireCpf * wireFt * r.conductors;
+      }
+    }
+    return total + runCost;
+  }, 0);
+
+  // Unit count material cost
+  const unitCountCost = countSessions
+    .filter((cs) => cs.pins.length > 0 && cs.unitCost != null)
+    .reduce((a, cs) => a + (cs.unitCost! * cs.pins.length), 0);
+
+  const grandTotalMaterialCost = totalMaterialCost + unitCountCost;
 
   const SectionHeader = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
     <div className="flex items-center gap-2 mt-4 mb-2 pb-1 border-b border-border/40">
@@ -1300,6 +1382,21 @@ function CrossPageTotals({ runs, countSessions = [] }: { runs: RunItem[]; countS
       {/* Summary strip — only shown once runs exist */}
       {runs.length > 0 && (
         <SummaryStrip totalFeet={totalFeet} totalSticks={totalSticks} totalWire={totalWire} />
+      )}
+
+      {/* Live material cost total */}
+      {(runs.length > 0 || countSessions.some(cs => cs.pins.length > 0)) && grandTotalMaterialCost > 0 && (
+        <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
+          <div>
+            <div className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</div>
+            {unitCountCost > 0 && totalMaterialCost > 0 && (
+              <div className="text-[9px] text-muted-foreground font-mono">
+                Runs: ${totalMaterialCost.toFixed(2)} · Count: ${unitCountCost.toFixed(2)}
+              </div>
+            )}
+          </div>
+          <div className="text-xl font-bold font-mono text-emerald-400">${grandTotalMaterialCost.toFixed(2)}</div>
+        </div>
       )}
 
       {/* ── Labor & Material Summary ── */}
@@ -2208,7 +2305,7 @@ function CivilEditor({
                   {/* ── MATERIAL SUMMARY — inline below Runs, always visible, grows with content ── */}
                   <div className="bp-card overflow-hidden border-t border-border/40">
                     <div className="px-4 py-3 space-y-3">
-                      <CrossPageTotals runs={runs} countSessions={countSessions} />
+                      <CrossPageTotals runs={runs} countSessions={countSessions} userMaterials={userMaterials} />
 
                     </div>
                   </div>

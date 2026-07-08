@@ -384,3 +384,15 @@
 - [x] Build reusable PriceSyncDialog component: shown when user saves a price that differs from DB; "Yes, update DB" calls upsertMaterialPrice; "No, keep local" dismisses
 - [x] Wire PriceSyncDialog into Unit Count custom price-per-item field: on blur, compare entered price to DB row for that session's material; if different, show dialog
 - [x] TypeScript: 0 errors after all changes
+
+## v5.41 — Catalog Sync, Grounding Conductor, Live Pricing, Measurement Fix
+- [x] Verify all new catalog items (LFNC sizes/fittings, MC fittings) are in the master CATALOG array so seedFromCatalog pushes them everywhere
+- [x] Add grounding conductor toggle to RunCard (off by default); when on, show size picker (14, 12, 10, 8, 6, 4, 2, 1/0 AWG); include grounding wire footage in billable wire total and cost
+- [x] Rename "Conductors" label to "Current Carrying Conductors" in RunCard
+- [x] Fix conduit/wire price lookup: selecting any conduit type/size or wire type/size must immediately recompute cost using the correct catalog ID key from user DB
+- [x] Remove "Estimated Material Cost" section from right panel (replaced by live cost in Labor & Material section)
+- [x] Wire live material cost display into the Labor & Material section so it updates as user toggles conduit/wire selections
+- [x] Fix conductor count calculation bug: calcWire returns per-conductor footage but was not being multiplied by conductors in Wire Only cost display, totalWire aggregation, and wire map breakdown
+- [x] Fix double-count bug in conduit mode: calcConduitWire already multiplies by conductors internally; removed redundant * r.conductors in CrossPageTotals cost aggregation
+- [x] Audit measurement tool: math chain confirmed correct (round-trip cancels); scale display formula verified (162 px/in = 72 points × scale 2.25)
+- [x] TypeScript: 0 errors after all changes

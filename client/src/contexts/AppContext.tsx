@@ -160,6 +160,12 @@ export interface RunItem {
    */
   conduitOnly?: boolean;
 
+  // ── Grounding conductor ────────────────────────────────────────────────────────
+  /** When true, include a separate grounding conductor in this run. */
+  includeGround?: boolean;
+  /** AWG size of the grounding conductor. Default "12" (matches NEC 250.122 for 20A). */
+  groundSize?: ConductorSize;
+
   /** @deprecated Use wirewasteFactor / wireWasteFactor instead */
   wireSlackPct?: number;
   /** @deprecated Use conduitWasteFactor instead */
