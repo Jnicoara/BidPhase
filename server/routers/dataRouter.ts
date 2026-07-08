@@ -181,6 +181,53 @@ export const dataRouter = router({
       }),
 
     /**
+     * Upsert a userPrice for a material matched by description (case-insensitive keyword match).
+     * Used by the price sync prompt when user edits a price in Unit Count or the run tool.
+     * - If a row with a matching description exists, its userPrice is updated.
+     * - If no match is found, a new row is inserted with the given price as both defaultPrice and userPrice.
+     * Returns { updated: true } if an existing row was found, { updated: false } if a new row was inserted.
+     */
+    upsertPriceByDescription: protectedProcedure
+      .input(
+        z.object({
+          description: z.string().min(1).max(512),
+          userPrice: z.number().min(0),
+          category: z.string().max(128).optional(),
+          unit: z.string().max(32).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const allMaterials = await db.getUserMaterials(ctx.user.id);
+        // Case-insensitive substring match on description
+        const needle = input.description.toLowerCase().trim();
+        const match = allMaterials.find(
+          (m) => m.description.toLowerCase().includes(needle) ||
+                 needle.includes(m.description.toLowerCase())
+        );
+        if (match) {
+          await db.updateMaterialPrice(match.id, ctx.user.id, input.userPrice);
+          return { updated: true, id: match.id };
+        } else {
+          // Insert a new row so the price is tracked going forward
+          await db.addSingleMaterial({
+            userId: ctx.user.id,
+            description: input.description,
+            category: input.category ?? null,
+            unit: input.unit ?? "EA",
+            defaultPrice: input.userPrice,
+            userPrice: input.userPrice,
+            unitMaterialCost: input.userPrice,
+            baseLaborHours: 0,
+            phase: null,
+            source: "custom",
+            itemCode: null,
+            externalSku: null,
+          });
+          return { updated: false };
+        }
+      }),
+
+    /**
      * Restore a snapshot of user materials (used for Undo after catalog reload).
      * Wipes current data and re-inserts the snapshot rows.
      */

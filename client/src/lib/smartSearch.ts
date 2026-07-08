@@ -294,7 +294,7 @@ function buildSearchText(item: SearchableItem): string {
     item.id ?? "",
     item.unit ?? "",
     // Include embedded trade slang / brand aliases if present
-    (item as { searchAliases?: string }).searchAliases ?? "",
+    (() => { const a = (item as { searchAliases?: string | string[] }).searchAliases; return Array.isArray(a) ? a.join(" ") : (a ?? ""); })(),
   ];
   return normalize(parts.join(" "));
 }

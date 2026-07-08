@@ -48,6 +48,7 @@ import type { CatalogItem, UserMaterialRow } from "@/lib/materialCatalog";
 import { getConduitPricePerFoot, getWirePricePerFoot } from "@/lib/materialCatalog";
 import { trpc } from "@/lib/trpc";
 import type { SavedMaterialRow } from "@/contexts/AppContext";
+import { PriceSyncDialog } from "@/components/PriceSyncDialog";
 
 // ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ─
 function ConduitPipeIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
@@ -628,6 +629,8 @@ function RunCard({
     LFNC: [
       { value: "3/8",   label: '⅜"'  }, { value: "1/2",   label: '½"'  },
       { value: "3/4",   label: '¾"'  }, { value: "1",     label: '1"'  },
+      { value: "1-1/4", label: '1¼"' }, { value: "1-1/2", label: '1½"' },
+      { value: "2",     label: '2"'  },
     ],
     ENT:  [
       { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
@@ -817,7 +820,7 @@ function RunCard({
                     ? "bg-yellow-400 text-black border-yellow-400"
                     : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
                 )}>
-                {rt === "wire" ? "Wire Only" : "Conduit"}
+                {rt === "wire" ? "Wire Only" : "Conduit / Wire"}
               </button>
             ))}
           </div>
@@ -1450,6 +1453,16 @@ function CivilEditor({
     staleTime: 60_000,
   });
 
+  // ── Price sync dialog state ──────────────────────────────────────────────────
+  // Shown when user edits a price in Unit Count that differs from the DB value
+  const [priceSyncDialog, setPriceSyncDialog] = useState<{
+    open: boolean;
+    description: string;
+    newPrice: number;
+    category?: string;
+    unit?: string;
+  }>({ open: false, description: "", newPrice: 0 });
+
   // Track which PDF page is currently active in PlanPanel
   const [activePage, setActivePage] = useState<number>(1);
 
@@ -1768,6 +1781,15 @@ function CivilEditor({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* Price sync dialog — shown when user edits a price in Unit Count */}
+      <PriceSyncDialog
+        open={priceSyncDialog.open}
+        onOpenChange={(open) => setPriceSyncDialog((prev) => ({ ...prev, open }))}
+        description={priceSyncDialog.description}
+        newPrice={priceSyncDialog.newPrice}
+        category={priceSyncDialog.category}
+        unit={priceSyncDialog.unit}
+      />
       {/* Back bar */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/10 shrink-0">
         <button
@@ -2041,7 +2063,7 @@ function CivilEditor({
                                   <div
                                     className="flex items-center gap-0.5 shrink-0"
                                     onClick={(e) => e.stopPropagation()}
-                                    title="Custom price per item"
+                                    title="Custom price per item — blur to sync to Material Database"
                                   >
                                     <span className="text-[9px] text-muted-foreground font-mono">$</span>
                                     <input
@@ -2058,6 +2080,27 @@ function CivilEditor({
                                               : s2
                                           )
                                         );
+                                      }}
+                                      onBlur={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        if (isNaN(val) || val <= 0) return;
+                                        // Check if this price differs from what's in the Material Database
+                                        const needle = cs.name.toLowerCase().trim();
+                                        const dbRow = userMaterials.find(
+                                          (m) => m.description.toLowerCase().includes(needle) ||
+                                                 needle.includes(m.description.toLowerCase())
+                                        );
+                                        const dbPrice = dbRow?.userPrice ?? dbRow?.defaultPrice ?? null;
+                                        if (dbPrice === null || Math.abs(val - dbPrice) > 0.001) {
+                                          // Price differs (or not in DB yet) — prompt user
+                                          setPriceSyncDialog({
+                                            open: true,
+                                            description: cs.name,
+                                            newPrice: val,
+                                            category: dbRow?.category ?? undefined,
+                                            unit: dbRow?.unit ?? "EA",
+                                          });
+                                        }
                                       }}
                                       placeholder="0.00"
                                       className="w-14 h-5 text-[9px] font-mono bg-transparent border-b border-border/40 focus:border-[#F5C518] outline-none text-muted-foreground focus:text-foreground text-right px-0.5"

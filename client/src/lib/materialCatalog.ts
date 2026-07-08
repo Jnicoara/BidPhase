@@ -35,7 +35,7 @@ export interface CatalogItem {
   unit: string;
   unitPrice: number;
   /** Optional trade slang / brand aliases for smart search */
-  searchAliases?: string;
+  searchAliases?: string | string[];
 }
 
 export const CATALOG: CatalogItem[] = [
@@ -308,9 +308,13 @@ export const CATALOG: CatalogItem[] = [
   { id: "cnd-lfmc-2-ft",           category: "Conduit", description: "2\" LFMC Liquid-Tight Flexible Metal Conduit (per foot)",        unit: "FT", unitPrice: 4.50 },
 
   // ── LFNC (Liquid-Tight Flexible Non-Metallic) — per foot ──────────────────
-  { id: "cnd-lfnc-1/2-ft",         category: "Conduit", description: "1/2\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",        unit: "FT", unitPrice: 0.45 },
-  { id: "cnd-lfnc-3/4-ft",         category: "Conduit", description: "3/4\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",        unit: "FT", unitPrice: 0.65 },
-  { id: "cnd-lfnc-1-ft",           category: "Conduit", description: "1\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",          unit: "FT", unitPrice: 1.00 },
+  { id: "cnd-lfnc-3/8-ft",         category: "Conduit", description: "3/8\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",        unit: "FT", unitPrice: 0.32, searchAliases: ["liquid tight non metallic", "lfnc flex", "non metallic liquidtight"] },
+  { id: "cnd-lfnc-1/2-ft",         category: "Conduit", description: "1/2\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",        unit: "FT", unitPrice: 0.45, searchAliases: ["liquid tight non metallic", "lfnc flex"] },
+  { id: "cnd-lfnc-3/4-ft",         category: "Conduit", description: "3/4\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",        unit: "FT", unitPrice: 0.65, searchAliases: ["liquid tight non metallic", "lfnc flex"] },
+  { id: "cnd-lfnc-1-ft",           category: "Conduit", description: "1\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",          unit: "FT", unitPrice: 1.00, searchAliases: ["liquid tight non metallic", "lfnc flex"] },
+  { id: "cnd-lfnc-1-1/4-ft",       category: "Conduit", description: "1-1/4\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",      unit: "FT", unitPrice: 1.55, searchAliases: ["liquid tight non metallic", "lfnc flex"] },
+  { id: "cnd-lfnc-1-1/2-ft",       category: "Conduit", description: "1-1/2\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",      unit: "FT", unitPrice: 2.10, searchAliases: ["liquid tight non metallic", "lfnc flex"] },
+  { id: "cnd-lfnc-2-ft",           category: "Conduit", description: "2\" LFNC Liquid-Tight Non-Metallic Conduit (per foot)",          unit: "FT", unitPrice: 3.20, searchAliases: ["liquid tight non metallic", "lfnc flex"] },
 
   // ── ENT (Electrical Non-Metallic Tubing / Smurf Tube) — per foot ──────────
   { id: "cnd-ent-1/2-ft",          category: "Conduit", description: "1/2\" ENT Flexible Non-Metallic Conduit (per foot)",             unit: "FT", unitPrice: 0.18 },
@@ -466,6 +470,25 @@ export const CATALOG: CatalogItem[] = [
   { id: "fit-lfmc-90-1/2",         category: "Conduit Fittings", description: "1/2\" LFMC 90-Degree Liquid-Tight Connector",           unit: "EA", unitPrice: 3.85 },
   { id: "fit-lfmc-90-3/4",         category: "Conduit Fittings", description: "3/4\" LFMC 90-Degree Liquid-Tight Connector",           unit: "EA", unitPrice: 5.50 },
   { id: "fit-lfmc-90-1",           category: "Conduit Fittings", description: "1\" LFMC 90-Degree Liquid-Tight Connector",             unit: "EA", unitPrice: 8.50 },
+
+  // ── LFNC (Liquid-Tight Flexible Non-Metallic) Fittings ─────────────────────
+  { id: "fit-lfnc-conn-3/8",        category: "Conduit Fittings", description: "3/8\" LFNC Straight Liquid-Tight Non-Metallic Connector",  unit: "EA", unitPrice: 1.65, searchAliases: ["lfnc connector", "liquid tight non metallic connector"] },
+  { id: "fit-lfnc-conn-1/2",        category: "Conduit Fittings", description: "1/2\" LFNC Straight Liquid-Tight Non-Metallic Connector",  unit: "EA", unitPrice: 2.10, searchAliases: ["lfnc connector", "liquid tight non metallic connector"] },
+  { id: "fit-lfnc-conn-3/4",        category: "Conduit Fittings", description: "3/4\" LFNC Straight Liquid-Tight Non-Metallic Connector",  unit: "EA", unitPrice: 2.85, searchAliases: ["lfnc connector", "liquid tight non metallic connector"] },
+  { id: "fit-lfnc-conn-1",          category: "Conduit Fittings", description: "1\" LFNC Straight Liquid-Tight Non-Metallic Connector",    unit: "EA", unitPrice: 4.50, searchAliases: ["lfnc connector", "liquid tight non metallic connector"] },
+  { id: "fit-lfnc-conn-1-1/4",      category: "Conduit Fittings", description: "1-1/4\" LFNC Straight Liquid-Tight Non-Metallic Connector", unit: "EA", unitPrice: 6.50, searchAliases: ["lfnc connector", "liquid tight non metallic connector"] },
+  { id: "fit-lfnc-conn-1-1/2",      category: "Conduit Fittings", description: "1-1/2\" LFNC Straight Liquid-Tight Non-Metallic Connector", unit: "EA", unitPrice: 8.50, searchAliases: ["lfnc connector", "liquid tight non metallic connector"] },
+  { id: "fit-lfnc-conn-2",          category: "Conduit Fittings", description: "2\" LFNC Straight Liquid-Tight Non-Metallic Connector",    unit: "EA", unitPrice: 12.00, searchAliases: ["lfnc connector", "liquid tight non metallic connector"] },
+  { id: "fit-lfnc-90-3/8",          category: "Conduit Fittings", description: "3/8\" LFNC 90-Degree Liquid-Tight Non-Metallic Connector", unit: "EA", unitPrice: 2.25, searchAliases: ["lfnc 90 connector", "liquid tight non metallic 90"] },
+  { id: "fit-lfnc-90-1/2",          category: "Conduit Fittings", description: "1/2\" LFNC 90-Degree Liquid-Tight Non-Metallic Connector", unit: "EA", unitPrice: 2.95, searchAliases: ["lfnc 90 connector", "liquid tight non metallic 90"] },
+  { id: "fit-lfnc-90-3/4",          category: "Conduit Fittings", description: "3/4\" LFNC 90-Degree Liquid-Tight Non-Metallic Connector", unit: "EA", unitPrice: 3.95, searchAliases: ["lfnc 90 connector", "liquid tight non metallic 90"] },
+  { id: "fit-lfnc-90-1",            category: "Conduit Fittings", description: "1\" LFNC 90-Degree Liquid-Tight Non-Metallic Connector",   unit: "EA", unitPrice: 6.25, searchAliases: ["lfnc 90 connector", "liquid tight non metallic 90"] },
+  { id: "fit-lfnc-coup-3/8",        category: "Conduit Fittings", description: "3/8\" LFNC Coupling",                                     unit: "EA", unitPrice: 1.45, searchAliases: ["lfnc coupling", "liquid tight non metallic coupling"] },
+  { id: "fit-lfnc-coup-1/2",        category: "Conduit Fittings", description: "1/2\" LFNC Coupling",                                     unit: "EA", unitPrice: 1.85, searchAliases: ["lfnc coupling", "liquid tight non metallic coupling"] },
+  { id: "fit-lfnc-coup-3/4",        category: "Conduit Fittings", description: "3/4\" LFNC Coupling",                                     unit: "EA", unitPrice: 2.50, searchAliases: ["lfnc coupling", "liquid tight non metallic coupling"] },
+  { id: "fit-lfnc-coup-1",          category: "Conduit Fittings", description: "1\" LFNC Coupling",                                       unit: "EA", unitPrice: 3.85, searchAliases: ["lfnc coupling", "liquid tight non metallic coupling"] },
+  { id: "fit-lfnc-coup-1-1/2",      category: "Conduit Fittings", description: "1-1/2\" LFNC Coupling",                                   unit: "EA", unitPrice: 6.50, searchAliases: ["lfnc coupling", "liquid tight non metallic coupling"] },
+  { id: "fit-lfnc-coup-2",          category: "Conduit Fittings", description: "2\" LFNC Coupling",                                       unit: "EA", unitPrice: 9.50, searchAliases: ["lfnc coupling", "liquid tight non metallic coupling"] },
 
   // ── Reducing Bushings & Locknuts ──────────────────────────────────────────
   { id: "fit-bush-3/4-1/2",        category: "Conduit Fittings", description: "3/4\" to 1/2\" Reducing Bushing",                       unit: "EA", unitPrice: 0.85 },
