@@ -506,6 +506,7 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
 
   const [importState, setImportState] = useState<ImportStage>({ stage: "idle" });
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showReloadConfirm, setShowReloadConfirm] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   // ── tRPC ──────────────────────────────────────────────────────────────────
@@ -698,6 +699,22 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
             Add Custom Material
           </Button>
 
+          {/* Reload master catalog */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowReloadConfirm(true)}
+            className="gap-1.5 text-xs h-8"
+            disabled={seedFromCatalog.isPending}
+          >
+            {seedFromCatalog.isPending ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <Database size={12} />
+            )}
+            Reload Master Catalog
+          </Button>
+
           {/* Import */}
           <Button
             size="sm"
@@ -754,7 +771,7 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
             <div>
               <p className="text-base font-semibold text-foreground">Your material database is empty</p>
               <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                Load the built-in master catalog of 623 common electrical items with baseline prices,
+                Load the built-in master catalog of 1,021 common electrical items with baseline prices,
                 or import your own supply house CSV.
               </p>
             </div>
@@ -762,7 +779,7 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
             <div className="bg-[#F5C518]/10 border border-[#F5C518]/30 rounded-xl p-5 max-w-sm w-full">
               <p className="text-sm font-semibold text-[#F5C518] mb-1">Recommended: Load Master Catalog</p>
               <p className="text-xs text-muted-foreground mb-4">
-                623 items across Distribution, Conduit, Wire, Rough-in, Devices &amp; Civil.
+                1,021 items across Distribution, Conduit, Wire, Rough-in, Devices, Lighting &amp; Civil.
                 Prices are editable — update them with your own supply house quotes at any time.
               </p>
               <Button
@@ -773,7 +790,7 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
                 {seedFromCatalog.isPending ? (
                   <><Loader2 size={14} className="animate-spin mr-2" />Loading catalog…</>
                 ) : (
-                  <><Database size={14} className="mr-2" />Load Master Catalog (623 items)</>
+                  <><Database size={14} className="mr-2" />Load Master Catalog (1,021 items)</>
                 )}
               </Button>
             </div>
@@ -917,6 +934,39 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
             onClose={() => setShowAddDialog(false)}
           />
         )}
+      </Dialog>
+
+      {/* Reload master catalog confirmation */}
+      <Dialog open={showReloadConfirm} onOpenChange={setShowReloadConfirm}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle size={18} className="text-yellow-400" />
+              Reload Master Catalog?
+            </DialogTitle>
+            <DialogDescription>
+              This will <strong>replace your entire material database</strong> with the 1,021-item master catalog.
+              Any custom prices (User_Price) and Last_Updated dates you have saved will be permanently lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowReloadConfirm(false)}>Cancel</Button>
+            <Button
+              className="bg-[#F5C518] text-black hover:bg-[#F5C518]/90 font-semibold"
+              disabled={seedFromCatalog.isPending}
+              onClick={() => {
+                setShowReloadConfirm(false);
+                seedFromCatalog.mutate({ replaceAll: true });
+              }}
+            >
+              {seedFromCatalog.isPending ? (
+                <><Loader2 size={14} className="animate-spin mr-2" />Loading…</>
+              ) : (
+                <><Database size={14} className="mr-2" />Yes, Reload Catalog</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
 
       {/* Delete confirmation */}
