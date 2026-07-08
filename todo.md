@@ -404,3 +404,74 @@
 - [x] Make EGC conductor material toggleable (Cu / Al) — added groundMaterial field to RunItem interface; Cu/Al toggle shown when EGC is enabled
 - [x] EGC footage must be included in the total wire footage display and cost aggregation — added to totalWire in CrossPageTotals and cost uses groundMaterial
 - [x] TypeScript: 0 errors after all changes
+
+## v5.45 — Major Feature Expansion (6 Systems)
+
+### 1. Database Schema Expansion
+- [x] Add customerName, address, bidDate, notes, status (enum: Bidding/Won/In Progress/Lost) to projects table
+- [x] Create master_items table (userId, itemCode, category, description, unit, masterMaterialCost, masterLaborHours, isActive)
+- [x] Create master_assemblies table (userId, name, description, phase, isActive)
+- [x] Create master_assembly_items join table (assemblyId, masterItemId, qty, sortOrder)
+- [x] Create master_labor_rates table (userId, name, ratePerHour, type: journeyman/apprentice/foreman)
+- [x] Create project_items table (projectId, masterItemId, description, unit, qty, masterMaterialCost, overrideMaterialCost, masterLaborHours, overrideLaborHours, phase, sortOrder)
+- [x] Create project_assemblies table (projectId, masterAssemblyId, name, phase, sortOrder)
+- [x] Create project_assembly_items table (projectAssemblyId, masterItemId, description, unit, qty, masterMaterialCost, overrideMaterialCost, masterLaborHours, overrideLaborHours)
+- [x] Create bid_summary table (projectId, percentageLaborFactor, lumpSumHours, markupPct) — one row per project
+- [x] Push all schema migrations with pnpm db:push
+
+### 2. tRPC Procedures
+- [x] projects router: add search query, update mutation (customerName, address, bidDate, notes, status)
+- [x] masterItems router: list, create, update, delete, bulkImport
+- [x] masterAssemblies router: list, get (with items), create, update, delete, addItem, removeItem, reorderItems
+- [x] masterLaborRates router: list, create, update, delete
+- [x] projectItems router: list (by projectId), add (from master or manual), update (qty/overrides), delete, resetToMaster
+- [x] projectAssemblies router: list, add (from master), update, delete, updateItem (override), resetItemToMaster
+- [x] bidSummary router: get, upsert (percentageLaborFactor, lumpSumHours, markupPct)
+
+### 3. Homepage
+- [x] Replace current homepage with clean project grid (Project Name, Customer, Bid Date, Status badge)
+- [x] Large search bar at top — wildcard filter across projectName, customerName, address simultaneously
+- [x] Status color badges (Bidding=yellow, Won=green, In Progress=blue, Lost=gray)
+- [x] "New Project" button with modal (name, customer, address, bid date, status)
+- [x] Click project → navigate to Project Detail view
+
+### 4. Project Detail View
+- [x] Editable header: Customer Name, Address, Bid Date (date picker), Status (dropdown), Notes (textarea)
+- [x] Auto-save on blur for all header fields
+- [x] "Back to Projects" button (large, obvious)
+- [x] Estimating workspace below header (tabs: Assemblies, Standalone Items, Bid Summary, BOM/RFQ)
+
+### 5. Master Items & Assemblies Management UI
+- [x] Settings/Master Catalog page: list master items with search, add/edit/delete
+- [x] Master Assemblies page: list assemblies, click to expand items, add/remove items, set qty
+- [x] Master Labor Rates page: list rates, add/edit/delete
+
+### 6. Project Assembly Workspace
+- [x] "Add Assembly" button — opens master assembly picker, adds copy to project
+- [x] Assembly card: shows name, phase, item list with qty/override price/override labor hours
+- [x] Inline edit for qty, overrideMaterialCost, overrideLaborHours per item
+- [x] "Reset to Default" button per item (replaces override with master value)
+- [x] "Add Standalone Item" button — opens master item picker or manual entry
+- [x] Phase grouping: items/assemblies can be tagged to a phase
+
+### 7. Bid Summary
+- [x] Show rawTotalHours (sum of all overrideLaborHours × qty across all items/assemblies)
+- [x] percentageLaborFactor input (default 1.0) — multiplier on rawTotalHours
+- [x] lumpSumHours input (default 0) — flat add/subtract
+- [x] finalAdjustedHours = (rawTotalHours × percentageLaborFactor) + lumpSumHours
+- [x] totalMaterialCost = sum of (overrideMaterialCost × qty) across all items
+- [x] markupPct input — applied to material cost only
+- [x] Grand total display: material + markup + (finalAdjustedHours × laborRate)
+
+### 8. BOM & RFQ Generation
+- [x] Aggregate all project items + assembly items by itemCode/description, sum quantities
+- [x] Internal BOM view: description, SKU, aggregated qty, unit, overrideMaterialCost, extended cost
+- [x] RFQ view: description, SKU, aggregated qty, unit — NO pricing or labor
+- [x] Export BOM as CSV
+- [x] Export RFQ as CSV (price-stripped)
+
+### 9. Tests & Cleanup
+- [x] Vitest: test bid summary math (rawHours × factor + lumpSum = finalHours)
+- [x] Vitest: test BOM aggregation (same item across 2 assemblies sums correctly)
+- [x] Vitest: test override/reset (override changes value, reset restores master)
+- [x] TypeScript: 0 errors after all changes

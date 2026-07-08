@@ -4,15 +4,18 @@
  * Mobile:  fixed bottom navigation bar
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
  *
- * Routing: uses window.history pushState so browser back/forward works for ALL routes.
- *   /           → landing page
- *   /residential→ Residential projects
- *   /commercial → Commercial projects
- *   /civil      → Infrastructure projects
- *   /material   → Labor & Material page (navigable, back/forward works)
- *   /estimate   → Estimate Engine
- *   /settings   → Settings
- *   /trash      → Trash
+ * Routing (hash-based):
+ *   /           → Projects home (search + grid)
+ *   /project/:id → Project detail (editable header + tabs)
+ *   /residential → Residential estimating workspace (legacy)
+ *   /commercial  → Commercial estimating workspace (legacy)
+ *   /civil       → Infrastructure estimating workspace (legacy)
+ *   /industrial  → Industrial estimating workspace (legacy)
+ *   /material    → Labor & Material page
+ *   /estimate    → Estimate Engine
+ *   /settings    → Settings
+ *   /trash       → Trash
+ *   /matdb       → Material Database
  */
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
@@ -24,39 +27,53 @@ import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
 import CategoryLanding from "@/pages/CategoryLanding";
 import TrashPage from "@/pages/TrashPage";
 import EstimateEnginePage from "@/pages/EstimateEnginePage";
-import { Settings, Trash2, ChevronRight, Zap, Database } from "lucide-react";
+import ProjectsHomePage from "@/pages/ProjectsHomePage";
+import ProjectDetailPage from "@/pages/ProjectDetailPage";
+import { Settings, Trash2, ChevronRight, Zap, Database, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Route = "landing" | "civil" | "commercial" | "residential" | "industrial" | "material" | "settings" | "trash" | "estimate" | "matdb";
+type Route =
+  | "home"
+  | "project-detail"
+  | "landing"
+  | "civil"
+  | "commercial"
+  | "residential"
+  | "industrial"
+  | "material"
+  | "settings"
+  | "trash"
+  | "estimate"
+  | "matdb";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
-function pathToRoute(path: string): Route {
-  // Support both hash-based (#/civil) and path-based (/civil) URLs
-  // Also handle sub-routes like #/residential/project-id — use only the first segment
+function pathToRoute(path: string): { route: Route; projectId?: number } {
   const full = path.replace(/^#\/?/, "").replace(/^\//, "").split("?")[0].split("#")[0];
-  const p = full.split("/")[0]; // only first segment for top-level route
-  if (p === "residential") return "residential";
-  if (p === "commercial") return "commercial";
-  if (p === "civil") return "civil";
-  if (p === "industrial") return "industrial";
-  if (p === "material") return "material";
-  if (p === "matdb") return "matdb";
-  if (p === "estimate") return "estimate";
-  if (p === "settings") return "settings";
-  if (p === "trash") return "trash";
-  return "landing";
+  const parts = full.split("/");
+  const p = parts[0];
+
+  if (p === "home") return { route: "home" };
+  if (p === "project" && parts[1]) {
+    const id = parseInt(parts[1]);
+    if (!isNaN(id)) return { route: "project-detail", projectId: id };
+  }
+  if (p === "residential") return { route: "residential" };
+  if (p === "commercial") return { route: "commercial" };
+  if (p === "civil") return { route: "civil" };
+  if (p === "industrial") return { route: "industrial" };
+  if (p === "material") return { route: "material" };
+  if (p === "matdb") return { route: "matdb" };
+  if (p === "estimate") return { route: "estimate" };
+  if (p === "settings") return { route: "settings" };
+  if (p === "trash") return { route: "trash" };
+  // Default: show projects home
+  return { route: "home" };
 }
 
-function getCurrentRoute(): Route {
-  // Support both hash routing (legacy) and path routing
+function getCurrentRouteState(): { route: Route; projectId?: number } {
   const hash = window.location.hash;
   if (hash && hash.length > 1) return pathToRoute(hash);
   return pathToRoute(window.location.pathname);
-}
-
-function routeToPath(route: Route): string {
-  if (route === "landing") return "/";
-  return `/${route}`;
 }
 
 // ── Nav config ──────────────────────────────────────────────────────────────
@@ -67,10 +84,6 @@ const CATEGORY_ICONS = {
   industrial:  IndustrialIcon,
 } as const;
 
-// Category labels removed — no longer user-facing
-const CATEGORY_LABELS = {} as Record<string, string>;
-
-// Ordered: Residential, Commercial, Industrial, Infrastructure (civil last)
 const CATEGORY_ORDER = ["residential", "commercial", "industrial", "civil"] as const;
 
 export default function BidPhaseShell() {
@@ -81,16 +94,24 @@ export default function BidPhaseShell() {
     activeCategory, setActiveCategory,
   } = useApp();
 
-  // ── URL-based routing using pushState ──────────────────────────────────────
-  const [route, setRoute] = useState<Route>(() => getCurrentRoute());
-  const [previousRoute, setPreviousRoute] = useState<Route>("landing");
+  // ── URL-based routing using hash ──────────────────────────────────────────
+  const [routeState, setRouteState] = useState<{ route: Route; projectId?: number }>(
+    () => getCurrentRouteState()
+  );
+  const [previousRoute, setPreviousRoute] = useState<Route>("home");
 
-  const navigate = useCallback((r: Route) => {
-    // Use hash routing for compatibility with static hosting
-    window.location.hash = r === "landing" ? "/" : `/${r}`;
+  const { route, projectId: activeProjectId } = routeState;
+
+  const navigate = useCallback((r: Route, id?: number) => {
+    if (r === "home") {
+      window.location.hash = "/home";
+    } else if (r === "project-detail" && id) {
+      window.location.hash = `/project/${id}`;
+    } else {
+      window.location.hash = `/${r}`;
+    }
   }, []);
 
-  // Go back using browser history (works with browser back button too)
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
       window.history.back();
@@ -101,13 +122,12 @@ export default function BidPhaseShell() {
 
   useEffect(() => {
     const onHashChange = () => {
-      const r = getCurrentRoute();
-      setRoute((prev) => {
-        // Track previous route before updating
-        setPreviousRoute(prev);
-        return r;
+      const state = getCurrentRouteState();
+      setRouteState(prev => {
+        setPreviousRoute(prev.route);
+        return state;
       });
-      // Sync AppContext state
+      const r = state.route;
       if (r === "civil" || r === "commercial" || r === "residential" || r === "industrial") {
         setActiveCategory(r);
         setActiveTab("projects");
@@ -116,14 +136,11 @@ export default function BidPhaseShell() {
       } else if (r === "material") {
         setShowMaterialList(true);
       } else {
-        // When navigating away from material via back/forward, clear the flag
         setShowMaterialList(false);
       }
     };
     window.addEventListener("hashchange", onHashChange);
-    // Also listen for popstate (browser back/forward on path-based)
     window.addEventListener("popstate", onHashChange);
-    // Sync initial state
     onHashChange();
     return () => {
       window.removeEventListener("hashchange", onHashChange);
@@ -132,7 +149,9 @@ export default function BidPhaseShell() {
   }, [setActiveCategory, setActiveTab, setShowMaterialList]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
+  const isOnHome       = route === "home";
   const isOnLanding    = route === "landing";
+  const isOnProjectDetail = route === "project-detail";
   const isInCategory   = route === "civil" || route === "commercial" || route === "residential" || route === "industrial";
   const isInSettings   = route === "settings";
   const isInTrash      = route === "trash";
@@ -144,41 +163,36 @@ export default function BidPhaseShell() {
     ? (route as "civil" | "commercial" | "residential" | "industrial")
     : activeCategory;
 
-  // ── Open L&M with proper URL push ─────────────────────────────────────────
-  const openMaterialList = useCallback(() => {
-    navigate("material");
-  }, [navigate]);
-
+  const openMaterialList = useCallback(() => navigate("material"), [navigate]);
   const closeMaterialList = useCallback(() => {
-    // Use browser back to pop the #/material entry off the history stack
-    // This avoids creating a new entry and fixes the back-button loop
-    if (window.history.length > 1) {
-      window.history.back();
-    } else {
-      navigate(currentCategory);
-    }
+    if (window.history.length > 1) window.history.back();
+    else navigate(currentCategory);
   }, [navigate, currentCategory]);
 
   // ── Content renderer ───────────────────────────────────────────────────────
-  // The home/landing screen IS the projects list (CategoryLanding).
-  // Navigating to a category route opens that project workspace directly.
   const renderContent = () => {
     if (isInMaterial)  return <MaterialListPage onBack={closeMaterialList} />;
     if (isInMatDb)     return <MaterialDatabasePage onBack={goBack} />;
-    if (isOnLanding)   return (
-      <CategoryLanding onSelect={(cat) => {
-        setActiveCategory(cat);
-        navigate(cat);
-      }} />
+    if (isOnHome || isOnLanding) return (
+      <ProjectsHomePage
+        onOpenProject={(id) => navigate("project-detail", id)}
+      />
+    );
+    if (isOnProjectDetail && activeProjectId) return (
+      <ProjectDetailPage
+        projectId={activeProjectId}
+        onBack={() => navigate("home")}
+        onOpenMaterialList={openMaterialList}
+      />
     );
     if (isInTrash)     return <TrashPage onBack={goBack} />;
     if (isInSettings)  return <SettingsTab onBack={goBack} />;
     if (isInEstimate)  return <EstimateEnginePage onBack={goBack} />;
-    // In a category — show the workspace
+    // Legacy category workspace
     return <UnifiedProjects category={currentCategory} />;
   };
 
-  const routeKey = route;
+  const routeKey = route === "project-detail" ? `project-${activeProjectId}` : route;
 
   // ── Sidebar nav item helper ────────────────────────────────────────────────
   const NavBtn = ({
@@ -216,9 +230,9 @@ export default function BidPhaseShell() {
         className="hidden md:flex flex-col shrink-0 w-16 hover:w-56 transition-[width] duration-200 ease-out
                    bg-sidebar border-r border-sidebar-border overflow-hidden group z-20"
       >
-        {/* Logo — click returns to landing */}
+        {/* Logo — click returns to home */}
         <div
-          onClick={() => navigate("landing")}
+          onClick={() => navigate("home")}
           className="flex items-center justify-center gap-2 px-3 py-4 h-16 border-b border-sidebar-border shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
           title="Back to home"
         >
@@ -239,20 +253,19 @@ export default function BidPhaseShell() {
         {/* Nav items — top section */}
         <nav className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
           <NavBtn
+            onClick={() => navigate("home")}
+            isActive={isOnHome || isOnLanding || isOnProjectDetail}
+            icon={Home}
+            label="Projects"
+            title="Projects"
+          />
+          <NavBtn
             onClick={() => navigate("matdb")}
             isActive={isInMatDb}
             icon={Database}
             label="Material Database"
             title="Material Database"
           />
-          {/* Estimate Engine — hidden for now, backend intact */}
-          {/* <div className="my-1 border-t border-sidebar-border/50" />
-          <NavBtn
-            onClick={() => navigate("estimate")}
-            isActive={isInEstimate}
-            icon={Zap}
-            label="Estimate Engine"
-          /> */}
         </nav>
 
         {/* Bottom section: Trash on top, Settings on bottom */}
@@ -276,7 +289,7 @@ export default function BidPhaseShell() {
           <span
             className="text-[10px] text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 font-mono"
           >
-            v3.0 · Field Edition
+            v5.45 · Field Edition
           </span>
         </div>
       </aside>
@@ -288,19 +301,20 @@ export default function BidPhaseShell() {
           <span
             className="font-bold text-base text-foreground cursor-pointer"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            onClick={() => navigate("landing")}
+            onClick={() => navigate("home")}
           >
             BidPhase
           </span>
           <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground font-mono">
             <ChevronRight size={12} />
             <span className="capitalize">
-              {isOnLanding ? "Home"
+              {isOnHome || isOnLanding ? "Projects"
+                : isOnProjectDetail ? "Project"
                 : isInTrash ? "Trash"
                 : isInSettings ? "Settings"
                 : isInEstimate ? "Estimate Engine"
                 : isInMaterial ? "Labor & Material"
-                : "Project"}
+                : "Workspace"}
             </span>
           </div>
         </header>
@@ -309,7 +323,6 @@ export default function BidPhaseShell() {
         <div
           className="flex-1 overflow-hidden tab-enter"
           key={routeKey}
-
         >
           {renderContent()}
         </div>
@@ -317,18 +330,16 @@ export default function BidPhaseShell() {
 
       {/* ── Mobile Bottom Nav ────────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex bg-sidebar border-t border-border">
-        {/* Projects tab removed — home IS the projects list; BP logo returns to home */}
-        {/* Estimate Engine mobile button — hidden for now */}
-        {/* <button
-          onClick={() => navigate("estimate")}
+        <button
+          onClick={() => navigate("home")}
           className={cn(
             "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-            isInEstimate ? "text-[#F5C518]" : "text-muted-foreground"
+            isOnHome || isOnProjectDetail ? "text-[#F5C518]" : "text-muted-foreground"
           )}
         >
-          <Zap size={18} className={isInEstimate ? "text-[#F5C518]" : ""} />
-          {isInEstimate && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
-        </button> */}
+          <Home size={18} className={isOnHome || isOnProjectDetail ? "text-[#F5C518]" : ""} />
+          {(isOnHome || isOnProjectDetail) && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
+        </button>
         <button
           onClick={() => navigate("settings")}
           className={cn(
@@ -352,7 +363,7 @@ export default function BidPhaseShell() {
       </nav>
 
       {/* ── Floating Export Button ───────────────────────────────── */}
-      {!isInMaterial && !isOnLanding && !isInTrash && !isInEstimate && !isInMatDb && (
+      {!isInMaterial && !isOnHome && !isOnLanding && !isInTrash && !isInEstimate && !isInMatDb && !isOnProjectDetail && (
         <ExportButton onOpenMaterialList={openMaterialList} />
       )}
     </div>

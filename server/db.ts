@@ -1,12 +1,28 @@
-import { and, desc, eq, asc } from "drizzle-orm";
+import { and, desc, eq, asc, or, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
   InsertProject,
   InsertUserMaterialsDb,
+  InsertMasterItem,
+  InsertMasterAssembly,
+  InsertMasterAssemblyItem,
+  InsertMasterLaborRate,
+  InsertProjectAssembly,
+  InsertProjectAssemblyItem,
+  InsertProjectItem,
+  InsertBidSummary,
   projects,
   userMaterialsDb,
   users,
+  masterItems,
+  masterAssemblies,
+  masterAssemblyItems,
+  masterLaborRates,
+  projectAssemblies,
+  projectAssemblyItems,
+  projectItems,
+  bidSummary,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -93,14 +109,29 @@ export async function updateUserPassword(userId: number, passwordHash: string) {
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────
-// Foundation for future cloud sync. Active project data is currently stored
-// in localStorage/IndexedDB on the client.
 
 export async function getProjectsByUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(projects)
     .where(and(eq(projects.userId, userId), eq(projects.isArchived, false)))
+    .orderBy(desc(projects.updatedAt));
+}
+
+export async function searchProjectsByUser(userId: number, query: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const q = `%${query}%`;
+  return db.select().from(projects)
+    .where(and(
+      eq(projects.userId, userId),
+      eq(projects.isArchived, false),
+      or(
+        like(projects.name, q),
+        like(projects.customerName, q),
+        like(projects.address, q),
+      )
+    ))
     .orderBy(desc(projects.updatedAt));
 }
 
@@ -141,8 +172,6 @@ export async function deleteProject(id: number, userId: number) {
 }
 
 // ─── User Materials Database ───────────────────────────────────────────────────
-// Stores user-imported material catalog entries (CSV/JSON upload via Settings).
-// Used by the CatalogPicker search in the Unit Count panel.
 
 export async function getUserMaterials(userId: number) {
   const db = await getDb();
@@ -152,7 +181,6 @@ export async function getUserMaterials(userId: number) {
     .orderBy(asc(userMaterialsDb.category), asc(userMaterialsDb.description));
 }
 
-/** Set userPrice for a single material row; auto-stamps lastUpdated to now */
 export async function updateMaterialPrice(id: number, userId: number, userPrice: number | null) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -161,7 +189,6 @@ export async function updateMaterialPrice(id: number, userId: number, userPrice:
     .where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
 }
 
-/** Reset userPrice + lastUpdated back to null (returns item to defaultPrice baseline) */
 export async function resetMaterialPrice(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -170,7 +197,6 @@ export async function resetMaterialPrice(id: number, userId: number) {
     .where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
 }
 
-/** Add a single custom material row */
 export async function addSingleMaterial(row: InsertUserMaterialsDb) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -178,7 +204,6 @@ export async function addSingleMaterial(row: InsertUserMaterialsDb) {
   return result[0];
 }
 
-/** Update description/unit/category/defaultPrice for a single row */
 export async function updateMaterialRow(
   id: number,
   userId: number,
@@ -208,4 +233,310 @@ export async function clearUserMaterials(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   await db.delete(userMaterialsDb).where(eq(userMaterialsDb.userId, userId));
+}
+
+// ─── Master Items ─────────────────────────────────────────────────────────────
+
+export async function getMasterItems(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(masterItems)
+    .where(and(eq(masterItems.userId, userId), eq(masterItems.isActive, true)))
+    .orderBy(asc(masterItems.category), asc(masterItems.description));
+}
+
+export async function getMasterItemById(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(masterItems)
+    .where(and(eq(masterItems.id, id), eq(masterItems.userId, userId)))
+    .limit(1);
+  return result[0];
+}
+
+export async function createMasterItem(data: InsertMasterItem) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(masterItems).values(data);
+  return result[0];
+}
+
+export async function updateMasterItem(id: number, userId: number, data: Partial<InsertMasterItem>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(masterItems).set({ ...data, updatedAt: new Date() })
+    .where(and(eq(masterItems.id, id), eq(masterItems.userId, userId)));
+}
+
+export async function deleteMasterItem(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  // Soft delete
+  await db.update(masterItems).set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(masterItems.id, id), eq(masterItems.userId, userId)));
+}
+
+export async function bulkInsertMasterItems(rows: InsertMasterItem[]) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  if (rows.length === 0) return;
+  await db.insert(masterItems).values(rows);
+}
+
+// ─── Master Assemblies ────────────────────────────────────────────────────────
+
+export async function getMasterAssemblies(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(masterAssemblies)
+    .where(and(eq(masterAssemblies.userId, userId), eq(masterAssemblies.isActive, true)))
+    .orderBy(asc(masterAssemblies.name));
+}
+
+export async function getMasterAssemblyWithItems(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [assembly] = await db.select().from(masterAssemblies)
+    .where(and(eq(masterAssemblies.id, id), eq(masterAssemblies.userId, userId)))
+    .limit(1);
+  if (!assembly) return undefined;
+
+  const items = await db.select({
+    id: masterAssemblyItems.id,
+    assemblyId: masterAssemblyItems.assemblyId,
+    masterItemId: masterAssemblyItems.masterItemId,
+    qty: masterAssemblyItems.qty,
+    sortOrder: masterAssemblyItems.sortOrder,
+    itemCode: masterItems.itemCode,
+    description: masterItems.description,
+    unit: masterItems.unit,
+    masterMaterialCost: masterItems.masterMaterialCost,
+    masterLaborHours: masterItems.masterLaborHours,
+    category: masterItems.category,
+  })
+    .from(masterAssemblyItems)
+    .innerJoin(masterItems, eq(masterAssemblyItems.masterItemId, masterItems.id))
+    .where(eq(masterAssemblyItems.assemblyId, id))
+    .orderBy(asc(masterAssemblyItems.sortOrder));
+
+  return { ...assembly, items };
+}
+
+export async function createMasterAssembly(data: InsertMasterAssembly) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(masterAssemblies).values(data);
+  return result[0];
+}
+
+export async function updateMasterAssembly(id: number, userId: number, data: Partial<InsertMasterAssembly>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(masterAssemblies).set({ ...data, updatedAt: new Date() })
+    .where(and(eq(masterAssemblies.id, id), eq(masterAssemblies.userId, userId)));
+}
+
+export async function deleteMasterAssembly(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(masterAssemblies).set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(masterAssemblies.id, id), eq(masterAssemblies.userId, userId)));
+}
+
+export async function addItemToMasterAssembly(data: InsertMasterAssemblyItem) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(masterAssemblyItems).values(data);
+}
+
+export async function updateMasterAssemblyItem(id: number, data: Partial<InsertMasterAssemblyItem>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(masterAssemblyItems).set(data).where(eq(masterAssemblyItems.id, id));
+}
+
+export async function removeItemFromMasterAssembly(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(masterAssemblyItems).where(eq(masterAssemblyItems.id, id));
+}
+
+// ─── Master Labor Rates ───────────────────────────────────────────────────────
+
+export async function getMasterLaborRates(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(masterLaborRates)
+    .where(eq(masterLaborRates.userId, userId))
+    .orderBy(asc(masterLaborRates.name));
+}
+
+export async function createMasterLaborRate(data: InsertMasterLaborRate) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const result = await db.insert(masterLaborRates).values(data);
+  return result[0];
+}
+
+export async function updateMasterLaborRate(id: number, userId: number, data: Partial<InsertMasterLaborRate>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(masterLaborRates).set({ ...data, updatedAt: new Date() })
+    .where(and(eq(masterLaborRates.id, id), eq(masterLaborRates.userId, userId)));
+}
+
+export async function deleteMasterLaborRate(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(masterLaborRates).where(and(eq(masterLaborRates.id, id), eq(masterLaborRates.userId, userId)));
+}
+
+// ─── Project Assemblies ───────────────────────────────────────────────────────
+
+export async function getProjectAssemblies(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(projectAssemblies)
+    .where(eq(projectAssemblies.projectId, projectId))
+    .orderBy(asc(projectAssemblies.sortOrder), asc(projectAssemblies.createdAt));
+}
+
+export async function getProjectAssemblyWithItems(assemblyId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [assembly] = await db.select().from(projectAssemblies)
+    .where(eq(projectAssemblies.id, assemblyId))
+    .limit(1);
+  if (!assembly) return undefined;
+
+  const items = await db.select().from(projectAssemblyItems)
+    .where(eq(projectAssemblyItems.projectAssemblyId, assemblyId))
+    .orderBy(asc(projectAssemblyItems.sortOrder));
+
+  return { ...assembly, items };
+}
+
+export async function getProjectAssembliesWithItems(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const assemblies = await getProjectAssemblies(projectId);
+  return Promise.all(assemblies.map(a => getProjectAssemblyWithItems(a.id)));
+}
+
+export async function createProjectAssembly(data: InsertProjectAssembly) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(projectAssemblies).values(data);
+  return result;
+}
+
+export async function updateProjectAssembly(id: number, data: Partial<InsertProjectAssembly>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(projectAssemblies).set({ ...data, updatedAt: new Date() })
+    .where(eq(projectAssemblies.id, id));
+}
+
+export async function deleteProjectAssembly(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(projectAssemblies).where(eq(projectAssemblies.id, id));
+}
+
+export async function createProjectAssemblyItem(data: InsertProjectAssemblyItem) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(projectAssemblyItems).values(data);
+}
+
+export async function updateProjectAssemblyItem(id: number, data: Partial<InsertProjectAssemblyItem>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(projectAssemblyItems).set({ ...data, updatedAt: new Date() })
+    .where(eq(projectAssemblyItems.id, id));
+}
+
+export async function resetProjectAssemblyItemToMaster(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  // Reset overrides to master values
+  await db.execute(sql`
+    UPDATE project_assembly_items
+    SET overrideMaterialCost = masterMaterialCost,
+        overrideLaborHours = masterLaborHours,
+        updatedAt = NOW()
+    WHERE id = ${id}
+  `);
+}
+
+export async function deleteProjectAssemblyItem(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(projectAssemblyItems).where(eq(projectAssemblyItems.id, id));
+}
+
+// ─── Project Items (Standalone) ───────────────────────────────────────────────
+
+export async function getProjectItems(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(projectItems)
+    .where(eq(projectItems.projectId, projectId))
+    .orderBy(asc(projectItems.sortOrder), asc(projectItems.createdAt));
+}
+
+export async function createProjectItem(data: InsertProjectItem) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(projectItems).values(data);
+}
+
+export async function updateProjectItem(id: number, data: Partial<InsertProjectItem>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(projectItems).set({ ...data, updatedAt: new Date() })
+    .where(eq(projectItems.id, id));
+}
+
+export async function resetProjectItemToMaster(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.execute(sql`
+    UPDATE project_items
+    SET overrideMaterialCost = masterMaterialCost,
+        overrideLaborHours = masterLaborHours,
+        updatedAt = NOW()
+    WHERE id = ${id}
+  `);
+}
+
+export async function deleteProjectItem(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(projectItems).where(eq(projectItems.id, id));
+}
+
+// ─── Bid Summary ──────────────────────────────────────────────────────────────
+
+export async function getBidSummary(projectId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(bidSummary)
+    .where(eq(bidSummary.projectId, projectId))
+    .limit(1);
+  return result[0];
+}
+
+export async function upsertBidSummary(data: InsertBidSummary) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(bidSummary).values(data).onDuplicateKeyUpdate({
+    set: {
+      percentageLaborFactor: data.percentageLaborFactor,
+      lumpSumHours: data.lumpSumHours,
+      markupPct: data.markupPct,
+      defaultLaborRateId: data.defaultLaborRateId,
+      updatedAt: new Date(),
+    },
+  });
 }
