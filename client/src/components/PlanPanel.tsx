@@ -686,8 +686,8 @@ export default function PlanPanel({
     const S = RENDER_BASE_ZOOM / dz;  // canvas px per 1 screen px
 
     // ── Draw a run (polyline + dots + per-segment labels) ──────────────────
-    const drawRun = (run: MeasureRun, color: string, isActive: boolean) => {
-      // Split points at PEN_LIFT sentinels into independent segments
+    // ── Helper: build segments + flat pts for a run ──────────────────────────
+    const buildRunGeom = (run: MeasureRun) => {
       const segments: { x: number; y: number }[][] = [];
       let seg: { x: number; y: number }[] = [];
       for (const p of run.points) {
@@ -699,11 +699,14 @@ export default function PlanPanel({
         }
       }
       if (seg.length > 0) segments.push(seg);
-      // Flatten for dot rendering and label calculations
-      const pts = segments.flat();
+      return { segments, pts: segments.flat() };
+    };
+
+    // ── Pass 1: draw lines + dots for a run (NO measurement labels) ───────────
+    const drawRunGeometry = (run: MeasureRun, color: string, isActive: boolean) => {
+      const { segments, pts } = buildRunGeom(run);
       if (pts.length === 0) return;
 
-      // Helper: draw all segments as independent polylines
       const strokeSegments = () => {
         for (const s of segments) {
           if (s.length < 2) continue;
@@ -714,7 +717,7 @@ export default function PlanPanel({
         }
       };
 
-      // Outer glow halo — wide, low-opacity bloom
+      // Outer glow halo
       if (pts.length >= 2) {
         ctx.strokeStyle = color;
         ctx.lineWidth = (isActive ? 14 : 10) * S;
@@ -723,8 +726,7 @@ export default function PlanPanel({
         strokeSegments();
         ctx.globalAlpha = 1;
       }
-
-      // Mid glow — tighter, brighter
+      // Mid glow
       if (pts.length >= 2) {
         ctx.strokeStyle = color;
         ctx.lineWidth = (isActive ? 6 : 4) * S;
@@ -733,8 +735,7 @@ export default function PlanPanel({
         strokeSegments();
         ctx.globalAlpha = 1;
       }
-
-      // Dark outline for contrast on light plans
+      // Dark outline
       if (pts.length >= 2) {
         ctx.strokeStyle = "rgba(0,0,0,0.55)";
         ctx.lineWidth = (isActive ? 4.5 : 3.5) * S;
@@ -742,8 +743,7 @@ export default function PlanPanel({
         ctx.globalAlpha = 1;
         strokeSegments();
       }
-
-      // Crisp bright core line
+      // Crisp core line
       if (pts.length >= 2) {
         ctx.strokeStyle = color;
         ctx.lineWidth = (isActive ? 2.5 : 1.8) * S;
@@ -752,125 +752,19 @@ export default function PlanPanel({
         strokeSegments();
       }
 
-      // Labels — per-segment or collapsed run total depending on zoom
-      if (scaleRatio && pageReady) {
-        const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
-        // Font scales with canvas resolution (shrinks as you zoom out)
-        const fontSize = Math.max(6, Math.round(9 * RENDER_BASE_ZOOM));
-        ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
-
-        // Collapse threshold: if any sub-segment's screen-pixel length < 25px, show run total only
-        // (25px is the sweet spot — labels appear noticeably sooner without cluttering at low zoom)
-        const MIN_SEG_SCREEN_PX = 25;
-        const showPerSeg = pts.length < 2 ? false : (() => {
-          for (const s of segments) {
-            for (let i = 1; i < s.length; i++) {
-              const screenLen = dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y) * dz / RENDER_BASE_ZOOM;
-              if (screenLen < MIN_SEG_SCREEN_PX) return false;
-            }
-          }
-          return true;
-        })();
-
-        // Helper: draw a label with a semi-transparent pill background
-        const drawLabel = (text: string, x: number, y: number, angle: number) => {
-          ctx.save();
-          ctx.translate(x, y);
-          const flip = Math.abs(angle) > Math.PI / 2;
-          ctx.rotate(flip ? angle + Math.PI : angle);
-          const pad = 5 * S;
-          const tw = ctx.measureText(text).width + pad * 2;
-          const th = fontSize + pad * 1.2;
-          const ry = 3 * S;
-          // Semi-transparent dark pill
-          ctx.fillStyle = "rgba(0,0,0,0.72)";
-          ctx.beginPath();
-          ctx.roundRect(-tw / 2, -(th + 3 * S), tw, th, ry);
-          ctx.fill();
-          // Colored text
-          ctx.fillStyle = color;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "bottom";
-          ctx.fillText(text, 0, -(3 * S));
-          ctx.restore();
-        };
-
-        if (showPerSeg) {
-          // When zoomed in: show individual line-segment distances AND segment-group totals
-          for (const s of segments) {
-            // Individual line distances along each sub-segment
-            for (let i = 1; i < s.length; i++) {
-              const a = s[i - 1];
-              const b = s[i];
-              const segPx = dist2D(a.x, a.y, b.x, b.y);
-              const segFt = segPx / pxPerFt;
-              const mx = (a.x + b.x) / 2;
-              const my = (a.y + b.y) / 2;
-              const angle = Math.atan2(b.y - a.y, b.x - a.x);
-              drawLabel(`${segFt.toFixed(1)}'`, mx, my, angle);
-            }
-          }
-          // If multiple segments (pen-lifted), also show each segment group's total
-          if (segments.length > 1) {
-            for (const s of segments) {
-              const groupPx = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0);
-              const groupFt = groupPx / pxPerFt;
-              const mid = s[Math.floor(s.length / 2)];
-              if (mid) drawLabel(`∑${groupFt.toFixed(1)}'`, mid.x, mid.y - 18 * S, 0);
-            }
-          }
-        } else if (pts.length >= 2) {
-          // Zoomed out: show each segment group's total at its arc-length midpoint
-          // arcMid: find the point at exactly half the total arc length of a segment group
-          const arcMid = (s: { x: number; y: number }[]) => {
-            const totalLen = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0);
-            const half = totalLen / 2;
-            let acc = 0;
-            for (let i = 1; i < s.length; i++) {
-              const d = dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y);
-              if (acc + d >= half) {
-                const t = (half - acc) / d;
-                return { x: s[i-1].x + t * (s[i].x - s[i-1].x), y: s[i-1].y + t * (s[i].y - s[i-1].y) };
-              }
-              acc += d;
-            }
-            return s[Math.floor(s.length / 2)];
-          };
-          if (segments.length > 1) {
-            // Multiple segments: label each group at its true center
-            for (const s of segments) {
-              const groupPx = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0);
-              const groupFt = groupPx / pxPerFt;
-              const mid = arcMid(s);
-              if (mid) drawLabel(`${groupFt.toFixed(1)}'`, mid.x, mid.y, 0);
-            }
-          } else {
-            // Single segment: show run total at true center
-            const totalPx = segments.reduce((runSum, s) =>
-              runSum + s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0), 0);
-            const totalFt = totalPx / pxPerFt;
-            const mid = arcMid(segments[0]);
-            drawLabel(`${totalFt.toFixed(1)}'`, mid.x, mid.y, 0);
-          }
-        }
-      }
-
-      // Dots — color-matched to the run line, white halo for contrast
+      // Dots
       const dotR = (isActive ? 5 : 4) * S;
       pts.forEach((p, i) => {
-        // White halo for contrast
         ctx.beginPath();
         ctx.arc(p.x, p.y, dotR + 2 * S, 0, Math.PI * 2);
         ctx.fillStyle = "#ffffff";
         ctx.globalAlpha = 0.9;
         ctx.fill();
         ctx.globalAlpha = 1;
-        // Color-matched fill (same as the run line)
         ctx.beginPath();
         ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
         ctx.fillStyle = color;
         ctx.fill();
-        // Thin dark ring
         ctx.strokeStyle = "rgba(0,0,0,0.55)";
         ctx.lineWidth = 1 * S;
         ctx.stroke();
@@ -900,6 +794,103 @@ export default function PlanPanel({
         ctx.globalAlpha = 1;
       }
     };
+
+    // ── Pass 2: draw measurement labels for a run (always on top of all geometry) ─
+    const drawRunLabels = (run: MeasureRun, color: string, isActive: boolean) => {
+      if (!scaleRatio || !pageReady) return;
+      const { segments, pts } = buildRunGeom(run);
+      if (pts.length < 2) return;
+
+      const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
+      const fontSize = Math.max(6, Math.round(9 * RENDER_BASE_ZOOM));
+      ctx.font = `bold ${fontSize}px 'JetBrains Mono', monospace`;
+
+      const MIN_SEG_SCREEN_PX = 25;
+      const showPerSeg = (() => {
+        for (const s of segments) {
+          for (let i = 1; i < s.length; i++) {
+            const screenLen = dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y) * dz / RENDER_BASE_ZOOM;
+            if (screenLen < MIN_SEG_SCREEN_PX) return false;
+          }
+        }
+        return true;
+      })();
+
+      const drawLabel = (text: string, x: number, y: number, angle: number) => {
+        ctx.save();
+        ctx.translate(x, y);
+        const flip = Math.abs(angle) > Math.PI / 2;
+        ctx.rotate(flip ? angle + Math.PI : angle);
+        const pad = 5 * S;
+        const tw = ctx.measureText(text).width + pad * 2;
+        const th = fontSize + pad * 1.2;
+        const ry = 3 * S;
+        ctx.fillStyle = "rgba(0,0,0,0.82)";
+        ctx.beginPath();
+        ctx.roundRect(-tw / 2, -(th + 3 * S), tw, th, ry);
+        ctx.fill();
+        ctx.fillStyle = color;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(text, 0, -(3 * S));
+        ctx.restore();
+      };
+
+      const arcMid = (s: { x: number; y: number }[]) => {
+        const totalLen = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0);
+        const half = totalLen / 2;
+        let acc = 0;
+        for (let i = 1; i < s.length; i++) {
+          const d = dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y);
+          if (acc + d >= half) {
+            const t = (half - acc) / d;
+            return { x: s[i-1].x + t * (s[i].x - s[i-1].x), y: s[i-1].y + t * (s[i].y - s[i-1].y) };
+          }
+          acc += d;
+        }
+        return s[Math.floor(s.length / 2)];
+      };
+
+      if (showPerSeg) {
+        for (const s of segments) {
+          for (let i = 1; i < s.length; i++) {
+            const a = s[i - 1];
+            const b = s[i];
+            const segFt = dist2D(a.x, a.y, b.x, b.y) / pxPerFt;
+            const mx = (a.x + b.x) / 2;
+            const my = (a.y + b.y) / 2;
+            drawLabel(`${segFt.toFixed(1)}'`, mx, my, Math.atan2(b.y - a.y, b.x - a.x));
+          }
+        }
+        if (segments.length > 1) {
+          for (const s of segments) {
+            const groupFt = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0) / pxPerFt;
+            const mid = s[Math.floor(s.length / 2)];
+            if (mid) drawLabel(`∑${groupFt.toFixed(1)}'`, mid.x, mid.y - 18 * S, 0);
+          }
+        }
+      } else {
+        if (segments.length > 1) {
+          for (const s of segments) {
+            const groupFt = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0) / pxPerFt;
+            const mid = arcMid(s);
+            if (mid) drawLabel(`${groupFt.toFixed(1)}'`, mid.x, mid.y, 0);
+          }
+        } else {
+          const totalFt = segments.reduce((runSum, s) =>
+            runSum + s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0), 0) / pxPerFt;
+          const mid = arcMid(segments[0]);
+          drawLabel(`${totalFt.toFixed(1)}'`, mid.x, mid.y, 0);
+        }
+      }
+    };
+
+    // Keep drawRun as a compatibility shim (not used in main draw loop below)
+    const drawRun = (run: MeasureRun, color: string, isActive: boolean) => {
+      drawRunGeometry(run, color, isActive);
+      drawRunLabels(run, color, isActive);
+    };
+    void drawRun; // suppress unused warning — kept for potential future use
 
     // ── Count pins ──────────────────────────────────────────────────────────
     const pinsToRender = allPagePinsRef.current;
@@ -1042,16 +1033,29 @@ export default function PlanPanel({
       ctx.fillText(String(idx + 1), px.x, px.y + shapeRadius + 2);
     });
 
-    // Draw all inactive runs first, then active on top
+    // ── Two-pass draw: geometry first, labels last so labels are never occluded ──
+    // Pass 1a: inactive run geometry (lines + dots)
     if (!hideUnselected) {
       currentRuns.forEach((run) => {
         if (run.id !== currentActiveRunId) {
-          drawRun(run, run.color ?? BASE_PALETTE[0], false);
+          drawRunGeometry(run, run.color ?? BASE_PALETTE[0], false);
         }
       });
     }
+    // Pass 1b: active run geometry on top of inactive
     const activeIdx = currentRuns.findIndex((r) => r.id === currentActiveRunId);
-    if (activeIdx >= 0) drawRun(currentRuns[activeIdx], currentRuns[activeIdx].color ?? BASE_PALETTE[0], true);
+    if (activeIdx >= 0) drawRunGeometry(currentRuns[activeIdx], currentRuns[activeIdx].color ?? BASE_PALETTE[0], true);
+
+    // Pass 2a: inactive run labels (on top of all geometry)
+    if (!hideUnselected) {
+      currentRuns.forEach((run) => {
+        if (run.id !== currentActiveRunId) {
+          drawRunLabels(run, run.color ?? BASE_PALETTE[0], false);
+        }
+      });
+    }
+    // Pass 2b: active run labels (topmost layer)
+    if (activeIdx >= 0) drawRunLabels(currentRuns[activeIdx], currentRuns[activeIdx].color ?? BASE_PALETTE[0], true);
 
     // ── Scale reference line ───────────────────────────────────────────────────
     const scalePts = scalePoints.map(normToCanvas).filter(Boolean) as { x: number; y: number }[];
@@ -1281,6 +1285,20 @@ export default function PlanPanel({
     displayZoomRef.current = targetZoom;
     centerPage(targetZoom);
   }, [centerPage]);
+
+  // ── Global mouseup: clean up drag if mouse released outside viewport ──────
+  useEffect(() => {
+    const onGlobalMouseUp = () => {
+      if (dragRef.current) {
+        dragRef.current = null;
+        setIsPanning(false);
+        document.body.classList.remove("bp-dragging");
+        setPanOffset({ ...panOffsetRef.current });
+      }
+    };
+    window.addEventListener("mouseup", onGlobalMouseUp);
+    return () => window.removeEventListener("mouseup", onGlobalMouseUp);
+  }, []);
 
   // ── Wheel zoom ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -2542,6 +2560,8 @@ export default function PlanPanel({
               oy: panOffsetRef.current.y,
             };
             setIsPanning(true);
+            // Mark body as dragging so sidebar hover is suppressed (see index.css)
+            document.body.classList.add("bp-dragging");
             e.preventDefault();
           }
         }}
@@ -2550,11 +2570,28 @@ export default function PlanPanel({
           const dx = e.clientX - dragRef.current.startX;
           const dy = e.clientY - dragRef.current.startY;
           const newOffset = { x: dragRef.current.ox + dx, y: dragRef.current.oy + dy };
+          // Write directly to DOM — no React setState during drag to avoid per-frame re-renders
           panOffsetRef.current = newOffset;
-          setPanOffset(newOffset);
+          const el = pagesContainerRef.current;
+          if (el) {
+            const z = displayZoomRef.current;
+            el.style.transform = `translate(${newOffset.x}px, ${newOffset.y}px) scale(${z / RENDER_BASE_ZOOM})`;
+          }
         }}
-        onMouseUp={() => { dragRef.current = null; setIsPanning(false); }}
-        onMouseLeave={() => { dragRef.current = null; setIsPanning(false); }}
+        onMouseUp={() => {
+          dragRef.current = null;
+          setIsPanning(false);
+          document.body.classList.remove("bp-dragging");
+          // Sync React state once drag ends (triggers re-render + useLayoutEffect re-applies transform)
+          setPanOffset({ ...panOffsetRef.current });
+        }}
+        onMouseLeave={() => {
+          if (!dragRef.current) return;
+          dragRef.current = null;
+          setIsPanning(false);
+          document.body.classList.remove("bp-dragging");
+          setPanOffset({ ...panOffsetRef.current });
+        }}
       >
         {pdfLoading ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">

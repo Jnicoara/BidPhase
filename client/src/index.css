@@ -336,4 +336,15 @@
   .num-flash {
     animation: num-flash 400ms ease-out;
   }
+
+  /* Suppress sidebar hover expansion while the user is dragging the PDF canvas.
+     PlanPanel adds/removes 'bp-dragging' on body on mousedown/mouseup. */
+  body.bp-dragging aside {
+    pointer-events: none !important;
+    width: 4rem !important; /* keep it collapsed */
+  }
+  /* Also suppress any context menus or dropdowns during drag */
+  body.bp-dragging * {
+    cursor: grabbing !important;
+  }
 }
