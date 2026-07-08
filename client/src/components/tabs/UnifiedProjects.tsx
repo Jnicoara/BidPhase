@@ -44,8 +44,9 @@ import {
   Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Link2, Trash2, Pencil, Check, X, Undo2, Maximize2, Download,
 } from "lucide-react";
-import type { CatalogItem } from "@/lib/materialCatalog";
+import type { CatalogItem, UserMaterialRow } from "@/lib/materialCatalog";
 import { getConduitPricePerFoot, getWirePricePerFoot } from "@/lib/materialCatalog";
+import { trpc } from "@/lib/trpc";
 import type { SavedMaterialRow } from "@/contexts/AppContext";
 
 // ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ─
@@ -482,11 +483,13 @@ function RunCard({
   index,
   onUpdate,
   onRemove,
+  userMaterials = [],
 }: {
   run: RunItem;
   index: number;
   onUpdate: (id: string, partial: Partial<RunItem>) => void;
   onRemove: (id: string) => void;
+  userMaterials?: UserMaterialRow[];
 }) {
   const [showFittings, setShowFittings] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -525,13 +528,15 @@ function RunCard({
   // Use same waste factor for wire inside conduit
   const conduitWireBillable = calcConduitWire(run.feet, run.conductors, wireTermMakeup, numPullPoints, conduitWasteFactor);
 
-  // ── Cost-per-foot lookup from master catalog ──────────────────────────────────
-  const conduitCostPerFt = !isWire ? getConduitPricePerFoot(run.conduitType ?? "EMT", run.conduitSize ?? "1/2") : null;
+  // ── Cost-per-foot lookup: user DB price > built-in catalog ──────────────────
+  const conduitCostPerFt = !isWire
+    ? getConduitPricePerFoot(run.conduitType ?? "EMT", run.conduitSize ?? "1/2", userMaterials)
+    : null;
   // For wire runs: look up by wire type id; for conduit runs: look up THHN by conductor size
   const wireTypeStr = isWire
     ? (run.wireTypeId?.includes("NM") ? "NM" : run.wireTypeId?.includes("MC") ? "MC" : "THHN")
     : "THHN";
-  const wireCostPerFt = getWirePricePerFoot(wireTypeStr, run.conductorSize ?? "12", run.conductorMaterial ?? "CU");
+  const wireCostPerFt = getWirePricePerFoot(wireTypeStr, run.conductorSize ?? "12", run.conductorMaterial ?? "CU", userMaterials);
 
   const conduitMaterialCost = conduitCostPerFt != null ? conduitCostPerFt * conduitBillable : null;
   const wireMaterialCost    = wireCostPerFt    != null ? wireCostPerFt    * (isWire ? wireBillable : conduitWireBillable) : null;
@@ -1326,6 +1331,11 @@ function CivilEditor({
   // CivilState.runs is typed as RunItem[] | undefined so no cast is needed.
   const [runs, setRuns] = useState<RunItem[]>(() => s.runs ?? []);
 
+  // Fetch user materials for run-tool price overrides (userPrice > catalog default)
+  const { data: userMaterials = [] } = trpc.data.materials.list.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+
   // Track which PDF page is currently active in PlanPanel
   const [activePage, setActivePage] = useState<number>(1);
 
@@ -2028,6 +2038,7 @@ function CivilEditor({
                                 index={i}
                                 onUpdate={updateRun}
                                 onRemove={removeRun}
+                                userMaterials={userMaterials}
                               />
                             ))}
                           </div>

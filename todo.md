@@ -345,3 +345,9 @@
 - [x] Unit Count: when "New Count Session" is clicked (or Count # is created), show a catalog picker inline so user can search and select a material to populate the session name and unit price — replaces the count line instead of creating a new one
 - [x] Unit Count: each session row gets an inline custom price-per-item field (editable number input, saves immediately)
 - [x] Runs panel: restore full run tool card — conduit type/size picker, wire type/AWG picker, waste factor slider (default 10%), material cost display — replacing the compact table view
+
+## v5.37 — User DB Prices in Run Tool
+
+- [x] Update getConduitPricePerFoot / getWirePricePerFoot to accept optional userMaterials array and apply userPrice > catalog default priority
+- [x] Fetch user materials in UnifiedProjects via tRPC and pass them down to RunCard price lookups
+- [x] Verify run tool cost display reflects user-overridden prices from Material Database

@@ -1329,13 +1329,84 @@ export function getCatalogItem(id: string): CatalogItem | undefined {
 }
 
 /**
+ * Minimal shape of a user DB row needed for price lookups.
+ * Matches the fields returned by db.getUserMaterials / trpc.data.materials.list.
+ */
+export interface UserMaterialRow {
+  description: string;
+  unit?: string | null;
+  userPrice?: number | null;
+  defaultPrice?: number | null;
+  unitMaterialCost?: number | null;
+}
+
+/** Resolve effective price from a user DB row: userPrice > defaultPrice > unitMaterialCost */
+function userRowEffectivePrice(m: UserMaterialRow): number {
+  if (m.userPrice != null && m.userPrice > 0) return m.userPrice;
+  if (m.defaultPrice != null && m.defaultPrice > 0) return m.defaultPrice;
+  return m.unitMaterialCost ?? 0;
+}
+
+/**
+ * Search user materials for a row whose description matches the given keywords.
+ * Returns the effective price if found, otherwise null.
+ * Matching is case-insensitive and requires ALL keywords to appear in the description.
+ */
+function findUserPrice(userMaterials: UserMaterialRow[], ...keywords: string[]): number | null {
+  const kws = keywords.map((k) => k.toLowerCase());
+  const match = userMaterials.find((m) => {
+    const desc = m.description.toLowerCase();
+    return kws.every((k) => desc.includes(k));
+  });
+  if (!match) return null;
+  const price = userRowEffectivePrice(match);
+  return price > 0 ? price : null;
+}
+
+/**
  * Look up the per-foot price for a conduit type + size combination.
- * Returns null if no matching item is found.
+ * Priority: user DB price > built-in catalog price.
+ * Pass userMaterials from trpc.data.materials.list to enable user-price override.
  */
 export function getConduitPricePerFoot(
   conduitType: string,
-  conduitSize: string
+  conduitSize: string,
+  userMaterials: UserMaterialRow[] = []
 ): number | null {
+  // Normalise size: "1/2" or "1/2\"" → "1/2"
+  const sizeNorm = conduitSize.replace(/\"/g, "").trim();
+
+  // Human-readable type label used for user DB keyword matching
+  const typeLabels: Record<string, string[]> = {
+    EMT:    ["emt"],
+    IMC:    ["imc"],
+    RMC:    ["rmc"],
+    GRC:    ["rmc", "rigid"],
+    "PVC-40": ["pvc", "40"],
+    "PVC-80": ["pvc", "80"],
+    PVC:    ["pvc"],
+    FMC:    ["fmc", "flex"],
+    LFMC:   ["lfmc", "liquidtight"],
+    LFNC:   ["lfnc"],
+    ENT:    ["ent", "smurf"],
+  };
+
+  // 1. Try user DB first — match on type keywords + size + "ft" or "/ft"
+  if (userMaterials.length > 0) {
+    const labels = typeLabels[conduitType.toUpperCase()] ?? [conduitType.toLowerCase()];
+    // Try with all type labels + size + "ft"
+    for (const label of labels) {
+      const userPrice = findUserPrice(userMaterials, label, sizeNorm, "ft");
+      if (userPrice != null) return userPrice;
+    }
+    // Broader fallback: type label + size (no "ft" requirement)
+    for (const label of labels) {
+      const userPrice = findUserPrice(userMaterials, label, sizeNorm);
+      if (userPrice != null) return userPrice;
+    }
+  }
+
+  // 2. Fall back to built-in catalog
   const typeMap: Record<string, string> = {
     EMT: "cnd-emt",
     IMC: "cnd-imc",
@@ -1350,7 +1421,6 @@ export function getConduitPricePerFoot(
     ENT: "cnd-ent",
   };
   const prefix = typeMap[conduitType.toUpperCase()] ?? `cnd-${conduitType.toLowerCase()}`;
-  const sizeNorm = conduitSize.replace(/\"/g, "").trim();
   const id = `${prefix}-${sizeNorm}-ft`;
   const item = getCatalogItem(id);
   return item ? item.unitPrice : null;
@@ -1358,37 +1428,60 @@ export function getConduitPricePerFoot(
 
 /**
  * Look up the per-foot price for a wire type + AWG combination.
- * Returns null if no matching item is found.
+ * Priority: user DB price > built-in catalog price.
+ * Pass userMaterials from trpc.data.materials.list to enable user-price override.
  */
 export function getWirePricePerFoot(
   wireType: string,
   conductorSize: string,
-  conductorMaterial: string = "CU"
+  conductorMaterial: string = "CU",
+  userMaterials: UserMaterialRow[] = []
 ): number | null {
   const mat = conductorMaterial.toUpperCase() === "AL" ? "al" : "cu";
   const sizeNorm = conductorSize.replace(/\s/g, "").toLowerCase();
+  const wtUpper = wireType.toUpperCase();
 
-  if (wireType.toUpperCase().includes("THHN") || wireType.toUpperCase().includes("THWN")) {
+  // Helper: try user DB for a wire type with given keywords
+  const tryUserWire = (...keywords: string[]): number | null =>
+    userMaterials.length > 0 ? findUserPrice(userMaterials, ...keywords) : null;
+
+  if (wtUpper.includes("THHN") || wtUpper.includes("THWN")) {
+    // User DB: look for "thhn" + size + material ("copper"/"cu" or "aluminum"/"al")
+    const matKw = mat === "cu" ? "copper" : "aluminum";
+    const userPrice = tryUserWire("thhn", sizeNorm) ??
+                      tryUserWire("thhn", `#${sizeNorm}`) ??
+                      tryUserWire("thhn", sizeNorm, matKw);
+    if (userPrice != null) return userPrice;
     const id = `wir-thhn-${sizeNorm}${mat}`;
     const item = getCatalogItem(id);
     return item ? item.unitPrice : null;
   }
-  if (wireType.toUpperCase().includes("NM") || wireType.toUpperCase().includes("ROMEX")) {
+  if (wtUpper.includes("NM") || wtUpper.includes("ROMEX")) {
+    const userPrice = tryUserWire("nm-b", sizeNorm) ??
+                      tryUserWire("nm", sizeNorm) ??
+                      tryUserWire("romex", sizeNorm);
+    if (userPrice != null) return userPrice;
     const id = `wir-nmb-${sizeNorm}`;
     const item = getCatalogItem(id);
     return item ? item.unitPrice : null;
   }
-  if (wireType.toUpperCase().includes("MC")) {
+  if (wtUpper.includes("MC")) {
+    const userPrice = tryUserWire("mc", sizeNorm);
+    if (userPrice != null) return userPrice;
     const id = `wir-mc-${sizeNorm}`;
     const item = getCatalogItem(id);
     return item ? item.unitPrice : null;
   }
-  if (wireType.toUpperCase().includes("SE") || wireType.toUpperCase().includes("SER")) {
+  if (wtUpper.includes("SE") || wtUpper.includes("SER")) {
+    const userPrice = tryUserWire("ser", sizeNorm) ?? tryUserWire("se", sizeNorm);
+    if (userPrice != null) return userPrice;
     const id = `wir-ser-${sizeNorm}`;
     const item = getCatalogItem(id);
     return item ? item.unitPrice : null;
   }
-  if (wireType.toUpperCase().includes("URD") || wireType.toUpperCase().includes("USE")) {
+  if (wtUpper.includes("URD") || wtUpper.includes("USE")) {
+    const userPrice = tryUserWire("urd", sizeNorm) ?? tryUserWire("use", sizeNorm);
+    if (userPrice != null) return userPrice;
     const id = `wir-urd-${sizeNorm}${mat}`;
     const item = getCatalogItem(id);
     return item ? item.unitPrice : null;
