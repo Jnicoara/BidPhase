@@ -301,11 +301,14 @@ function WireTypePicker({
   value,
   stranded,
   onChange,
+  availableCategories,
 }: {
   value?: string;
   stranded?: boolean;
   onChange: (id: string, stranded: boolean) => void;
+  availableCategories?: WireCategory[];
 }) {
+  const cats = availableCategories && availableCategories.length > 0 ? availableCategories : WIRE_CATEGORIES;
   const [activeCategory, setActiveCategory] = useState<WireCategory>("THHN / THWN");
   const filtered = WIRE_TYPES.filter((w) => w.category === activeCategory);
   const selected = WIRE_TYPES.find((w) => w.id === value);
@@ -315,7 +318,7 @@ function WireTypePicker({
       <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Wire Type</Label>
       {/* Category tabs */}
       <div className="flex flex-wrap gap-1">
-        {WIRE_CATEGORIES.map((cat) => (
+        {cats.map((cat) => (
           <button
             key={cat}
             onClick={() => setActiveCategory(cat)}
@@ -509,44 +512,115 @@ function RunCard({
     if (trimmed) onUpdate(run.id, { name: trimmed });
     setEditingName(false);
   };
+
   const isWire = (run.runType ?? "conduit") === "wire";
+  const conduitOnly = !isWire && (run.conduitOnly ?? false);
 
-  // ── Jacketed / Romex defaults & calculations ─────────────────────────────────
-  const makeupAllowance  = run.makeupAllowance  ?? 2;
-  const serviceLoop      = run.serviceLoop      ?? 3;
-  const numTerminations  = run.numTerminations  ?? 2;
-  const wirewasteFactor  = run.wirewasteFactor  ?? 10;
-  const wireNetLength    = run.feet + makeupAllowance * numTerminations + serviceLoop;
-  const wireBillable     = calcWire(run.feet, run.conductors, makeupAllowance, serviceLoop, numTerminations, wirewasteFactor);
+  // ── Derive available conduit types from user DB, ordered most-to-least common ──
+  // Priority order: EMT, PVC, RMC, IMC, FMC, LFMC, ENT, LFNC, GRC
+  const CONDUIT_ORDER = ["EMT", "PVC", "RMC", "IMC", "FMC", "LFMC", "ENT", "LFNC", "GRC"];
+  const DB_CONDUIT_KEYWORDS: Record<string, string[]> = {
+    EMT:  ["emt"],
+    RMC:  ["rmc", "rigid metal"],
+    IMC:  ["imc"],
+    PVC:  ["pvc"],
+    FMC:  ["fmc", "flex conduit", "flexible metal"],
+    LFMC: ["lfmc", "liquidtight"],
+    LFNC: ["lfnc"],
+    ENT:  ["ent", "smurf"],
+    GRC:  ["grc"],
+  };
+  const dbConduitTypes = CONDUIT_ORDER.filter((ct) => {
+    if (userMaterials.length === 0) return true; // show all when no DB
+    const kws = DB_CONDUIT_KEYWORDS[ct] ?? [ct.toLowerCase()];
+    return userMaterials.some((m) => {
+      const d = m.description.toLowerCase();
+      return kws.some((k) => d.includes(k));
+    });
+  });
+  // Always include at least EMT as fallback
+  const availableConduitTypes = dbConduitTypes.length > 0 ? dbConduitTypes : ["EMT"];
 
-  // ── Conduit defaults & calculations ──────────────────────────────────────────
-  // Single shared waste factor (default 10%) applies to both conduit and wire
+  // ── Wire-only mode: derive available wire types from user DB ──
+  // Group by category label for the picker tabs
+  const DB_WIRE_KEYWORDS: Record<string, string[]> = {
+    "THHN / THWN":    ["thhn", "thwn"],
+    "NM Cable (Romex)": ["nm-b", "nm", "romex"],
+    "Specialty":       ["mc", "bx", "ac-90", "metal clad"],
+    "Service Entrance": ["ser", "seu", "service entrance"],
+    "XHHW":            ["xhhw"],
+    "USE / URD":       ["urd", "use-2", "use "],
+    "Bare / Ground":   ["bare", "ground wire"],
+    "Low Voltage":     ["cat6", "cat 6", "coax", "fire alarm", "security", "speaker", "thermostat", "cl2"],
+  };
+  const dbWireCategories = userMaterials.length === 0
+    ? WIRE_CATEGORIES
+    : WIRE_CATEGORIES.filter((cat) => {
+        const kws = DB_WIRE_KEYWORDS[cat] ?? [];
+        return kws.length === 0 || userMaterials.some((m) => {
+          const d = m.description.toLowerCase();
+          return kws.some((k) => d.includes(k));
+        });
+      });
+  const availableWireCategories = dbWireCategories.length > 0 ? dbWireCategories : WIRE_CATEGORIES;
+
+  // ── Wire-only mode calculations ──
+  const makeupAllowance = run.makeupAllowance ?? 2;
+  const serviceLoop     = run.serviceLoop     ?? 3;
+  const numTerminations = run.numTerminations ?? 2;
+  const wirewasteFactor = run.wirewasteFactor ?? 10;
+  const wireNetLength   = run.feet + makeupAllowance * numTerminations + serviceLoop;
+  const wireBillable    = calcWire(run.feet, run.conductors, makeupAllowance, serviceLoop, numTerminations, wirewasteFactor);
+
+  // ── Conduit mode calculations ──
   const conduitWasteFactor  = run.conduitWasteFactor ?? 10;
+  const wireWasteFactor     = run.wireWasteFactor    ?? 10;  // separate from conduit
   const wireTermMakeup      = run.wireTermMakeup     ?? 2;
   const numPullPoints       = run.numPullPoints      ?? 2;
   const conduitBillable     = calcConduitBillable(run.feet, conduitWasteFactor);
-  // Use same waste factor for wire inside conduit
-  const conduitWireBillable = calcConduitWire(run.feet, run.conductors, wireTermMakeup, numPullPoints, conduitWasteFactor);
+  const conduitWireBillable = conduitOnly
+    ? 0
+    : calcConduitWire(run.feet, run.conductors, wireTermMakeup, numPullPoints, wireWasteFactor);
 
-  // ── Cost-per-foot lookup: user DB price > built-in catalog ──────────────────
+  // ── Cost-per-foot lookup: user DB price > built-in catalog ──
   const conduitCostPerFt = !isWire
     ? getConduitPricePerFoot(run.conduitType ?? "EMT", run.conduitSize ?? "1/2", userMaterials)
     : null;
-  // For wire runs: look up by wire type id; for conduit runs: look up THHN by conductor size
   const wireTypeStr = isWire
-    ? (run.wireTypeId?.includes("NM") ? "NM" : run.wireTypeId?.includes("MC") ? "MC" : "THHN")
+    ? (run.wireTypeId?.includes("NM") || run.wireTypeId?.includes("nm") ? "NM"
+       : run.wireTypeId?.includes("mc") || run.wireTypeId?.includes("MC") ? "MC"
+       : "THHN")
     : "THHN";
-  const wireCostPerFt = getWirePricePerFoot(wireTypeStr, run.conductorSize ?? "12", run.conductorMaterial ?? "CU", userMaterials);
+  const wireCostPerFt = (!conduitOnly)
+    ? getWirePricePerFoot(wireTypeStr, run.conductorSize ?? "12", run.conductorMaterial ?? "CU", userMaterials)
+    : null;
 
   const conduitMaterialCost = conduitCostPerFt != null ? conduitCostPerFt * conduitBillable : null;
-  const wireMaterialCost    = wireCostPerFt    != null ? wireCostPerFt    * (isWire ? wireBillable : conduitWireBillable) : null;
+  const wireMaterialCost    = (!conduitOnly && wireCostPerFt != null)
+    ? wireCostPerFt * (isWire ? wireBillable : conduitWireBillable)
+    : null;
   const totalMaterialCost   = (conduitMaterialCost ?? 0) + (wireMaterialCost ?? 0);
 
   const updateFitting = (key: FittingId, val: number) => {
     onUpdate(run.id, { fittings: { ...run.fittings, [key]: val } });
   };
-
   const totalFittings = Object.values(run.fittings).reduce((a, b) => a + b, 0);
+
+  // Helper: safe numeric input that allows 0
+  const numInput = (val: number, onChange: (n: number) => void, step = 1, placeholder = "0") => (
+    <Input
+      type="number"
+      min={0}
+      step={step}
+      value={val === 0 ? "" : val}
+      placeholder={placeholder}
+      onChange={(e) => {
+        const raw = e.target.value;
+        onChange(raw === "" ? 0 : parseFloat(raw) || 0);
+      }}
+      className="h-7 font-mono text-xs bg-input border-border"
+    />
+  );
 
   return (
     <div className="bp-card overflow-hidden">
@@ -561,16 +635,12 @@ function RunCard({
               </p>
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={() => { onRemove(run.id); setConfirmDelete(false); }}
-                className="flex-1 py-1.5 rounded text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
-              >
+              <button onClick={() => { onRemove(run.id); setConfirmDelete(false); }}
+                className="flex-1 py-1.5 rounded text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors">
                 Remove
               </button>
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="flex-1 py-1.5 rounded text-xs font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors"
-              >
+              <button onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-1.5 rounded text-xs font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors">
                 Cancel
               </button>
             </div>
@@ -578,88 +648,69 @@ function RunCard({
         </div>
       )}
 
-      {/* Run header — click to collapse/expand */}
+      {/* Run header */}
       <div
         className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/10 cursor-pointer select-none"
         onClick={() => setIsCollapsed((v) => !v)}
       >
         <div className="flex items-center gap-2">
-          <div
-            className="w-2 h-2 rounded-full shrink-0"
-            style={{
-              background: ["#22C55E","#3B82F6","#F97316","#A855F7","#EC4899","#14B8A6"][index % 6],
-            }}
-          />
+          <div className="w-2 h-2 rounded-full shrink-0"
+            style={{ background: ["#22C55E","#3B82F6","#F97316","#A855F7","#EC4899","#14B8A6"][index % 6] }} />
           {editingName ? (
-            <input
-              ref={nameInputRef}
-              value={nameInput}
+            <input ref={nameInputRef} value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               onBlur={commitName}
               onKeyDown={(e) => { if (e.key === "Enter") commitName(); if (e.key === "Escape") setEditingName(false); }}
               className="text-sm font-semibold bg-transparent border-b border-[#F5C518] outline-none text-foreground w-28"
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              onClick={(e) => e.stopPropagation()}
-            />
+              onClick={(e) => e.stopPropagation()} />
           ) : (
-            <span
-              className="text-sm font-semibold text-foreground cursor-text hover:text-[#F5C518] transition-colors"
+            <span className="text-sm font-semibold text-foreground cursor-text hover:text-[#F5C518] transition-colors"
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              onClick={startEditName}
-              title="Click to rename"
-            >
+              onClick={startEditName} title="Click to rename">
               {run.name}
             </span>
           )}
           <span className="text-[10px] font-mono text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded">
             {isWire
               ? `Wire · ${run.conductors}c`
-              : `${run.conduitType ?? "EMT"} ${run.conduitSize}"`}
+              : conduitOnly
+                ? `${run.conduitType ?? "EMT"} ${run.conduitSize}" · empty`
+                : `${run.conduitType ?? "EMT"} ${run.conduitSize}"`}
           </span>
           {run.pageNumber !== undefined && (
-            <span className="text-[10px] font-mono text-muted-foreground/60 bg-muted/20 px-1.5 py-0.5 rounded">
-              pg {run.pageNumber}
-            </span>
+            <span className="text-[10px] font-mono text-muted-foreground/60 bg-muted/20 px-1.5 py-0.5 rounded">pg {run.pageNumber}</span>
           )}
           {isCollapsed && (
-            <span className="text-[10px] font-mono text-[#F5C518] bg-[#F5C518]/10 px-1.5 py-0.5 rounded">
-              {run.feet} ft
-            </span>
+            <span className="text-[10px] font-mono text-[#F5C518] bg-[#F5C518]/10 px-1.5 py-0.5 rounded">{run.feet} ft</span>
           )}
         </div>
         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={() => setIsCollapsed((v) => !v)}
+          <button onClick={() => setIsCollapsed((v) => !v)}
             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            title={isCollapsed ? "Expand" : "Collapse"}
-          >
+            title={isCollapsed ? "Expand" : "Collapse"}>
             {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
           </button>
-          <button
-            onClick={() => setConfirmDelete(true)}
+          <button onClick={() => setConfirmDelete(true)}
             className="p-1 text-muted-foreground/50 hover:text-destructive transition-colors rounded hover:bg-destructive/10"
-            title="Remove run"
-          >
+            title="Remove run">
             <X size={13} />
           </button>
         </div>
       </div>
 
-      {/* Run body — hidden when collapsed */}
+      {/* Run body */}
       <div className={cn("p-4 space-y-4", isCollapsed ? "hidden" : "")}>
-        {/* Measured Takeoff row + Conductors (conduit only) */}
+
+        {/* Measured Takeoff + Conductors */}
         <div className={isWire ? "space-y-1.5" : "grid grid-cols-2 gap-3"}>
           <div className="space-y-1.5">
             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Measured Takeoff (ft)</Label>
-            <Input
-              type="number"
-              min={0}
-              step={1}
-              value={run.feet || ""}
+            <Input type="number" min={0} step={1}
+              value={run.feet === 0 ? "" : run.feet}
               onChange={(e) => onUpdate(run.id, { feet: parseFloat(e.target.value) || 0 })}
               placeholder="0"
-              className="h-8 font-mono text-sm bg-input border-border"
-            />
+              className="h-8 font-mono text-sm bg-input border-border" />
           </div>
           {!isWire && (
             <div className="space-y-1.5">
@@ -667,307 +718,222 @@ function RunCard({
                 <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductors</Label>
                 <span className="text-sm font-bold text-[#F5C518] font-mono">{run.conductors}</span>
               </div>
-              <Slider
-                min={1} max={12} step={1}
-                value={[run.conductors]}
+              <Slider min={1} max={12} step={1} value={[run.conductors]}
                 onValueChange={([v]) => onUpdate(run.id, { conductors: v })}
-                className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
-              />
+                className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
             </div>
           )}
         </div>
 
-        {/* Run type toggle: Conduit vs Wire */}
+        {/* Run type toggle: Conduit vs Wire Only */}
         <div className="space-y-1.5">
           <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Run Type</Label>
           <div className="flex gap-2">
             {(["conduit", "wire"] as const).map((rt) => (
-              <button
-                key={rt}
-                onClick={() => onUpdate(run.id, { runType: rt })}
+              <button key={rt}
+                onClick={() => onUpdate(run.id, { runType: rt, conduitOnly: false })}
                 className={cn(
-                  "flex-1 py-1.5 rounded text-xs font-medium border transition-all capitalize",
+                  "flex-1 py-1.5 rounded text-xs font-medium border transition-all",
                   (run.runType ?? "conduit") === rt
                     ? "bg-yellow-400 text-black border-yellow-400"
                     : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                )}
-              >
-                {rt === "wire" ? "Jacketed / Romex" : "Conduit"}
+                )}>
+                {rt === "wire" ? "Wire Only" : "Conduit"}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Conduit type + size — only shown for conduit runs */}
+        {/* ───────────────────────── CONDUIT MODE ───────────────────────── */}
         {!isWire && (
           <>
+            {/* Conduit Type — DB-synced, ordered most-to-least common */}
             <div className="space-y-1.5">
               <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Type</Label>
               <div className="flex flex-wrap gap-1">
-                {CONDUIT_TYPES.map((ct) => (
-                  <button
-                    key={ct.id}
-                    onClick={() => onUpdate(run.id, { conduitType: ct.id as ConduitType })}
+                {availableConduitTypes.map((ct) => (
+                  <button key={ct}
+                    onClick={() => onUpdate(run.id, { conduitType: ct as ConduitType })}
                     className={cn(
                       "px-2.5 py-1 rounded text-[10px] font-mono font-semibold border transition-all",
-                      (run.conduitType ?? "EMT") === ct.id
+                      (run.conduitType ?? "EMT") === ct
                         ? "bg-yellow-400 text-black border-yellow-400"
                         : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                    )}
-                  >
-                    {ct.label}
+                    )}>
+                    {ct}
                   </button>
                 ))}
               </div>
             </div>
+
+            {/* Conduit Size */}
             <div className="space-y-1.5">
               <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Size</Label>
               <div className="grid grid-cols-5 gap-1">
                 {CONDUIT_SIZES.map((cs) => (
-                  <button
-                    key={cs.value}
+                  <button key={cs.value}
                     onClick={() => onUpdate(run.id, { conduitSize: cs.value })}
                     className={cn(
                       "py-1 rounded text-[10px] font-mono font-medium border transition-all",
                       run.conduitSize === cs.value
                         ? "bg-yellow-400 text-black border-yellow-400"
                         : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                    )}
-                  >
+                    )}>
                     {cs.label}
                   </button>
                 ))}
               </div>
             </div>
-          </>
-        )}
 
-        {/* Wire Type Picker — only shown for wire runs */}
-        {isWire && (
-          <WireTypePicker
-            value={run.wireTypeId}
-            stranded={run.wireStranded}
-            onChange={(id, stranded) => onUpdate(run.id, { wireTypeId: id, wireStranded: stranded })}
-          />
-        )}
-
-        {/* Conductor material — hidden for wire runs (material is embedded in wire type name) */}
-        {!isWire && (
-          <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Material</Label>
-            <div className="flex gap-2">
-              {CONDUCTOR_MATERIALS.map((cm) => (
-                <button
-                  key={cm.id}
-                  onClick={() => onUpdate(run.id, { conductorMaterial: cm.id as ConductorMaterial })}
-                  className={cn(
-                    "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
-                    (run.conductorMaterial ?? "CU") === cm.id
-                      ? "bg-yellow-400 text-black border-yellow-400"
-                      : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                  )}
-                >
-                  {cm.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Conductor size */}
-        <div className="space-y-1.5">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Size</Label>
-          <div className="grid grid-cols-5 gap-1">
-            {CONDUCTOR_SIZES.map((sz) => (
+            {/* Conduit-Only toggle (future pull / empty conduit) */}
+            <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/10 px-3 py-2">
+              <div>
+                <div className="text-[11px] font-medium text-foreground">Empty / Future Pull</div>
+                <div className="text-[10px] text-muted-foreground">No wire — conduit only (stub-out)</div>
+              </div>
               <button
-                key={sz}
-                onClick={() => onUpdate(run.id, { conductorSize: sz as ConductorSize })}
+                onClick={() => onUpdate(run.id, { conduitOnly: !conduitOnly })}
                 className={cn(
-                  "py-1 rounded text-[10px] font-mono font-medium border transition-all",
-                  (run.conductorSize ?? "12") === sz
-                    ? "bg-yellow-400 text-black border-yellow-400"
-                    : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                  "relative w-9 h-5 rounded-full border transition-all",
+                  conduitOnly
+                    ? "bg-yellow-400 border-yellow-400"
+                    : "bg-muted/40 border-border"
                 )}
               >
-                {sz}
+                <span className={cn(
+                  "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
+                  conduitOnly ? "left-4" : "left-0.5"
+                )} />
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Jacketed / Romex estimating inputs ───────────────────────────────────── */}
-        {isWire && (
-          <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Makeup Allowance (ft/term)</Label>
-                <Input
-                  type="number" min={0} step={0.5}
-                  value={makeupAllowance}
-                  onChange={(e) => onUpdate(run.id, { makeupAllowance: parseFloat(e.target.value) || 0 })}
-                  className="h-7 font-mono text-xs bg-input border-border"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Service Loop (ft)</Label>
-                <Input
-                  type="number" min={0} step={0.5}
-                  value={serviceLoop}
-                  onChange={(e) => onUpdate(run.id, { serviceLoop: parseFloat(e.target.value) || 0 })}
-                  className="h-7 font-mono text-xs bg-input border-border"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">No. of Terminations</Label>
-                <Input
-                  type="number" min={1} step={1}
-                  value={numTerminations}
-                  onChange={(e) => onUpdate(run.id, { numTerminations: parseInt(e.target.value) || 1 })}
-                  className="h-7 font-mono text-xs bg-input border-border"
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[10px] text-muted-foreground">Waste Factor</Label>
-                  <span className="text-[10px] font-bold font-mono text-[#F5C518]">{wirewasteFactor}%</span>
-                </div>
-                <Slider
-                  min={0} max={50} step={1}
-                  value={[wirewasteFactor]}
-                  onValueChange={([v]) => onUpdate(run.id, { wirewasteFactor: v })}
-                  className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
-                />
-              </div>
             </div>
-          </div>
-        )}
 
-        {/* ── Conduit estimating inputs ─────────────────────────────────────────────── */}
-        {!isWire && (
-          <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Single waste factor applies to both conduit and wire */}
-              <div className="space-y-1 col-span-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[10px] text-muted-foreground">Waste Factor (conduit &amp; wire)</Label>
-                  <span className="text-[10px] font-bold font-mono text-[#F5C518]">{conduitWasteFactor}%</span>
+            {/* Wire type + conductor material/size — hidden in conduit-only mode */}
+            {!conduitOnly && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Material</Label>
+                  <div className="flex gap-2">
+                    {CONDUCTOR_MATERIALS.map((cm) => (
+                      <button key={cm.id}
+                        onClick={() => onUpdate(run.id, { conductorMaterial: cm.id as ConductorMaterial })}
+                        className={cn(
+                          "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
+                          (run.conductorMaterial ?? "CU") === cm.id
+                            ? "bg-yellow-400 text-black border-yellow-400"
+                            : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                        )}>
+                        {cm.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <Slider
-                  min={0} max={50} step={1}
-                  value={[conduitWasteFactor]}
-                  onValueChange={([v]) => onUpdate(run.id, { conduitWasteFactor: v, wireWasteFactor: v })}
-                  className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Wire Makeup / Pull Point (ft)</Label>
-                <Input
-                  type="number" min={0} step={0.5}
-                  value={wireTermMakeup}
-                  onChange={(e) => onUpdate(run.id, { wireTermMakeup: parseFloat(e.target.value) || 0 })}
-                  className="h-7 font-mono text-xs bg-input border-border"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">No. of Pull Points</Label>
-                <Input
-                  type="number" min={1} step={1}
-                  value={numPullPoints}
-                  onChange={(e) => onUpdate(run.id, { numPullPoints: parseInt(e.target.value) || 1 })}
-                  className="h-7 font-mono text-xs bg-input border-border"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Calculated outputs ─────────────────────────────────────────────────────────── */}
-        {isWire ? (
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-muted/20 rounded-lg p-2.5">
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                  <StrippedWireIcon size={10} /> Net Length
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Size (AWG)</Label>
+                  <div className="grid grid-cols-5 gap-1">
+                    {CONDUCTOR_SIZES.map((sz) => (
+                      <button key={sz}
+                        onClick={() => onUpdate(run.id, { conductorSize: sz as ConductorSize })}
+                        className={cn(
+                          "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                          (run.conductorSize ?? "12") === sz
+                            ? "bg-yellow-400 text-black border-yellow-400"
+                            : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                        )}>
+                        {sz}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="text-xl font-bold font-mono text-foreground">{wireNetLength.toFixed(1)}</div>
-                <div className="text-[10px] text-muted-foreground font-mono">ft before waste</div>
-              </div>
-              <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
-                <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
-                  <StrippedWireIcon size={10} /> Billable Wire
-                </div>
-                <div className="text-xl font-bold font-mono text-[#F5C518]">{wireBillable}</div>
-                <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wirewasteFactor}% waste</div>
-              </div>
-            </div>
-            {/* Material cost row */}
-            {wireMaterialCost != null ? (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</span>
-                  <span className="text-base font-bold font-mono text-emerald-400">${wireMaterialCost.toFixed(2)}</span>
-                </div>
-                <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                  ${wireCostPerFt!.toFixed(3)}/ft × {wireBillable} ft
-                </div>
-              </div>
-            ) : (
-              <div className="bg-muted/10 border border-border/30 rounded-lg p-2 text-[10px] text-muted-foreground/60 text-center">
-                No catalog price found for this wire type/size — update in Material Database
-              </div>
+              </>
             )}
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
-                <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
-                  <ConduitPipeIcon size={10} /> Billable Conduit
+
+            {/* Conduit Estimating Inputs */}
+            <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Conduit waste factor */}
+                <div className="space-y-1 col-span-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] text-muted-foreground">Conduit Waste Factor</Label>
+                    <span className="text-[10px] font-bold font-mono text-[#F5C518]">{conduitWasteFactor}%</span>
+                  </div>
+                  <Slider min={0} max={50} step={1} value={[conduitWasteFactor]}
+                    onValueChange={([v]) => onUpdate(run.id, { conduitWasteFactor: v })}
+                    className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
                 </div>
-                <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitBillable}</div>
-                <div className="text-[10px] text-muted-foreground font-mono">
-                  ft → {calcSticks(conduitBillable)} sticks
-                </div>
-              </div>
-              <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
-                <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
-                  <StrippedWireIcon size={10} /> Billable Wire
-                </div>
-                <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitWireBillable}</div>
-                <div className="text-[10px] text-muted-foreground font-mono">ft w/ {conduitWasteFactor}% waste</div>
-              </div>
-            </div>
-            {/* Material cost breakdown */}
-            {(conduitMaterialCost != null || wireMaterialCost != null) ? (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</span>
-                  <span className="text-base font-bold font-mono text-emerald-400">${totalMaterialCost.toFixed(2)}</span>
-                </div>
-                {conduitMaterialCost != null && (
-                  <div className="text-[10px] text-muted-foreground font-mono">
-                    Conduit: ${conduitCostPerFt!.toFixed(3)}/ft × {conduitBillable} ft = ${conduitMaterialCost.toFixed(2)}
+                {/* Wire waste factor — only shown when wire is included */}
+                {!conduitOnly && (
+                  <div className="space-y-1 col-span-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] text-muted-foreground">Wire Waste Factor</Label>
+                      <span className="text-[10px] font-bold font-mono text-[#F5C518]">{wireWasteFactor}%</span>
+                    </div>
+                    <Slider min={0} max={50} step={1} value={[wireWasteFactor]}
+                      onValueChange={([v]) => onUpdate(run.id, { wireWasteFactor: v })}
+                      className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
                   </div>
                 )}
-                {wireMaterialCost != null && (
-                  <div className="text-[10px] text-muted-foreground font-mono">
-                    Wire: ${wireCostPerFt!.toFixed(3)}/ft × {conduitWireBillable} ft = ${wireMaterialCost.toFixed(2)}
+                {/* Pull points */}
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">No. of Pull Points</Label>
+                  {numInput(numPullPoints, (v) => onUpdate(run.id, { numPullPoints: v }))}
+                </div>
+                {/* Wire makeup per pull point — only when wire is included */}
+                {!conduitOnly && (
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Wire Makeup / Pull Pt (ft)</Label>
+                    {numInput(wireTermMakeup, (v) => onUpdate(run.id, { wireTermMakeup: v }), 0.5)}
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="bg-muted/10 border border-border/30 rounded-lg p-2 text-[10px] text-muted-foreground/60 text-center">
-                No catalog price found for {run.conduitType ?? "EMT"} {run.conduitSize ?? "1/2"}&quot; — update in Material Database
-              </div>
-            )}
-          </div>
-        )}
+            </div>
 
-                {/* Fittings toggle — only for conduit runs */}
-        {(run.runType ?? "conduit") === "conduit" && (
-          <>
+            {/* Conduit Outputs */}
+            <div className="space-y-2">
+              <div className={cn("grid gap-2", conduitOnly ? "grid-cols-1" : "grid-cols-2")}>
+                <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
+                  <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
+                    <ConduitPipeIcon size={10} /> Billable Conduit
+                  </div>
+                  <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitBillable}</div>
+                  <div className="text-[10px] text-muted-foreground font-mono">ft → {calcSticks(conduitBillable)} sticks</div>
+                </div>
+                {!conduitOnly && (
+                  <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
+                    <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
+                      <StrippedWireIcon size={10} /> Billable Wire
+                    </div>
+                    <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitWireBillable}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wireWasteFactor}% waste</div>
+                  </div>
+                )}
+              </div>
+              {/* Cost breakdown */}
+              {(conduitMaterialCost != null || wireMaterialCost != null) ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</span>
+                    <span className="text-base font-bold font-mono text-emerald-400">${totalMaterialCost.toFixed(2)}</span>
+                  </div>
+                  {conduitMaterialCost != null && (
+                    <div className="text-[10px] text-muted-foreground font-mono">
+                      Conduit: ${conduitCostPerFt!.toFixed(3)}/ft × {conduitBillable} ft = ${conduitMaterialCost.toFixed(2)}
+                    </div>
+                  )}
+                  {wireMaterialCost != null && (
+                    <div className="text-[10px] text-muted-foreground font-mono">
+                      Wire: ${wireCostPerFt!.toFixed(3)}/ft × {conduitWireBillable} ft = ${wireMaterialCost.toFixed(2)}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-muted/10 border border-border/30 rounded-lg p-2 text-[10px] text-muted-foreground/60 text-center">
+                  No catalog price for {run.conduitType ?? "EMT"} {run.conduitSize ?? "1/2"}&quot; — update in Material Database
+                </div>
+              )}
+            </div>
+
+            {/* Fittings */}
             <button
               onClick={() => setShowFittings((v) => !v)}
               className={cn(
@@ -975,15 +941,12 @@ function RunCard({
                 showFittings
                   ? "border-[#F5C518]/40 bg-[#F5C518]/5 text-[#F5C518]"
                   : "border-border bg-muted/20 text-muted-foreground hover:text-foreground hover:border-border/80"
-              )}
-            >
+              )}>
               <div className="flex items-center gap-2">
                 <MaleAdapterIcon size={12} />
                 <span>Fittings</span>
                 {totalFittings > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-[#F5C518]/20 text-[#F5C518] text-[10px] font-bold">
-                    {totalFittings}
-                  </span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-[#F5C518]/20 text-[#F5C518] text-[10px] font-bold">{totalFittings}</span>
                 )}
               </div>
               <span className="text-[10px] text-muted-foreground">{showFittings ? "▲" : "▼"}</span>
@@ -991,17 +954,108 @@ function RunCard({
             {showFittings && (
               <div className="bg-muted/10 rounded-lg px-3 py-2 border border-border/50">
                 {FITTING_TYPES.map((ft) => (
-                  <FittingCounter
-                    key={ft.id}
-                    label={ft.label}
-                    value={run.fittings[ft.id]}
-                    onChange={(v) => updateFitting(ft.id, v)}
-                  />
+                  <FittingCounter key={ft.id} label={ft.label} value={run.fittings[ft.id]} onChange={(v) => updateFitting(ft.id, v)} />
                 ))}
               </div>
             )}
           </>
         )}
+
+        {/* ───────────────────────── WIRE ONLY MODE ───────────────────────── */}
+        {isWire && (
+          <>
+            {/* Wire Type Picker — filtered to DB-available categories */}
+            <WireTypePicker
+              value={run.wireTypeId}
+              stranded={run.wireStranded}
+              availableCategories={availableWireCategories}
+              onChange={(id, stranded) => onUpdate(run.id, { wireTypeId: id, wireStranded: stranded })}
+            />
+
+            {/* Conductor Size */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Size (AWG)</Label>
+              <div className="grid grid-cols-5 gap-1">
+                {CONDUCTOR_SIZES.map((sz) => (
+                  <button key={sz}
+                    onClick={() => onUpdate(run.id, { conductorSize: sz as ConductorSize })}
+                    className={cn(
+                      "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                      (run.conductorSize ?? "12") === sz
+                        ? "bg-yellow-400 text-black border-yellow-400"
+                        : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                    )}>
+                    {sz}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Wire-Only Estimating Inputs */}
+            <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Makeup Allowance (ft/term)</Label>
+                  {numInput(makeupAllowance, (v) => onUpdate(run.id, { makeupAllowance: v }), 0.5)}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Service Loop (ft)</Label>
+                  {numInput(serviceLoop, (v) => onUpdate(run.id, { serviceLoop: v }), 0.5)}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">No. of Terminations</Label>
+                  {numInput(numTerminations, (v) => onUpdate(run.id, { numTerminations: v }))}
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] text-muted-foreground">Waste Factor</Label>
+                    <span className="text-[10px] font-bold font-mono text-[#F5C518]">{wirewasteFactor}%</span>
+                  </div>
+                  <Slider min={0} max={50} step={1} value={[wirewasteFactor]}
+                    onValueChange={([v]) => onUpdate(run.id, { wirewasteFactor: v })}
+                    className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
+                </div>
+              </div>
+            </div>
+
+            {/* Wire-Only Outputs */}
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-muted/20 rounded-lg p-2.5">
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                    <StrippedWireIcon size={10} /> Net Length
+                  </div>
+                  <div className="text-xl font-bold font-mono text-foreground">{wireNetLength.toFixed(1)}</div>
+                  <div className="text-[10px] text-muted-foreground font-mono">ft before waste</div>
+                </div>
+                <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
+                  <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
+                    <StrippedWireIcon size={10} /> Billable Wire
+                  </div>
+                  <div className="text-xl font-bold font-mono text-[#F5C518]">{wireBillable}</div>
+                  <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wirewasteFactor}% waste</div>
+                </div>
+              </div>
+              {wireMaterialCost != null ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</span>
+                    <span className="text-base font-bold font-mono text-emerald-400">${wireMaterialCost.toFixed(2)}</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    ${wireCostPerFt!.toFixed(3)}/ft × {wireBillable} ft
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-muted/10 border border-border/30 rounded-lg p-2 text-[10px] text-muted-foreground/60 text-center">
+                  No catalog price for this wire type/size — update in Material Database
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
       </div>
     </div>
   );
@@ -1552,6 +1606,7 @@ function CivilEditor({
           wireTermMakeup: 2,
           wireWasteFactor: 10,
           numPullPoints: 2,
+          conduitOnly: false,
         };
         syncRuns([newRun, ...runs]);
         const pageLabel = pageNumber ? ` from page ${pageNumber}` : "";

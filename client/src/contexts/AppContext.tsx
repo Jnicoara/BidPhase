@@ -154,6 +154,11 @@ export interface RunItem {
   wireWasteFactor?: number;
   /** Number of terminations/pull points for conduit wire calc. Default 2. */
   numPullPoints?: number;
+  /**
+   * When true, this is a conduit-only run (future pull / empty conduit).
+   * Wire section is hidden and wire cost is excluded from totals.
+   */
+  conduitOnly?: boolean;
 
   /** @deprecated Use wirewasteFactor / wireWasteFactor instead */
   wireSlackPct?: number;

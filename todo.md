@@ -351,3 +351,16 @@
 - [x] Update getConduitPricePerFoot / getWirePricePerFoot to accept optional userMaterials array and apply userPrice > catalog default priority
 - [x] Fetch user materials in UnifiedProjects via tRPC and pass them down to RunCard price lookups
 - [x] Verify run tool cost display reflects user-overridden prices from Material Database
+
+## v5.38 — Run Tool Overhaul
+
+- [x] Add wireWasteFactor field to RunItem (default 10%); conduitWasteFactor already exists
+- [x] Add conduitOnly boolean to RunItem (default false) — conduit-only run, no wire
+- [x] Rename "Jacketed / Romex" run type to "Wire Only" (bare conductors, no conduit)
+- [x] Conduit run mode: pull points, wire termination makeup, wire waste factor slider, conduit waste factor slider — all inputs allow 0
+- [x] Wire-only run mode: service loop, makeup per termination, number of terminations, wire waste factor slider — all inputs allow 0
+- [x] Conduit-only toggle inside conduit mode: hides wire section, excludes wire cost from totals
+- [x] Conduit type list: derived from user DB (EMT/RMC/IMC/PVC/FMC/LFMC keywords), ordered most-to-least common, falls back to catalog
+- [x] Wire type list: derived from user DB (THHN/NM-B/MC/SER/URD/XHHW keywords), falls back to wireTypes catalog
+- [x] Live pricing: cost-per-foot re-reads from user DB on every render (already wired — verify)
+- [x] TypeScript: 0 errors after all changes
