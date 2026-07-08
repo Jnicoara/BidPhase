@@ -317,3 +317,12 @@
 - [x] Add Custom Material button + quick-entry form
 - [x] Wire MaterialDatabasePage into BidPhaseShell sidebar nav
 - [x] Update estimating engine fallback: userPrice > defaultPrice, flag if both missing; CatalogPicker now shows user DB items with effective price
+
+## v5.31 — Master Electrical Catalog & Run Cost Integration
+- [x] Generate 623-item master electrical catalog (Distribution, Conduit, Wire, Rough-in, Devices, Civil) in materialCatalog.ts
+- [x] Replace static materialCatalog.ts with new comprehensive catalog; added getConduitPricePerFoot() and getWirePricePerFoot() lookup helpers
+- [x] Build DB seeder: hasMaterials + seedFromCatalog procedures; MaterialDatabasePage shows seed banner when DB is empty
+- [x] Wire/conduit variable chart already visible; conduit type/size + wire type/AWG pickers confirmed working
+- [x] Waste factor: simplified conduit runs to single shared slider (default 10%) for both conduit and wire
+- [x] Auto cost-per-foot: conduit and wire size selection auto-looks up price from catalog via getConduitPricePerFoot/getWirePricePerFoot
+- [x] Run totals show emerald-green material cost breakdown (conduit cost + wire cost + total) with cost/ft × billable ft formula displayed

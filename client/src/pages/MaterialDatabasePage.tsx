@@ -544,6 +544,14 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
     onError: (err) => toast.error(err.message),
   });
 
+  const seedFromCatalog = trpc.data.materials.seedFromCatalog.useMutation({
+    onSuccess: (res) => {
+      toast.success(`Loaded ${res.count} items from the master catalog`);
+      utils.data.materials.list.invalidate();
+    },
+    onError: (err) => toast.error(`Seed failed: ${err.message}`),
+  });
+
   // ── File pick ─────────────────────────────────────────────────────────────
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -741,22 +749,44 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
         )}
 
         {!isLoading && materials.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-            <Database size={40} className="text-muted-foreground/30" />
+          <div className="flex flex-col items-center justify-center py-16 gap-6 text-center px-8">
+            <Database size={48} className="text-muted-foreground/20" />
             <div>
-              <p className="text-sm font-medium text-muted-foreground">No materials yet</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">
-                Import a CSV from your supply house or add items manually.
+              <p className="text-base font-semibold text-foreground">Your material database is empty</p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                Load the built-in master catalog of 623 common electrical items with baseline prices,
+                or import your own supply house CSV.
               </p>
             </div>
+            {/* Primary CTA — load master catalog */}
+            <div className="bg-[#F5C518]/10 border border-[#F5C518]/30 rounded-xl p-5 max-w-sm w-full">
+              <p className="text-sm font-semibold text-[#F5C518] mb-1">Recommended: Load Master Catalog</p>
+              <p className="text-xs text-muted-foreground mb-4">
+                623 items across Distribution, Conduit, Wire, Rough-in, Devices &amp; Civil.
+                Prices are editable — update them with your own supply house quotes at any time.
+              </p>
+              <Button
+                className="w-full bg-[#F5C518] text-black hover:bg-[#F5C518]/90 font-semibold"
+                disabled={seedFromCatalog.isPending}
+                onClick={() => seedFromCatalog.mutate({ replaceAll: false })}
+              >
+                {seedFromCatalog.isPending ? (
+                  <><Loader2 size={14} className="animate-spin mr-2" />Loading catalog…</>
+                ) : (
+                  <><Database size={14} className="mr-2" />Load Master Catalog (623 items)</>
+                )}
+              </Button>
+            </div>
+            {/* Secondary options */}
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => setShowAddDialog(true)} className="gap-1.5 text-xs">
                 <Plus size={12} />Add Custom Material
               </Button>
               <Button
                 size="sm"
+                variant="outline"
                 onClick={() => fileRef.current?.click()}
-                className="gap-1.5 text-xs bg-[#F5C518] text-black hover:bg-[#F5C518]/90"
+                className="gap-1.5 text-xs"
               >
                 <Upload size={12} />Import CSV
               </Button>

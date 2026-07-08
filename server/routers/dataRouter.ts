@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
+import { CATALOG } from "../../client/src/lib/materialCatalog";
 import * as db from "../db";
 
 // ─── Materials Database ────────────────────────────────────────────────────────
@@ -140,5 +141,39 @@ export const dataRouter = router({
       await db.clearUserMaterials(ctx.user.id);
       return { success: true };
     }),
+
+    /** Check whether the user has any materials in their database */
+    hasMaterials: protectedProcedure.query(async ({ ctx }) => {
+      const items = await db.getUserMaterials(ctx.user.id);
+      return { count: items.length, hasData: items.length > 0 };
+    }),
+
+    /**
+     * Seed the user's material database from the built-in master catalog.
+     * When replaceAll=true, wipes existing data first.
+     */
+    seedFromCatalog: protectedProcedure
+      .input(z.object({ replaceAll: z.boolean().default(false) }))
+      .mutation(async ({ input, ctx }) => {
+        if (input.replaceAll) {
+          await db.clearUserMaterials(ctx.user.id);
+        }
+        const rows = CATALOG.map((item) => ({
+          userId: ctx.user.id,
+          itemCode: item.id,
+          category: item.category,
+          description: item.description,
+          unit: item.unit,
+          defaultPrice: item.unitPrice,
+          userPrice: null,
+          unitMaterialCost: item.unitPrice,
+          baseLaborHours: 0,
+          phase: null,
+          source: "catalog" as const,
+          externalSku: null,
+        }));
+        await db.bulkInsertUserMaterials(rows);
+        return { success: true, count: rows.length };
+      }),
   }),
 });

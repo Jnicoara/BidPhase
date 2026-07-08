@@ -45,6 +45,7 @@ import {
   Link2, Trash2, Pencil, Check, X, Undo2, Maximize2, Download,
 } from "lucide-react";
 import type { CatalogItem } from "@/lib/materialCatalog";
+import { getConduitPricePerFoot, getWirePricePerFoot } from "@/lib/materialCatalog";
 import type { SavedMaterialRow } from "@/contexts/AppContext";
 
 // ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ─
@@ -516,12 +517,25 @@ function RunCard({
   const wireBillable     = calcWire(run.feet, run.conductors, makeupAllowance, serviceLoop, numTerminations, wirewasteFactor);
 
   // ── Conduit defaults & calculations ──────────────────────────────────────────
-  const conduitWasteFactor = run.conduitWasteFactor ?? 10;
-  const wireTermMakeup     = run.wireTermMakeup     ?? 2;
-  const wireWasteFactor    = run.wireWasteFactor    ?? 10;
-  const numPullPoints      = run.numPullPoints      ?? 2;
-  const conduitBillable    = calcConduitBillable(run.feet, conduitWasteFactor);
-  const conduitWireBillable = calcConduitWire(run.feet, run.conductors, wireTermMakeup, numPullPoints, wireWasteFactor);
+  // Single shared waste factor (default 10%) applies to both conduit and wire
+  const conduitWasteFactor  = run.conduitWasteFactor ?? 10;
+  const wireTermMakeup      = run.wireTermMakeup     ?? 2;
+  const numPullPoints       = run.numPullPoints      ?? 2;
+  const conduitBillable     = calcConduitBillable(run.feet, conduitWasteFactor);
+  // Use same waste factor for wire inside conduit
+  const conduitWireBillable = calcConduitWire(run.feet, run.conductors, wireTermMakeup, numPullPoints, conduitWasteFactor);
+
+  // ── Cost-per-foot lookup from master catalog ──────────────────────────────────
+  const conduitCostPerFt = !isWire ? getConduitPricePerFoot(run.conduitType ?? "EMT", run.conduitSize ?? "1/2") : null;
+  // For wire runs: look up by wire type id; for conduit runs: look up THHN by conductor size
+  const wireTypeStr = isWire
+    ? (run.wireTypeId?.includes("NM") ? "NM" : run.wireTypeId?.includes("MC") ? "MC" : "THHN")
+    : "THHN";
+  const wireCostPerFt = getWirePricePerFoot(wireTypeStr, run.conductorSize ?? "12", run.conductorMaterial ?? "CU");
+
+  const conduitMaterialCost = conduitCostPerFt != null ? conduitCostPerFt * conduitBillable : null;
+  const wireMaterialCost    = wireCostPerFt    != null ? wireCostPerFt    * (isWire ? wireBillable : conduitWireBillable) : null;
+  const totalMaterialCost   = (conduitMaterialCost ?? 0) + (wireMaterialCost ?? 0);
 
   const updateFitting = (key: FittingId, val: number) => {
     onUpdate(run.id, { fittings: { ...run.fittings, [key]: val } });
@@ -829,27 +843,16 @@ function RunCard({
           <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
             <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
+              {/* Single waste factor applies to both conduit and wire */}
+              <div className="space-y-1 col-span-2">
                 <div className="flex items-center justify-between">
-                  <Label className="text-[10px] text-muted-foreground">Conduit Waste Factor</Label>
+                  <Label className="text-[10px] text-muted-foreground">Waste Factor (conduit &amp; wire)</Label>
                   <span className="text-[10px] font-bold font-mono text-[#F5C518]">{conduitWasteFactor}%</span>
                 </div>
                 <Slider
                   min={0} max={50} step={1}
                   value={[conduitWasteFactor]}
-                  onValueChange={([v]) => onUpdate(run.id, { conduitWasteFactor: v })}
-                  className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[10px] text-muted-foreground">Wire Waste Factor</Label>
-                  <span className="text-[10px] font-bold font-mono text-[#F5C518]">{wireWasteFactor}%</span>
-                </div>
-                <Slider
-                  min={0} max={50} step={1}
-                  value={[wireWasteFactor]}
-                  onValueChange={([v]) => onUpdate(run.id, { wireWasteFactor: v })}
+                  onValueChange={([v]) => onUpdate(run.id, { conduitWasteFactor: v, wireWasteFactor: v })}
                   className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
                 />
               </div>
@@ -877,40 +880,83 @@ function RunCard({
 
         {/* ── Calculated outputs ─────────────────────────────────────────────────────────── */}
         {isWire ? (
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-muted/20 rounded-lg p-2.5">
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
-                <StrippedWireIcon size={10} /> Net Length
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-muted/20 rounded-lg p-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+                  <StrippedWireIcon size={10} /> Net Length
+                </div>
+                <div className="text-xl font-bold font-mono text-foreground">{wireNetLength.toFixed(1)}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">ft before waste</div>
               </div>
-              <div className="text-xl font-bold font-mono text-foreground">{wireNetLength.toFixed(1)}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">ft before waste</div>
-            </div>
-            <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
-              <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
-                <StrippedWireIcon size={10} /> Billable Wire
+              <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
+                <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
+                  <StrippedWireIcon size={10} /> Billable Wire
+                </div>
+                <div className="text-xl font-bold font-mono text-[#F5C518]">{wireBillable}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wirewasteFactor}% waste</div>
               </div>
-              <div className="text-xl font-bold font-mono text-[#F5C518]">{wireBillable}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wirewasteFactor}% waste</div>
             </div>
+            {/* Material cost row */}
+            {wireMaterialCost != null ? (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</span>
+                  <span className="text-base font-bold font-mono text-emerald-400">${wireMaterialCost.toFixed(2)}</span>
+                </div>
+                <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                  ${wireCostPerFt!.toFixed(3)}/ft × {wireBillable} ft
+                </div>
+              </div>
+            ) : (
+              <div className="bg-muted/10 border border-border/30 rounded-lg p-2 text-[10px] text-muted-foreground/60 text-center">
+                No catalog price found for this wire type/size — update in Material Database
+              </div>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
-              <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
-                <ConduitPipeIcon size={10} /> Billable Conduit
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
+                <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
+                  <ConduitPipeIcon size={10} /> Billable Conduit
+                </div>
+                <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitBillable}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">
+                  ft → {calcSticks(conduitBillable)} sticks
+                </div>
               </div>
-              <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitBillable}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">
-                ft → {calcSticks(conduitBillable)} sticks
+              <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
+                <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
+                  <StrippedWireIcon size={10} /> Billable Wire
+                </div>
+                <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitWireBillable}</div>
+                <div className="text-[10px] text-muted-foreground font-mono">ft w/ {conduitWasteFactor}% waste</div>
               </div>
             </div>
-            <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
-              <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
-                <StrippedWireIcon size={10} /> Billable Wire
+            {/* Material cost breakdown */}
+            {(conduitMaterialCost != null || wireMaterialCost != null) ? (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-medium">Est. Material Cost</span>
+                  <span className="text-base font-bold font-mono text-emerald-400">${totalMaterialCost.toFixed(2)}</span>
+                </div>
+                {conduitMaterialCost != null && (
+                  <div className="text-[10px] text-muted-foreground font-mono">
+                    Conduit: ${conduitCostPerFt!.toFixed(3)}/ft × {conduitBillable} ft = ${conduitMaterialCost.toFixed(2)}
+                  </div>
+                )}
+                {wireMaterialCost != null && (
+                  <div className="text-[10px] text-muted-foreground font-mono">
+                    Wire: ${wireCostPerFt!.toFixed(3)}/ft × {conduitWireBillable} ft = ${wireMaterialCost.toFixed(2)}
+                  </div>
+                )}
               </div>
-              <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitWireBillable}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wireWasteFactor}% waste</div>
-            </div>
+            ) : (
+              <div className="bg-muted/10 border border-border/30 rounded-lg p-2 text-[10px] text-muted-foreground/60 text-center">
+                No catalog price found for {run.conduitType ?? "EMT"} {run.conduitSize ?? "1/2"}&quot; — update in Material Database
+              </div>
+            )}
           </div>
         )}
 
