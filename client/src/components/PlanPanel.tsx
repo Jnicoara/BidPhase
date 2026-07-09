@@ -1187,73 +1187,10 @@ export default function PlanPanel({
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       ctx.restore();
     }
-  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, activeRunColor]);
+  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, crosshair, activeRunColor]);
 
-  // Full redraw when runs/pins/page change (NOT on every crosshair mouse move)
-  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
-
-  // Crosshair-only redraw: restore canvas snapshot then draw crosshair lines.
-  // This avoids re-rendering all runs/pins on every mouse move.
-  const canvasSnapshotRef = useRef<ImageData | null>(null);
-  // Capture a snapshot after a full redraw so crosshair can restore it
-  // Re-capture whenever runs, pins, or page change (same deps as drawCanvas + pageReady)
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !pageReady) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    // Small delay so drawCanvas has finished painting
-    const id = setTimeout(() => {
-      try {
-        canvasSnapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      } catch {
-        canvasSnapshotRef.current = null;
-      }
-    }, 32); // slightly longer than drawCanvas's own 16ms settle
-    return () => clearTimeout(id);
-  }, [currentRuns, currentPins, allPagePins, pageReady, displayZoom]);
-
-  // When crosshair changes, restore snapshot + draw crosshair lines only
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    if (!crosshair) {
-      // No crosshair — restore clean snapshot if available
-      if (canvasSnapshotRef.current) {
-        ctx.putImageData(canvasSnapshotRef.current, 0, 0);
-      }
-      return;
-    }
-    // Restore snapshot first (removes previous crosshair lines)
-    if (canvasSnapshotRef.current) {
-      ctx.putImageData(canvasSnapshotRef.current, 0, 0);
-    }
-    // Draw crosshair lines
-    const s = pageSizeRef.current;
-    if (!s || s.w === 0) return;
-    const dz = displayZoomRef.current || 0.40;
-    const S = RENDER_BASE_ZOOM / dz;
-    const x = crosshair.x * s.w;
-    const y = crosshair.y * s.h;
-    const col = activeRunColor || "#FFD700";
-    const r = parseInt(col.slice(1, 3), 16);
-    const g = parseInt(col.slice(3, 5), 16);
-    const b = parseInt(col.slice(5, 7), 16);
-    ctx.save();
-    ctx.strokeStyle = `rgba(0,0,0,0.45)`;
-    ctx.lineWidth = 3 * S;
-    ctx.setLineDash([8 * S, 6 * S]);
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-    ctx.strokeStyle = `rgba(${r},${g},${b},1)`;
-    ctx.lineWidth = 1 * S;
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-    ctx.restore();
-  }, [crosshair, activeRunColor]);
-
+  // Redraw canvas whenever runs/pins/page/crosshair change
+  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady, crosshair]);
   // Clear crosshair guide whenever mode returns to idle
   useEffect(() => { if (mode === "none") setCrosshair(null); }, [mode]);
 
