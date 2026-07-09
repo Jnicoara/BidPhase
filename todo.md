@@ -679,3 +679,8 @@
 - [x] Conduit estimating inputs: default pull points = 0, wire makeup default sum = 0, waste factor default = 0
 - [x] Wire estimating inputs: default wire type = NM Cable, all estimating inputs start at 0
 - [x] Clear Page (unit counter) must also clear all runs on the current page — count mode Clear page now calls onClearPageAll (runs + all sessions' pins)
+
+## v5.68 — Cursor, Count Pointer Smoothness, Distance Label
+- [x] Cursor: hide custom dot over confirm dialogs (modal overlays) — added isDialogOpen guard to cursor:none and isPointerInViewport
+- [x] Count mode pointer: remove lag/glitch — converted crosshair to ref + RAF snapshot path; no React re-render on mouse move
+- [x] Distance labels: remove sideways M (∑ or similar symbol) from footage tags — removed ∑ prefix from group segment label

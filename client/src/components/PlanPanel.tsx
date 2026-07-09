@@ -635,8 +635,17 @@ export default function PlanPanel({
   // mousePos for the smooth pointer-events:none overlay cursor (no browser cursor lag)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [isPointerInViewport, setIsPointerInViewport] = useState(false);
-  // ── Full-screen crosshair overlay state ──────────────────────────────────
-  const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
+  // ── Full-screen crosshair overlay — ref-based (no React re-render on mouse move) ──
+  const crosshairRef = useRef<{ x: number; y: number } | null>(null);
+  // Snapshot of canvas pixels BEFORE crosshair is drawn — restored each RAF frame
+  const canvasSnapshotRef = useRef<ImageData | null>(null);
+  // RAF handle to deduplicate crosshair-only redraws
+  const crosshairRafRef = useRef<number | null>(null);
+  // Legacy shim so existing setCrosshair(null) calls compile without changes
+  const setCrosshair = useCallback((v: { x: number; y: number } | null) => {
+    crosshairRef.current = v;
+    if (!v) canvasSnapshotRef.current = null;
+  }, []);
 
   // Legacy panRef alias (scroll-based pan no longer used)
   const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
@@ -1053,7 +1062,7 @@ export default function PlanPanel({
           for (const s of segments) {
             const groupFt = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0) / pxPerFt;
             const mid = s[Math.floor(s.length / 2)];
-            if (mid) drawLabel(`∑${groupFt.toFixed(1)}'`, mid.x, mid.y - 18 * S, 0);
+            if (mid) drawLabel(`${groupFt.toFixed(1)}'`, mid.x, mid.y - 18 * S, 0);
           }
         }
       } else {
@@ -1284,11 +1293,13 @@ export default function PlanPanel({
       ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
       ctx.fillText(`S${i + 1}`, p.x + 9 * S, p.y - 7 * S);
     });
+    // ── Capture snapshot BEFORE crosshair (RAF path restores this for zero-lag redraw) ──
+    canvasSnapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
     // ── Full-screen crosshair overlay ────────────────────────────────────────────
     // Draws spanning hairlines from edge to edge in the active color.
     // Color: yellow for scale mode, active run color for measure mode.
-    if (crosshair) {
-      const { x, y } = crosshair;
+    if (crosshairRef.current) {
+      const { x, y } = crosshairRef.current;
       // Crosshair lines are always yellow regardless of mode
       const hex = "#F5C518";
       // Parse hex to rgb for rgba usage
@@ -1314,10 +1325,10 @@ export default function PlanPanel({
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       ctx.restore();
     }
-  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, crosshair, activeRunColor]);
+  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, activeRunColor]);
 
   // Redraw canvas whenever runs/pins/page/crosshair change
-  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady, crosshair]);
+  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
   // Clear crosshair guide whenever mode returns to idle
   useEffect(() => { if (mode === "none") setCrosshair(null); }, [mode]);
 
@@ -1975,18 +1986,54 @@ export default function PlanPanel({
     // Right-click in measure mode is a no-op (panning is handled by viewport)
   }, [normToCanvas, onPinRemoved, canvasToNorm]);
 
-  // ── Canvas mouse move (drag only) ────────────────────────────────────────
+  // ── Canvas mouse move — RAF crosshair (no React re-render on every move) ──
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (modeRef.current === "none") { setCrosshair(null); setMousePos(null); setIsPointerInViewport(false); return; }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const scaleX = canvas.width  / canvas.offsetWidth;
     const scaleY = canvas.height / canvas.offsetHeight;
-    setCrosshair({
-      x: e.nativeEvent.offsetX * scaleX,
-      y: e.nativeEvent.offsetY * scaleY,
+    const cx = e.nativeEvent.offsetX * scaleX;
+    const cy = e.nativeEvent.offsetY * scaleY;
+    // Update ref only — no React state change
+    crosshairRef.current = { x: cx, y: cy };
+    // Cancel any pending RAF to avoid queuing multiple frames
+    if (crosshairRafRef.current !== null) cancelAnimationFrame(crosshairRafRef.current);
+    crosshairRafRef.current = requestAnimationFrame(() => {
+      crosshairRafRef.current = null;
+      const c = canvasRef.current;
+      const ctx2 = c?.getContext("2d");
+      const snap = canvasSnapshotRef.current;
+      if (!c || !ctx2 || !snap) return;
+      // Restore scene without crosshair
+      ctx2.putImageData(snap, 0, 0);
+      // Draw crosshair lines
+      const pos = crosshairRef.current;
+      if (!pos) return;
+      const { x, y } = pos;
+      const hex = "#F5C518";
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      const dz = displayZoomRef.current || 0.40;
+      const S = RENDER_BASE_ZOOM / dz;
+      ctx2.save();
+      ctx2.setLineDash([]);
+      ctx2.strokeStyle = `rgba(${r},${g},${b},0.18)`;
+      ctx2.lineWidth = 8 * S;
+      ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, c.height); ctx2.stroke();
+      ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(c.width, y); ctx2.stroke();
+      ctx2.strokeStyle = `rgba(${r},${g},${b},0.45)`;
+      ctx2.lineWidth = 3 * S;
+      ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, c.height); ctx2.stroke();
+      ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(c.width, y); ctx2.stroke();
+      ctx2.strokeStyle = `rgba(${r},${g},${b},1)`;
+      ctx2.lineWidth = 1 * S;
+      ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, c.height); ctx2.stroke();
+      ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(c.width, y); ctx2.stroke();
+      ctx2.restore();
     });
-  }, []);
+  }, [RENDER_BASE_ZOOM]);
 
   // ── Confirm scale ──────────────────────────────────────────────────────────
   const confirmScale = useCallback(() => {
@@ -2150,10 +2197,12 @@ export default function PlanPanel({
   return (
     <div
       className="flex flex-col h-full bg-background border-r border-border relative"
-      style={activeCursorColor && !isPanning && isPointerInViewport ? { cursor: "none" } : undefined}
+      style={activeCursorColor && !isPanning && isPointerInViewport && !deleteConfirm && !pendingPdfFile && !showScalePrompt ? { cursor: "none" } : undefined}
       onMouseMove={(e) => {
-        if (!activeCursorColor || isPanning) {
+        // Never apply custom cursor when a dialog overlay is open
+        if (!activeCursorColor || isPanning || deleteConfirm || pendingPdfFile || showScalePrompt) {
           setIsPointerInViewport(false);
+          setMousePos(null);
           return;
         }
         const rootRect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
