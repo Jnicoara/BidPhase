@@ -2005,6 +2005,9 @@ export default function PlanPanel({
       const ctx2 = c?.getContext("2d");
       const snap = canvasSnapshotRef.current;
       if (!c || !ctx2 || !snap) return;
+      // Guard: if canvas was resized (zoom change), snapshot dimensions won't match.
+      // Skip the restore to avoid overwriting the freshly-drawn zoomed frame.
+      if (snap.width !== c.width || snap.height !== c.height) return;
       // Restore scene without crosshair
       ctx2.putImageData(snap, 0, 0);
       // Draw crosshair lines
@@ -2206,14 +2209,16 @@ export default function PlanPanel({
           return;
         }
         const rootRect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-        const viewportRect = viewportRef.current?.getBoundingClientRect();
-        const withinViewport = !!viewportRect
-          && e.clientX >= viewportRect.left
-          && e.clientX <= viewportRect.right
-          && e.clientY >= viewportRect.top
-          && e.clientY <= viewportRect.bottom;
-        setIsPointerInViewport(withinViewport);
-        if (!withinViewport) {
+        // Hit-test against the actual PDF overlay canvas (not the full viewport div)
+        // so the dot only appears when the pointer is over the PDF page itself.
+        const pageCanvasRect = canvasRef.current?.getBoundingClientRect();
+        const withinPage = !!pageCanvasRect
+          && e.clientX >= pageCanvasRect.left
+          && e.clientX <= pageCanvasRect.right
+          && e.clientY >= pageCanvasRect.top
+          && e.clientY <= pageCanvasRect.bottom;
+        setIsPointerInViewport(withinPage);
+        if (!withinPage) {
           setMousePos(null);
           return;
         }
@@ -2861,7 +2866,7 @@ export default function PlanPanel({
         style={{
           cursor: (pendingPdfFile || deleteConfirm || showScalePrompt || !pageReady)
             ? "default"
-            : isPanning ? "grabbing" : activeCursorColor ? "none" : (mode !== "none" ? "crosshair" : "grab"),
+            : (isPanning && mode === "none") ? "grabbing" : activeCursorColor ? "none" : (mode !== "none" ? "crosshair" : "grab"),
           // Disable ALL browser touch handling (pan, pinch-zoom, pull-to-refresh, edge-swipe).
           // Our own touch handlers in the useEffect below manage everything.
           touchAction: "none",
