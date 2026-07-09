@@ -634,6 +634,7 @@ export default function PlanPanel({
   }, [mode]);
   // mousePos for the smooth pointer-events:none overlay cursor (no browser cursor lag)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+  const [isPointerInViewport, setIsPointerInViewport] = useState(false);
   // ── Full-screen crosshair overlay state ──────────────────────────────────
   const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
 
@@ -1660,16 +1661,30 @@ export default function PlanPanel({
       }
       if (e.key === "ArrowLeft" && numPages > 1) {
         e.preventDefault();
-        setCurrentPage((p) => Math.max(1, p - 1));
+        setCurrentPage((p) => {
+          const next = Math.max(1, p - 1);
+          onCurrentPageChange?.(next);
+          return next;
+        });
+        setMode("none");
+        modeRef.current = "none";
+        zoomReset();
       }
       if (e.key === "ArrowRight" && numPages > 1) {
         e.preventDefault();
-        setCurrentPage((p) => Math.min(numPages, p + 1));
+        setCurrentPage((p) => {
+          const next = Math.min(numPages, p + 1);
+          onCurrentPageChange?.(next);
+          return next;
+        });
+        setMode("none");
+        modeRef.current = "none";
+        zoomReset();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zoomIn, zoomOut, zoomReset, scaleRatio, numPages]); // eslint-disable-line
+  }, [zoomIn, zoomOut, zoomReset, scaleRatio, numPages, onCurrentPageChange, setCurrentPage]); // eslint-disable-line
 
   // ── Canvas click handler ───────────────────────────────────────────────────
   // Canvas is rendered at renderZoom; getBoundingClientRect gives display size.
@@ -1962,7 +1977,7 @@ export default function PlanPanel({
 
   // ── Canvas mouse move (drag only) ────────────────────────────────────────
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (modeRef.current === "none") { setCrosshair(null); setMousePos(null); return; }
+    if (modeRef.current === "none") { setCrosshair(null); setMousePos(null); setIsPointerInViewport(false); return; }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const scaleX = canvas.width  / canvas.offsetWidth;
@@ -1971,12 +1986,6 @@ export default function PlanPanel({
       x: e.nativeEvent.offsetX * scaleX,
       y: e.nativeEvent.offsetY * scaleY,
     });
-    // Track viewport-relative position for the smooth overlay cursor div
-    const viewport = viewportRef.current;
-    if (viewport) {
-      const rect = viewport.getBoundingClientRect();
-      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-    }
   }, []);
 
   // ── Confirm scale ──────────────────────────────────────────────────────────
@@ -2127,7 +2136,8 @@ export default function PlanPanel({
     onCurrentPageChange?.(clamped);
     setMode("none");
     modeRef.current = "none";
-  }, [numPages, setCurrentPage, onCurrentPageChange]);
+    zoomReset();
+  }, [numPages, setCurrentPage, onCurrentPageChange, zoomReset]);
 
   // ── Compute run count per page for page selector badges ───────────────────
   const getPageRunCount = useCallback((pIdx: number) => {
@@ -2140,13 +2150,27 @@ export default function PlanPanel({
   return (
     <div
       className="flex flex-col h-full bg-background border-r border-border relative"
-      style={activeCursorColor && !isPanning ? { cursor: "none" } : undefined}
+      style={activeCursorColor && !isPanning && isPointerInViewport ? { cursor: "none" } : undefined}
       onMouseMove={(e) => {
-        if (!activeCursorColor || isPanning) return;
-        const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-        setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        if (!activeCursorColor || isPanning) {
+          setIsPointerInViewport(false);
+          return;
+        }
+        const rootRect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+        const viewportRect = viewportRef.current?.getBoundingClientRect();
+        const withinViewport = !!viewportRect
+          && e.clientX >= viewportRect.left
+          && e.clientX <= viewportRect.right
+          && e.clientY >= viewportRect.top
+          && e.clientY <= viewportRect.bottom;
+        setIsPointerInViewport(withinViewport);
+        if (!withinViewport) {
+          setMousePos(null);
+          return;
+        }
+        setMousePos({ x: e.clientX - rootRect.left, y: e.clientY - rootRect.top });
       }}
-      onMouseLeave={() => { setMousePos(null); }}
+      onMouseLeave={() => { setMousePos(null); setIsPointerInViewport(false); }}
     >
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
       {/* Contextual toolbar: buttons shown depend on the current mode */}
@@ -3146,7 +3170,7 @@ export default function PlanPanel({
 
       {/* Smooth overlay cursor — pointer-events:none div that tracks mouse, GPU-composited, zero lag */}
       {/* Positioned relative to the outer panel div (same element mousePos is computed from) */}
-      {mousePos && activeCursorColor && !isPanning && (
+      {mousePos && activeCursorColor && !isPanning && isPointerInViewport && (
         <div
           className="absolute pointer-events-none z-[60]"
           style={{
