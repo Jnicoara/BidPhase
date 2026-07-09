@@ -664,3 +664,10 @@
 - [x] Fix: added latestStateRef (always-fresh ref updated every render) — both the assembly-link useEffect and handleSaveCountToLM now read from latestStateRef.current instead of the stale closure
 - [x] handleSaveCountToLM now re-fetches the freshest version of the session by ID before expanding assembly items, so pins dropped after assembly selection are always included
 - [x] TypeScript: 0 errors
+
+## v5.64 — L&M Sync, Labor Columns, PDF Speed
+- [x] L&M summary: running total at bottom must sum all savedMaterialRows (qty × unitCost)
+- [x] L&M summary: deleting a count session must remove its orphaned savedMaterialRows
+- [x] L&M summary: add select-all checkbox + bulk delete button
+- [x] Combine Trainee + Journeyman labor into single combined labor column with hardhat icon
+- [x] PDF: fix 12-second page load — root cause was react-pdf re-rendering on every page change; replaced with pdfjs OffscreenCanvas bitmap cache that renders pages once and serves subsequent navigations instantly from memory

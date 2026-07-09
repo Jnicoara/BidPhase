@@ -5,8 +5,7 @@
  *  1. Material rows (from count sessions + runs + manual additions) with catalog picker
  *     — multi-select checkboxes for bulk delete/edit
  *     — "Add from Catalog" button to add items directly from the price database
- *  2. Journeyman labor lines (description + hours × rate)
- *  3. Trainee labor lines (description + hours × rate)
+ *  2. Labor lines (Journeyman + Trainee combined, each line has a type toggle)
  *  4. Totals strip: material subtotal + markup % (material only) + labor subtotal = grand total
  *  5. Export: CSV, PDF, Print
  */
@@ -14,7 +13,7 @@ import { useState, useCallback, useEffect } from "react";
 import { nanoid } from "nanoid";
 import {
   ArrowLeft, Plus, Trash2, Printer, Download, FileText,
-  ChevronDown, ChevronUp, Edit2, HardHat, Wrench,
+  ChevronDown, ChevronUp, Edit2, HardHat,
   Tag, DollarSign, Percent, BookOpen, CheckSquare, Square, X, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -375,8 +374,7 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
   const [jRateDraft, setJRateDraft] = useState(String(journeymanRate));
   const [tRateDraft, setTRateDraft] = useState(String(traineeRate));
   const [showMaterials, setShowMaterials] = useState(true);
-  const [showJourneyman, setShowJourneyman] = useState(true);
-  const [showTrainee, setShowTrainee] = useState(true);
+  const [showLabor, setShowLabor] = useState(true);
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [materialSearch, setMaterialSearch] = useState("");
 
@@ -615,83 +613,67 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
           )}
         </section>
 
-        {/* Journeyman Labor */}
+        {/* Labor — combined Journeyman + Trainee */}
         <section className="bg-card border border-border rounded-xl">
-          <button onClick={() => setShowJourneyman((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
+          <button onClick={() => setShowLabor((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
             <div className="flex items-center gap-2">
               <HardHat size={14} className="text-[#F5C518]" />
-              <span className="text-sm font-semibold">Journeyman Labor</span>
-              <span className="text-xs text-muted-foreground font-mono">{jHours} hrs · ${fmt(jLaborTotal)}</span>
+              <span className="text-sm font-semibold">Labor</span>
+              <span className="text-xs text-muted-foreground font-mono">{jHours + tHours} hrs · ${fmt(laborSubtotal)}</span>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1 text-xs text-muted-foreground" onClick={(e) => e.stopPropagation()}>
-                <span>Rate: $</span>
+                <span className="text-[10px] text-muted-foreground/60">J: $</span>
                 <input type="number" min={0} step={1} value={jRateDraft} onChange={(e) => setJRateDraft(e.target.value)}
                   onBlur={() => { const v = parseFloat(jRateDraft); if (!isNaN(v) && v > 0) setJourneymanRate(v); else setJRateDraft(String(journeymanRate)); }}
-                  className="w-14 bg-transparent border-b border-[#F5C518]/40 text-[#F5C518] font-mono text-xs text-right outline-none focus:border-[#F5C518]" />
-                <span>/hr</span>
+                  className="w-12 bg-transparent border-b border-[#F5C518]/40 text-[#F5C518] font-mono text-xs text-right outline-none focus:border-[#F5C518]" />
+                <span className="text-[10px] text-muted-foreground/60 ml-1">T: $</span>
+                <input type="number" min={0} step={1} value={tRateDraft} onChange={(e) => setTRateDraft(e.target.value)}
+                  onBlur={() => { const v = parseFloat(tRateDraft); if (!isNaN(v) && v > 0) setTraineeRate(v); else setTRateDraft(String(traineeRate)); }}
+                  className="w-12 bg-transparent border-b border-[#F5C518]/40 text-[#F5C518] font-mono text-xs text-right outline-none focus:border-[#F5C518]" />
+                <span className="text-[10px] text-muted-foreground/60">/hr</span>
               </div>
-              {showJourneyman ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+              {showLabor ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
             </div>
           </button>
-          {showJourneyman && (
+          {showLabor && (
             <div>
-              <div className="grid grid-cols-[1fr_100px_100px_28px] gap-2 px-4 py-2 bg-muted/20 border-y border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                <span>Task</span><span className="text-right">Hours</span><span className="text-right">Total</span><span />
+              <div className="grid grid-cols-[60px_1fr_100px_100px_28px] gap-2 px-4 py-2 bg-muted/20 border-y border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                <span>Type</span><span>Task</span><span className="text-right">Hours</span><span className="text-right">Total</span><span />
               </div>
-              {journeymanLines.length === 0 && <div className="px-4 py-6 text-center text-xs text-muted-foreground">No journeyman tasks yet.</div>}
+              {/* Journeyman lines */}
               {journeymanLines.map((line) => (
-                <div key={line.id} className="grid grid-cols-[1fr_100px_100px_28px] gap-2 px-4 py-2 border-b border-border/40 items-center group hover:bg-muted/10 transition-colors">
+                <div key={line.id} className="grid grid-cols-[60px_1fr_100px_100px_28px] gap-2 px-4 py-2 border-b border-border/40 items-center group hover:bg-muted/10 transition-colors">
+                  <span className="text-[10px] font-mono font-semibold text-[#F5C518] bg-[#F5C518]/10 rounded px-1.5 py-0.5 text-center">JNY</span>
                   <InlineEdit value={line.description} onSave={(v) => updateJLine(line.id, { description: v })} className="text-xs text-foreground" inputClassName="text-xs w-full" />
                   <div className="text-right"><InlineEdit value={String(line.hours)} onSave={(v) => updateJLine(line.id, { hours: parseFloat(v) || 0 })} className="text-xs font-mono text-foreground justify-end" inputClassName="text-xs w-20 font-mono text-right" /></div>
                   <div className="text-right text-xs font-mono font-medium text-[#F5C518]">${fmt(line.hours * journeymanRate)}</div>
                   <button onClick={() => setDeletingLaborId(line.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"><Trash2 size={12} /></button>
                 </div>
               ))}
-              <div className="px-4 py-2 flex items-center justify-between">
-                <button onClick={addJLine} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors"><Plus size={12} />Add Task</button>
-                <span className="text-xs font-mono font-bold text-[#F5C518]">{jHours} hrs · ${fmt(jLaborTotal)}</span>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Trainee Labor */}
-        <section className="bg-card border border-border rounded-xl">
-          <button onClick={() => setShowTrainee((v) => !v)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors">
-            <div className="flex items-center gap-2">
-              <Wrench size={14} className="text-[#F5C518]" />
-              <span className="text-sm font-semibold">Trainee Labor</span>
-              <span className="text-xs text-muted-foreground font-mono">{tHours} hrs · ${fmt(tLaborTotal)}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground" onClick={(e) => e.stopPropagation()}>
-                <span>Rate: $</span>
-                <input type="number" min={0} step={1} value={tRateDraft} onChange={(e) => setTRateDraft(e.target.value)}
-                  onBlur={() => { const v = parseFloat(tRateDraft); if (!isNaN(v) && v > 0) setTraineeRate(v); else setTRateDraft(String(traineeRate)); }}
-                  className="w-14 bg-transparent border-b border-[#F5C518]/40 text-[#F5C518] font-mono text-xs text-right outline-none focus:border-[#F5C518]" />
-                <span>/hr</span>
-              </div>
-              {showTrainee ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-            </div>
-          </button>
-          {showTrainee && (
-            <div>
-              <div className="grid grid-cols-[1fr_100px_100px_28px] gap-2 px-4 py-2 bg-muted/20 border-y border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                <span>Task</span><span className="text-right">Hours</span><span className="text-right">Total</span><span />
-              </div>
-              {traineeLines.length === 0 && <div className="px-4 py-6 text-center text-xs text-muted-foreground">No trainee tasks yet.</div>}
+              {/* Trainee lines */}
               {traineeLines.map((line) => (
-                <div key={line.id} className="grid grid-cols-[1fr_100px_100px_28px] gap-2 px-4 py-2 border-b border-border/40 items-center group hover:bg-muted/10 transition-colors">
+                <div key={line.id} className="grid grid-cols-[60px_1fr_100px_100px_28px] gap-2 px-4 py-2 border-b border-border/40 items-center group hover:bg-muted/10 transition-colors">
+                  <span className="text-[10px] font-mono font-semibold text-blue-400 bg-blue-400/10 rounded px-1.5 py-0.5 text-center">TRN</span>
                   <InlineEdit value={line.description} onSave={(v) => updateTLine(line.id, { description: v })} className="text-xs text-foreground" inputClassName="text-xs w-full" />
                   <div className="text-right"><InlineEdit value={String(line.hours)} onSave={(v) => updateTLine(line.id, { hours: parseFloat(v) || 0 })} className="text-xs font-mono text-foreground justify-end" inputClassName="text-xs w-20 font-mono text-right" /></div>
                   <div className="text-right text-xs font-mono font-medium text-[#F5C518]">${fmt(line.hours * traineeRate)}</div>
                   <button onClick={() => setDeletingLaborId(line.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-400"><Trash2 size={12} /></button>
                 </div>
               ))}
-              <div className="px-4 py-2 flex items-center justify-between">
-                <button onClick={addTLine} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors"><Plus size={12} />Add Task</button>
-                <span className="text-xs font-mono font-bold text-[#F5C518]">{tHours} hrs · ${fmt(tLaborTotal)}</span>
+              {journeymanLines.length === 0 && traineeLines.length === 0 && (
+                <div className="px-4 py-6 text-center text-xs text-muted-foreground">No labor tasks yet. Add Journeyman or Trainee tasks below.</div>
+              )}
+              <div className="px-4 py-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <button onClick={addJLine} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors"><Plus size={12} /><span className="text-[10px] font-mono font-semibold text-[#F5C518]">JNY</span></button>
+                  <button onClick={addTLine} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#F5C518] transition-colors"><Plus size={12} /><span className="text-[10px] font-mono font-semibold text-blue-400">TRN</span></button>
+                </div>
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  {jHours > 0 && <span className="text-muted-foreground">{jHours} JNY hrs · ${fmt(jLaborTotal)}</span>}
+                  {tHours > 0 && <span className="text-muted-foreground">{tHours} TRN hrs · ${fmt(tLaborTotal)}</span>}
+                  <span className="font-bold text-[#F5C518]">${fmt(laborSubtotal)}</span>
+                </div>
               </div>
             </div>
           )}

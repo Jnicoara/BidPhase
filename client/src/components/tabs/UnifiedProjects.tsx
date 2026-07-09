@@ -1531,7 +1531,7 @@ ${rows.slice(5).map((row) => {
   );
 }
 
-function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { runs: RunItem[]; countSessions?: CountSession[]; userMaterials?: UserMaterialRow[] }) {
+function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], userMaterials = [] }: { runs: RunItem[]; countSessions?: CountSession[]; savedMaterialRows?: SavedMaterialRow[]; userMaterials?: UserMaterialRow[] }) {
   const { setShowMaterialList } = useApp();
 
   const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
@@ -1725,7 +1725,10 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
     .filter((cs) => cs.pins.length > 0 && cs.unitCost != null)
     .reduce((a, cs) => a + (cs.unitCost! * cs.pins.length), 0);
 
-  const grandTotalMaterialCost = totalMaterialCost + unitCountCost;
+  // Saved material rows cost (assembly items pushed to L&M)
+  const savedRowsCost = savedMaterialRows.reduce((a, r) => a + r.qty * r.unitCost, 0);
+
+  const grandTotalMaterialCost = totalMaterialCost + unitCountCost + savedRowsCost;
 
   const SectionHeader = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
     <div className="flex items-center gap-2 mt-4 mb-2 pb-1 border-b border-border/40">
@@ -1879,6 +1882,32 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
             })}
           </div>
         </>
+      )}
+      {/* ── Saved Assembly Rows ── */}
+      {savedMaterialRows.length > 0 && (
+        <>
+          <SectionHeader icon={<span className="text-[10px]">📦</span>} title="Saved Items" />
+          <div className="space-y-1">
+            {savedMaterialRows.map((r) => (
+              <div key={r.id} className="flex items-center justify-between text-[11px] py-0.5">
+                <span className="font-mono text-foreground truncate max-w-[55%]">{r.description}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-muted-foreground">{r.qty} {r.unit}</span>
+                  {r.unitCost > 0 && (
+                    <span className="font-mono text-[#F5C518]">${(r.qty * r.unitCost).toFixed(2)}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {/* ── Running Total ── */}
+      {grandTotalMaterialCost > 0 && (
+        <div className="mt-3 pt-2 border-t border-[#F5C518]/20 flex items-center justify-between">
+          <span className="text-[10px] font-semibold text-[#F5C518] uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Est. Material Total</span>
+          <span className="text-[12px] font-mono font-bold text-[#F5C518]">${grandTotalMaterialCost.toFixed(2)}</span>
+        </div>
       )}
     </div>
   );
@@ -2137,7 +2166,10 @@ function CivilEditor({
   const handleDeleteCountSession = (id: string) => {
     const updated = countSessions.filter((cs) => cs.id !== id);
     const newActive = activeCountSessionId === id ? (updated[0]?.id ?? undefined) : activeCountSessionId;
-    updateSessions(updated, newActive);
+    // Also remove any savedMaterialRows that were saved from this session
+    const freshS = latestStateRef.current.s;
+    const cleanedRows = (freshS.savedMaterialRows ?? []).filter((r) => r.sessionId !== id);
+    setCivilState({ ...freshS, runs: latestStateRef.current.runs, countSessions: updated, activeCountSessionId: newActive, savedMaterialRows: cleanedRows });
   };
 
   const handleRenameCountSession = (id: string) => {
@@ -2865,7 +2897,7 @@ function CivilEditor({
                   {/* ── MATERIAL SUMMARY — inline below Runs, always visible, grows with content ── */}
                   <div className="bp-card overflow-hidden border-t border-border/40">
                     <div className="px-4 py-3 space-y-3">
-                      <CrossPageTotals runs={runs} countSessions={countSessions} userMaterials={userMaterials} />
+                      <CrossPageTotals runs={runs} countSessions={countSessions} savedMaterialRows={s.savedMaterialRows ?? []} userMaterials={userMaterials} />
                     </div>
                     {/* ── Export button — full-width prominent yellow button with CSV / PDF options ── */}
                     {runs.length > 0 && (

@@ -20,15 +20,16 @@
  *  - onPushDistance: called when user pushes total footage to the calculator
  *  - onDeleteRun: called when a run is deleted from the run strip
  */
-import {
+import React, {
   useState,
   useRef,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
+  memo,
 } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -110,6 +111,65 @@ function clearBitmapCache(pdfHash?: string) {
     globalBitmapCache.clear();
   }
 }
+
+// ── PageThumb: bitmap-cached page thumbnail used in the page overview grid ─────
+const PageThumb = memo(function PageThumb({
+  pNum,
+  isActive,
+  pdfHash,
+  scale,
+  onClick,
+}: {
+  pNum: number;
+  isActive: boolean;
+  pdfHash: string | null;
+  scale: number;
+  onClick: () => void;
+}) {
+  const thumbRef = useRef<HTMLCanvasElement>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!pdfHash) return;
+    let cancelled = false;
+    renderPageBitmap(pNum, scale, pdfHash).then((bitmap) => {
+      if (cancelled || !bitmap || !thumbRef.current) return;
+      const canvas = thumbRef.current;
+      const MAX_W = 200;
+      const ratio = Math.min(MAX_W / bitmap.width, 1);
+      canvas.width = Math.round(bitmap.width * ratio);
+      canvas.height = Math.round(bitmap.height * ratio);
+      canvas.style.width = `${canvas.width}px`;
+      canvas.style.height = `${canvas.height}px`;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        setLoaded(true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [pNum, pdfHash, scale]);
+
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "relative flex flex-col rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60",
+        isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border bg-card hover:bg-muted/20"
+      )}
+    >
+      <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden">
+        {!loaded && <div className="h-32 w-full" />}
+        <canvas ref={thumbRef} style={{ display: loaded ? "block" : "none" }} />
+      </div>
+      <div className={cn("px-3 py-1.5 text-center", isActive ? "bg-[#F5C518]/10" : "bg-card")}>
+        <span className={cn("text-xs font-semibold font-mono", isActive ? "text-[#F5C518]" : "text-muted-foreground")}>
+          {isActive ? "▶ " : ""}Page {pNum}
+        </span>
+      </div>
+    </button>
+  );
+});
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure" | "count" | "drag-scale" | "drag-run";
@@ -545,12 +605,14 @@ export default function PlanPanel({
   // ── Refs ───────────────────────────────────────────────────────────────────
   // pdfDocRef: holds the raw pdfjs document for bitmap cache rendering
   const pdfDocRef = useRef<import("pdfjs-dist").PDFDocumentProxy | null>(null);
+  const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);   // fixed-size overflow:hidden viewport
   const scrollAreaRef = viewportRef;                  // alias kept for legacy code
   const pagesContainerRef = useRef<HTMLDivElement>(null);
   const pageSizeRef = useRef<{ w: number; h: number } | null>(null);
   const [pageReady, setPageReady] = useState(false);
+  const [pageBitmapLoading, setPageBitmapLoading] = useState(false);
   // Incremental pinch state: stores the previous frame's distance and midpoint
   const pinchRef = useRef<{ prevDist: number; prevMid: { x: number; y: number } } | null>(null);
   const isPinchingRef = useRef(false);
@@ -663,9 +725,73 @@ export default function PlanPanel({
   useEffect(() => {
     pageSizeRef.current = null;
     setPageReady(false);
+    setPageBitmapLoading(!!pdfFile);
     setMode("none");
     modeRef.current = "none";
-  }, [currentPage]);
+  }, [currentPage, pdfFile]);
+
+  const paintPdfBitmap = useCallback((bitmap: ImageBitmap) => {
+    const canvas = pdfCanvasRef.current;
+    if (!canvas) return;
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.style.width = `${bitmap.width}px`;
+    canvas.style.height = `${bitmap.height}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, bitmap.width, bitmap.height);
+    ctx.drawImage(bitmap, 0, 0);
+  }, []);
+
+  useEffect(() => {
+    if (!pdfHash || !pdfDocRef.current || numPages < 1) return;
+    let cancelled = false;
+    const scale = BASE_DPI * RENDER_BASE_ZOOM;
+    const hash = pdfHash;
+
+    setPageBitmapLoading(true);
+
+    renderPageBitmap(currentPage, scale, hash).then((bitmap) => {
+      if (cancelled) return;
+      if (!bitmap) {
+        setPageBitmapLoading(false);
+        return;
+      }
+
+      paintPdfBitmap(bitmap);
+      pageSizeRef.current = { w: bitmap.width, h: bitmap.height };
+      setPageReady(true);
+      setPageBitmapLoading(false);
+
+      // Reset transient pointer/pan state after the new page bitmap is ready.
+      dragRef.current = null;
+      dragPointRef.current = null;
+      setIsPanning(false);
+      setMousePos(null);
+      setCrosshair(null);
+
+      const pagesToPrefetch = [
+        currentPage + 1,
+        currentPage - 1,
+        currentPage + 2,
+        currentPage - 2,
+      ].filter((p) => p >= 1 && p <= numPages);
+
+      let delay = 0;
+      pagesToPrefetch.forEach((p) => {
+        setTimeout(() => {
+          if (!cancelled) {
+            renderPageBitmap(p, scale, hash);
+          }
+        }, delay);
+        delay += 50;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPage, numPages, pdfHash, paintPdfBitmap, RENDER_BASE_ZOOM]);
 
   // ── NormPoint → canvas pixel coords (single-page: pageIndex always 0) ─────
   const normToCanvas = useCallback(
@@ -2753,58 +2879,39 @@ export default function PlanPanel({
           >
             {/* Inner wrapper rendered at renderZoom — no gutter needed since we can pan freely */}
             <div style={{ position: "relative", display: "inline-block" }}>
-              <Document
-                key={`${pdfHash || "default"}-${pdfLoadId}`}
-                file={pdfFile}
-                onLoadSuccess={(doc) => {
-                  const n = doc.numPages;
-                  setNumPages(n);
-                  pageSizeRef.current = null;
-                  setPageReady(false);
-                  // Store raw pdfjs document for bitmap cache
-                  pdfDocRef.current = doc as unknown as import("pdfjs-dist").PDFDocumentProxy;
-                  globalPdfDoc = pdfDocRef.current;
-                  globalPdfHash = pdfHash;
-                }}
-                loading={
-                  <div className="flex items-center justify-center p-8 text-muted-foreground text-sm">
-                    Loading PDF…
-                  </div>
-                }
-              >
-                <Page
-                  pageNumber={currentPage}
-                  scale={BASE_DPI * RENDER_BASE_ZOOM}
-                  renderAnnotationLayer={false}
-                  renderTextLayer={false}
-                  onRenderSuccess={(page) => {
-                    onPageRenderSuccess({ width: page.width, height: page.height });
-                    // After react-pdf renders the current page, kick off background
-                    // prefetch of adjacent pages (±2) so navigation is instant.
-                    if (pdfHash && pdfDocRef.current) {
-                      const scale = BASE_DPI * RENDER_BASE_ZOOM;
-                      const hash = pdfHash;
-                      const total = numPages;
-                      // Prefetch pages: current (cache it), then ±1, ±2
-                      const pagesToPrefetch = [
-                        currentPage,
-                        currentPage + 1,
-                        currentPage - 1,
-                        currentPage + 2,
-                        currentPage - 2,
-                      ].filter((p) => p >= 1 && p <= total);
-                      // Run prefetches sequentially with low priority (setTimeout 0)
-                      let delay = 0;
-                      pagesToPrefetch.forEach((p) => {
-                        setTimeout(() => {
-                          renderPageBitmap(p, scale, hash);
-                        }, delay);
-                        delay += 50; // stagger by 50ms to avoid blocking the main thread
-                      });
-                    }
+              <div className="hidden" aria-hidden>
+                <Document
+                  key={`${pdfHash || "default"}-${pdfLoadId}`}
+                  file={pdfFile}
+                  onLoadSuccess={(doc) => {
+                    const n = doc.numPages;
+                    setNumPages(n);
+                    pageSizeRef.current = null;
+                    setPageReady(false);
+                    setPageBitmapLoading(true);
+                    // Store raw pdfjs document for bitmap cache
+                    pdfDocRef.current = doc as unknown as import("pdfjs-dist").PDFDocumentProxy;
+                    globalPdfDoc = pdfDocRef.current;
+                    globalPdfHash = pdfHash;
                   }}
-                />
-              </Document>
+                  loading={<div />}
+                >
+                  <div />
+                </Document>
+              </div>
+
+              {pageBitmapLoading && !pageReady && (
+                <div className="flex items-center justify-center p-8 text-muted-foreground text-sm min-h-[240px] min-w-[320px]">
+                  Rendering page…
+                </div>
+              )}
+
+              <canvas
+                ref={pdfCanvasRef}
+                style={{
+                  display: pageReady ? "block" : "none",
+                }}
+              />
 
               {/* Overlay canvas — sits directly on top of the PDF page */}
               {pageReady && (
@@ -3004,38 +3111,14 @@ export default function PlanPanel({
                   const pNum = i + 1;
                   const isActive = pNum === currentPage;
                   return (
-                    <button
-                      key={i}
+                    <PageThumb
+                      key={pNum}
+                      pNum={pNum}
+                      isActive={isActive}
+                      pdfHash={pdfHash}
+                      scale={BASE_DPI * RENDER_BASE_ZOOM}
                       onClick={() => { goToPage(pNum); setShowPageOverview(false); }}
-                      className={cn(
-                        "relative flex flex-col rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60",
-                        isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border bg-card hover:bg-muted/20"
-                      )}
-                    >
-                      {/* PDF thumbnail — full width */}
-                      <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden">
-                        <Document file={pdfFile} loading={<div className="h-32 w-full" />}>
-                          <Page
-                            pageNumber={pNum}
-                            width={440}
-                            renderAnnotationLayer={false}
-                            renderTextLayer={false}
-                          />
-                        </Document>
-                      </div>
-                      {/* Page number only */}
-                      <div className={cn(
-                        "px-3 py-1.5 text-center",
-                        isActive ? "bg-[#F5C518]/10" : "bg-card"
-                      )}>
-                        <span className={cn(
-                          "text-xs font-semibold font-mono",
-                          isActive ? "text-[#F5C518]" : "text-muted-foreground"
-                        )}>
-                          {isActive ? "▶ " : ""}Page {pNum}
-                        </span>
-                      </div>
-                    </button>
+                    />
                   );
                 })}
               </div>
