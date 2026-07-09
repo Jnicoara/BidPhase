@@ -835,8 +835,8 @@ function RunCard({
           </div>
         </div>
 
-        {/* ── Multi-circuit conductor groups (conduit mode only) ── */}
-        {!isWire && (() => {
+        {/* ── Multi-circuit conductor groups — hidden when Empty/Future Pull is on ── */}
+        {!isWire && !conduitOnly && (() => {
           // Derive active groups: use conductorGroups if present and non-empty,
           // otherwise synthesise one group from the legacy scalar fields.
           const groups = (run.conductorGroups && run.conductorGroups.length > 0)
@@ -906,7 +906,7 @@ function RunCard({
                   {/* Group header: circuit label + remove button */}
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      {groups.length > 1 ? `Circuit ${gi + 1}` : "Circuit"}
+                      {groups.length > 1 ? `Circuit ${gi + 1} of ${groups.length}` : "Circuit"}
                     </span>
                     {groups.length > 1 && (
                       <button
@@ -969,8 +969,8 @@ function RunCard({
           );
         })()}
 
-        {/* Equipment Grounding Conductor (EGC) — directly below Current Carrying Conductors */}
-        {!isWire && (
+        {/* Equipment Grounding Conductor (EGC) — hidden when Empty/Future Pull is on */}
+        {!isWire && !conduitOnly && (
           <div className={cn(
             "rounded-lg border px-3 py-2.5 transition-all",
             run.includeGround
@@ -1088,9 +1088,12 @@ function RunCard({
             </div>
 
             {/* Conduit-Only toggle (future pull / empty conduit) */}
-            <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/10 px-3 py-2">
+            <div className={cn(
+              "flex items-center justify-between rounded-lg border px-3 py-2 transition-all",
+              conduitOnly ? "border-yellow-400/50 bg-yellow-400/8" : "border-border/50 bg-muted/10"
+            )}>
               <div>
-                <div className="text-[11px] font-medium text-foreground">Empty / Future Pull</div>
+                <div className={cn("text-[11px] font-medium", conduitOnly ? "text-yellow-400" : "text-foreground")}>Empty / Future Pull</div>
                 <div className="text-[10px] text-muted-foreground">No wire — conduit only (stub-out)</div>
               </div>
               <button
@@ -1108,8 +1111,6 @@ function RunCard({
                 )} />
               </button>
             </div>
-
-            {/* Conductor material/size is now handled by the multi-circuit groups UI above */}
 
             {/* Conduit Estimating Inputs */}
             <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">

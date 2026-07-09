@@ -624,3 +624,13 @@
 - [x] Restore large full-width Export Material List (CSV) button with solid yellow background
 - [x] Assembly count badge: solid yellow pill with Layers icon + assembly name (up to 12 chars)
 - [x] TypeScript: 0 errors
+
+## v5.57 — RunCard Reorder, Circuit Labels, Empty/Future Hide, Cover Plates
+
+- [x] Reorder conduit RunCard: Conduit Type → Conduit Size → Empty/Future Pull toggle → Conductors → EGC → Estimating Inputs → Outputs → Fittings
+- [x] Empty/Future Pull toggle now highlighted yellow when active (border + text)
+- [x] Conductor groups and EGC hidden when Empty/Future Pull is on (no wire needed for stub-outs)
+- [x] Circuit label changed from "Circuit 2" to "Circuit 2 of 3" so user knows total circuit count
+- [x] Added 33 new white device cover plate items to master catalog: 1G/2G/3G/4G standard, midsize (Leviton 80601-W/80714-W), jumbo (Leviton 88001-W/88014-W), screwless (Leviton 84001-W/84003-W/84014-W), combination plates; all with searchAliases
+- [x] Added smartSearch aliases: no screw, smooth plate, seamless plate, midsize plate, jumbo plate, oversized plate, double/triple/quad gang plate, 2/3/4 gang plate, combination plate, combo plate
+- [x] TypeScript: 0 errors
