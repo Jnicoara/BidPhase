@@ -1935,31 +1935,37 @@ function CivilEditor({
     staleTime: 30_000,
   });
   // When an assembly is selected in the picker, fetch its items
+  // Use a ref to hold the target session ID so the useEffect always applies to the correct session
+  // even if the component re-renders between selection and data arrival.
   const [pendingAssemblyId, setPendingAssemblyId] = useState<number | null>(null);
+  const pendingTargetSessionRef = useRef<string | null>(null);
   const { data: pendingAssemblyDetail } = trpc.masterAssemblies.get.useQuery(
-    { id: pendingAssemblyId! },
-    { enabled: pendingAssemblyId != null, staleTime: 30_000 }
+    { id: pendingAssemblyId ?? 0 },
+    { enabled: pendingAssemblyId != null, staleTime: 0, gcTime: 0 }
   );
   // Assembly search filter state
   const [assemblySearch, setAssemblySearch] = useState("");
   const [assemblyDropdownOpen, setAssemblyDropdownOpen] = useState(false);
 
-  // When assembly detail loads, apply it to the active count session
+  // When assembly detail loads, apply it to the target count session
   useEffect(() => {
     if (!pendingAssemblyDetail || pendingAssemblyId == null) return;
     const asm = pendingAssemblyDetail;
+    const targetSessionId = pendingTargetSessionRef.current ?? activeCountSessionId;
+    if (!targetSessionId) return;
     const items = (asm.items ?? []).map((it) => ({
       description: it.description,
-      unit: it.unit,
+      unit: it.unit ?? "EA",
       qty: typeof it.qty === "string" ? parseFloat(it.qty) : Number(it.qty),
-      masterMaterialCost: typeof it.masterMaterialCost === "string" ? parseFloat(it.masterMaterialCost) : Number(it.masterMaterialCost),
-      masterLaborHours: typeof it.masterLaborHours === "string" ? parseFloat(it.masterLaborHours) : Number(it.masterLaborHours),
+      masterMaterialCost: typeof it.masterMaterialCost === "string" ? parseFloat(it.masterMaterialCost) : Number(it.masterMaterialCost ?? 0),
+      masterLaborHours: typeof it.masterLaborHours === "string" ? parseFloat(it.masterLaborHours) : Number(it.masterLaborHours ?? 0),
     }));
-    const updated = countSessions.map((cs) =>
-      cs.id === activeCountSessionId
+    // Apply to the target session — read the latest sessions from the ref to avoid stale closure
+    const latestSessions: CountSession[] = s.countSessions ?? [];
+    const updatedSessions = latestSessions.map((cs) =>
+      cs.id === targetSessionId
         ? {
             ...cs,
-            // Auto-fill session name from assembly name (only if still using the default or empty name)
             name: (!cs.name || cs.name === "New Count" || cs.name.trim() === "") ? asm.name : cs.name,
             assemblyId: asm.id,
             assemblyName: asm.name,
@@ -1967,13 +1973,15 @@ function CivilEditor({
           }
         : cs
     );
-    updateSessions(updated, activeCountSessionId);
+    setCivilState({ ...s, runs, countSessions: updatedSessions, activeCountSessionId });
+    // Clear pending state after applying
+    pendingTargetSessionRef.current = null;
     setPendingAssemblyId(null);
     setAssemblySearch("");
     setAssemblyDropdownOpen(false);
-    toast.success(`Assembly "${asm.name}" linked — each pin = 1 assembly instance.`);
+    toast.success(`Assembly "${asm.name}" linked (${items.length} item${items.length !== 1 ? "s" : ""}) — each pin = 1 instance.`);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingAssemblyDetail]);
+  }, [pendingAssemblyDetail, pendingAssemblyId]);
 
   // ── Price sync dialog state ──────────────────────────────────────────────────
   // Shown when user edits a price in Unit Count that differs from the DB value
@@ -2754,7 +2762,7 @@ function CivilEditor({
                                         .map((a) => (
                                           <button
                                             key={a.id}
-                                            onMouseDown={(e) => { e.preventDefault(); setPendingAssemblyId(a.id); setAssemblyDropdownOpen(false); }}
+                                            onMouseDown={(e) => { e.preventDefault(); pendingTargetSessionRef.current = activeCountSessionId ?? null; setPendingAssemblyId(a.id); setAssemblyDropdownOpen(false); }}
                                             className="w-full text-left px-3 py-2 text-[11px] text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors font-mono border-b border-border/30 last:border-0 flex items-center gap-2"
                                           >
                                             <Layers size={10} className="text-[#F5C518]/60 shrink-0" />
