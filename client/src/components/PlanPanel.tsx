@@ -20,16 +20,15 @@
  *  - onPushDistance: called when user pushes total footage to the calculator
  *  - onDeleteRun: called when a run is deleted from the run strip
  */
-import React, {
+import {
   useState,
   useRef,
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
-  memo,
 } from "react";
-import { Document, pdfjs } from "react-pdf";
+import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -111,65 +110,6 @@ function clearBitmapCache(pdfHash?: string) {
     globalBitmapCache.clear();
   }
 }
-
-// ── PageThumb: bitmap-cached page thumbnail used in the page overview grid ─────
-const PageThumb = memo(function PageThumb({
-  pNum,
-  isActive,
-  pdfHash,
-  scale,
-  onClick,
-}: {
-  pNum: number;
-  isActive: boolean;
-  pdfHash: string | null;
-  scale: number;
-  onClick: () => void;
-}) {
-  const thumbRef = useRef<HTMLCanvasElement>(null);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (!pdfHash) return;
-    let cancelled = false;
-    renderPageBitmap(pNum, scale, pdfHash).then((bitmap) => {
-      if (cancelled || !bitmap || !thumbRef.current) return;
-      const canvas = thumbRef.current;
-      const MAX_W = 200;
-      const ratio = Math.min(MAX_W / bitmap.width, 1);
-      canvas.width = Math.round(bitmap.width * ratio);
-      canvas.height = Math.round(bitmap.height * ratio);
-      canvas.style.width = `${canvas.width}px`;
-      canvas.style.height = `${canvas.height}px`;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        setLoaded(true);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [pNum, pdfHash, scale]);
-
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "relative flex flex-col rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60",
-        isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border bg-card hover:bg-muted/20"
-      )}
-    >
-      <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden">
-        {!loaded && <div className="h-32 w-full" />}
-        <canvas ref={thumbRef} style={{ display: loaded ? "block" : "none" }} />
-      </div>
-      <div className={cn("px-3 py-1.5 text-center", isActive ? "bg-[#F5C518]/10" : "bg-card")}>
-        <span className={cn("text-xs font-semibold font-mono", isActive ? "text-[#F5C518]" : "text-muted-foreground")}>
-          {isActive ? "▶ " : ""}Page {pNum}
-        </span>
-      </div>
-    </button>
-  );
-});
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure" | "count" | "drag-scale" | "drag-run";
@@ -605,14 +545,12 @@ export default function PlanPanel({
   // ── Refs ───────────────────────────────────────────────────────────────────
   // pdfDocRef: holds the raw pdfjs document for bitmap cache rendering
   const pdfDocRef = useRef<import("pdfjs-dist").PDFDocumentProxy | null>(null);
-  const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);   // fixed-size overflow:hidden viewport
   const scrollAreaRef = viewportRef;                  // alias kept for legacy code
   const pagesContainerRef = useRef<HTMLDivElement>(null);
   const pageSizeRef = useRef<{ w: number; h: number } | null>(null);
   const [pageReady, setPageReady] = useState(false);
-  const [pageBitmapLoading, setPageBitmapLoading] = useState(false);
   // Incremental pinch state: stores the previous frame's distance and midpoint
   const pinchRef = useRef<{ prevDist: number; prevMid: { x: number; y: number } } | null>(null);
   const isPinchingRef = useRef(false);
@@ -634,18 +572,8 @@ export default function PlanPanel({
   }, [mode]);
   // mousePos for the smooth pointer-events:none overlay cursor (no browser cursor lag)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
-  const [isPointerInViewport, setIsPointerInViewport] = useState(false);
-  // ── Full-screen crosshair overlay — ref-based (no React re-render on mouse move) ──
-  const crosshairRef = useRef<{ x: number; y: number } | null>(null);
-  // Snapshot of canvas pixels BEFORE crosshair is drawn — restored each RAF frame
-  const canvasSnapshotRef = useRef<ImageData | null>(null);
-  // RAF handle to deduplicate crosshair-only redraws
-  const crosshairRafRef = useRef<number | null>(null);
-  // Legacy shim so existing setCrosshair(null) calls compile without changes
-  const setCrosshair = useCallback((v: { x: number; y: number } | null) => {
-    crosshairRef.current = v;
-    if (!v) canvasSnapshotRef.current = null;
-  }, []);
+  // ── Full-screen crosshair overlay state ──────────────────────────────────
+  const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
 
   // Legacy panRef alias (scroll-based pan no longer used)
   const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
@@ -735,73 +663,9 @@ export default function PlanPanel({
   useEffect(() => {
     pageSizeRef.current = null;
     setPageReady(false);
-    setPageBitmapLoading(!!pdfFile);
     setMode("none");
     modeRef.current = "none";
-  }, [currentPage, pdfFile]);
-
-  const paintPdfBitmap = useCallback((bitmap: ImageBitmap) => {
-    const canvas = pdfCanvasRef.current;
-    if (!canvas) return;
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    canvas.style.width = `${bitmap.width}px`;
-    canvas.style.height = `${bitmap.height}px`;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, bitmap.width, bitmap.height);
-    ctx.drawImage(bitmap, 0, 0);
-  }, []);
-
-  useEffect(() => {
-    if (!pdfHash || !pdfDocRef.current || numPages < 1) return;
-    let cancelled = false;
-    const scale = BASE_DPI * RENDER_BASE_ZOOM;
-    const hash = pdfHash;
-
-    setPageBitmapLoading(true);
-
-    renderPageBitmap(currentPage, scale, hash).then((bitmap) => {
-      if (cancelled) return;
-      if (!bitmap) {
-        setPageBitmapLoading(false);
-        return;
-      }
-
-      paintPdfBitmap(bitmap);
-      pageSizeRef.current = { w: bitmap.width, h: bitmap.height };
-      setPageReady(true);
-      setPageBitmapLoading(false);
-
-      // Reset transient pointer/pan state after the new page bitmap is ready.
-      dragRef.current = null;
-      dragPointRef.current = null;
-      setIsPanning(false);
-      setMousePos(null);
-      setCrosshair(null);
-
-      const pagesToPrefetch = [
-        currentPage + 1,
-        currentPage - 1,
-        currentPage + 2,
-        currentPage - 2,
-      ].filter((p) => p >= 1 && p <= numPages);
-
-      let delay = 0;
-      pagesToPrefetch.forEach((p) => {
-        setTimeout(() => {
-          if (!cancelled) {
-            renderPageBitmap(p, scale, hash);
-          }
-        }, delay);
-        delay += 50;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentPage, numPages, pdfHash, paintPdfBitmap, RENDER_BASE_ZOOM]);
+  }, [currentPage]);
 
   // ── NormPoint → canvas pixel coords (single-page: pageIndex always 0) ─────
   const normToCanvas = useCallback(
@@ -1062,7 +926,7 @@ export default function PlanPanel({
           for (const s of segments) {
             const groupFt = s.reduce((sum, _, i) => i === 0 ? sum : sum + dist2D(s[i-1].x, s[i-1].y, s[i].x, s[i].y), 0) / pxPerFt;
             const mid = s[Math.floor(s.length / 2)];
-            if (mid) drawLabel(`${groupFt.toFixed(1)}'`, mid.x, mid.y - 18 * S, 0);
+            if (mid) drawLabel(`∑${groupFt.toFixed(1)}'`, mid.x, mid.y - 18 * S, 0);
           }
         }
       } else {
@@ -1293,13 +1157,11 @@ export default function PlanPanel({
       ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
       ctx.fillText(`S${i + 1}`, p.x + 9 * S, p.y - 7 * S);
     });
-    // ── Capture snapshot BEFORE crosshair (RAF path restores this for zero-lag redraw) ──
-    canvasSnapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
     // ── Full-screen crosshair overlay ────────────────────────────────────────────
     // Draws spanning hairlines from edge to edge in the active color.
     // Color: yellow for scale mode, active run color for measure mode.
-    if (crosshairRef.current) {
-      const { x, y } = crosshairRef.current;
+    if (crosshair) {
+      const { x, y } = crosshair;
       // Crosshair lines are always yellow regardless of mode
       const hex = "#F5C518";
       // Parse hex to rgb for rgba usage
@@ -1325,10 +1187,10 @@ export default function PlanPanel({
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       ctx.restore();
     }
-  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, activeRunColor]);
+  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, crosshair, activeRunColor]);
 
   // Redraw canvas whenever runs/pins/page/crosshair change
-  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
+  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady, crosshair]);
   // Clear crosshair guide whenever mode returns to idle
   useEffect(() => { if (mode === "none") setCrosshair(null); }, [mode]);
 
@@ -1672,30 +1534,16 @@ export default function PlanPanel({
       }
       if (e.key === "ArrowLeft" && numPages > 1) {
         e.preventDefault();
-        setCurrentPage((p) => {
-          const next = Math.max(1, p - 1);
-          onCurrentPageChange?.(next);
-          return next;
-        });
-        setMode("none");
-        modeRef.current = "none";
-        zoomReset();
+        setCurrentPage((p) => Math.max(1, p - 1));
       }
       if (e.key === "ArrowRight" && numPages > 1) {
         e.preventDefault();
-        setCurrentPage((p) => {
-          const next = Math.min(numPages, p + 1);
-          onCurrentPageChange?.(next);
-          return next;
-        });
-        setMode("none");
-        modeRef.current = "none";
-        zoomReset();
+        setCurrentPage((p) => Math.min(numPages, p + 1));
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zoomIn, zoomOut, zoomReset, scaleRatio, numPages, onCurrentPageChange, setCurrentPage]); // eslint-disable-line
+  }, [zoomIn, zoomOut, zoomReset, scaleRatio, numPages]); // eslint-disable-line
 
   // ── Canvas click handler ───────────────────────────────────────────────────
   // Canvas is rendered at renderZoom; getBoundingClientRect gives display size.
@@ -1986,57 +1834,24 @@ export default function PlanPanel({
     // Right-click in measure mode is a no-op (panning is handled by viewport)
   }, [normToCanvas, onPinRemoved, canvasToNorm]);
 
-  // ── Canvas mouse move — RAF crosshair (no React re-render on every move) ──
+  // ── Canvas mouse move (drag only) ────────────────────────────────────────
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (modeRef.current === "none") { setCrosshair(null); setMousePos(null); setIsPointerInViewport(false); return; }
+    if (modeRef.current === "none") { setCrosshair(null); setMousePos(null); return; }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const scaleX = canvas.width  / canvas.offsetWidth;
     const scaleY = canvas.height / canvas.offsetHeight;
-    const cx = e.nativeEvent.offsetX * scaleX;
-    const cy = e.nativeEvent.offsetY * scaleY;
-    // Update ref only — no React state change
-    crosshairRef.current = { x: cx, y: cy };
-    // Cancel any pending RAF to avoid queuing multiple frames
-    if (crosshairRafRef.current !== null) cancelAnimationFrame(crosshairRafRef.current);
-    crosshairRafRef.current = requestAnimationFrame(() => {
-      crosshairRafRef.current = null;
-      const c = canvasRef.current;
-      const ctx2 = c?.getContext("2d");
-      const snap = canvasSnapshotRef.current;
-      if (!c || !ctx2 || !snap) return;
-      // Guard: if canvas was resized (zoom change), snapshot dimensions won't match.
-      // Skip the restore to avoid overwriting the freshly-drawn zoomed frame.
-      if (snap.width !== c.width || snap.height !== c.height) return;
-      // Restore scene without crosshair
-      ctx2.putImageData(snap, 0, 0);
-      // Draw crosshair lines
-      const pos = crosshairRef.current;
-      if (!pos) return;
-      const { x, y } = pos;
-      const hex = "#F5C518";
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      const dz = displayZoomRef.current || 0.40;
-      const S = RENDER_BASE_ZOOM / dz;
-      ctx2.save();
-      ctx2.setLineDash([]);
-      ctx2.strokeStyle = `rgba(${r},${g},${b},0.18)`;
-      ctx2.lineWidth = 8 * S;
-      ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, c.height); ctx2.stroke();
-      ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(c.width, y); ctx2.stroke();
-      ctx2.strokeStyle = `rgba(${r},${g},${b},0.45)`;
-      ctx2.lineWidth = 3 * S;
-      ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, c.height); ctx2.stroke();
-      ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(c.width, y); ctx2.stroke();
-      ctx2.strokeStyle = `rgba(${r},${g},${b},1)`;
-      ctx2.lineWidth = 1 * S;
-      ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, c.height); ctx2.stroke();
-      ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(c.width, y); ctx2.stroke();
-      ctx2.restore();
+    setCrosshair({
+      x: e.nativeEvent.offsetX * scaleX,
+      y: e.nativeEvent.offsetY * scaleY,
     });
-  }, [RENDER_BASE_ZOOM]);
+    // Track viewport-relative position for the smooth overlay cursor div
+    const viewport = viewportRef.current;
+    if (viewport) {
+      const rect = viewport.getBoundingClientRect();
+      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    }
+  }, []);
 
   // ── Confirm scale ──────────────────────────────────────────────────────────
   const confirmScale = useCallback(() => {
@@ -2186,8 +2001,7 @@ export default function PlanPanel({
     onCurrentPageChange?.(clamped);
     setMode("none");
     modeRef.current = "none";
-    zoomReset();
-  }, [numPages, setCurrentPage, onCurrentPageChange, zoomReset]);
+  }, [numPages, setCurrentPage, onCurrentPageChange]);
 
   // ── Compute run count per page for page selector badges ───────────────────
   const getPageRunCount = useCallback((pIdx: number) => {
@@ -2198,34 +2012,7 @@ export default function PlanPanel({
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div
-      className="flex flex-col h-full bg-background border-r border-border relative"
-      style={activeCursorColor && !isPanning && isPointerInViewport && !deleteConfirm && !pendingPdfFile && !showScalePrompt ? { cursor: "none" } : undefined}
-      onMouseMove={(e) => {
-        // Never apply custom cursor when a dialog overlay is open
-        if (!activeCursorColor || isPanning || deleteConfirm || pendingPdfFile || showScalePrompt) {
-          setIsPointerInViewport(false);
-          setMousePos(null);
-          return;
-        }
-        const rootRect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-        // Hit-test against the actual PDF overlay canvas (not the full viewport div)
-        // so the dot only appears when the pointer is over the PDF page itself.
-        const pageCanvasRect = canvasRef.current?.getBoundingClientRect();
-        const withinPage = !!pageCanvasRect
-          && e.clientX >= pageCanvasRect.left
-          && e.clientX <= pageCanvasRect.right
-          && e.clientY >= pageCanvasRect.top
-          && e.clientY <= pageCanvasRect.bottom;
-        setIsPointerInViewport(withinPage);
-        if (!withinPage) {
-          setMousePos(null);
-          return;
-        }
-        setMousePos({ x: e.clientX - rootRect.left, y: e.clientY - rootRect.top });
-      }}
-      onMouseLeave={() => { setMousePos(null); setIsPointerInViewport(false); }}
-    >
+    <div className="flex flex-col h-full bg-background border-r border-border relative">
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
       {/* Contextual toolbar: buttons shown depend on the current mode */}
       <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-border bg-card shrink-0">
@@ -2642,14 +2429,14 @@ export default function PlanPanel({
               <Trash2 size={13} />
             </Button>
             {/* Clear page — matches Runs toolbar styling exactly */}
-            {(currentRuns.length > 0 || allPagePins.length > 0) && (
+            {(currentRuns.length > 0 || currentPins.length > 0) && (
               <Button
                 size="sm"
                 className="h-7 text-xs px-2 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 variant="ghost"
                 onClick={() => {
                   const runCount = currentRuns.length;
-                  const pinCount = allPagePins.length;
+                  const pinCount = currentPins.length;
                   const parts: string[] = [];
                   if (runCount > 0) parts.push(`${runCount} run${runCount !== 1 ? "s" : ""}`);
                   if (pinCount > 0) parts.push(`${pinCount} pin${pinCount !== 1 ? "s" : ""}`);
@@ -2657,13 +2444,6 @@ export default function PlanPanel({
                     count: runCount + pinCount,
                     name: `all marks on page ${currentPage}${parts.length ? ` (${parts.join(" and ")})` : ""}`,
                     onConfirm: () => {
-                      // Reset local run state too (mirrors measure-mode clear)
-                      setCurrentRuns([]);
-                      setCurrentActiveRunId("");
-                      dragRef.current = null;
-                      setIsPanning(false);
-                      setMousePos(null);
-                      setCrosshair(null);
                       onClearPageAll?.(currentPage);
                       toast.info(`Cleared page ${currentPage}.`);
                     },
@@ -2866,7 +2646,7 @@ export default function PlanPanel({
         style={{
           cursor: (pendingPdfFile || deleteConfirm || showScalePrompt || !pageReady)
             ? "default"
-            : (isPanning && mode === "none") ? "grabbing" : activeCursorColor ? "none" : (mode !== "none" ? "crosshair" : "grab"),
+            : isPanning ? "grabbing" : activeCursorColor ? "none" : (mode !== "none" ? "crosshair" : "grab"),
           // Disable ALL browser touch handling (pan, pinch-zoom, pull-to-refresh, edge-swipe).
           // Our own touch handlers in the useEffect below manage everything.
           touchAction: "none",
@@ -2973,39 +2753,58 @@ export default function PlanPanel({
           >
             {/* Inner wrapper rendered at renderZoom — no gutter needed since we can pan freely */}
             <div style={{ position: "relative", display: "inline-block" }}>
-              <div className="hidden" aria-hidden>
-                <Document
-                  key={`${pdfHash || "default"}-${pdfLoadId}`}
-                  file={pdfFile}
-                  onLoadSuccess={(doc) => {
-                    const n = doc.numPages;
-                    setNumPages(n);
-                    pageSizeRef.current = null;
-                    setPageReady(false);
-                    setPageBitmapLoading(true);
-                    // Store raw pdfjs document for bitmap cache
-                    pdfDocRef.current = doc as unknown as import("pdfjs-dist").PDFDocumentProxy;
-                    globalPdfDoc = pdfDocRef.current;
-                    globalPdfHash = pdfHash;
-                  }}
-                  loading={<div />}
-                >
-                  <div />
-                </Document>
-              </div>
-
-              {pageBitmapLoading && !pageReady && (
-                <div className="flex items-center justify-center p-8 text-muted-foreground text-sm min-h-[240px] min-w-[320px]">
-                  Rendering page…
-                </div>
-              )}
-
-              <canvas
-                ref={pdfCanvasRef}
-                style={{
-                  display: pageReady ? "block" : "none",
+              <Document
+                key={`${pdfHash || "default"}-${pdfLoadId}`}
+                file={pdfFile}
+                onLoadSuccess={(doc) => {
+                  const n = doc.numPages;
+                  setNumPages(n);
+                  pageSizeRef.current = null;
+                  setPageReady(false);
+                  // Store raw pdfjs document for bitmap cache
+                  pdfDocRef.current = doc as unknown as import("pdfjs-dist").PDFDocumentProxy;
+                  globalPdfDoc = pdfDocRef.current;
+                  globalPdfHash = pdfHash;
                 }}
-              />
+                loading={
+                  <div className="flex items-center justify-center p-8 text-muted-foreground text-sm">
+                    Loading PDF…
+                  </div>
+                }
+              >
+                <Page
+                  pageNumber={currentPage}
+                  scale={BASE_DPI * RENDER_BASE_ZOOM}
+                  renderAnnotationLayer={false}
+                  renderTextLayer={false}
+                  onRenderSuccess={(page) => {
+                    onPageRenderSuccess({ width: page.width, height: page.height });
+                    // After react-pdf renders the current page, kick off background
+                    // prefetch of adjacent pages (±2) so navigation is instant.
+                    if (pdfHash && pdfDocRef.current) {
+                      const scale = BASE_DPI * RENDER_BASE_ZOOM;
+                      const hash = pdfHash;
+                      const total = numPages;
+                      // Prefetch pages: current (cache it), then ±1, ±2
+                      const pagesToPrefetch = [
+                        currentPage,
+                        currentPage + 1,
+                        currentPage - 1,
+                        currentPage + 2,
+                        currentPage - 2,
+                      ].filter((p) => p >= 1 && p <= total);
+                      // Run prefetches sequentially with low priority (setTimeout 0)
+                      let delay = 0;
+                      pagesToPrefetch.forEach((p) => {
+                        setTimeout(() => {
+                          renderPageBitmap(p, scale, hash);
+                        }, delay);
+                        delay += 50; // stagger by 50ms to avoid blocking the main thread
+                      });
+                    }
+                  }}
+                />
+              </Document>
 
               {/* Overlay canvas — sits directly on top of the PDF page */}
               {pageReady && (
@@ -3205,14 +3004,38 @@ export default function PlanPanel({
                   const pNum = i + 1;
                   const isActive = pNum === currentPage;
                   return (
-                    <PageThumb
-                      key={pNum}
-                      pNum={pNum}
-                      isActive={isActive}
-                      pdfHash={pdfHash}
-                      scale={BASE_DPI * RENDER_BASE_ZOOM}
+                    <button
+                      key={i}
                       onClick={() => { goToPage(pNum); setShowPageOverview(false); }}
-                    />
+                      className={cn(
+                        "relative flex flex-col rounded-lg border overflow-hidden transition-all hover:border-[#F5C518]/60",
+                        isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border bg-card hover:bg-muted/20"
+                      )}
+                    >
+                      {/* PDF thumbnail — full width */}
+                      <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden">
+                        <Document file={pdfFile} loading={<div className="h-32 w-full" />}>
+                          <Page
+                            pageNumber={pNum}
+                            width={440}
+                            renderAnnotationLayer={false}
+                            renderTextLayer={false}
+                          />
+                        </Document>
+                      </div>
+                      {/* Page number only */}
+                      <div className={cn(
+                        "px-3 py-1.5 text-center",
+                        isActive ? "bg-[#F5C518]/10" : "bg-card"
+                      )}>
+                        <span className={cn(
+                          "text-xs font-semibold font-mono",
+                          isActive ? "text-[#F5C518]" : "text-muted-foreground"
+                        )}>
+                          {isActive ? "▶ " : ""}Page {pNum}
+                        </span>
+                      </div>
+                    </button>
                   );
                 })}
               </div>
@@ -3220,58 +3043,56 @@ export default function PlanPanel({
           </div>
         )}
 
+        {/* Smooth overlay cursor — pointer-events:none div that tracks mouse, GPU-composited, zero lag */}
+        {mousePos && activeCursorColor && !isPanning && (
+          <div
+            className="absolute pointer-events-none z-[50]"
+            style={{
+              left: mousePos.x,
+              top: mousePos.y,
+              transform: "translate(-50%, -50%)",
+              willChange: "transform",
+            }}
+          >
+            {/* Dot */}
+            <div
+              className="absolute rounded-full"
+              style={{
+                width: 10,
+                height: 10,
+                left: -5,
+                top: -5,
+                backgroundColor: activeCursorColor,
+                boxShadow: "0 0 0 1.5px rgba(0,0,0,0.5)",
+              }}
+            />
+            {/* Horizontal hairline */}
+            <div
+              className="absolute"
+              style={{
+                width: 20,
+                height: 1,
+                left: -10,
+                top: -0.5,
+                backgroundColor: activeCursorColor,
+                opacity: 0.7,
+              }}
+            />
+            {/* Vertical hairline */}
+            <div
+              className="absolute"
+              style={{
+                width: 1,
+                height: 20,
+                left: -0.5,
+                top: -10,
+                backgroundColor: activeCursorColor,
+                opacity: 0.7,
+              }}
+            />
+          </div>
+        )}
       </div>
-
-      {/* Smooth overlay cursor — pointer-events:none div that tracks mouse, GPU-composited, zero lag */}
-      {/* Positioned relative to the outer panel div (same element mousePos is computed from) */}
-      {mousePos && activeCursorColor && !isPanning && isPointerInViewport && (
-        <div
-          className="absolute pointer-events-none z-[60]"
-          style={{
-            left: mousePos.x,
-            top: mousePos.y,
-            transform: "translate(-50%, -50%)",
-            willChange: "transform",
-          }}
-        >
-          {/* Dot */}
-          <div
-            className="absolute rounded-full"
-            style={{
-              width: 10,
-              height: 10,
-              left: -5,
-              top: -5,
-              backgroundColor: activeCursorColor,
-              boxShadow: "0 0 0 1.5px rgba(0,0,0,0.5)",
-            }}
-          />
-          {/* Horizontal hairline */}
-          <div
-            className="absolute"
-            style={{
-              width: 20,
-              height: 1,
-              left: -10,
-              top: -0.5,
-              backgroundColor: activeCursorColor,
-              opacity: 0.7,
-            }}
-          />
-          {/* Vertical hairline */}
-          <div
-            className="absolute"
-            style={{
-              width: 1,
-              height: 20,
-              left: -0.5,
-              top: -10,
-              backgroundColor: activeCursorColor,
-              opacity: 0.7,
-            }}
-          />
-        </div>
-      )}
 
       {/* ── Right-click context menu ─────────────────────────────────────────── */}
 

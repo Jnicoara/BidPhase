@@ -310,8 +310,7 @@ function WireTypePicker({
   availableCategories?: WireCategory[];
 }) {
   const cats = availableCategories && availableCategories.length > 0 ? availableCategories : WIRE_CATEGORIES;
-  // Default to NM Cable category so new wire runs open on the most common residential type
-  const [activeCategory, setActiveCategory] = useState<WireCategory>("NM Cable (Romex)");
+  const [activeCategory, setActiveCategory] = useState<WireCategory>("THHN / THWN");
   const filtered = WIRE_TYPES.filter((w) => w.category === activeCategory);
   const selected = WIRE_TYPES.find((w) => w.id === value);
 
@@ -570,13 +569,13 @@ function RunCard({
   const makeupAllowance = run.makeupAllowance ?? 0;   // default 0 — user sets per-job
   const serviceLoop     = run.serviceLoop     ?? 0;   // default 0 — user sets per-job
   const numTerminations = run.numTerminations ?? 0;   // default 0 — user sets per-job
-  const wirewasteFactor = run.wirewasteFactor ?? 0;
+  const wirewasteFactor = run.wirewasteFactor ?? 10;
   const wireNetLength   = run.feet + makeupAllowance * numTerminations + serviceLoop;
   const wireBillable    = calcWire(run.feet, run.conductors, makeupAllowance, serviceLoop, numTerminations, wirewasteFactor);
 
   // ── Conduit mode calculations ──
-  const conduitWasteFactor  = run.conduitWasteFactor ?? 0;
-  const wireWasteFactor     = run.wireWasteFactor    ?? 0;  // separate from conduit
+  const conduitWasteFactor  = run.conduitWasteFactor ?? 10;
+  const wireWasteFactor     = run.wireWasteFactor    ?? 10;  // separate from conduit
   const wireTermMakeup      = run.wireTermMakeup     ?? 0;   // default 0 — user sets per-job
   const numPullPoints       = run.numPullPoints      ?? 0;   // default 0 — user sets per-job
   const conduitBillable     = calcConduitBillable(run.feet, conduitWasteFactor);
@@ -1532,7 +1531,7 @@ ${rows.slice(5).map((row) => {
   );
 }
 
-function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], userMaterials = [] }: { runs: RunItem[]; countSessions?: CountSession[]; savedMaterialRows?: SavedMaterialRow[]; userMaterials?: UserMaterialRow[] }) {
+function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { runs: RunItem[]; countSessions?: CountSession[]; userMaterials?: UserMaterialRow[] }) {
   const { setShowMaterialList } = useApp();
 
   const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
@@ -1543,7 +1542,7 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
   for (const r of runs) {
     if ((r.runType ?? "conduit") === "wire") continue; // wire runs handled separately
     const key = `${r.conduitType ?? "EMT"} ${r.conduitSize}"`;
-    const billableFt = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0);
+    const billableFt = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10);
     const existing = conduitMap.get(key);
     if (existing) {
       existing.feet   += billableFt;
@@ -1570,7 +1569,7 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
         r.makeupAllowance ?? 0,
         r.serviceLoop ?? 0,
         r.numTerminations ?? 0,
-        r.wirewasteFactor ?? 0,
+        r.wirewasteFactor ?? 10,
       ) * r.conductors;
       const existing = wireMap.get(label);
       if (existing) {
@@ -1591,7 +1590,7 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
           r.feet, g.conductors,
           r.wireTermMakeup ?? 0,
           r.numPullPoints ?? 0,
-          r.wireWasteFactor ?? 0,
+          r.wireWasteFactor ?? 10,
         );
         const existing = wireMap.get(label);
         if (existing) {
@@ -1613,7 +1612,7 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
     const mat = (r.groundMaterial ?? "CU") as ConductorMaterial;
     const size = (r.groundSize ?? "12") as ConductorSize;
     const label = conductorLabel(mat, size) + " EGC";
-    const egcFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+    const egcFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
     const existing = egcMap.get(label);
     if (existing) {
       existing.feet += egcFt;
@@ -1648,24 +1647,24 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
   const totalFeet   = runs.reduce((a, r) => a + r.feet, 0);
   const totalSticks = runs.reduce((a, r) => {
     if ((r.runType ?? "conduit") === "wire") return a;
-    return a + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0));
+    return a + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10));
   }, 0);
   const totalWire   = runs.reduce((a, r) => {
     const isWireRun = (r.runType ?? "conduit") === "wire";
     let runWire: number;
     if (isWireRun) {
       // calcWire returns per-conductor footage — multiply by conductors for total
-      runWire = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 0) * r.conductors;
+      runWire = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 10) * r.conductors;
     } else {
       // Conduit runs: sum across conductor groups
       const groups = (r.conductorGroups && r.conductorGroups.length > 0)
         ? r.conductorGroups
         : [{ conductors: r.conductors, id: "grp-legacy" }];
-      runWire = r.conduitOnly ? 0 : groups.reduce((s, g) => s + calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0), 0);
+      runWire = r.conduitOnly ? 0 : groups.reduce((s, g) => s + calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10), 0);
     }
     // Add EGC footage when enabled (1 conductor, same waste factor as wire)
     if (!isWireRun && !r.conduitOnly && r.includeGround) {
-      runWire += calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+      runWire += calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
     }
     return a + runWire;
   }, 0);
@@ -1680,7 +1679,7 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
       // Conduit cost
       const conduitCpf = getConduitPricePerFoot(r.conduitType ?? "EMT", r.conduitSize ?? "1/2", userMaterials);
       if (conduitCpf != null) {
-        const billable = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0);
+        const billable = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10);
         runCost += conduitCpf * billable;
       }
       // Wire cost (skip if conduit-only)
@@ -1694,7 +1693,7 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
           const wireSize = (wireTypeStr === "mc" || wireTypeStr === "nm") ? (r.conductorSize ?? "12") : g.conductorSize;
           const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, g.conductorMaterial, userMaterials, r.wireTypeId);
           if (wireCpf != null) {
-            const wireFt = calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+            const wireFt = calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
             runCost += wireCpf * wireFt;
           }
         }
@@ -1703,7 +1702,7 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
           // Use groundMaterial for EGC pricing (defaults to CU if not set)
           const groundCpf = getWirePricePerFoot("thhn", r.groundSize ?? "12", r.groundMaterial ?? "CU", userMaterials, undefined);
           if (groundCpf != null) {
-            const wireFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+            const wireFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
             runCost += groundCpf * wireFt;
           }
         }
@@ -1714,7 +1713,7 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
       const wireSize = r.conductorSize ?? "12";
       const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
       if (wireCpf != null) {
-        const wireFt = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 0);
+        const wireFt = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 10);
         runCost += wireCpf * wireFt * r.conductors;
       }
     }
@@ -1726,10 +1725,7 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
     .filter((cs) => cs.pins.length > 0 && cs.unitCost != null)
     .reduce((a, cs) => a + (cs.unitCost! * cs.pins.length), 0);
 
-  // Saved material rows cost (assembly items pushed to L&M)
-  const savedRowsCost = savedMaterialRows.reduce((a, r) => a + r.qty * r.unitCost, 0);
-
-  const grandTotalMaterialCost = totalMaterialCost + unitCountCost + savedRowsCost;
+  const grandTotalMaterialCost = totalMaterialCost + unitCountCost;
 
   const SectionHeader = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
     <div className="flex items-center gap-2 mt-4 mb-2 pb-1 border-b border-border/40">
@@ -1884,32 +1880,6 @@ function CrossPageTotals({ runs, countSessions = [], savedMaterialRows = [], use
           </div>
         </>
       )}
-      {/* ── Saved Assembly Rows ── */}
-      {savedMaterialRows.length > 0 && (
-        <>
-          <SectionHeader icon={<span className="text-[10px]">📦</span>} title="Saved Items" />
-          <div className="space-y-1">
-            {savedMaterialRows.map((r) => (
-              <div key={r.id} className="flex items-center justify-between text-[11px] py-0.5">
-                <span className="font-mono text-foreground truncate max-w-[55%]">{r.description}</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-muted-foreground">{r.qty} {r.unit}</span>
-                  {r.unitCost > 0 && (
-                    <span className="font-mono text-[#F5C518]">${(r.qty * r.unitCost).toFixed(2)}</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-      {/* ── Running Total ── */}
-      {grandTotalMaterialCost > 0 && (
-        <div className="mt-3 pt-2 border-t border-[#F5C518]/20 flex items-center justify-between">
-          <span className="text-[10px] font-semibold text-[#F5C518] uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Est. Material Total</span>
-          <span className="text-[12px] font-mono font-bold text-[#F5C518]">${grandTotalMaterialCost.toFixed(2)}</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -1969,9 +1939,6 @@ function CivilEditor({
   // even if the component re-renders between selection and data arrival.
   const [pendingAssemblyId, setPendingAssemblyId] = useState<number | null>(null);
   const pendingTargetSessionRef = useRef<string | null>(null);
-  // Always-fresh ref to the latest civil state + runs — avoids stale closures in async effects
-  const latestStateRef = useRef<{ s: typeof s; runs: RunItem[] }>({ s, runs });
-  useEffect(() => { latestStateRef.current = { s, runs }; });
   const { data: pendingAssemblyDetail } = trpc.masterAssemblies.get.useQuery(
     { id: pendingAssemblyId ?? 0 },
     { enabled: pendingAssemblyId != null, staleTime: 0, gcTime: 0 }
@@ -1993,9 +1960,8 @@ function CivilEditor({
       masterMaterialCost: typeof it.masterMaterialCost === "string" ? parseFloat(it.masterMaterialCost) : Number(it.masterMaterialCost ?? 0),
       masterLaborHours: typeof it.masterLaborHours === "string" ? parseFloat(it.masterLaborHours) : Number(it.masterLaborHours ?? 0),
     }));
-    // Apply to the target session — read the latest state from the ref to avoid stale closure
-    const { s: freshS, runs: freshRuns } = latestStateRef.current;
-    const latestSessions: CountSession[] = freshS.countSessions ?? [];
+    // Apply to the target session — read the latest sessions from the ref to avoid stale closure
+    const latestSessions: CountSession[] = s.countSessions ?? [];
     const updatedSessions = latestSessions.map((cs) =>
       cs.id === targetSessionId
         ? {
@@ -2007,8 +1973,7 @@ function CivilEditor({
           }
         : cs
     );
-    const freshActiveId = freshS.activeCountSessionId;
-    setCivilState({ ...freshS, runs: freshRuns, countSessions: updatedSessions, activeCountSessionId: freshActiveId });
+    setCivilState({ ...s, runs, countSessions: updatedSessions, activeCountSessionId });
     // Clear pending state after applying
     pendingTargetSessionRef.current = null;
     setPendingAssemblyId(null);
@@ -2098,21 +2063,16 @@ function CivilEditor({
       toast.error(`"${cs.name}" has no pins yet — drop pins first.`);
       return;
     }
-    // Always read fresh state from the ref to avoid stale closure issues
-    const { s: freshS, runs: freshRuns } = latestStateRef.current;
-    const freshSessions: CountSession[] = freshS.countSessions ?? [];
-    // Find the freshest version of this session (it may have been updated since the callback was created)
-    const freshCs = freshSessions.find((x) => x.id === cs.id) ?? cs;
-    const existing = freshS.savedMaterialRows ?? [];
+    const existing = s.savedMaterialRows ?? [];
     const now = Date.now();
     let newRows: SavedMaterialRow[];
-    if (freshCs.assemblyId && freshCs.assemblyItems && freshCs.assemblyItems.length > 0) {
+    if (cs.assemblyId && cs.assemblyItems && cs.assemblyItems.length > 0) {
       // Assembly session: expand into one row per assembly item × number of pins
-      newRows = freshCs.assemblyItems.map((item, idx) => ({
-        id: `smr-${now.toString(36)}-${freshCs.id}-${idx}`,
-        sessionId: freshCs.id,
+      newRows = cs.assemblyItems.map((item, idx) => ({
+        id: `smr-${now.toString(36)}-${cs.id}-${idx}`,
+        sessionId: cs.id,
         description: item.description,
-        qty: parseFloat((item.qty * freshCs.pins.length).toFixed(4)),
+        qty: parseFloat((item.qty * cs.pins.length).toFixed(4)),
         unitCost: item.masterMaterialCost,
         unit: item.unit || "EA",
         savedAt: now,
@@ -2120,22 +2080,22 @@ function CivilEditor({
     } else {
       // Standard session: single row
       newRows = [{
-        id: `smr-${now.toString(36)}-${freshCs.id}`,
-        sessionId: freshCs.id,
-        description: freshCs.name,
-        qty: freshCs.pins.length,
-        unitCost: freshCs.unitCost ?? 0,
+        id: `smr-${now.toString(36)}-${cs.id}`,
+        sessionId: cs.id,
+        description: cs.name,
+        qty: cs.pins.length,
+        unitCost: cs.unitCost ?? 0,
         unit: "EA",
         savedAt: now,
       }];
     }
-    setCivilState({ ...freshS, runs: freshRuns, countSessions: freshSessions, activeCountSessionId: freshS.activeCountSessionId, savedMaterialRows: [...existing, ...newRows] });
-    if (freshCs.assemblyId) {
-      toast.success(`"${freshCs.assemblyName ?? freshCs.name}" ×${freshCs.pins.length} expanded into ${newRows.length} line item${newRows.length !== 1 ? "s" : ""} in Labor & Material.`);
+    setCivilState({ ...s, runs, countSessions, activeCountSessionId, savedMaterialRows: [...existing, ...newRows] });
+    if (cs.assemblyId) {
+      toast.success(`"${cs.assemblyName ?? cs.name}" ×${cs.pins.length} expanded into ${newRows.length} line item${newRows.length !== 1 ? "s" : ""} in Labor & Material.`);
     } else {
-      toast.success(`"${freshCs.name}" (${freshCs.pins.length} EA) saved to Labor & Material.`);
+      toast.success(`"${cs.name}" (${cs.pins.length} EA) saved to Labor & Material.`);
     }
-  }, [setCivilState]);
+  }, [s, runs, countSessions, activeCountSessionId, setCivilState]);
 
   const handleAddCountSessionFromCatalog = useCallback((item: CatalogItem | null) => {
     if (!item) return;
@@ -2167,10 +2127,7 @@ function CivilEditor({
   const handleDeleteCountSession = (id: string) => {
     const updated = countSessions.filter((cs) => cs.id !== id);
     const newActive = activeCountSessionId === id ? (updated[0]?.id ?? undefined) : activeCountSessionId;
-    // Also remove any savedMaterialRows that were saved from this session
-    const freshS = latestStateRef.current.s;
-    const cleanedRows = (freshS.savedMaterialRows ?? []).filter((r) => r.sessionId !== id);
-    setCivilState({ ...freshS, runs: latestStateRef.current.runs, countSessions: updated, activeCountSessionId: newActive, savedMaterialRows: cleanedRows });
+    updateSessions(updated, newActive);
   };
 
   const handleRenameCountSession = (id: string) => {
@@ -2263,17 +2220,16 @@ function CivilEditor({
           conductorMaterial: "CU",
           conductorSize: "12",
           fittings: defaultFittings(),
-          // Jacketed / Romex defaults — start at 0 so user adjusts per job
-          makeupAllowance: 0,
-          serviceLoop: 0,
-          numTerminations: 0,
-          wirewasteFactor: 0,
-          // Conduit defaults — waste starts at 0, pull points at 0
-          conduitWasteFactor: 0,
-          wireTermMakeup: 0,
-          wireWasteFactor: 0,
-          numPullPoints: 0,
-          wireTypeId: "nm-12-2",
+          // Jacketed / Romex defaults
+          makeupAllowance: 2,
+          serviceLoop: 3,
+          numTerminations: 2,
+          wirewasteFactor: 10,
+          // Conduit defaults
+          conduitWasteFactor: 10,
+          wireTermMakeup: 2,
+          wireWasteFactor: 10,
+          numPullPoints: 2,
           conduitOnly: false,
           feetFromPlan: true,
         };
@@ -2367,12 +2323,12 @@ function CivilEditor({
   // These are computed for potential future use in the header strip
   const totalWire = runs.reduce((acc, r) => {
     const isWireRun = (r.runType ?? "conduit") === "wire";
-    if (isWireRun) return acc + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 0);
-    return acc + calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+    if (isWireRun) return acc + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10);
+    return acc + calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
   }, 0);
   const totalSticks = runs.reduce((acc, r) => {
     if ((r.runType ?? "conduit") === "wire") return acc;
-    return acc + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0));
+    return acc + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10));
   }, 0);
 
   return (
@@ -2899,7 +2855,7 @@ function CivilEditor({
                   {/* ── MATERIAL SUMMARY — inline below Runs, always visible, grows with content ── */}
                   <div className="bp-card overflow-hidden border-t border-border/40">
                     <div className="px-4 py-3 space-y-3">
-                      <CrossPageTotals runs={runs} countSessions={countSessions} savedMaterialRows={s.savedMaterialRows ?? []} userMaterials={userMaterials} />
+                      <CrossPageTotals runs={runs} countSessions={countSessions} userMaterials={userMaterials} />
                     </div>
                     {/* ── Export button — full-width prominent yellow button with CSV / PDF options ── */}
                     {runs.length > 0 && (
