@@ -42,7 +42,7 @@ import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
   Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Link2, Trash2, Pencil, Check, X, Undo2, Maximize2, Download, Layers,
+  Link2, Trash2, Pencil, Check, X, Undo2, Maximize2, Download, Layers, Search,
 } from "lucide-react";
 import type { CatalogItem, UserMaterialRow } from "@/lib/materialCatalog";
 import { getConduitPricePerFoot, getWirePricePerFoot } from "@/lib/materialCatalog";
@@ -583,9 +583,14 @@ function RunCard({
   const _activeGroups = (run.conductorGroups && run.conductorGroups.length > 0)
     ? run.conductorGroups
     : [{ conductors: run.conductors, conductorMaterial: run.conductorMaterial ?? "CU" as ConductorMaterial, conductorSize: run.conductorSize ?? "12" as ConductorSize, id: "grp-legacy" }];
-  const conduitWireBillable = conduitOnly
+  const conduitWireBillableCC = conduitOnly
     ? 0
     : _activeGroups.reduce((sum, g) => sum + calcConduitWire(run.feet, g.conductors, wireTermMakeup, numPullPoints, wireWasteFactor), 0);
+  // Include EGC footage in the Billable Wire total when EGC is enabled
+  const egcBillableFt = (!conduitOnly && run.includeGround)
+    ? calcConduitWire(run.feet, 1, wireTermMakeup, numPullPoints, wireWasteFactor)
+    : 0;
+  const conduitWireBillable = conduitWireBillableCC + egcBillableFt;
 
   // ── Conduit sizes filtered per conduit type ──
   // Real NEC trade sizes available for each conduit type
@@ -808,12 +813,30 @@ function RunCard({
 
         {/* Measured Takeoff */}
         <div className="space-y-1.5">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Measured Takeoff (ft)</Label>
+          <div className="flex items-center justify-between">
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Measured Takeoff (ft)</Label>
+            {run.feetFromPlan && (
+              <span className="flex items-center gap-1 text-[9px] text-[#F5C518]/70 font-mono" title="Set by plan tool — drag run points to update">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                plan-locked
+              </span>
+            )}
+          </div>
           <Input type="number" min={0} step={1}
             value={run.feet === 0 ? "" : run.feet}
-            onChange={(e) => onUpdate(run.id, { feet: parseFloat(e.target.value) || 0 })}
+            onChange={(e) => {
+              if (run.feetFromPlan) return; // locked — only plan tool can update
+              onUpdate(run.id, { feet: parseFloat(e.target.value) || 0 });
+            }}
+            readOnly={run.feetFromPlan}
             placeholder="0"
-            className="h-8 font-mono text-sm bg-input border-border" />
+            className={cn(
+              "h-8 font-mono text-sm bg-input border-border",
+              run.feetFromPlan && "opacity-60 cursor-not-allowed select-none"
+            )} />
+          {run.feetFromPlan && (
+            <p className="text-[9px] text-muted-foreground/50">Drag run points on the plan to update footage.</p>
+          )}
         </div>
 
         {/* ── Run type toggle: Conduit vs Wire Only — FIRST so irrelevant fields hide immediately ── */}
@@ -1173,8 +1196,13 @@ function RunCard({
                     <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
                       <StrippedWireIcon size={10} /> Billable Wire
                     </div>
-                    <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitWireBillable}</div>
-                    <div className="text-[10px] text-muted-foreground font-mono">ft w/ {wireWasteFactor}% waste</div>
+                    <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitWireBillable.toFixed(1)}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono">
+                      ft w/ {wireWasteFactor}% waste
+                      {run.includeGround && egcBillableFt > 0 && (
+                        <span className="ml-1 text-[#F5C518]/60">(incl. {egcBillableFt.toFixed(1)} ft EGC)</span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1341,6 +1369,166 @@ function useFlashKey(value: number): string {
     }
   }, [value]);
   return String(flashKey);
+}
+
+// ─── Export Button ─────────────────────────────────────────────────────────────
+function ExportButton({ runs, countSessions = [], projectName }: { runs: RunItem[]; countSessions?: CountSession[]; projectName: string }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const buildRows = () => {
+    const rows: string[][] = [];
+    rows.push(["BidPhase \u2014 Material Export", "", "", "", "", "", ""]);
+    rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", ""]);
+    rows.push([`Project: ${projectName}`, "", "", "", "", "", ""]);
+    rows.push([]);
+    rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft)"]);
+    for (const run of runs) {
+      const activeGroups = (run.conductorGroups && run.conductorGroups.length > 0)
+        ? run.conductorGroups
+        : [{ conductors: run.conductors, conductorMaterial: run.conductorMaterial ?? "CU", conductorSize: run.conductorSize ?? "12", id: "grp-legacy" }];
+      const wireFt = run.conduitOnly ? 0 : activeGroups.reduce((s, g) => s + parseFloat((run.feet * g.conductors * 1.1).toFixed(1)), 0)
+        + (run.includeGround ? parseFloat((run.feet * 1.1).toFixed(1)) : 0);
+      rows.push([
+        run.name,
+        run.pageNumber != null ? String(run.pageNumber) : "",
+        run.conduitType ?? "EMT",
+        `${run.conduitSize}"`,
+        String(run.feet),
+        String(Math.ceil(run.feet / 10)),
+        String(wireFt.toFixed(1)),
+      ]);
+    }
+    const totalFt = runs.reduce((a, r) => a + r.feet, 0);
+    const totalSticks = runs.reduce((a, r) => a + Math.ceil(r.feet / 10), 0);
+    rows.push(["TOTAL", "", "", "", String(totalFt.toFixed(0)), String(totalSticks), ""]);
+    const activeSessions = countSessions.filter((cs) => cs.pins.length > 0);
+    if (activeSessions.length > 0) {
+      rows.push([]);
+      rows.push(["Unit Count", "", "", "", "", "", ""]);
+      rows.push(["Session", "EA", "Count", "", "", "", ""]);
+      for (const cs of activeSessions) {
+        rows.push([cs.name, "EA", String(cs.pins.length), "", "", "", ""]);
+      }
+    }
+    return rows;
+  };
+
+  const exportCSV = () => {
+    const rows = buildRows();
+    const csv = rows.map((row) => row.map((v) => {
+      const s = String(v);
+      return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
+    }).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${projectName.replace(/[^a-z0-9]/gi, "_")}_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("Exported as CSV (Excel-compatible).");
+    setOpen(false);
+  };
+
+  const exportPDF = () => {
+    const rows = buildRows();
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>BidPhase Export</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11px; margin: 24px; color: #111; }
+  h1 { font-size: 16px; margin-bottom: 4px; }
+  .meta { color: #666; font-size: 10px; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; }
+  th { background: #F5C518; color: #000; padding: 5px 8px; text-align: left; font-size: 10px; }
+  td { padding: 4px 8px; border-bottom: 1px solid #eee; }
+  tr:last-child td { border-bottom: none; }
+  .section { font-weight: bold; background: #f5f5f5; padding: 4px 8px; margin-top: 16px; }
+  .total { font-weight: bold; background: #fffde7; }
+</style></head><body>
+<h1>BidPhase — Material Export</h1>
+<div class="meta">Project: ${projectName} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}</div>
+<table>
+<thead><tr>${rows[4].map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+<tbody>
+${rows.slice(5).map((row) => {
+  if (row.length === 0) return "";
+  if (row[0] === "TOTAL") return `<tr class="total">${row.map((c) => `<td>${c}</td>`).join("")}</tr>`;
+  if (row[1] === "" && row[2] === "" && row[3] === "") return `<tr><td colspan="7" class="section">${row[0]}</td></tr>`;
+  return `<tr>${row.map((c) => `<td>${c}</td>`).join("")}</tr>`;
+}).join("\n")}
+</tbody></table></body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) { toast.error("Pop-up blocked. Allow pop-ups and try again."); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+    toast.success("PDF print dialog opened.");
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} className="px-4 pb-4 relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-lg bg-[#F5C518] text-black hover:bg-[#F5C518]/90 active:scale-[0.98] transition-all text-sm font-bold shadow-md"
+      >
+        <Download size={16} />
+        Export
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-4 right-4 mb-1 rounded-lg border border-[#F5C518]/40 bg-popover shadow-xl overflow-hidden z-50">
+          <button
+            onClick={exportCSV}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors border-b border-border/40"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <div className="text-left">
+              <div className="font-semibold">Export as CSV</div>
+              <div className="text-[10px] text-muted-foreground">Open in Excel, Google Sheets, or Numbers</div>
+            </div>
+          </button>
+          <button
+            onClick={exportPDF}
+            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <path d="M9 15v-4h2a2 2 0 0 1 0 4H9z"/>
+              <path d="M14 15v-4"/>
+              <path d="M19 11h-2v4"/>
+              <path d="M17 13h1.5"/>
+            </svg>
+            <div className="text-left">
+              <div className="font-semibold">Export as PDF</div>
+              <div className="text-[10px] text-muted-foreground">Print or save as PDF via browser dialog</div>
+            </div>
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { runs: RunItem[]; countSessions?: CountSession[]; userMaterials?: UserMaterialRow[] }) {
@@ -1754,6 +1942,7 @@ function CivilEditor({
   );
   // Assembly search filter state
   const [assemblySearch, setAssemblySearch] = useState("");
+  const [assemblyDropdownOpen, setAssemblyDropdownOpen] = useState(false);
 
   // When assembly detail loads, apply it to the active count session
   useEffect(() => {
@@ -1768,12 +1957,20 @@ function CivilEditor({
     }));
     const updated = countSessions.map((cs) =>
       cs.id === activeCountSessionId
-        ? { ...cs, assemblyId: asm.id, assemblyName: asm.name, assemblyItems: items }
+        ? {
+            ...cs,
+            // Auto-fill session name from assembly name (only if still using the default or empty name)
+            name: (!cs.name || cs.name === "New Count" || cs.name.trim() === "") ? asm.name : cs.name,
+            assemblyId: asm.id,
+            assemblyName: asm.name,
+            assemblyItems: items,
+          }
         : cs
     );
     updateSessions(updated, activeCountSessionId);
     setPendingAssemblyId(null);
     setAssemblySearch("");
+    setAssemblyDropdownOpen(false);
     toast.success(`Assembly "${asm.name}" linked — each pin = 1 assembly instance.`);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAssemblyDetail]);
@@ -1995,7 +2192,7 @@ function CivilEditor({
       if (existingIdx !== -1) {
         const updated = runs.map((r) =>
           (r.name === runName && r.pageNumber === pageNumber)
-            ? { ...r, feet: ft, conduitSize: conduitSize ?? r.conduitSize, segmentFeet }
+            ? { ...r, feet: ft, conduitSize: conduitSize ?? r.conduitSize, segmentFeet, feetFromPlan: true }
             : r
         );
         syncRuns(updated);
@@ -2026,6 +2223,7 @@ function CivilEditor({
           wireWasteFactor: 10,
           numPullPoints: 2,
           conduitOnly: false,
+          feetFromPlan: true,
         };
         syncRuns([newRun, ...runs]);
         const pageLabel = pageNumber ? ` from page ${pageNumber}` : "";
@@ -2515,9 +2713,12 @@ function CivilEditor({
                             <div className="space-y-1.5">
                               <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Count as Assembly</Label>
                               {activeCountSession.assemblyId ? (
-                                <div className="flex items-center gap-2 rounded-md border border-[#F5C518]/40 bg-[#F5C518]/8 px-2.5 py-1.5">
-                                  <span className="flex-1 text-[10px] font-semibold text-[#F5C518] truncate">{activeCountSession.assemblyName ?? "Assembly"}</span>
-                                  <span className="text-[9px] text-muted-foreground font-mono">{(activeCountSession.assemblyItems?.length ?? 0)} items/ea</span>
+                                <div className="flex items-center gap-2 rounded-md border border-[#F5C518]/40 bg-[#F5C518]/10 px-2.5 py-2">
+                                  <Layers size={12} className="text-[#F5C518] shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-[11px] font-bold text-[#F5C518] truncate">{activeCountSession.assemblyName ?? "Assembly"}</div>
+                                    <div className="text-[9px] text-muted-foreground font-mono">{(activeCountSession.assemblyItems?.length ?? 0)} items per pin</div>
+                                  </div>
                                   <button
                                     onClick={() => {
                                       const updated = countSessions.map((cs) =>
@@ -2527,40 +2728,45 @@ function CivilEditor({
                                       );
                                       updateSessions(updated, activeCountSession.id);
                                     }}
-                                    className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                                    className="text-muted-foreground/50 hover:text-destructive transition-colors p-0.5 rounded"
                                     title="Unlink assembly">
-                                    <X size={11} />
+                                    <X size={12} />
                                   </button>
                                 </div>
                               ) : (
-                                <div className="space-y-1">
-                                  <input
-                                    type="text"
-                                    value={assemblySearch}
-                                    onChange={(e) => setAssemblySearch(e.target.value)}
-                                    placeholder="Search assemblies…"
-                                    className="w-full h-7 px-2 text-[10px] font-mono bg-input border border-border rounded text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#F5C518]/60"
-                                  />
-                                  {assemblySearch.trim().length > 0 && (
-                                    <div className="max-h-32 overflow-y-auto rounded border border-border bg-popover space-y-0.5 p-1">
+                                <div className="relative">
+                                  <div className="relative">
+                                    <Search size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none" />
+                                    <input
+                                      type="text"
+                                      value={assemblySearch}
+                                      onChange={(e) => setAssemblySearch(e.target.value)}
+                                      onFocus={() => setAssemblyDropdownOpen(true)}
+                                      onBlur={() => setTimeout(() => setAssemblyDropdownOpen(false), 150)}
+                                      placeholder={masterAssemblies.length === 0 ? "No assemblies yet" : `Search ${masterAssemblies.length} assembl${masterAssemblies.length === 1 ? 'y' : 'ies'}…`}
+                                      className="w-full h-8 pl-6 pr-2 text-[11px] font-mono bg-input border border-border rounded text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#F5C518]/60 transition-colors"
+                                    />
+                                  </div>
+                                  {assemblyDropdownOpen && masterAssemblies.length > 0 && (
+                                    <div className="absolute z-50 top-full left-0 right-0 mt-0.5 max-h-48 overflow-y-auto rounded-md border border-[#F5C518]/30 bg-popover shadow-lg">
                                       {masterAssemblies
-                                        .filter((a) => a.name.toLowerCase().includes(assemblySearch.toLowerCase()))
-                                        .slice(0, 10)
+                                        .filter((a) => assemblySearch.trim().length === 0 || a.name.toLowerCase().includes(assemblySearch.toLowerCase()))
                                         .map((a) => (
                                           <button
                                             key={a.id}
-                                            onClick={() => setPendingAssemblyId(a.id)}
-                                            className="w-full text-left px-2 py-1 rounded text-[10px] text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors font-mono truncate"
+                                            onMouseDown={(e) => { e.preventDefault(); setPendingAssemblyId(a.id); setAssemblyDropdownOpen(false); }}
+                                            className="w-full text-left px-3 py-2 text-[11px] text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors font-mono border-b border-border/30 last:border-0 flex items-center gap-2"
                                           >
-                                            {a.name}
+                                            <Layers size={10} className="text-[#F5C518]/60 shrink-0" />
+                                            <span className="truncate">{a.name}</span>
                                           </button>
                                         ))}
-                                      {masterAssemblies.filter((a) => a.name.toLowerCase().includes(assemblySearch.toLowerCase())).length === 0 && (
-                                        <p className="px-2 py-1 text-[10px] text-muted-foreground italic">No assemblies found</p>
+                                      {masterAssemblies.filter((a) => assemblySearch.trim().length === 0 || a.name.toLowerCase().includes(assemblySearch.toLowerCase())).length === 0 && (
+                                        <p className="px-3 py-2 text-[10px] text-muted-foreground italic">No assemblies match</p>
                                       )}
                                     </div>
                                   )}
-                                  <p className="text-[9px] text-muted-foreground/60">Link an assembly to expand each pin into its component items when saved to L&amp;M.</p>
+                                  <p className="mt-1 text-[9px] text-muted-foreground/60">Click to browse all assemblies. Each pin = 1 full assembly instance when saved to L&amp;M.</p>
                                 </div>
                               )}
                             </div>
@@ -2643,63 +2849,9 @@ function CivilEditor({
                     <div className="px-4 py-3 space-y-3">
                       <CrossPageTotals runs={runs} countSessions={countSessions} userMaterials={userMaterials} />
                     </div>
-                    {/* ── Export button — full-width prominent button at the bottom of the L&M card ── */}
+                    {/* ── Export button — full-width prominent yellow button with CSV / PDF options ── */}
                     {runs.length > 0 && (
-                      <div className="px-4 pb-4">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const rows: string[][] = [];
-                            rows.push(["BidPhase \u2014 Material Export", "", "", "", "", "", ""]);
-                            rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", ""]);
-                            rows.push([`Project: ${projectName}`, "", "", "", "", "", ""]);
-                            rows.push([]);
-                            rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft)"]);
-                            for (const run of runs) {
-                              rows.push([
-                                run.name,
-                                run.pageNumber != null ? String(run.pageNumber) : "",
-                                run.conduitType ?? "EMT",
-                                `${run.conduitSize}"`,
-                                String(run.feet),
-                                String(Math.ceil(run.feet / 10)),
-                                String(parseFloat((run.feet * (run.conductors || 1) * 1.1).toFixed(1))),
-                              ]);
-                            }
-                            const totalFt = runs.reduce((a, r) => a + r.feet, 0);
-                            const totalSticks = runs.reduce((a, r) => a + Math.ceil(r.feet / 10), 0);
-                            rows.push(["TOTAL", "", "", "", String(totalFt.toFixed(0)), String(totalSticks), ""]);
-                            const activeSessions = countSessions.filter((cs) => cs.pins.length > 0);
-                            if (activeSessions.length > 0) {
-                              rows.push([]);
-                              rows.push(["Unit Count", "", "", "", "", "", ""]);
-                              rows.push(["Session", "EA", "Count", "", "", "", ""]);
-                              for (const cs of activeSessions) {
-                                rows.push([cs.name, "EA", String(cs.pins.length), "", "", "", ""]);
-                              }
-                            }
-                            const csv = rows.map((row) => row.map((v) => {
-                              const s = String(v);
-                              return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
-                            }).join(",")).join("\n");
-                            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a");
-                            a.href = url;
-                            a.download = `${projectName.replace(/[^a-z0-9]/gi, "_")}_Export_${new Date().toISOString().slice(0, 10)}.csv`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                            toast.success("Exported as CSV.");
-                          }}
-                          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#F5C518] text-black hover:bg-[#F5C518]/90 active:scale-[0.98] transition-all text-sm font-bold shadow-sm"
-                          title="Export runs as CSV"
-                        >
-                          <Download size={15} />
-                          Export Material List (CSV)
-                        </button>
-                      </div>
+                      <ExportButton runs={runs} countSessions={countSessions} projectName={projectName} />
                     )}
                   </div>
 

@@ -641,3 +641,11 @@
 - [x] Rewrite smartSearch v2: per-token alias expansion, prefix-aware tiered scoring (exact→starts-with→word-boundary→contains), all-tokens-must-match filter, item index cache
 - [x] Rich alias map: 150+ trade terms, abbreviations, brand names (Romex/NM-B, THHN/THWN, EMT/thin wall, GFCI/GFI, decora/rocker, outlet/receptacle, conduit bodies, panels, breakers, etc.)
 - [x] TypeScript: 0 errors
+
+## v5.59 — Assembly Picker UX, EGC Wire Totals, Locked Takeoff, Export Button
+- [x] Unit counter: replace assembly text search with searchable dropdown (shows all assemblies, filters as you type, auto-fills session name from assembly name)
+- [x] Unit counter: auto-fill session name from assembly name when assembly is linked
+- [x] Run calculator: lock Measured Takeoff field — read-only when feetFromPlan=true; shows lock icon and hint; only plan tool can update
+- [x] Run calculator: include EGC in billable wire length — conduitWireBillable now adds EGC footage; output shows breakdown (incl. X ft EGC)
+- [x] Restore yellow Export button with dropdown: Export as CSV (Excel-compatible) and Export as PDF (print dialog) options
+- [x] TypeScript: 0 errors

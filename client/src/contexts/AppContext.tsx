@@ -185,6 +185,12 @@ export interface RunItem {
   wireSlackPct?: number;
   /** @deprecated Use conduitWasteFactor instead */
   conduitSlackPct?: number;
+
+  /**
+   * When true, the `feet` value was set by the plan measurement tool and should
+   * not be manually editable — only the plan tool can update it.
+   */
+  feetFromPlan?: boolean;
 }
 
 // ─── Saved material row (count session saved to L&M) ───────────────────────
