@@ -572,3 +572,16 @@
 ### Tests
 - [x] All 38 existing vitest tests pass (0 regressions)
 - [x] TypeScript: 0 errors
+
+## v5.51 — Sidebar/Icon Swap, Unit Count Tools, Runs Mode, Plastic Boxes, Search Sync
+
+- [x] Swap sidebar order: Assembly Builder below Material Database
+- [x] Swap icons: Assembly Builder gets Database icon, Material Database gets Package icon
+- [x] Add Clear Page button to Unit Count toolbar (same behavior as Runs clear page)
+- [x] Add Delete button to Unit Count toolbar (delete active count session pins)
+- [x] Clicking Runs tab in right panel re-enters measure mode for the active run
+- [x] Add residential plastic boxes to materialCatalog.ts with trade slang aliases (1-gang, 2-gang, 3-gang, 4-gang, old work, new work, round, octagon, 4-square, weatherproof, PVC, handy box, gem box, etc.)
+- [x] Sync all material search bars (Unit Count, right panel, Material DB) with user DB + master catalog
+- [x] Unit Count app catalog syncs with Material Database (user DB rows appear in count search)
+- [x] Master catalog count in Material Database page updates dynamically when admin adds/removes items
+- [x] TypeScript: 0 errors

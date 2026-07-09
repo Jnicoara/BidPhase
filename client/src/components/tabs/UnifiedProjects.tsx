@@ -1640,6 +1640,7 @@ function CivilEditor({
   const countSessionsOpen = activeSection === "count";
   const setCountSessionsOpen = (open: boolean) => setActiveSection(open ? "count" : null);
   const [countModeRequest, setCountModeRequest] = useState(0);
+  const [measureModeRequest, setMeasureModeRequest] = useState(0);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [rightPanelSize, setRightPanelSize] = useState(40);
@@ -1993,6 +1994,7 @@ function CivilEditor({
 
             }}
             countModeRequest={countModeRequest}
+            measureModeRequest={measureModeRequest}
             onMeasureStart={() => {
               setActiveSection("runs");
               if (rightPanelCollapsed) toggleRightPanel();
@@ -2324,7 +2326,14 @@ function CivilEditor({
                   {/* ── RUNS accordion ── */}
                   <div className="bp-card overflow-hidden">
                     <button
-                      onClick={() => setActiveSection(activeSection === "runs" ? null : "runs")}
+                      onClick={() => {
+                        const opening = activeSection !== "runs";
+                        setActiveSection(opening ? "runs" : null);
+                        if (opening) {
+                          // Re-enter measure mode for the active run when Runs tab is opened
+                          setMeasureModeRequest((v) => v + 1);
+                        }
+                      }}
                       className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
                     >
                       <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>

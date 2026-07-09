@@ -727,6 +727,45 @@ export const CATALOG: CatalogItem[] = [
   { id: "box-handy-cover-blank",   category: "Boxes & Enclosures", description: "Handy Box Blank Cover",                                unit: "EA", unitPrice: 0.85 },
   { id: "box-handy-cover-sg",      category: "Boxes & Enclosures", description: "Handy Box Single-Gang Cover",                          unit: "EA", unitPrice: 0.95 },
 
+  // ── Residential Plastic Boxes — New Work (nail-on / bracket) ─────────────
+  { id: "box-res-1g-nw-14ci",      category: "Boxes & Enclosures", description: "1-Gang Plastic New Work Box 14 Cu In (Nail-On)",       unit: "EA", unitPrice: 0.55, searchAliases: "1 gang plastic box single gang new work nail on gem box blue box resi box 1g nw" },
+  { id: "box-res-1g-nw-18ci",      category: "Boxes & Enclosures", description: "1-Gang Plastic New Work Box 18 Cu In (Nail-On)",       unit: "EA", unitPrice: 0.65, searchAliases: "1 gang plastic box single gang new work nail on gem box blue box resi box 1g nw" },
+  { id: "box-res-1g-nw-22ci",      category: "Boxes & Enclosures", description: "1-Gang Plastic New Work Box 22 Cu In (Nail-On)",       unit: "EA", unitPrice: 0.75, searchAliases: "1 gang plastic box single gang new work nail on gem box blue box resi box 1g nw" },
+  { id: "box-res-2g-nw-25ci",      category: "Boxes & Enclosures", description: "2-Gang Plastic New Work Box 25 Cu In (Nail-On)",       unit: "EA", unitPrice: 0.85, searchAliases: "2 gang plastic box double gang new work nail on gem box blue box resi box 2g nw" },
+  { id: "box-res-2g-nw-32ci",      category: "Boxes & Enclosures", description: "2-Gang Plastic New Work Box 32 Cu In (Nail-On)",       unit: "EA", unitPrice: 0.95, searchAliases: "2 gang plastic box double gang new work nail on gem box blue box resi box 2g nw" },
+  { id: "box-res-3g-nw-42ci",      category: "Boxes & Enclosures", description: "3-Gang Plastic New Work Box 42 Cu In (Nail-On)",       unit: "EA", unitPrice: 1.35, searchAliases: "3 gang plastic box triple gang new work nail on resi box 3g nw" },
+  { id: "box-res-4g-nw-56ci",      category: "Boxes & Enclosures", description: "4-Gang Plastic New Work Box 56 Cu In (Nail-On)",       unit: "EA", unitPrice: 1.85, searchAliases: "4 gang plastic box quad gang new work nail on resi box 4g nw" },
+
+  // ── Residential Plastic Boxes — Old Work (cut-in / remodel) ──────────────
+  { id: "box-res-1g-ow-14ci",      category: "Boxes & Enclosures", description: "1-Gang Plastic Old Work Box 14 Cu In (Cut-In)",        unit: "EA", unitPrice: 0.85, searchAliases: "1 gang plastic box single gang old work cut in remodel box gem box blue box resi box 1g ow retrofit" },
+  { id: "box-res-1g-ow-18ci",      category: "Boxes & Enclosures", description: "1-Gang Plastic Old Work Box 18 Cu In (Cut-In)",        unit: "EA", unitPrice: 0.95, searchAliases: "1 gang plastic box single gang old work cut in remodel box gem box blue box resi box 1g ow retrofit" },
+  { id: "box-res-2g-ow-25ci",      category: "Boxes & Enclosures", description: "2-Gang Plastic Old Work Box 25 Cu In (Cut-In)",        unit: "EA", unitPrice: 1.25, searchAliases: "2 gang plastic box double gang old work cut in remodel box gem box blue box resi box 2g ow retrofit" },
+  { id: "box-res-2g-ow-32ci",      category: "Boxes & Enclosures", description: "2-Gang Plastic Old Work Box 32 Cu In (Cut-In)",        unit: "EA", unitPrice: 1.45, searchAliases: "2 gang plastic box double gang old work cut in remodel box gem box blue box resi box 2g ow retrofit" },
+  { id: "box-res-3g-ow-42ci",      category: "Boxes & Enclosures", description: "3-Gang Plastic Old Work Box 42 Cu In (Cut-In)",        unit: "EA", unitPrice: 1.85, searchAliases: "3 gang plastic box triple gang old work cut in remodel box resi box 3g ow retrofit" },
+  { id: "box-res-4g-ow-56ci",      category: "Boxes & Enclosures", description: "4-Gang Plastic Old Work Box 56 Cu In (Cut-In)",        unit: "EA", unitPrice: 2.45, searchAliases: "4 gang plastic box quad gang old work cut in remodel box resi box 4g ow retrofit" },
+
+  // ── Residential Plastic Round / Ceiling Boxes ─────────────────────────────
+  { id: "box-res-round-nw-15ci",   category: "Boxes & Enclosures", description: "Round Plastic New Work Ceiling Box 15 Cu In",          unit: "EA", unitPrice: 0.85, searchAliases: "round plastic box ceiling box light box round box new work resi ceiling" },
+  { id: "box-res-round-ow-15ci",   category: "Boxes & Enclosures", description: "Round Plastic Old Work Ceiling Box 15 Cu In",          unit: "EA", unitPrice: 1.15, searchAliases: "round plastic box ceiling box light box round box old work remodel resi ceiling" },
+  { id: "box-res-round-fan-nw",    category: "Boxes & Enclosures", description: "Round Plastic Fan-Rated New Work Ceiling Box",          unit: "EA", unitPrice: 2.25, searchAliases: "fan box fan rated ceiling box plastic fan box new work resi fan" },
+  { id: "box-res-round-fan-ow",    category: "Boxes & Enclosures", description: "Round Plastic Fan-Rated Old Work Ceiling Box",          unit: "EA", unitPrice: 3.50, searchAliases: "fan box fan rated ceiling box plastic fan box old work remodel resi fan" },
+  { id: "box-res-oct-nw",          category: "Boxes & Enclosures", description: "Octagon Plastic New Work Ceiling Box 4\" x 1-1/2\"",   unit: "EA", unitPrice: 0.95, searchAliases: "octagon plastic box oct box ceiling box light box new work resi oct" },
+  { id: "box-res-oct-ow",          category: "Boxes & Enclosures", description: "Octagon Plastic Old Work Ceiling Box 4\" x 1-1/2\"",   unit: "EA", unitPrice: 1.35, searchAliases: "octagon plastic box oct box ceiling box light box old work remodel resi oct" },
+
+  // ── Weatherproof / Outdoor Plastic Boxes ─────────────────────────────────
+  { id: "box-res-wp-1g-pvc",       category: "Boxes & Enclosures", description: "1-Gang PVC Weatherproof Box (Outdoor)",                unit: "EA", unitPrice: 1.85, searchAliases: "weatherproof plastic box outdoor box 1 gang pvc wp box resi outdoor" },
+  { id: "box-res-wp-2g-pvc",       category: "Boxes & Enclosures", description: "2-Gang PVC Weatherproof Box (Outdoor)",                unit: "EA", unitPrice: 2.45, searchAliases: "weatherproof plastic box outdoor box 2 gang pvc wp box resi outdoor" },
+  { id: "box-res-wp-cover-1g",     category: "Boxes & Enclosures", description: "1-Gang In-Use Weatherproof Cover (Plastic)",            unit: "EA", unitPrice: 3.25, searchAliases: "in use cover bubble cover weatherproof cover 1 gang plastic resi wp cover" },
+  { id: "box-res-wp-cover-2g",     category: "Boxes & Enclosures", description: "2-Gang In-Use Weatherproof Cover (Plastic)",            unit: "EA", unitPrice: 4.50, searchAliases: "in use cover bubble cover weatherproof cover 2 gang plastic resi wp cover" },
+
+  // ── Plastic Vapor Barrier / Airtight Boxes ────────────────────────────────
+  { id: "box-res-vapor-1g",        category: "Boxes & Enclosures", description: "1-Gang Vapor Barrier / Airtight Plastic Box",           unit: "EA", unitPrice: 3.50, searchAliases: "vapor barrier box airtight box insulated wall box 1 gang vapor box" },
+  { id: "box-res-vapor-2g",        category: "Boxes & Enclosures", description: "2-Gang Vapor Barrier / Airtight Plastic Box",           unit: "EA", unitPrice: 5.50, searchAliases: "vapor barrier box airtight box insulated wall box 2 gang vapor box" },
+
+  // ── Plastic Siding / Exterior Boxes ──────────────────────────────────────
+  { id: "box-res-siding-1g",       category: "Boxes & Enclosures", description: "1-Gang Plastic Siding Box (Exterior)",                  unit: "EA", unitPrice: 2.25, searchAliases: "siding box exterior box plastic 1 gang siding mount" },
+  { id: "box-res-siding-2g",       category: "Boxes & Enclosures", description: "2-Gang Plastic Siding Box (Exterior)",                  unit: "EA", unitPrice: 3.25, searchAliases: "siding box exterior box plastic 2 gang siding mount" },
+
   // ═══════════════════════════════════════════════════════════════════════════
   // SUPPORTS & FASTENERS
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1356,12 +1395,16 @@ export const CATALOG_CATEGORIES: string[] = Array.from(
 
 export function searchCatalog(query: string, limit = 20): CatalogItem[] {
   const q = query.toLowerCase();
-  return CATALOG.filter(
-    (i) =>
-      i.description.toLowerCase().includes(q) ||
-      i.category.toLowerCase().includes(q) ||
-      i.id.toLowerCase().includes(q)
-  ).slice(0, limit);
+  return CATALOG.filter((i) => {
+    if (i.description.toLowerCase().includes(q)) return true;
+    if (i.category.toLowerCase().includes(q)) return true;
+    if (i.id.toLowerCase().includes(q)) return true;
+    if (i.searchAliases) {
+      const aliases = Array.isArray(i.searchAliases) ? i.searchAliases.join(" ") : i.searchAliases;
+      if (aliases.toLowerCase().includes(q)) return true;
+    }
+    return false;
+  }).slice(0, limit);
 }
 
 export function getCatalogItem(id: string): CatalogItem | undefined {

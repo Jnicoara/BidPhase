@@ -274,18 +274,18 @@ export default function BidPhaseShell() {
             title="Projects"
           />
           <NavBtn
-            onClick={() => navigate("assemblies")}
-            isActive={isInAssemblies}
-            icon={Package}
-            label="Assembly Builder"
-            title="Assembly Builder"
-          />
-          <NavBtn
             onClick={() => navigate("matdb")}
             isActive={isInMatDb}
-            icon={Database}
+            icon={Package}
             label="Material Database"
             title="Material Database"
+          />
+          <NavBtn
+            onClick={() => navigate("assemblies")}
+            isActive={isInAssemblies}
+            icon={Database}
+            label="Assembly Builder"
+            title="Assembly Builder"
           />
         </nav>
 
@@ -391,7 +391,7 @@ export default function BidPhaseShell() {
             isInAssemblies ? "text-[#F5C518]" : "text-muted-foreground"
           )}
         >
-          <Package size={18} className={isInAssemblies ? "text-[#F5C518]" : ""} />
+          <Database size={18} className={isInAssemblies ? "text-[#F5C518]" : ""} />
           {isInAssemblies && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
         </button>
         <button

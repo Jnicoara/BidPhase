@@ -143,13 +143,25 @@ export default function CatalogPicker({
     onChange(null);
   };
 
-  // Filtered results — either from static catalog or user DB, using smart search
+  // Filtered results — when searching, always search BOTH sources simultaneously
   const results = useMemo((): CatalogItem[] => {
-    const source: CatalogItem[] = showUserDb ? userDbItems : CATALOG;
     if (query.trim()) {
-      // Smart search: fuzzy + trade slang expansion, no category filter when searching
-      return smartSearch<CatalogItem & SearchableItem>(source as (CatalogItem & SearchableItem)[], query, 50) as CatalogItem[];
+      // Search both App Catalog and My Materials simultaneously, merge and deduplicate
+      const catalogResults = smartSearch<CatalogItem & SearchableItem>(CATALOG as (CatalogItem & SearchableItem)[], query, 30) as CatalogItem[];
+      const dbResults = smartSearch<CatalogItem & SearchableItem>(userDbItems as (CatalogItem & SearchableItem)[], query, 20) as CatalogItem[];
+      // Put user DB results first (they have custom pricing), then catalog results
+      const merged = [...dbResults, ...catalogResults];
+      // Deduplicate by description (case-insensitive)
+      const seen = new Set<string>();
+      return merged.filter((i) => {
+        const key = i.description.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 50);
     }
+    // No query: show the selected source with category filter
+    const source: CatalogItem[] = showUserDb ? userDbItems : CATALOG;
     if (activeCategory) return source.filter((i) => i.category === activeCategory).slice(0, 50);
     return source.slice(0, 30);
   }, [showUserDb, query, activeCategory, userDbItems]);
@@ -282,7 +294,7 @@ export default function CatalogPicker({
 
       {/* Footer hint */}
       <div className="px-3 py-1.5 border-t border-border/50 shrink-0">
-        <p className="text-[10px] text-muted-foreground">{CATALOG.length} items in catalog · prices are editable after selection</p>
+        <p className="text-[10px] text-muted-foreground">{CATALOG.length + userDbItems.length} items total ({CATALOG.length} catalog + {userDbItems.length} custom) · prices editable after selection</p>
       </div>
     </div>,
     document.body

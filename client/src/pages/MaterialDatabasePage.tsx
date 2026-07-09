@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { smartSearch } from "@/lib/smartSearch";
 import type { SearchableItem } from "@/lib/smartSearch";
+import { CATALOG } from "@/lib/materialCatalog";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -812,7 +813,7 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
             <div>
               <p className="text-base font-semibold text-foreground">Your material database is empty</p>
               <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                Load the built-in master catalog of 1,021 common electrical items with baseline prices,
+                Load the built-in master catalog of {CATALOG.length.toLocaleString()} common electrical items with baseline prices,
                 or import your own supply house CSV.
               </p>
             </div>
@@ -820,7 +821,7 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
             <div className="bg-[#F5C518]/10 border border-[#F5C518]/30 rounded-xl p-5 max-w-sm w-full">
               <p className="text-sm font-semibold text-[#F5C518] mb-1">Recommended: Load Master Catalog</p>
               <p className="text-xs text-muted-foreground mb-4">
-                1,021 items across Distribution, Conduit, Wire, Rough-in, Devices, Lighting &amp; Civil.
+                {CATALOG.length.toLocaleString()} items across Distribution, Conduit, Wire, Rough-in, Devices, Lighting &amp; Civil.
                 Prices are editable — update them with your own supply house quotes at any time.
               </p>
               <Button
@@ -831,7 +832,7 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
                 {seedFromCatalog.isPending ? (
                   <><Loader2 size={14} className="animate-spin mr-2" />Loading catalog…</>
                 ) : (
-                  <><Database size={14} className="mr-2" />Load Master Catalog (1,021 items)</>
+                  <><Database size={14} className="mr-2" />Load Master Catalog ({CATALOG.length.toLocaleString()} items)</>
                 )}
               </Button>
             </div>

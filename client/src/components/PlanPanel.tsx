@@ -54,6 +54,7 @@ import {
   Check,
   MapPin,
   Hash,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CONDUIT_SIZES, type ConduitSize, type CountPin, type CountSession } from "@/contexts/AppContext";
@@ -332,6 +333,8 @@ interface PlanPanelProps {
   onUnitCountToggle?: (open: boolean) => void;
   /** Increment this to programmatically activate count mode from the right panel */
   countModeRequest?: number;
+  /** Increment this to programmatically activate measure mode from the right panel (Runs tab click) */
+  measureModeRequest?: number;
   /** Called when top toolbar Unit Count button is clicked — parent should bootstrap a session if none exists */
   onRequestCountSession?: () => void;
   /** Called when user enters measure mode (Measure / Resume button clicked) */
@@ -352,6 +355,7 @@ export default function PlanPanel({
   onPdfReplaced,
   onUnitCountToggle,
   countModeRequest = 0,
+  measureModeRequest = 0,
   onRequestCountSession,
   onMeasureStart,
 }: PlanPanelProps) {
@@ -480,6 +484,15 @@ export default function PlanPanel({
       toast.info("Unit Count: click to place a pin · right-click to remove.");
     }
   }, [countModeRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Activate measure mode when right panel Runs tab is opened
+  useEffect(() => {
+    if (measureModeRequest > 0 && scaleRatio) {
+      setMode("measure");
+      modeRef.current = "measure";
+      onUnitCountToggle?.(false);
+    }
+  }, [measureModeRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const [hideUnselected, setHideUnselected] = useState(false);
   const [showPageOverview, setShowPageOverview] = useState(false);
   // Saved/favorite custom colors (persisted in localStorage)
@@ -2317,7 +2330,36 @@ export default function PlanPanel({
             >
               <Undo2 size={13} />
             </Button>
-            {/* Trash session pins */}
+            {/* Clear Page — clears ALL runs AND pins on current page (same as Runs toolbar) */}
+            <Button
+              size="sm"
+              className="h-7 text-xs px-2 shrink-0"
+              variant="ghost"
+              onClick={() => {
+                const runCount = currentRuns.length;
+                const pinCount = currentPins.length;
+                if (runCount === 0 && pinCount === 0) { toast.info("Nothing on this page to clear."); return; }
+                const doAll = () => {
+                  onClearPageAll?.(currentPage);
+                  toast.info(`Cleared page ${currentPage}.`);
+                };
+                if (runCount + pinCount >= 2) {
+                  setDeleteConfirm({
+                    count: runCount + pinCount,
+                    name: `all runs and pins on page ${currentPage}`,
+                    onConfirm: doAll,
+                  });
+                } else {
+                  doAll();
+                }
+              }}
+              disabled={!pdfFile}
+              title={`Clear all runs and pins on page ${currentPage}`}
+            >
+              <XCircle size={11} className="mr-1" />
+              Clear Page
+            </Button>
+            {/* Delete (trash) active session pins on this page */}
             <Button
               size="icon"
               className="h-7 w-7 shrink-0"
@@ -2341,7 +2383,7 @@ export default function PlanPanel({
                 }
               }}
               disabled={!pdfFile}
-              title={`Clear "${activeCountSession?.name ?? "active session"}" pins on page ${currentPage}`}
+              title={`Delete "${activeCountSession?.name ?? "active session"}" pins on page ${currentPage}`}
             >
               <Trash2 size={13} />
             </Button>
