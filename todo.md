@@ -671,3 +671,11 @@
 - [x] L&M summary: add select-all checkbox + bulk delete button
 - [x] Combine Trainee + Journeyman labor into single combined labor column with hardhat icon
 - [x] PDF: fix 12-second page load — root cause was react-pdf re-rendering on every page change; replaced with pdfjs OffscreenCanvas bitmap cache that renders pages once and serves subsequent navigations instantly from memory
+
+## v5.65 — Cursor, Delete Sync, Estimating Defaults, Clear Page
+- [x] Fix cursor disappearing in the gap between PDF page and toolbars (z-index / pointer-events gap) — moved onMouseMove + cursor:none to outer panel container
+- [x] Material delete from summary page must also remove from "Saved Items" panel in right panel — deleteRowsFromState propagates to project state
+- [x] Material delete from summary page must also remove the corresponding unit count session pins — deleteRowsFromState also removes matching countSession pins
+- [x] Conduit estimating inputs: default pull points = 0, wire makeup default sum = 0, waste factor default = 0
+- [x] Wire estimating inputs: default wire type = NM Cable, all estimating inputs start at 0
+- [x] Clear Page (unit counter) must also clear all runs on the current page — count mode Clear page now calls onClearPageAll (runs + all sessions' pins)

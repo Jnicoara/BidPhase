@@ -304,6 +304,8 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
     setShowMaterialList,
     activeCivilProject, activeCommercialProject, activeResidentialProject,
     activeCivilCatProject, activeCommercialCatProject, activeResidentialCatProject,
+    setCivilCatState, setCommercialCatState, setResidentialCatState,
+    setCivilState,
     markupPct, setMarkupPct,
     journeymanLines, setJourneymanLines,
     traineeLines, setTraineeLines,
@@ -399,6 +401,76 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
   const markupAmt = materialSubtotal * (markupPct / 100);
   const grandTotal = materialSubtotal + markupAmt + laborSubtotal;
 
+  // ── Propagate deletions back into project state ────────────────────────────
+  const deleteRowsFromState = useCallback((idsToDelete: Set<string>) => {
+    // Parse each id to determine which project + what to remove
+    // id formats:
+    //   {prefix}-smr-{smrId}   → savedMaterialRow
+    //   {prefix}-s-{sessionId} → live countSession
+    //   {prefix}-r-{runId}-*   → run row (runs are read-only from summary; skip)
+    const prefixToSetter: Record<string, ((s: import('@/contexts/AppContext').CivilState) => void) | undefined> = {
+      "civil-cat": (s) => setCivilCatState(s),
+      "comm-cat":  (s) => setCommercialCatState(s),
+      "res-cat":   (s) => setResidentialCatState(s),
+      "civil":     (s) => setCivilState(s),
+    };
+    const prefixToProject: Record<string, CivilProject | undefined> = {
+      "civil-cat": activeCivilCatProject,
+      "comm-cat":  activeCommercialCatProject,
+      "res-cat":   activeResidentialCatProject,
+      "civil":     activeCivilProject,
+    };
+
+    // Group ids by prefix
+    const byPrefix: Record<string, string[]> = {};
+    for (const id of Array.from(idsToDelete)) {
+      const parts = id.split("-");
+      // prefix is first 1 or 2 parts depending on format
+      let prefix = "";
+      let rest = "";
+      if (id.startsWith("civil-cat-")) { prefix = "civil-cat"; rest = id.slice("civil-cat-".length); }
+      else if (id.startsWith("comm-cat-")) { prefix = "comm-cat"; rest = id.slice("comm-cat-".length); }
+      else if (id.startsWith("res-cat-")) { prefix = "res-cat"; rest = id.slice("res-cat-".length); }
+      else if (id.startsWith("civil-")) { prefix = "civil"; rest = id.slice("civil-".length); }
+      else continue;
+      if (!byPrefix[prefix]) byPrefix[prefix] = [];
+      byPrefix[prefix].push(rest);
+    }
+
+    for (const [prefix, rests] of Object.entries(byPrefix)) {
+      const proj = prefixToProject[prefix];
+      const setter = prefixToSetter[prefix];
+      if (!proj || !setter) continue;
+      const st = proj.state;
+
+      // Collect smrIds and sessionIds to remove
+      const smrIdsToRemove = new Set<string>();
+      const sessionIdsToRemove = new Set<string>();
+      for (const rest of rests) {
+        if (rest.startsWith("smr-")) {
+          smrIdsToRemove.add(rest.slice("smr-".length));
+        } else if (rest.startsWith("s-")) {
+          sessionIdsToRemove.add(rest.slice("s-".length));
+        }
+        // run rows (r-*) are derived — skip
+      }
+
+      if (smrIdsToRemove.size === 0 && sessionIdsToRemove.size === 0) continue;
+
+      // Remove savedMaterialRows
+      const newSavedMaterialRows = (st.savedMaterialRows ?? []).filter(
+        (smr) => !smrIdsToRemove.has(smr.id) && !sessionIdsToRemove.has((smr as import('@/contexts/AppContext').SavedMaterialRow).sessionId ?? "")
+      );
+      // Remove countSessions (and their pins)
+      const newCountSessions = (st.countSessions ?? []).filter(
+        (s) => !sessionIdsToRemove.has(s.id)
+      );
+
+      setter({ ...st, savedMaterialRows: newSavedMaterialRows, countSessions: newCountSessions });
+    }
+  }, [activeCivilCatProject, activeCommercialCatProject, activeResidentialCatProject, activeCivilProject,
+      setCivilCatState, setCommercialCatState, setResidentialCatState, setCivilState]);
+
   // ── Row helpers ─────────────────────────────────────────────────────────────
   const updateRow = (id: string, patch: Partial<MaterialRow>) => {
     setRows((p) => p.map((r) => r.id === id ? { ...r, ...patch } : r));
@@ -424,6 +496,7 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
   const allSelected = allRows.length > 0 && selectedIds.size === allRows.length;
 
   const bulkDelete = () => {
+    deleteRowsFromState(selectedIds);
     setRows((p) => p.filter((r) => !selectedIds.has(r.id)));
     setManualRows((p) => p.filter((r) => !selectedIds.has(r.id)));
     clearSelection();
@@ -725,7 +798,7 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl p-6 w-80 shadow-2xl">
             <h3 className="text-sm font-semibold mb-2">Delete {selectedIds.size} rows?</h3>
-            <p className="text-xs text-muted-foreground mb-4">Count session data in the plan is not affected.</p>
+            <p className="text-xs text-muted-foreground mb-4">This will also remove the corresponding saved items and unit count sessions from the plan.</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setBulkDeletePending(false)} className="px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-muted/20 transition-colors">Cancel</button>
               <button onClick={bulkDelete} className="px-3 py-1.5 text-xs bg-red-500/90 text-white rounded-lg hover:bg-red-500 transition-colors">Delete All</button>
@@ -739,10 +812,10 @@ ${traineeLines.map((l) => `<tr><td>${l.description}</td><td class="right">${l.ho
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl p-6 w-80 shadow-2xl">
             <h3 className="text-sm font-semibold mb-2">Remove this row?</h3>
-            <p className="text-xs text-muted-foreground mb-4">Count session data in the plan is not affected.</p>
+            <p className="text-xs text-muted-foreground mb-4">This will also remove the corresponding saved item and unit count session.</p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setDeletingRowId(null)} className="px-3 py-1.5 text-xs border border-border rounded-lg hover:bg-muted/20 transition-colors">Cancel</button>
-              <button onClick={() => { setRows((p) => p.filter((r) => r.id !== deletingRowId)); setManualRows((p) => p.filter((r) => r.id !== deletingRowId)); setDeletingRowId(null); }} className="px-3 py-1.5 text-xs bg-red-500/90 text-white rounded-lg hover:bg-red-500 transition-colors">Remove</button>
+              <button onClick={() => { if (deletingRowId) deleteRowsFromState(new Set([deletingRowId])); setRows((p) => p.filter((r) => r.id !== deletingRowId)); setManualRows((p) => p.filter((r) => r.id !== deletingRowId)); setDeletingRowId(null); }} className="px-3 py-1.5 text-xs bg-red-500/90 text-white rounded-lg hover:bg-red-500 transition-colors">Remove</button>
             </div>
           </div>
         </div>

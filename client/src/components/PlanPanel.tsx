@@ -2138,7 +2138,16 @@ export default function PlanPanel({
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-background border-r border-border relative">
+    <div
+      className="flex flex-col h-full bg-background border-r border-border relative"
+      style={activeCursorColor && !isPanning ? { cursor: "none" } : undefined}
+      onMouseMove={(e) => {
+        if (!activeCursorColor || isPanning) return;
+        const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+        setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      }}
+      onMouseLeave={() => { setMousePos(null); }}
+    >
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
       {/* Contextual toolbar: buttons shown depend on the current mode */}
       <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-border bg-card shrink-0">
@@ -2555,14 +2564,14 @@ export default function PlanPanel({
               <Trash2 size={13} />
             </Button>
             {/* Clear page — matches Runs toolbar styling exactly */}
-            {(currentRuns.length > 0 || currentPins.length > 0) && (
+            {(currentRuns.length > 0 || allPagePins.length > 0) && (
               <Button
                 size="sm"
                 className="h-7 text-xs px-2 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 variant="ghost"
                 onClick={() => {
                   const runCount = currentRuns.length;
-                  const pinCount = currentPins.length;
+                  const pinCount = allPagePins.length;
                   const parts: string[] = [];
                   if (runCount > 0) parts.push(`${runCount} run${runCount !== 1 ? "s" : ""}`);
                   if (pinCount > 0) parts.push(`${pinCount} pin${pinCount !== 1 ? "s" : ""}`);
@@ -2570,6 +2579,13 @@ export default function PlanPanel({
                     count: runCount + pinCount,
                     name: `all marks on page ${currentPage}${parts.length ? ` (${parts.join(" and ")})` : ""}`,
                     onConfirm: () => {
+                      // Reset local run state too (mirrors measure-mode clear)
+                      setCurrentRuns([]);
+                      setCurrentActiveRunId("");
+                      dragRef.current = null;
+                      setIsPanning(false);
+                      setMousePos(null);
+                      setCrosshair(null);
                       onClearPageAll?.(currentPage);
                       toast.info(`Cleared page ${currentPage}.`);
                     },
