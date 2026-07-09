@@ -681,3 +681,11 @@
 - [x] Bitmap cache and instant page load works for all projects — legacy saved PDFs now auto-derive and persist pdfHash on restore so old projects use the same bitmap cache + prefetch path
 - [x] Restore scrollable page overview panel — wheel zoom is disabled while the overview overlay is open so the page picker can scroll naturally again
 - [x] TypeScript: 0 errors
+## v5.73 — Project Switching & Fast Page Load
+- [x] useLocalStorage re-reads from localStorage when key changes (project switch) — fixes stale page/zoom/hash
+- [x] PlanPanel tabKey-change effect resets all transient state (numPages, autoFittedRef, bitmapPageRef, mode, pan, zoom) on project switch
+- [x] Document key includes tabKey so switching projects always forces a fresh react-pdf mount
+- [x] Start zoom always 40% centered when opening any project
+- [x] Page navigation works correctly across all projects
+- [x] Instant bitmap cache loading works across all projects
+- [x] TypeScript: 0 errors

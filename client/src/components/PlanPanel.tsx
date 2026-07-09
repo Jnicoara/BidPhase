@@ -676,6 +676,39 @@ export default function PlanPanel({
     return () => ro.disconnect();
   }, []);
 
+  // ── Project (tabKey) change: reset ALL transient state ───────────────────────
+  // PlanPanel is reused across projects — only tabKey changes. When it does, plain
+  // useState/useRef values (numPages, pdfLoadId, autoFittedRef, etc.) keep the
+  // previous project's values. This effect resets everything so the new project
+  // starts clean, while persisted state (currentPage, displayZoom, pdfHash) is
+  // already handled by the useLocalStorage key-change re-read.
+  useEffect(() => {
+    setNumPages(0);
+    setPdfLoadId((c) => c + 1);      // force Document remount for new project
+    autoFittedRef.current = false;
+    bitmapPageRef.current = "";
+    pageSizeRef.current = null;
+    setPageReady(false);
+    setMode("none");
+    modeRef.current = "none";
+    dragRef.current = null;
+    dragPointRef.current = null;
+    setIsPanning(false);
+    setMousePos(null);
+    setCrosshair(null);
+    setShowPageOverview(false);
+    setShowScalePrompt(false);
+    setDeleteConfirm(null);
+    setPendingPdfFile(null);
+    setPausedRunId(null);
+    // Reset zoom to 40% so the new project always opens at the right zoom
+    const startZoom = 0.40;
+    setDisplayZoom(startZoom);
+    displayZoomRef.current = startZoom;
+    panOffsetRef.current = { x: 0, y: 0 };
+    setPanOffset({ x: 0, y: 0 });
+  }, [tabKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reset page render state when page changes (NOT on pdfFile change — that's handled by applyPdfLoad
   // and the Document key={pdfHash} remount. Including pdfFile here would race with onRenderSuccess.)
   useEffect(() => {
@@ -2859,7 +2892,7 @@ export default function PlanPanel({
             {/* Inner wrapper rendered at renderZoom — no gutter needed since we can pan freely */}
             <div style={{ position: "relative", display: "inline-block" }}>
               <Document
-                key={`${pdfHash || "default"}-${pdfLoadId}`}
+                key={`${tabKey}-${pdfHash || "default"}-${pdfLoadId}`}
                 file={pdfFile}
                 onLoadSuccess={(doc) => {
                   const n = doc.numPages;
