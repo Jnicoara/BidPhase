@@ -494,3 +494,81 @@
 - [x] Add EGC running total section to CrossPageTotals right panel (after Conductors, before Per-Page Breakdown) — shows billable footage per EGC size/material
 - [x] Move Clear Page button to immediately after Unit Count button in idle toolbar (before Undo)
 - [x] TypeScript: 0 errors
+
+## v5.50 — RBAC + Assembly Builder + Admin Feature Flags
+
+### Step 1: RBAC
+- [ ] Add "contractor" to the role enum in schema.ts (alongside "user" and "admin")
+- [ ] Push DB migration for role enum change
+- [ ] Expose ctx.user.role to frontend via auth.me query
+- [ ] Add useIsAdmin() and useIsContractor() hooks to frontend
+
+### Step 2: Assemblies DB (already exists — verify and document)
+- [ ] Confirm master_assemblies, master_assembly_items tables are live
+- [ ] Confirm masterAssembliesRouter procedures are wired and functional
+- [ ] Confirm laborHours field exists on assembly items
+
+### Step 3: Assembly Builder UI
+- [ ] Create standalone AssemblyBuilderPage accessible from sidebar
+- [ ] List all master assemblies with search/filter
+- [ ] Create/edit assembly: name, description, phase, add items from materials DB with qty
+- [ ] Show labor hours total per assembly (sum of item qty × masterLaborHours)
+- [ ] Wire to masterAssembliesRouter (list, create, update, addItem, removeItem)
+
+### Step 4: Feature Flags System
+- [ ] Add feature_flags table: id, flagKey (unique), label, description, enabledForContractors, updatedAt
+- [ ] Push DB migration for feature_flags table
+- [ ] Add featureFlagsRouter: getAll (admin), upsert (admin), getForUser (public — returns only keys + enabled state, no admin data)
+- [ ] Add featureFlagsRouter to appRouter
+- [ ] Add useFeatureFlag(key) hook to frontend that reads from getForUser query
+
+### Step 5: Admin Settings Page
+- [ ] Create AdminSettingsPage accessible ONLY when role === "admin"
+- [ ] Add "Admin" nav item to sidebar (only visible to admins)
+- [ ] Feature Flags section: list all flags with toggle switches, label, description
+- [ ] Seed the "enable_labor_units" flag (default: OFF for contractors)
+- [ ] Gate all labor-related UI in ProjectAssembliesTab, BidSummaryTab, BomRfqTab behind useFeatureFlag("enable_labor_units")
+- [ ] Gate labor data in tRPC responses: strip laborHours fields from projectAssemblies/projectItems list when flag is OFF for contractor role
+- [ ] TypeScript: 0 errors after all changes
+
+## v5.50 — RBAC + Assembly Builder + Feature Flags (COMPLETE)
+
+### Step 1: RBAC
+- [x] Add `contractor` to the role enum in drizzle/schema.ts (alongside existing `user` and `admin`)
+- [x] `adminProcedure` already existed in server/_core/trpc.ts — no change needed
+- [x] Owner openId is auto-promoted to `admin` on every login upsert in db.ts — no change needed
+- [x] All existing pages remain accessible to contractor/user role by default
+
+### Step 2: Assemblies Database
+- [x] `master_assemblies` and `master_assembly_items` tables already existed from v5.45 — no new migration needed
+- [x] `feature_flags` table added to schema (flagKey, label, description, enabledForContractors, timestamps)
+- [x] DB migration pushed (pnpm db:push)
+- [x] `getAllFeatureFlags`, `getFeatureFlag`, `upsertFeatureFlag`, `seedDefaultFeatureFlags` helpers added to db.ts
+- [x] `seedDefaultFeatureFlags` called at server startup — seeds `enable_labor_units` flag (default OFF)
+
+### Step 3: Assembly Builder UI
+- [x] `AssemblyBuilderPage` created at client/src/pages/AssemblyBuilderPage.tsx
+- [x] Create/rename/delete assemblies with name and optional phase
+- [x] Expand assembly to see item list; add items from master catalog via search
+- [x] Inline qty editing per item with auto-save on blur
+- [x] Material cost and labor hours totals per assembly (labor columns hidden when flag is OFF)
+- [x] `useFeatureFlag` and `useFeatureFlags` hooks created at client/src/hooks/useFeatureFlag.ts
+- [x] Assembly Builder wired into BidPhaseShell routing at /assemblies with Package icon in sidebar
+
+### Step 4: Admin Dashboard — Feature Flags UI
+- [x] `featureFlagsRouter` created with `getAll` (admin only), `upsert` (admin only), `getForUser` (authenticated)
+- [x] `AdminSettingsPage` created at client/src/pages/AdminSettingsPage.tsx
+- [x] Toggle switches for each flag with ON/OFF badge and description
+- [x] Role reference table showing admin/contractor/user distinctions
+- [x] Admin Settings nav item in sidebar — only visible when `user.role === "admin"` (Shield icon)
+- [x] Route `/admin` wired into BidPhaseShell
+
+### Step 5: Labor Units Feature Toggle
+- [x] `enable_labor_units` flag seeded as first toggle (default OFF for contractors)
+- [x] `useFeatureFlag("enable_labor_units")` used in AssemblyBuilderPage to hide/show labor columns
+- [x] `featureFlags.getForUser` returns all flags as `Record<string, boolean>` — admins always get true
+- [x] System is scalable: add new flags via `seedDefaultFeatureFlags` or Admin Settings UI, consume with `useFeatureFlag(key)`
+
+### Tests
+- [x] All 38 existing vitest tests pass (0 regressions)
+- [x] TypeScript: 0 errors

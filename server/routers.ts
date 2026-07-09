@@ -9,6 +9,7 @@ import { masterLaborRatesRouter } from "./routers/masterLaborRatesRouter";
 import { projectAssembliesRouter } from "./routers/projectAssembliesRouter";
 import { projectItemsRouter } from "./routers/projectItemsRouter";
 import { bidSummaryRouter } from "./routers/bidSummaryRouter";
+import { featureFlagsRouter } from "./routers/featureFlagsRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -21,6 +22,7 @@ export const appRouter = router({
   projectAssemblies: projectAssembliesRouter,
   projectItems: projectItemsRouter,
   bidSummary: bidSummaryRouter,
+  featureFlags: featureFlagsRouter,
 });
 
 export type AppRouter = typeof appRouter;

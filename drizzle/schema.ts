@@ -23,7 +23,7 @@ export const users = mysqlTable("users", {
   passwordHash: text("passwordHash"),
   loginMethod: varchar("loginMethod", { length: 64 }),
   emailVerified: boolean("emailVerified").default(false).notNull(),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: mysqlEnum("role", ["user", "admin", "contractor"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -277,3 +277,19 @@ export const bidSummary = mysqlTable(
 
 export type BidSummary = typeof bidSummary.$inferSelect;
 export type InsertBidSummary = typeof bidSummary.$inferInsert;
+
+// ─── Feature Flags ────────────────────────────────────────────────────────────
+// Admin-controlled toggles that gate features for the Contractor role.
+// Each row is identified by a unique flagKey string.
+export const featureFlags = mysqlTable("feature_flags", {
+  id: int("id").autoincrement().primaryKey(),
+  flagKey: varchar("flagKey", { length: 128 }).notNull().unique(),
+  label: varchar("label", { length: 255 }).notNull(),
+  description: text("description"),
+  enabledForContractors: boolean("enabledForContractors").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type FeatureFlag = typeof featureFlags.$inferSelect;
+export type InsertFeatureFlag = typeof featureFlags.$inferInsert;

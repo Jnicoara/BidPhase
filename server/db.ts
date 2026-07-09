@@ -12,6 +12,8 @@ import {
   InsertProjectAssemblyItem,
   InsertProjectItem,
   InsertBidSummary,
+  InsertFeatureFlag,
+  FeatureFlag,
   projects,
   userMaterialsDb,
   users,
@@ -23,6 +25,7 @@ import {
   projectAssemblyItems,
   projectItems,
   bidSummary,
+  featureFlags,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -539,4 +542,55 @@ export async function upsertBidSummary(data: InsertBidSummary) {
       updatedAt: new Date(),
     },
   });
+}
+
+// ─── Feature Flags ────────────────────────────────────────────────────────────
+
+/** Return all feature flags (admin use). */
+export async function getAllFeatureFlags(): Promise<FeatureFlag[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(featureFlags).orderBy(featureFlags.flagKey);
+}
+
+/** Return a single flag by key. */
+export async function getFeatureFlag(flagKey: string): Promise<FeatureFlag | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(featureFlags).where(eq(featureFlags.flagKey, flagKey)).limit(1);
+  return result[0];
+}
+
+/** Upsert a feature flag (insert or update). */
+export async function upsertFeatureFlag(data: InsertFeatureFlag): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(featureFlags).values(data).onDuplicateKeyUpdate({
+    set: {
+      label: data.label,
+      description: data.description,
+      enabledForContractors: data.enabledForContractors,
+      updatedAt: new Date(),
+    },
+  });
+}
+
+/** Seed default flags if they don't exist yet. Called at server startup. */
+export async function seedDefaultFeatureFlags(): Promise<void> {
+  const defaults: InsertFeatureFlag[] = [
+    {
+      flagKey: "enable_labor_units",
+      label: "Enable Labor Units for Contractors",
+      description:
+        "When ON, contractors can view, input, and calculate totals using Labor Units (Hours) fields on assemblies and takeoffs. When OFF, all labor-related UI and data is completely hidden from contractors.",
+      enabledForContractors: false,
+    },
+  ];
+
+  for (const flag of defaults) {
+    const existing = await getFeatureFlag(flag.flagKey);
+    if (!existing) {
+      await upsertFeatureFlag(flag);
+    }
+  }
 }

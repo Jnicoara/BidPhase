@@ -1,5 +1,5 @@
 /**
- * BidPhaseShell — Main layout shell v5.46
+ * BidPhaseShell — Main layout shell v5.50
  * Desktop: fixed left sidebar (icon-only 64px, expands to 220px on hover)
  * Mobile:  fixed bottom navigation bar
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
@@ -17,9 +17,12 @@
  *   /settings    → Settings
  *   /trash       → Trash
  *   /matdb       → Material Database
+ *   /assemblies  → Assembly Builder
+ *   /admin       → Admin Settings (admin role only)
  */
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
 import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, IndustrialIcon } from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import MaterialListPage from "@/pages/MaterialListPage";
@@ -29,7 +32,9 @@ import EstimateEnginePage from "@/pages/EstimateEnginePage";
 import BidPhaseHomePage from "@/pages/BidPhaseHomePage";
 import ProjectsPage from "@/pages/ProjectsPage";
 import ProjectDetailPage from "@/pages/ProjectDetailPage";
-import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen } from "lucide-react";
+import AssemblyBuilderPage from "@/pages/AssemblyBuilderPage";
+import AdminSettingsPage from "@/pages/AdminSettingsPage";
+import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Route =
@@ -45,7 +50,9 @@ type Route =
   | "settings"
   | "trash"
   | "estimate"
-  | "matdb";
+  | "matdb"
+  | "assemblies"
+  | "admin";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
 function pathToRoute(path: string): { route: Route; projectId?: number } {
@@ -68,6 +75,8 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   if (p === "estimate") return { route: "estimate" };
   if (p === "settings") return { route: "settings" };
   if (p === "trash") return { route: "trash" };
+  if (p === "assemblies") return { route: "assemblies" };
+  if (p === "admin") return { route: "admin" };
   // Default: show homepage
   return { route: "home" };
 }
@@ -85,6 +94,9 @@ export default function BidPhaseShell() {
     setShowMaterialList,
     activeCategory, setActiveCategory,
   } = useApp();
+
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   // ── URL-based routing using hash ──────────────────────────────────────────
   const [routeState, setRouteState] = useState<{ route: Route; projectId?: number }>(
@@ -152,6 +164,8 @@ export default function BidPhaseShell() {
   const isInEstimate      = route === "estimate";
   const isInMaterial      = route === "material";
   const isInMatDb         = route === "matdb";
+  const isInAssemblies    = route === "assemblies";
+  const isInAdmin         = route === "admin";
 
   const currentCategory = isInCategory
     ? (route as "civil" | "commercial" | "residential" | "industrial")
@@ -176,9 +190,11 @@ export default function BidPhaseShell() {
         onOpenMaterialList={openMaterialList}
       />
     );
-    if (isInTrash)    return <TrashPage onBack={goBack} />;
-    if (isInSettings) return <SettingsTab onBack={goBack} />;
-    if (isInEstimate) return <EstimateEnginePage onBack={goBack} />;
+    if (isInTrash)       return <TrashPage onBack={goBack} />;
+    if (isInSettings)    return <SettingsTab onBack={goBack} />;
+    if (isInEstimate)    return <EstimateEnginePage onBack={goBack} />;
+    if (isInAssemblies)  return <AssemblyBuilderPage />;
+    if (isInAdmin)       return <AdminSettingsPage />;
     // Legacy category workspace
     return <UnifiedProjects category={currentCategory} />;
   };
@@ -258,6 +274,13 @@ export default function BidPhaseShell() {
             title="Projects"
           />
           <NavBtn
+            onClick={() => navigate("assemblies")}
+            isActive={isInAssemblies}
+            icon={Package}
+            label="Assembly Builder"
+            title="Assembly Builder"
+          />
+          <NavBtn
             onClick={() => navigate("matdb")}
             isActive={isInMatDb}
             icon={Database}
@@ -266,8 +289,18 @@ export default function BidPhaseShell() {
           />
         </nav>
 
-        {/* Bottom section: Trash on top, Settings on bottom */}
+        {/* Bottom section */}
         <div className="flex flex-col gap-1 p-2 border-t border-sidebar-border shrink-0">
+          {/* Admin Settings — only visible to admin role */}
+          {isAdmin && (
+            <NavBtn
+              onClick={() => navigate("admin")}
+              isActive={isInAdmin}
+              icon={Shield}
+              label="Admin Settings"
+              title="Admin Settings"
+            />
+          )}
           <NavBtn
             onClick={() => navigate("trash")}
             isActive={isInTrash}
@@ -287,7 +320,7 @@ export default function BidPhaseShell() {
           <span
             className="text-[10px] text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 font-mono"
           >
-            v5.46 · Field Edition
+            v5.50 · Field Edition
           </span>
         </div>
       </aside>
@@ -306,13 +339,15 @@ export default function BidPhaseShell() {
           <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground font-mono">
             <ChevronRight size={12} />
             <span className="capitalize">
-              {isOnHome        ? "Home"
-                : isOnProjects     ? "Projects"
-                : isOnProjectDetail ? "Project"
-                : isInTrash        ? "Trash"
-                : isInSettings     ? "Settings"
-                : isInEstimate     ? "Estimate Engine"
-                : isInMaterial     ? "Labor & Material"
+              {isOnHome          ? "Home"
+                : isOnProjects       ? "Projects"
+                : isOnProjectDetail  ? "Project"
+                : isInTrash          ? "Trash"
+                : isInSettings       ? "Settings"
+                : isInEstimate       ? "Estimate Engine"
+                : isInMaterial       ? "Labor & Material"
+                : isInAssemblies     ? "Assembly Builder"
+                : isInAdmin          ? "Admin Settings"
                 : "Workspace"}
             </span>
           </div>
@@ -348,6 +383,16 @@ export default function BidPhaseShell() {
         >
           <FolderOpen size={18} className={(isOnProjects || isOnProjectDetail) ? "text-[#F5C518]" : ""} />
           {(isOnProjects || isOnProjectDetail) && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
+        </button>
+        <button
+          onClick={() => navigate("assemblies")}
+          className={cn(
+            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
+            isInAssemblies ? "text-[#F5C518]" : "text-muted-foreground"
+          )}
+        >
+          <Package size={18} className={isInAssemblies ? "text-[#F5C518]" : ""} />
+          {isInAssemblies && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
         </button>
         <button
           onClick={() => navigate("settings")}

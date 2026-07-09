@@ -36,6 +36,13 @@
       "when": 1783484994471,
       "tag": "0004_blue_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1783559791164,
+      "tag": "0005_lucky_violations",
+      "breakpoints": true
     }
   ]
 }
