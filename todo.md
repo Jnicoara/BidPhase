@@ -649,3 +649,12 @@
 - [x] Run calculator: include EGC in billable wire length — conduitWireBillable now adds EGC footage; output shows breakdown (incl. X ft EGC)
 - [x] Restore yellow Export button with dropdown: Export as CSV (Excel-compatible) and Export as PDF (print dialog) options
 - [x] TypeScript: 0 errors
+
+## v5.61 — PDF Performance Sprint
+
+- [x] Bitmap cache: renderPageBitmap() renders pages via raw pdfjs-dist OffscreenCanvas and stores ImageBitmap per page, keyed by pdfHash+page
+- [x] Prefetch ±2 adjacent pages in background after each page render (staggered 50ms apart to avoid blocking main thread)
+- [x] pdfDocRef stores raw pdfjs document on PDF load for bitmap rendering
+- [x] Crosshair-only redraw: snapshot canvas after full redraw; on mouse move only restore snapshot + draw crosshair lines (no full run/pin redraw on every mouse move)
+- [x] Snapshot invalidation: re-captured whenever runs, pins, or page change so crosshair always restores to correct state
+- [x] TypeScript: 0 errors

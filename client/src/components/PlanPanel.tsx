@@ -67,6 +67,50 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
+// ── Bitmap cache helpers ──────────────────────────────────────────────────────
+// Keyed by `${pdfHash}:${pageNumber}` — survives page navigation within the same PDF
+const globalBitmapCache = new Map<string, ImageBitmap>();
+let globalPdfDoc: import("pdfjs-dist").PDFDocumentProxy | null = null;
+let globalPdfHash: string | null = null;
+
+async function renderPageBitmap(
+  pageNum: number,
+  scale: number,
+  pdfHash: string
+): Promise<ImageBitmap | null> {
+  const cacheKey = `${pdfHash}:${pageNum}`;
+  if (globalBitmapCache.has(cacheKey)) return globalBitmapCache.get(cacheKey)!;
+  if (!globalPdfDoc) return null;
+  try {
+    const page = await globalPdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
+    const offscreen = new OffscreenCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    const ctx = offscreen.getContext("2d")!;
+    // pdfjs RenderParameters requires `canvas` (the DOM canvas) alongside `canvasContext`.
+    // For OffscreenCanvas we pass null for canvas and cast ctx to satisfy the type.
+    await page.render({
+      canvasContext: ctx as unknown as CanvasRenderingContext2D,
+      canvas: null as unknown as HTMLCanvasElement,
+      viewport,
+    }).promise;
+    const bitmap = await createImageBitmap(offscreen);
+    globalBitmapCache.set(cacheKey, bitmap);
+    return bitmap;
+  } catch {
+    return null;
+  }
+}
+
+function clearBitmapCache(pdfHash?: string) {
+  if (pdfHash) {
+    Array.from(globalBitmapCache.keys()).forEach((key) => {
+      if (key.startsWith(`${pdfHash}:`)) globalBitmapCache.delete(key);
+    });
+  } else {
+    globalBitmapCache.clear();
+  }
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure" | "count" | "drag-scale" | "drag-run";
 
@@ -499,6 +543,8 @@ export default function PlanPanel({
   const [savedColors, setSavedColors] = useLocalStorage<string[]>("bp_saved_colors", []);
 
   // ── Refs ───────────────────────────────────────────────────────────────────
+  // pdfDocRef: holds the raw pdfjs document for bitmap cache rendering
+  const pdfDocRef = useRef<import("pdfjs-dist").PDFDocumentProxy | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);   // fixed-size overflow:hidden viewport
   const scrollAreaRef = viewportRef;                  // alias kept for legacy code
@@ -1141,9 +1187,73 @@ export default function PlanPanel({
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
       ctx.restore();
     }
-  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, crosshair, activeRunColor]);
+  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, activeRunColor]);
 
-  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady, crosshair]);
+  // Full redraw when runs/pins/page change (NOT on every crosshair mouse move)
+  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
+
+  // Crosshair-only redraw: restore canvas snapshot then draw crosshair lines.
+  // This avoids re-rendering all runs/pins on every mouse move.
+  const canvasSnapshotRef = useRef<ImageData | null>(null);
+  // Capture a snapshot after a full redraw so crosshair can restore it
+  // Re-capture whenever runs, pins, or page change (same deps as drawCanvas + pageReady)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !pageReady) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    // Small delay so drawCanvas has finished painting
+    const id = setTimeout(() => {
+      try {
+        canvasSnapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      } catch {
+        canvasSnapshotRef.current = null;
+      }
+    }, 32); // slightly longer than drawCanvas's own 16ms settle
+    return () => clearTimeout(id);
+  }, [currentRuns, currentPins, allPagePins, pageReady, displayZoom]);
+
+  // When crosshair changes, restore snapshot + draw crosshair lines only
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    if (!crosshair) {
+      // No crosshair — restore clean snapshot if available
+      if (canvasSnapshotRef.current) {
+        ctx.putImageData(canvasSnapshotRef.current, 0, 0);
+      }
+      return;
+    }
+    // Restore snapshot first (removes previous crosshair lines)
+    if (canvasSnapshotRef.current) {
+      ctx.putImageData(canvasSnapshotRef.current, 0, 0);
+    }
+    // Draw crosshair lines
+    const s = pageSizeRef.current;
+    if (!s || s.w === 0) return;
+    const dz = displayZoomRef.current || 0.40;
+    const S = RENDER_BASE_ZOOM / dz;
+    const x = crosshair.x * s.w;
+    const y = crosshair.y * s.h;
+    const col = activeRunColor || "#FFD700";
+    const r = parseInt(col.slice(1, 3), 16);
+    const g = parseInt(col.slice(3, 5), 16);
+    const b = parseInt(col.slice(5, 7), 16);
+    ctx.save();
+    ctx.strokeStyle = `rgba(0,0,0,0.45)`;
+    ctx.lineWidth = 3 * S;
+    ctx.setLineDash([8 * S, 6 * S]);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    ctx.strokeStyle = `rgba(${r},${g},${b},1)`;
+    ctx.lineWidth = 1 * S;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    ctx.restore();
+  }, [crosshair, activeRunColor]);
+
   // Clear crosshair guide whenever mode returns to idle
   useEffect(() => { if (mode === "none") setCrosshair(null); }, [mode]);
 
@@ -2709,10 +2819,15 @@ export default function PlanPanel({
               <Document
                 key={`${pdfHash || "default"}-${pdfLoadId}`}
                 file={pdfFile}
-                onLoadSuccess={({ numPages: n }) => {
+                onLoadSuccess={(doc) => {
+                  const n = doc.numPages;
                   setNumPages(n);
                   pageSizeRef.current = null;
                   setPageReady(false);
+                  // Store raw pdfjs document for bitmap cache
+                  pdfDocRef.current = doc as unknown as import("pdfjs-dist").PDFDocumentProxy;
+                  globalPdfDoc = pdfDocRef.current;
+                  globalPdfHash = pdfHash;
                 }}
                 loading={
                   <div className="flex items-center justify-center p-8 text-muted-foreground text-sm">
@@ -2725,9 +2840,32 @@ export default function PlanPanel({
                   scale={BASE_DPI * RENDER_BASE_ZOOM}
                   renderAnnotationLayer={false}
                   renderTextLayer={false}
-                  onRenderSuccess={(page) =>
-                    onPageRenderSuccess({ width: page.width, height: page.height })
-                  }
+                  onRenderSuccess={(page) => {
+                    onPageRenderSuccess({ width: page.width, height: page.height });
+                    // After react-pdf renders the current page, kick off background
+                    // prefetch of adjacent pages (±2) so navigation is instant.
+                    if (pdfHash && pdfDocRef.current) {
+                      const scale = BASE_DPI * RENDER_BASE_ZOOM;
+                      const hash = pdfHash;
+                      const total = numPages;
+                      // Prefetch pages: current (cache it), then ±1, ±2
+                      const pagesToPrefetch = [
+                        currentPage,
+                        currentPage + 1,
+                        currentPage - 1,
+                        currentPage + 2,
+                        currentPage - 2,
+                      ].filter((p) => p >= 1 && p <= total);
+                      // Run prefetches sequentially with low priority (setTimeout 0)
+                      let delay = 0;
+                      pagesToPrefetch.forEach((p) => {
+                        setTimeout(() => {
+                          renderPageBitmap(p, scale, hash);
+                        }, delay);
+                        delay += 50; // stagger by 50ms to avoid blocking the main thread
+                      });
+                    }
+                  }}
                 />
               </Document>
 
