@@ -3142,56 +3142,58 @@ export default function PlanPanel({
           </div>
         )}
 
-        {/* Smooth overlay cursor — pointer-events:none div that tracks mouse, GPU-composited, zero lag */}
-        {mousePos && activeCursorColor && !isPanning && (
-          <div
-            className="absolute pointer-events-none z-[50]"
-            style={{
-              left: mousePos.x,
-              top: mousePos.y,
-              transform: "translate(-50%, -50%)",
-              willChange: "transform",
-            }}
-          >
-            {/* Dot */}
-            <div
-              className="absolute rounded-full"
-              style={{
-                width: 10,
-                height: 10,
-                left: -5,
-                top: -5,
-                backgroundColor: activeCursorColor,
-                boxShadow: "0 0 0 1.5px rgba(0,0,0,0.5)",
-              }}
-            />
-            {/* Horizontal hairline */}
-            <div
-              className="absolute"
-              style={{
-                width: 20,
-                height: 1,
-                left: -10,
-                top: -0.5,
-                backgroundColor: activeCursorColor,
-                opacity: 0.7,
-              }}
-            />
-            {/* Vertical hairline */}
-            <div
-              className="absolute"
-              style={{
-                width: 1,
-                height: 20,
-                left: -0.5,
-                top: -10,
-                backgroundColor: activeCursorColor,
-                opacity: 0.7,
-              }}
-            />
-          </div>
-        )}
       </div>
+
+      {/* Smooth overlay cursor — pointer-events:none div that tracks mouse, GPU-composited, zero lag */}
+      {/* Positioned relative to the outer panel div (same element mousePos is computed from) */}
+      {mousePos && activeCursorColor && !isPanning && (
+        <div
+          className="absolute pointer-events-none z-[60]"
+          style={{
+            left: mousePos.x,
+            top: mousePos.y,
+            transform: "translate(-50%, -50%)",
+            willChange: "transform",
+          }}
+        >
+          {/* Dot */}
+          <div
+            className="absolute rounded-full"
+            style={{
+              width: 10,
+              height: 10,
+              left: -5,
+              top: -5,
+              backgroundColor: activeCursorColor,
+              boxShadow: "0 0 0 1.5px rgba(0,0,0,0.5)",
+            }}
+          />
+          {/* Horizontal hairline */}
+          <div
+            className="absolute"
+            style={{
+              width: 20,
+              height: 1,
+              left: -10,
+              top: -0.5,
+              backgroundColor: activeCursorColor,
+              opacity: 0.7,
+            }}
+          />
+          {/* Vertical hairline */}
+          <div
+            className="absolute"
+            style={{
+              width: 1,
+              height: 20,
+              left: -0.5,
+              top: -10,
+              backgroundColor: activeCursorColor,
+              opacity: 0.7,
+            }}
+          />
+        </div>
+      )}
 
       {/* ── Right-click context menu ─────────────────────────────────────────── */}
 
