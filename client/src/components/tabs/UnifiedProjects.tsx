@@ -1939,6 +1939,9 @@ function CivilEditor({
   // even if the component re-renders between selection and data arrival.
   const [pendingAssemblyId, setPendingAssemblyId] = useState<number | null>(null);
   const pendingTargetSessionRef = useRef<string | null>(null);
+  // Always-fresh ref to the latest civil state + runs — avoids stale closures in async effects
+  const latestStateRef = useRef<{ s: typeof s; runs: RunItem[] }>({ s, runs });
+  useEffect(() => { latestStateRef.current = { s, runs }; });
   const { data: pendingAssemblyDetail } = trpc.masterAssemblies.get.useQuery(
     { id: pendingAssemblyId ?? 0 },
     { enabled: pendingAssemblyId != null, staleTime: 0, gcTime: 0 }
@@ -1960,8 +1963,9 @@ function CivilEditor({
       masterMaterialCost: typeof it.masterMaterialCost === "string" ? parseFloat(it.masterMaterialCost) : Number(it.masterMaterialCost ?? 0),
       masterLaborHours: typeof it.masterLaborHours === "string" ? parseFloat(it.masterLaborHours) : Number(it.masterLaborHours ?? 0),
     }));
-    // Apply to the target session — read the latest sessions from the ref to avoid stale closure
-    const latestSessions: CountSession[] = s.countSessions ?? [];
+    // Apply to the target session — read the latest state from the ref to avoid stale closure
+    const { s: freshS, runs: freshRuns } = latestStateRef.current;
+    const latestSessions: CountSession[] = freshS.countSessions ?? [];
     const updatedSessions = latestSessions.map((cs) =>
       cs.id === targetSessionId
         ? {
@@ -1973,7 +1977,8 @@ function CivilEditor({
           }
         : cs
     );
-    setCivilState({ ...s, runs, countSessions: updatedSessions, activeCountSessionId });
+    const freshActiveId = freshS.activeCountSessionId;
+    setCivilState({ ...freshS, runs: freshRuns, countSessions: updatedSessions, activeCountSessionId: freshActiveId });
     // Clear pending state after applying
     pendingTargetSessionRef.current = null;
     setPendingAssemblyId(null);
@@ -2063,16 +2068,21 @@ function CivilEditor({
       toast.error(`"${cs.name}" has no pins yet — drop pins first.`);
       return;
     }
-    const existing = s.savedMaterialRows ?? [];
+    // Always read fresh state from the ref to avoid stale closure issues
+    const { s: freshS, runs: freshRuns } = latestStateRef.current;
+    const freshSessions: CountSession[] = freshS.countSessions ?? [];
+    // Find the freshest version of this session (it may have been updated since the callback was created)
+    const freshCs = freshSessions.find((x) => x.id === cs.id) ?? cs;
+    const existing = freshS.savedMaterialRows ?? [];
     const now = Date.now();
     let newRows: SavedMaterialRow[];
-    if (cs.assemblyId && cs.assemblyItems && cs.assemblyItems.length > 0) {
+    if (freshCs.assemblyId && freshCs.assemblyItems && freshCs.assemblyItems.length > 0) {
       // Assembly session: expand into one row per assembly item × number of pins
-      newRows = cs.assemblyItems.map((item, idx) => ({
-        id: `smr-${now.toString(36)}-${cs.id}-${idx}`,
-        sessionId: cs.id,
+      newRows = freshCs.assemblyItems.map((item, idx) => ({
+        id: `smr-${now.toString(36)}-${freshCs.id}-${idx}`,
+        sessionId: freshCs.id,
         description: item.description,
-        qty: parseFloat((item.qty * cs.pins.length).toFixed(4)),
+        qty: parseFloat((item.qty * freshCs.pins.length).toFixed(4)),
         unitCost: item.masterMaterialCost,
         unit: item.unit || "EA",
         savedAt: now,
@@ -2080,22 +2090,22 @@ function CivilEditor({
     } else {
       // Standard session: single row
       newRows = [{
-        id: `smr-${now.toString(36)}-${cs.id}`,
-        sessionId: cs.id,
-        description: cs.name,
-        qty: cs.pins.length,
-        unitCost: cs.unitCost ?? 0,
+        id: `smr-${now.toString(36)}-${freshCs.id}`,
+        sessionId: freshCs.id,
+        description: freshCs.name,
+        qty: freshCs.pins.length,
+        unitCost: freshCs.unitCost ?? 0,
         unit: "EA",
         savedAt: now,
       }];
     }
-    setCivilState({ ...s, runs, countSessions, activeCountSessionId, savedMaterialRows: [...existing, ...newRows] });
-    if (cs.assemblyId) {
-      toast.success(`"${cs.assemblyName ?? cs.name}" ×${cs.pins.length} expanded into ${newRows.length} line item${newRows.length !== 1 ? "s" : ""} in Labor & Material.`);
+    setCivilState({ ...freshS, runs: freshRuns, countSessions: freshSessions, activeCountSessionId: freshS.activeCountSessionId, savedMaterialRows: [...existing, ...newRows] });
+    if (freshCs.assemblyId) {
+      toast.success(`"${freshCs.assemblyName ?? freshCs.name}" ×${freshCs.pins.length} expanded into ${newRows.length} line item${newRows.length !== 1 ? "s" : ""} in Labor & Material.`);
     } else {
-      toast.success(`"${cs.name}" (${cs.pins.length} EA) saved to Labor & Material.`);
+      toast.success(`"${freshCs.name}" (${freshCs.pins.length} EA) saved to Labor & Material.`);
     }
-  }, [s, runs, countSessions, activeCountSessionId, setCivilState]);
+  }, [setCivilState]);
 
   const handleAddCountSessionFromCatalog = useCallback((item: CatalogItem | null) => {
     if (!item) return;

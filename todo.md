@@ -658,3 +658,9 @@
 - [x] Crosshair-only redraw: snapshot canvas after full redraw; on mouse move only restore snapshot + draw crosshair lines (no full run/pin redraw on every mouse move)
 - [x] Snapshot invalidation: re-captured whenever runs, pins, or page change so crosshair always restores to correct state
 - [x] TypeScript: 0 errors
+
+## v5.63 — Assembly Push-Through Fix
+- [x] Root cause: useEffect and handleSaveCountToLM both read from stale `s` closure — overwrites latest state with old snapshot
+- [x] Fix: added latestStateRef (always-fresh ref updated every render) — both the assembly-link useEffect and handleSaveCountToLM now read from latestStateRef.current instead of the stale closure
+- [x] handleSaveCountToLM now re-fetches the freshest version of the session by ID before expanding assembly items, so pins dropped after assembly selection are always included
+- [x] TypeScript: 0 errors
