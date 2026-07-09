@@ -987,7 +987,7 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
               Reload Master Catalog?
             </DialogTitle>
             <DialogDescription>
-              This will <strong>replace your entire material database</strong> with the 1,021-item master catalog.
+              This will <strong>replace your entire material database</strong> with the {CATALOG.length.toLocaleString()}-item master catalog.
               Any custom prices (User_Price) and Last_Updated dates you have saved will be permanently lost.
             </DialogDescription>
           </DialogHeader>

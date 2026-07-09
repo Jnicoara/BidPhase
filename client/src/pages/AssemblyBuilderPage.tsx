@@ -81,12 +81,13 @@ function AssemblyCard({
     onSuccess: () => { onRefresh(); setEditingName(false); },
     onError: (e) => toast.error(e.message),
   });
+  const [addingInProgress, setAddingInProgress] = useState(false);
   const addItem = trpc.masterAssemblies.addItem.useMutation({
-    onSuccess: () => { refetchDetail(); setAddingItem(false); setItemSearch(""); },
-    onError: (e) => toast.error(e.message),
+    onSuccess: () => { refetchDetail(); setAddingInProgress(false); },
+    onError: (e) => { toast.error(e.message); setAddingInProgress(false); },
   });
   const createMasterItem = trpc.masterItems.create.useMutation({
-    onError: (e) => toast.error(`Failed to import item: ${e.message}`),
+    onError: (e) => { toast.error(`Failed to import item: ${e.message}`); setAddingInProgress(false); },
   });
   const removeItem = trpc.masterAssemblies.removeItem.useMutation({
     onSuccess: () => refetchDetail(),
@@ -300,8 +301,14 @@ function AssemblyCard({
                   return (
                     <button
                       key={result.id}
-                      className="w-full text-left px-3 py-2 hover:bg-muted/40 transition-colors"
+                      disabled={addingInProgress}
+                      className="w-full text-left px-3 py-2 hover:bg-muted/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       onClick={async () => {
+                        if (addingInProgress) return;
+                        setAddingInProgress(true);
+                        // Close the search panel immediately for snappy UX
+                        setAddingItem(false);
+                        setItemSearch("");
                         if (isDb && dbItem) {
                           addItem.mutate({ assemblyId: assembly.id, masterItemId: dbItem.id, qty: 1 });
                         } else if (catItem) {
@@ -318,10 +325,14 @@ function AssemblyCard({
                             if (created && typeof created === "object" && "id" in created) {
                               addItem.mutate({ assemblyId: assembly.id, masterItemId: (created as { id: number }).id, qty: 1 });
                               toast.success(`"${catItem.description}" imported to your Materials DB and added.`);
+                            } else {
+                              setAddingInProgress(false);
                             }
                           } catch {
-                            // error already shown by createMasterItem.onError
+                            setAddingInProgress(false);
                           }
+                        } else {
+                          setAddingInProgress(false);
                         }
                       }}
                     >
