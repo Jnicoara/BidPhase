@@ -666,3 +666,13 @@
 - [x] Viewport cursor: grab off-page at all times, grabbing when panning; canvas cursor:none in active tool mode
 - [x] Page navigation (goToPage) now calls zoomReset() so clicking any page chip or arrow re-centers at 40% zoom
 - [x] TypeScript: 0 errors
+## v5.71 — Estimating Defaults to 0, Zoom Glitch Fix, Instant Page Load
+- [x] Crosshair canvas size synced inside drawCanvas — prevents stale canvas dimensions after zoom causing crosshair to draw at wrong scale
+- [x] bitmapCanvasRef added: displays cached bitmap instantly on page navigation (z-index 1, behind overlay canvas); eliminates blank-page flash when switching pages
+- [x] onRenderSuccess caches current page to bitmapCanvas and prefetches adjacent pages
+- [x] Instant bitmap display useEffect: draws cached bitmap to bitmapCanvas immediately when currentPage changes
+- [x] All estimating input defaults changed to 0: conduitWasteFactor, wireWasteFactor, wirewasteFactor, makeupAllowance, serviceLoop, numTerminations, wireTermMakeup, numPullPoints
+- [x] calcWire, calcConduitBillable, calcConduitWire function default parameters all changed to 0
+- [x] All ?? 10 fallback defaults in run calculations changed to ?? 0
+- [x] handlePush new run defaults changed to 0 for all estimating fields
+- [x] TypeScript: 0 errors

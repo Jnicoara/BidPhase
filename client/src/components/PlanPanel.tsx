@@ -549,6 +549,9 @@ export default function PlanPanel({
   // Dedicated crosshair canvas — sits on top of main canvas, pointer-events:none.
   // Crosshair is drawn here via RAF so the main canvas is never touched on mouse move.
   const crosshairCanvasRef = useRef<HTMLCanvasElement>(null);
+  const bitmapCanvasRef = useRef<HTMLCanvasElement>(null);
+  // Track whether the current page is already showing from the bitmap cache (for instant nav)
+  const bitmapPageRef = useRef<string>(""); // "pdfHash:pageNum" of what's currently drawn
   const crosshairRafRef = useRef<number | null>(null);
   const crosshairPosRef = useRef<{ x: number; y: number } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);   // fixed-size overflow:hidden viewport
@@ -672,6 +675,31 @@ export default function PlanPanel({
     modeRef.current = "none";
   }, [currentPage]);
 
+  // ── Instant page display from bitmap cache ────────────────────────────────
+  // When navigating to a page that's already in the bitmap cache, draw it immediately
+  // to the bitmapCanvas so the user sees the page without waiting for react-pdf's <Page>
+  // to re-render. The <Page> component still renders in the background to populate pageSizeRef
+  // (needed for overlay canvas coordinates), but the visual is instant.
+  useEffect(() => {
+    if (!pdfHash || !currentPage) return;
+    const cacheKey = `${pdfHash}:${currentPage}`;
+    if (bitmapPageRef.current === cacheKey) return; // already showing this page
+    const bitmap = globalBitmapCache.get(cacheKey);
+    const bc = bitmapCanvasRef.current;
+    if (!bitmap || !bc) return;
+    bc.width = bitmap.width;
+    bc.height = bitmap.height;
+    bc.style.width = `${bitmap.width}px`;
+    bc.style.height = `${bitmap.height}px`;
+    const ctx = bc.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(bitmap, 0, 0);
+    bitmapPageRef.current = cacheKey;
+    // Immediately set pageSizeRef so overlay canvas can draw without waiting for react-pdf
+    pageSizeRef.current = { w: bitmap.width, h: bitmap.height };
+    setPageReady(true);
+  }, [currentPage, pdfHash]);
+
   // ── NormPoint → canvas pixel coords (single-page: pageIndex always 0) ─────
   const normToCanvas = useCallback(
     (pt: NormPoint): { x: number; y: number } | null => {
@@ -739,6 +767,15 @@ export default function PlanPanel({
     canvas.height = s.h;
     canvas.style.width = `${s.w}px`;
     canvas.style.height = `${s.h}px`;
+
+    // Keep crosshair canvas in sync with main canvas at all times (zoom changes resize main canvas)
+    const cc = crosshairCanvasRef.current;
+    if (cc && (cc.width !== s.w || cc.height !== s.h)) {
+      cc.width = s.w;
+      cc.height = s.h;
+      cc.style.width = `${s.w}px`;
+      cc.style.height = `${s.h}px`;
+    }
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -2821,33 +2858,59 @@ export default function PlanPanel({
                   renderTextLayer={false}
                   onRenderSuccess={(page) => {
                     onPageRenderSuccess({ width: page.width, height: page.height });
-                    // After react-pdf renders the current page, kick off background
-                    // prefetch of adjacent pages (±2) so navigation is instant.
+                    // After react-pdf renders the current page:
+                    // 1. Render it to the bitmapCanvas and cache it for instant future navigation
+                    // 2. Kick off background prefetch of adjacent pages (±2)
                     if (pdfHash && pdfDocRef.current) {
                       const scale = BASE_DPI * RENDER_BASE_ZOOM;
                       const hash = pdfHash;
                       const total = numPages;
-                      // Prefetch pages: current (cache it), then ±1, ±2
+                      const cacheKey = `${hash}:${currentPage}`;
+                      // Render current page to bitmap cache + draw to bitmapCanvas
+                      renderPageBitmap(currentPage, scale, hash).then((bitmap) => {
+                        if (!bitmap) return;
+                        const bc = bitmapCanvasRef.current;
+                        if (bc && bitmapPageRef.current !== cacheKey) {
+                          bc.width = bitmap.width;
+                          bc.height = bitmap.height;
+                          bc.style.width = `${bitmap.width}px`;
+                          bc.style.height = `${bitmap.height}px`;
+                          const ctx = bc.getContext("2d");
+                          if (ctx) ctx.drawImage(bitmap, 0, 0);
+                          bitmapPageRef.current = cacheKey;
+                        }
+                      });
+                      // Prefetch adjacent pages: ±1, ±2
                       const pagesToPrefetch = [
-                        currentPage,
                         currentPage + 1,
                         currentPage - 1,
                         currentPage + 2,
                         currentPage - 2,
                       ].filter((p) => p >= 1 && p <= total);
-                      // Run prefetches sequentially with low priority (setTimeout 0)
-                      let delay = 0;
+                      let delay = 50;
                       pagesToPrefetch.forEach((p) => {
                         setTimeout(() => {
                           renderPageBitmap(p, scale, hash);
                         }, delay);
-                        delay += 50; // stagger by 50ms to avoid blocking the main thread
+                        delay += 50;
                       });
                     }
                   }}
                 />
               </Document>
 
+              {/* Bitmap canvas — displays cached PDF page bitmap for instant navigation */}
+              <canvas
+                ref={bitmapCanvasRef}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  pointerEvents: "none",
+                  zIndex: 1,
+                  display: "block",
+                }}
+              />
               {/* Overlay canvas — sits directly on top of the PDF page */}
               {pageReady && (
                 <canvas

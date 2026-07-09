@@ -222,10 +222,10 @@ function defaultFittings(): FittingCounts {
 function calcWire(
   feet: number,
   conductors: number,
-  makeupAllowance = 2,
-  serviceLoop = 3,
-  numTerminations = 2,
-  wirewasteFactor = 10,
+  makeupAllowance = 0,
+  serviceLoop = 0,
+  numTerminations = 0,
+  wirewasteFactor = 0,
 ) {
   const netLength = feet + makeupAllowance * numTerminations + serviceLoop;
   return parseFloat((netLength * (1 + wirewasteFactor / 100)).toFixed(1));
@@ -235,15 +235,15 @@ function calcWire(
 // Total Billable Conduit = feet × (1 + conduitWasteFactor/100)
 // Net Wire Length = feet + (wireTermMakeup × numPullPoints)
 // Total Billable Wire (per conductor) = Net Wire Length × (1 + wireWasteFactor/100)
-function calcConduitBillable(feet: number, conduitWasteFactor = 10) {
+function calcConduitBillable(feet: number, conduitWasteFactor = 0) {
   return parseFloat((feet * (1 + conduitWasteFactor / 100)).toFixed(1));
 }
 function calcConduitWire(
   feet: number,
   conductors: number,
-  wireTermMakeup = 2,
-  numPullPoints = 2,
-  wireWasteFactor = 10,
+  wireTermMakeup = 0,
+  numPullPoints = 0,
+  wireWasteFactor = 0,
 ) {
   const netWireLength = feet + wireTermMakeup * numPullPoints;
   return parseFloat((netWireLength * (1 + wireWasteFactor / 100) * conductors).toFixed(1));
@@ -569,13 +569,13 @@ function RunCard({
   const makeupAllowance = run.makeupAllowance ?? 0;   // default 0 — user sets per-job
   const serviceLoop     = run.serviceLoop     ?? 0;   // default 0 — user sets per-job
   const numTerminations = run.numTerminations ?? 0;   // default 0 — user sets per-job
-  const wirewasteFactor = run.wirewasteFactor ?? 10;
+  const wirewasteFactor = run.wirewasteFactor ?? 0;   // default 0 — user sets per-job
   const wireNetLength   = run.feet + makeupAllowance * numTerminations + serviceLoop;
   const wireBillable    = calcWire(run.feet, run.conductors, makeupAllowance, serviceLoop, numTerminations, wirewasteFactor);
 
   // ── Conduit mode calculations ──
-  const conduitWasteFactor  = run.conduitWasteFactor ?? 10;
-  const wireWasteFactor     = run.wireWasteFactor    ?? 10;  // separate from conduit
+  const conduitWasteFactor  = run.conduitWasteFactor ?? 0;   // default 0 — user sets per-job
+  const wireWasteFactor     = run.wireWasteFactor    ?? 0;   // default 0 — user sets per-job
   const wireTermMakeup      = run.wireTermMakeup     ?? 0;   // default 0 — user sets per-job
   const numPullPoints       = run.numPullPoints      ?? 0;   // default 0 — user sets per-job
   const conduitBillable     = calcConduitBillable(run.feet, conduitWasteFactor);
@@ -1542,7 +1542,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
   for (const r of runs) {
     if ((r.runType ?? "conduit") === "wire") continue; // wire runs handled separately
     const key = `${r.conduitType ?? "EMT"} ${r.conduitSize}"`;
-    const billableFt = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10);
+    const billableFt = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0);
     const existing = conduitMap.get(key);
     if (existing) {
       existing.feet   += billableFt;
@@ -1569,7 +1569,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
         r.makeupAllowance ?? 0,
         r.serviceLoop ?? 0,
         r.numTerminations ?? 0,
-        r.wirewasteFactor ?? 10,
+        r.wirewasteFactor ?? 0,
       ) * r.conductors;
       const existing = wireMap.get(label);
       if (existing) {
@@ -1590,7 +1590,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
           r.feet, g.conductors,
           r.wireTermMakeup ?? 0,
           r.numPullPoints ?? 0,
-          r.wireWasteFactor ?? 10,
+          r.wireWasteFactor ?? 0,
         );
         const existing = wireMap.get(label);
         if (existing) {
@@ -1612,7 +1612,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
     const mat = (r.groundMaterial ?? "CU") as ConductorMaterial;
     const size = (r.groundSize ?? "12") as ConductorSize;
     const label = conductorLabel(mat, size) + " EGC";
-    const egcFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+    const egcFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
     const existing = egcMap.get(label);
     if (existing) {
       existing.feet += egcFt;
@@ -1647,24 +1647,24 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
   const totalFeet   = runs.reduce((a, r) => a + r.feet, 0);
   const totalSticks = runs.reduce((a, r) => {
     if ((r.runType ?? "conduit") === "wire") return a;
-    return a + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10));
+    return a + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0));
   }, 0);
   const totalWire   = runs.reduce((a, r) => {
     const isWireRun = (r.runType ?? "conduit") === "wire";
     let runWire: number;
     if (isWireRun) {
       // calcWire returns per-conductor footage — multiply by conductors for total
-      runWire = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 10) * r.conductors;
+      runWire = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 0) * r.conductors;
     } else {
       // Conduit runs: sum across conductor groups
       const groups = (r.conductorGroups && r.conductorGroups.length > 0)
         ? r.conductorGroups
         : [{ conductors: r.conductors, id: "grp-legacy" }];
-      runWire = r.conduitOnly ? 0 : groups.reduce((s, g) => s + calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10), 0);
+      runWire = r.conduitOnly ? 0 : groups.reduce((s, g) => s + calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0), 0);
     }
     // Add EGC footage when enabled (1 conductor, same waste factor as wire)
     if (!isWireRun && !r.conduitOnly && r.includeGround) {
-      runWire += calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+      runWire += calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
     }
     return a + runWire;
   }, 0);
@@ -1679,7 +1679,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       // Conduit cost
       const conduitCpf = getConduitPricePerFoot(r.conduitType ?? "EMT", r.conduitSize ?? "1/2", userMaterials);
       if (conduitCpf != null) {
-        const billable = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10);
+        const billable = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0);
         runCost += conduitCpf * billable;
       }
       // Wire cost (skip if conduit-only)
@@ -1693,7 +1693,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
           const wireSize = (wireTypeStr === "mc" || wireTypeStr === "nm") ? (r.conductorSize ?? "12") : g.conductorSize;
           const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, g.conductorMaterial, userMaterials, r.wireTypeId);
           if (wireCpf != null) {
-            const wireFt = calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+            const wireFt = calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
             runCost += wireCpf * wireFt;
           }
         }
@@ -1702,7 +1702,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
           // Use groundMaterial for EGC pricing (defaults to CU if not set)
           const groundCpf = getWirePricePerFoot("thhn", r.groundSize ?? "12", r.groundMaterial ?? "CU", userMaterials, undefined);
           if (groundCpf != null) {
-            const wireFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+            const wireFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
             runCost += groundCpf * wireFt;
           }
         }
@@ -1713,7 +1713,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       const wireSize = r.conductorSize ?? "12";
       const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
       if (wireCpf != null) {
-        const wireFt = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 10);
+        const wireFt = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 0);
         runCost += wireCpf * wireFt * r.conductors;
       }
     }
@@ -2221,15 +2221,15 @@ function CivilEditor({
           conductorSize: "12",
           fittings: defaultFittings(),
           // Jacketed / Romex defaults
-          makeupAllowance: 2,
-          serviceLoop: 3,
-          numTerminations: 2,
-          wirewasteFactor: 10,
+          makeupAllowance: 0,
+          serviceLoop: 0,
+          numTerminations: 0,
+          wirewasteFactor: 0,
           // Conduit defaults
-          conduitWasteFactor: 10,
-          wireTermMakeup: 2,
-          wireWasteFactor: 10,
-          numPullPoints: 2,
+          conduitWasteFactor: 0,
+          wireTermMakeup: 0,
+          wireWasteFactor: 0,
+          numPullPoints: 0,
           conduitOnly: false,
           feetFromPlan: true,
         };
@@ -2323,12 +2323,12 @@ function CivilEditor({
   // These are computed for potential future use in the header strip
   const totalWire = runs.reduce((acc, r) => {
     const isWireRun = (r.runType ?? "conduit") === "wire";
-    if (isWireRun) return acc + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 2, r.serviceLoop ?? 3, r.numTerminations ?? 2, r.wirewasteFactor ?? 10);
-    return acc + calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 2, r.numPullPoints ?? 2, r.wireWasteFactor ?? 10);
+    if (isWireRun) return acc + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 0);
+    return acc + calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
   }, 0);
   const totalSticks = runs.reduce((acc, r) => {
     if ((r.runType ?? "conduit") === "wire") return acc;
-    return acc + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 10));
+    return acc + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0));
   }, 0);
 
   return (
