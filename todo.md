@@ -585,3 +585,11 @@
 - [x] Unit Count app catalog syncs with Material Database (user DB rows appear in count search)
 - [x] Master catalog count in Material Database page updates dynamically when admin adds/removes items
 - [x] TypeScript: 0 errors
+
+## v5.52 — Unified Search Aliases + Unit Count Toolbar Styling
+- [x] Expanded ALIAS_MAP in smartSearch.ts with comprehensive trade slang: plug/outlet/receptacle/device, GFI/GFCI/ground fault, AFCI/arc fault, USB, spec grade, tamper resistant, weatherproof, 3-way/4-way/dimmer/fan switch, can/pot/wafer/downlight/troffer/strip/vapor tight, smoke/CO/combo detector, doorbell/chime/transformer, thermostat/stat, panel/loadcenter/breaker/CB, meter socket/base/can, disconnect/safety switch, conduit fittings, wire/cable types, boxes, strut/channel, and more
+- [x] Removed all duplicate ALIAS_MAP keys (52 duplicates removed)
+- [x] Unit Count toolbar Delete button now uses icon-only ghost style matching Runs toolbar Trash button
+- [x] Unit Count toolbar Clear Page button now uses text+icon ghost style with hover:text-destructive matching Runs toolbar Clear page button exactly
+- [x] Clear Page only shows when there is content on the page (same conditional as Runs toolbar)
+- [x] TypeScript: 0 errors

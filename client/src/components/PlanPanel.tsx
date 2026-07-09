@@ -2330,36 +2330,7 @@ export default function PlanPanel({
             >
               <Undo2 size={13} />
             </Button>
-            {/* Clear Page — clears ALL runs AND pins on current page (same as Runs toolbar) */}
-            <Button
-              size="sm"
-              className="h-7 text-xs px-2 shrink-0"
-              variant="ghost"
-              onClick={() => {
-                const runCount = currentRuns.length;
-                const pinCount = currentPins.length;
-                if (runCount === 0 && pinCount === 0) { toast.info("Nothing on this page to clear."); return; }
-                const doAll = () => {
-                  onClearPageAll?.(currentPage);
-                  toast.info(`Cleared page ${currentPage}.`);
-                };
-                if (runCount + pinCount >= 2) {
-                  setDeleteConfirm({
-                    count: runCount + pinCount,
-                    name: `all runs and pins on page ${currentPage}`,
-                    onConfirm: doAll,
-                  });
-                } else {
-                  doAll();
-                }
-              }}
-              disabled={!pdfFile}
-              title={`Clear all runs and pins on page ${currentPage}`}
-            >
-              <XCircle size={11} className="mr-1" />
-              Clear Page
-            </Button>
-            {/* Delete (trash) active session pins on this page */}
+            {/* Delete (trash) active session pins on this page — matches Runs toolbar Trash styling */}
             <Button
               size="icon"
               className="h-7 w-7 shrink-0"
@@ -2387,6 +2358,34 @@ export default function PlanPanel({
             >
               <Trash2 size={13} />
             </Button>
+            {/* Clear page — matches Runs toolbar styling exactly */}
+            {(currentRuns.length > 0 || currentPins.length > 0) && (
+              <Button
+                size="sm"
+                className="h-7 text-xs px-2 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                variant="ghost"
+                onClick={() => {
+                  const runCount = currentRuns.length;
+                  const pinCount = currentPins.length;
+                  const parts: string[] = [];
+                  if (runCount > 0) parts.push(`${runCount} run${runCount !== 1 ? "s" : ""}`);
+                  if (pinCount > 0) parts.push(`${pinCount} pin${pinCount !== 1 ? "s" : ""}`);
+                  setDeleteConfirm({
+                    count: runCount + pinCount,
+                    name: `all marks on page ${currentPage}${parts.length ? ` (${parts.join(" and ")})` : ""}`,
+                    onConfirm: () => {
+                      onClearPageAll?.(currentPage);
+                      toast.info(`Cleared page ${currentPage}.`);
+                    },
+                  });
+                }}
+                disabled={!pdfFile}
+                title={`Clear all runs and pins on page ${currentPage}`}
+              >
+                <Trash2 size={11} className="mr-1" />
+                Clear page
+              </Button>
+            )}
           </>
         )}
 
