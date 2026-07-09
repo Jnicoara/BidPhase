@@ -85,6 +85,9 @@ function AssemblyCard({
     onSuccess: () => { refetchDetail(); setAddingItem(false); setItemSearch(""); },
     onError: (e) => toast.error(e.message),
   });
+  const createMasterItem = trpc.masterItems.create.useMutation({
+    onError: (e) => toast.error(`Failed to import item: ${e.message}`),
+  });
   const removeItem = trpc.masterAssemblies.removeItem.useMutation({
     onSuccess: () => refetchDetail(),
     onError: (e) => toast.error(e.message),
@@ -298,12 +301,27 @@ function AssemblyCard({
                     <button
                       key={result.id}
                       className="w-full text-left px-3 py-2 hover:bg-muted/40 transition-colors"
-                      onClick={() => {
+                      onClick={async () => {
                         if (isDb && dbItem) {
                           addItem.mutate({ assemblyId: assembly.id, masterItemId: dbItem.id, qty: 1 });
                         } else if (catItem) {
-                          // Catalog item — add as manual entry with null masterItemId
-                          addItem.mutate({ assemblyId: assembly.id, masterItemId: null as unknown as number, qty: 1 });
+                          // Auto-import catalog item into master_items DB, then add to assembly
+                          try {
+                            const created = await createMasterItem.mutateAsync({
+                              description: catItem.description,
+                              unit: catItem.unit ?? "EA",
+                              category: catItem.category ?? null,
+                              itemCode: catItem.id ?? null,
+                              masterMaterialCost: 0,
+                              masterLaborHours: 0,
+                            });
+                            if (created && typeof created === "object" && "id" in created) {
+                              addItem.mutate({ assemblyId: assembly.id, masterItemId: (created as { id: number }).id, qty: 1 });
+                              toast.success(`"${catItem.description}" imported to your Materials DB and added.`);
+                            }
+                          } catch {
+                            // error already shown by createMasterItem.onError
+                          }
                         }
                       }}
                     >

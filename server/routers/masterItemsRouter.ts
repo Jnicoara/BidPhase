@@ -18,13 +18,13 @@ export const masterItemsRouter = router({
 
   create: protectedProcedure
     .input(z.object({
-      itemCode: z.string().max(128).optional(),
-      category: z.string().max(128).optional(),
+      itemCode: z.string().max(128).nullable().optional(),
+      category: z.string().max(128).nullable().optional(),
       description: z.string().min(1).max(512),
       unit: z.string().max(32).default("EA"),
       masterMaterialCost: z.number().min(0).default(0),
       masterLaborHours: z.number().min(0).default(0),
-      notes: z.string().max(2000).optional(),
+      notes: z.string().max(2000).nullable().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const result = await db.createMasterItem({

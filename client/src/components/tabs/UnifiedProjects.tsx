@@ -579,9 +579,13 @@ function RunCard({
   const wireTermMakeup      = run.wireTermMakeup     ?? 0;   // default 0 — user sets per-job
   const numPullPoints       = run.numPullPoints      ?? 0;   // default 0 — user sets per-job
   const conduitBillable     = calcConduitBillable(run.feet, conduitWasteFactor);
+  // For multi-circuit runs, sum wire footage across all conductor groups
+  const _activeGroups = (run.conductorGroups && run.conductorGroups.length > 0)
+    ? run.conductorGroups
+    : [{ conductors: run.conductors, conductorMaterial: run.conductorMaterial ?? "CU" as ConductorMaterial, conductorSize: run.conductorSize ?? "12" as ConductorSize, id: "grp-legacy" }];
   const conduitWireBillable = conduitOnly
     ? 0
-    : calcConduitWire(run.feet, run.conductors, wireTermMakeup, numPullPoints, wireWasteFactor);
+    : _activeGroups.reduce((sum, g) => sum + calcConduitWire(run.feet, g.conductors, wireTermMakeup, numPullPoints, wireWasteFactor), 0);
 
   // ── Conduit sizes filtered per conduit type ──
   // Real NEC trade sizes available for each conduit type
@@ -678,11 +682,27 @@ function RunCard({
     : null;
 
   const conduitMaterialCost = conduitCostPerFt != null ? conduitCostPerFt * conduitBillable : null;
-  // wireBillable (calcWire) returns per-conductor footage — multiply by conductors for total
-  // conduitWireBillable (calcConduitWire) already includes conductors — do NOT multiply again
-  const wireMaterialCost    = (!conduitOnly && wireCostPerFt != null)
-    ? wireCostPerFt * (isWire ? wireBillable * run.conductors : conduitWireBillable)
-    : null;
+  // Wire cost: for conduit mode, sum across all conductor groups (each group may have different size/material)
+  // wireCostPerFt above uses first group / scalar fallback for the compact price indicator
+  const wireMaterialCost = (() => {
+    if (conduitOnly) return null;
+    if (isWire) {
+      // Wire-only: single spec, multiply by conductors
+      return wireCostPerFt != null ? wireCostPerFt * wireBillable * run.conductors : null;
+    }
+    // Conduit mode: sum cost across all groups
+    let total = 0;
+    let hasAnyPrice = false;
+    for (const g of _activeGroups) {
+      const gSize = (wireTypeStr === "MC" || wireTypeStr === "NM") ? parseWireIdSize(run.wireTypeId) : g.conductorSize;
+      const gCpf = getWirePricePerFoot(wireTypeStr, gSize, g.conductorMaterial, userMaterials, run.wireTypeId);
+      if (gCpf != null) {
+        total += gCpf * calcConduitWire(run.feet, g.conductors, wireTermMakeup, numPullPoints, wireWasteFactor);
+        hasAnyPrice = true;
+      }
+    }
+    return hasAnyPrice ? total : null;
+  })();
   const totalMaterialCost   = (conduitMaterialCost ?? 0) + (wireMaterialCost ?? 0);
 
   const updateFitting = (key: FittingId, val: number) => {
@@ -786,28 +806,149 @@ function RunCard({
       {/* Run body */}
       <div className={cn("p-4 space-y-4", isCollapsed ? "hidden" : "")}>
 
-        {/* Measured Takeoff + Conductors */}
-        <div className={isWire ? "space-y-1.5" : "grid grid-cols-2 gap-3"}>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Measured Takeoff (ft)</Label>
-            <Input type="number" min={0} step={1}
-              value={run.feet === 0 ? "" : run.feet}
-              onChange={(e) => onUpdate(run.id, { feet: parseFloat(e.target.value) || 0 })}
-              placeholder="0"
-              className="h-8 font-mono text-sm bg-input border-border" />
-          </div>
-          {!isWire && (
-            <div className="space-y-1.5">
+        {/* Measured Takeoff */}
+        <div className="space-y-1.5">
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Measured Takeoff (ft)</Label>
+          <Input type="number" min={0} step={1}
+            value={run.feet === 0 ? "" : run.feet}
+            onChange={(e) => onUpdate(run.id, { feet: parseFloat(e.target.value) || 0 })}
+            placeholder="0"
+            className="h-8 font-mono text-sm bg-input border-border" />
+        </div>
+
+        {/* ── Multi-circuit conductor groups (conduit mode only) ── */}
+        {!isWire && (() => {
+          // Derive active groups: use conductorGroups if present and non-empty,
+          // otherwise synthesise one group from the legacy scalar fields.
+          const groups = (run.conductorGroups && run.conductorGroups.length > 0)
+            ? run.conductorGroups
+            : [{
+                id: "grp-legacy",
+                conductors: run.conductors,
+                conductorMaterial: run.conductorMaterial ?? "CU" as ConductorMaterial,
+                conductorSize: run.conductorSize ?? "12" as ConductorSize,
+              }];
+
+          const updateGroup = (gid: string, patch: Partial<typeof groups[0]>) => {
+            const next = groups.map((g) => g.id === gid ? { ...g, ...patch } : g);
+            // Also keep scalar fields in sync with the first group for backward compat
+            const first = next[0];
+            onUpdate(run.id, {
+              conductorGroups: next,
+              conductors: first.conductors,
+              conductorMaterial: first.conductorMaterial,
+              conductorSize: first.conductorSize,
+            });
+          };
+
+          const addGroup = () => {
+            const last = groups[groups.length - 1];
+            const newGroup = {
+              id: `grp-${Date.now().toString(36)}`,
+              conductors: last?.conductors ?? 2,
+              conductorMaterial: last?.conductorMaterial ?? "CU" as ConductorMaterial,
+              conductorSize: last?.conductorSize ?? "12" as ConductorSize,
+            };
+            const next = [...groups, newGroup];
+            const first = next[0];
+            onUpdate(run.id, {
+              conductorGroups: next,
+              conductors: first.conductors,
+              conductorMaterial: first.conductorMaterial,
+              conductorSize: first.conductorSize,
+            });
+          };
+
+          const removeGroup = (gid: string) => {
+            if (groups.length <= 1) return; // must keep at least one
+            const next = groups.filter((g) => g.id !== gid);
+            const first = next[0];
+            onUpdate(run.id, {
+              conductorGroups: next,
+              conductors: first.conductors,
+              conductorMaterial: first.conductorMaterial,
+              conductorSize: first.conductorSize,
+            });
+          };
+
+          return (
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Current Carrying Conductors</Label>
-                <span className="text-sm font-bold text-[#F5C518] font-mono">{run.conductors}</span>
+                <button
+                  onClick={addGroup}
+                  className="flex items-center gap-1 text-[10px] font-semibold text-[#F5C518] hover:text-[#F5C518]/80 transition-colors"
+                  title="Add another circuit to this conduit">
+                  <Plus size={11} /> Add Circuit
+                </button>
               </div>
-              <Slider min={1} max={12} step={1} value={[run.conductors]}
-                onValueChange={([v]) => onUpdate(run.id, { conductors: v })}
-                className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
+              {groups.map((g, gi) => (
+                <div key={g.id} className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2.5 space-y-2.5">
+                  {/* Group header: circuit label + remove button */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                      {groups.length > 1 ? `Circuit ${gi + 1}` : "Circuit"}
+                    </span>
+                    {groups.length > 1 && (
+                      <button
+                        onClick={() => removeGroup(g.id)}
+                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                        title="Remove this circuit">
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+                  {/* Conductor count slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] text-muted-foreground">Conductors</Label>
+                      <span className="text-sm font-bold text-[#F5C518] font-mono">{g.conductors}</span>
+                    </div>
+                    <Slider min={1} max={12} step={1} value={[g.conductors]}
+                      onValueChange={([v]) => updateGroup(g.id, { conductors: v })}
+                      className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
+                  </div>
+                  {/* Cu / Al material toggle */}
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Material</Label>
+                    <div className="flex gap-2">
+                      {CONDUCTOR_MATERIALS.map((cm) => (
+                        <button key={cm.id}
+                          onClick={() => updateGroup(g.id, { conductorMaterial: cm.id as ConductorMaterial })}
+                          className={cn(
+                            "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
+                            g.conductorMaterial === cm.id
+                              ? "bg-yellow-400 text-black border-yellow-400"
+                              : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                          )}>
+                          {cm.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Conductor size grid */}
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Size (AWG)</Label>
+                    <div className="grid grid-cols-5 gap-1">
+                      {CONDUCTOR_SIZES.map((sz) => (
+                        <button key={sz}
+                          onClick={() => updateGroup(g.id, { conductorSize: sz as ConductorSize })}
+                          className={cn(
+                            "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                            g.conductorSize === sz
+                              ? "bg-yellow-400 text-black border-yellow-400"
+                              : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                          )}>
+                          {sz}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* Equipment Grounding Conductor (EGC) — directly below Current Carrying Conductors */}
         {!isWire && (
@@ -968,45 +1109,7 @@ function RunCard({
               </button>
             </div>
 
-            {/* Wire type + conductor material/size — hidden in conduit-only mode */}
-            {!conduitOnly && (
-              <>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Material</Label>
-                  <div className="flex gap-2">
-                    {CONDUCTOR_MATERIALS.map((cm) => (
-                      <button key={cm.id}
-                        onClick={() => onUpdate(run.id, { conductorMaterial: cm.id as ConductorMaterial })}
-                        className={cn(
-                          "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
-                          (run.conductorMaterial ?? "CU") === cm.id
-                            ? "bg-yellow-400 text-black border-yellow-400"
-                            : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                        )}>
-                        {cm.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conductor Size (AWG)</Label>
-                  <div className="grid grid-cols-5 gap-1">
-                    {CONDUCTOR_SIZES.map((sz) => (
-                      <button key={sz}
-                        onClick={() => onUpdate(run.id, { conductorSize: sz as ConductorSize })}
-                        className={cn(
-                          "py-1 rounded text-[10px] font-mono font-medium border transition-all",
-                          (run.conductorSize ?? "12") === sz
-                            ? "bg-yellow-400 text-black border-yellow-400"
-                            : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                        )}>
-                        {sz}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
+            {/* Conductor material/size is now handled by the multi-circuit groups UI above */}
 
             {/* Conduit Estimating Inputs */}
             <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
@@ -1260,37 +1363,49 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
   type WireKey = string; // e.g. "#12 AWG Cu"
   const wireMap = new Map<WireKey, { label: string; qty: number; feet: number }>();
   for (const r of runs) {
-    if (r.conductors < 1) continue;
     const isWireRun = (r.runType ?? "conduit") === "wire";
-    const mat  = r.conductorMaterial ?? "CU";
-    const size = r.conductorSize ?? "12";
-    const label = conductorLabel(mat as ConductorMaterial, size as ConductorSize);
-    // Use per-run estimating parameters for accurate billable totals
-    let wireFt: number;
     if (isWireRun) {
-      // calcWire returns per-conductor footage — multiply by conductors for total
-      wireFt = calcWire(
+      // Wire-only runs use scalar fields (no multi-circuit support for wire-only mode)
+      if (r.conductors < 1) continue;
+      const mat  = r.conductorMaterial ?? "CU";
+      const size = r.conductorSize ?? "12";
+      const label = conductorLabel(mat as ConductorMaterial, size as ConductorSize);
+      const wireFt = calcWire(
         r.feet, r.conductors,
         r.makeupAllowance ?? 0,
         r.serviceLoop ?? 0,
         r.numTerminations ?? 0,
         r.wirewasteFactor ?? 10,
       ) * r.conductors;
+      const existing = wireMap.get(label);
+      if (existing) {
+        existing.feet += wireFt;
+        existing.qty  += r.conductors;
+      } else {
+        wireMap.set(label, { label, qty: r.conductors, feet: wireFt });
+      }
     } else {
-      // calcConduitWire already includes conductors
-      wireFt = calcConduitWire(
-        r.feet, r.conductors,
-        r.wireTermMakeup ?? 0,
-        r.numPullPoints ?? 0,
-        r.wireWasteFactor ?? 10,
-      );
-    }
-    const existing = wireMap.get(label);
-    if (existing) {
-      existing.feet += wireFt;
-      existing.qty  += r.conductors;
-    } else {
-      wireMap.set(label, { label, qty: r.conductors, feet: wireFt });
+      // Conduit runs: iterate conductor groups (or fall back to scalar)
+      const groups = (r.conductorGroups && r.conductorGroups.length > 0)
+        ? r.conductorGroups
+        : [{ conductors: r.conductors, conductorMaterial: r.conductorMaterial ?? "CU" as ConductorMaterial, conductorSize: r.conductorSize ?? "12" as ConductorSize, id: "grp-legacy" }];
+      for (const g of groups) {
+        if (g.conductors < 1) continue;
+        const label = conductorLabel(g.conductorMaterial, g.conductorSize);
+        const wireFt = calcConduitWire(
+          r.feet, g.conductors,
+          r.wireTermMakeup ?? 0,
+          r.numPullPoints ?? 0,
+          r.wireWasteFactor ?? 10,
+        );
+        const existing = wireMap.get(label);
+        if (existing) {
+          existing.feet += wireFt;
+          existing.qty  += g.conductors;
+        } else {
+          wireMap.set(label, { label, qty: g.conductors, feet: wireFt });
+        }
+      }
     }
   }
   const wireRows = Array.from(wireMap.entries()).sort(([a], [b]) => a.localeCompare(b));
@@ -1347,8 +1462,11 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       // calcWire returns per-conductor footage — multiply by conductors for total
       runWire = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 10) * r.conductors;
     } else {
-      // calcConduitWire already includes conductors
-      runWire = r.conduitOnly ? 0 : calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+      // Conduit runs: sum across conductor groups
+      const groups = (r.conductorGroups && r.conductorGroups.length > 0)
+        ? r.conductorGroups
+        : [{ conductors: r.conductors, id: "grp-legacy" }];
+      runWire = r.conduitOnly ? 0 : groups.reduce((s, g) => s + calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10), 0);
     }
     // Add EGC footage when enabled (1 conductor, same waste factor as wire)
     if (!isWireRun && !r.conduitOnly && r.includeGround) {
@@ -1373,12 +1491,17 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       // Wire cost (skip if conduit-only)
       if (!r.conduitOnly) {
         const wireTypeStr = r.wireTypeId ? r.wireTypeId.replace(/^wir-/, "") : "thhn";
-        const wireSize = r.conductorSize ?? "12";
-        const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
-        if (wireCpf != null) {
-          // calcConduitWire already multiplies by conductors internally — do NOT multiply again
-          const wireFt = calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
-          runCost += wireCpf * wireFt;
+        // Iterate conductor groups for accurate per-group pricing
+        const groups = (r.conductorGroups && r.conductorGroups.length > 0)
+          ? r.conductorGroups
+          : [{ conductors: r.conductors, conductorMaterial: r.conductorMaterial ?? "CU" as ConductorMaterial, conductorSize: r.conductorSize ?? "12" as ConductorSize, id: "grp-legacy" }];
+        for (const g of groups) {
+          const wireSize = (wireTypeStr === "mc" || wireTypeStr === "nm") ? (r.conductorSize ?? "12") : g.conductorSize;
+          const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, g.conductorMaterial, userMaterials, r.wireTypeId);
+          if (wireCpf != null) {
+            const wireFt = calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 10);
+            runCost += wireCpf * wireFt;
+          }
         }
         // Grounding conductor cost
         if (r.includeGround) {
@@ -1613,6 +1736,42 @@ function CivilEditor({
     staleTime: 60_000,
   });
 
+  // Fetch master assemblies for assembly-counting picker
+  const { data: masterAssemblies = [] } = trpc.masterAssemblies.list.useQuery(undefined, {
+    staleTime: 30_000,
+  });
+  // When an assembly is selected in the picker, fetch its items
+  const [pendingAssemblyId, setPendingAssemblyId] = useState<number | null>(null);
+  const { data: pendingAssemblyDetail } = trpc.masterAssemblies.get.useQuery(
+    { id: pendingAssemblyId! },
+    { enabled: pendingAssemblyId != null, staleTime: 30_000 }
+  );
+  // Assembly search filter state
+  const [assemblySearch, setAssemblySearch] = useState("");
+
+  // When assembly detail loads, apply it to the active count session
+  useEffect(() => {
+    if (!pendingAssemblyDetail || pendingAssemblyId == null) return;
+    const asm = pendingAssemblyDetail;
+    const items = (asm.items ?? []).map((it) => ({
+      description: it.description,
+      unit: it.unit,
+      qty: typeof it.qty === "string" ? parseFloat(it.qty) : Number(it.qty),
+      masterMaterialCost: typeof it.masterMaterialCost === "string" ? parseFloat(it.masterMaterialCost) : Number(it.masterMaterialCost),
+      masterLaborHours: typeof it.masterLaborHours === "string" ? parseFloat(it.masterLaborHours) : Number(it.masterLaborHours),
+    }));
+    const updated = countSessions.map((cs) =>
+      cs.id === activeCountSessionId
+        ? { ...cs, assemblyId: asm.id, assemblyName: asm.name, assemblyItems: items }
+        : cs
+    );
+    updateSessions(updated, activeCountSessionId);
+    setPendingAssemblyId(null);
+    setAssemblySearch("");
+    toast.success(`Assembly "${asm.name}" linked — each pin = 1 assembly instance.`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAssemblyDetail]);
+
   // ── Price sync dialog state ──────────────────────────────────────────────────
   // Shown when user edits a price in Unit Count that differs from the DB value
   const [priceSyncDialog, setPriceSyncDialog] = useState<{
@@ -1693,18 +1852,38 @@ function CivilEditor({
       toast.error(`"${cs.name}" has no pins yet — drop pins first.`);
       return;
     }
-    const newRow: SavedMaterialRow = {
-      id: `smr-${Date.now().toString(36)}-${cs.id}`,
-      sessionId: cs.id,
-      description: cs.name,
-      qty: cs.pins.length,
-      unitCost: cs.unitCost ?? 0,
-      unit: "EA",
-      savedAt: Date.now(),
-    };
     const existing = s.savedMaterialRows ?? [];
-    setCivilState({ ...s, runs, countSessions, activeCountSessionId, savedMaterialRows: [...existing, newRow] });
-    toast.success(`"${cs.name}" (${cs.pins.length} EA) saved to Labor & Material.`);
+    const now = Date.now();
+    let newRows: SavedMaterialRow[];
+    if (cs.assemblyId && cs.assemblyItems && cs.assemblyItems.length > 0) {
+      // Assembly session: expand into one row per assembly item × number of pins
+      newRows = cs.assemblyItems.map((item, idx) => ({
+        id: `smr-${now.toString(36)}-${cs.id}-${idx}`,
+        sessionId: cs.id,
+        description: item.description,
+        qty: parseFloat((item.qty * cs.pins.length).toFixed(4)),
+        unitCost: item.masterMaterialCost,
+        unit: item.unit || "EA",
+        savedAt: now,
+      }));
+    } else {
+      // Standard session: single row
+      newRows = [{
+        id: `smr-${now.toString(36)}-${cs.id}`,
+        sessionId: cs.id,
+        description: cs.name,
+        qty: cs.pins.length,
+        unitCost: cs.unitCost ?? 0,
+        unit: "EA",
+        savedAt: now,
+      }];
+    }
+    setCivilState({ ...s, runs, countSessions, activeCountSessionId, savedMaterialRows: [...existing, ...newRows] });
+    if (cs.assemblyId) {
+      toast.success(`"${cs.assemblyName ?? cs.name}" ×${cs.pins.length} expanded into ${newRows.length} line item${newRows.length !== 1 ? "s" : ""} in Labor & Material.`);
+    } else {
+      toast.success(`"${cs.name}" (${cs.pins.length} EA) saved to Labor & Material.`);
+    }
   }, [s, runs, countSessions, activeCountSessionId, setCivilState]);
 
   const handleAddCountSessionFromCatalog = useCallback((item: CatalogItem | null) => {
@@ -2221,54 +2400,65 @@ function CivilEditor({
                                       onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }}
                                     >{cs.name}</span>
                                   )}
-                                  {/* Inline price-per-item field */}
-                                  <div
-                                    className="flex items-center gap-0.5 shrink-0"
-                                    onClick={(e) => e.stopPropagation()}
-                                    title="Custom price per item — blur to sync to Material Database"
-                                  >
-                                    <span className="text-[9px] text-muted-foreground font-mono">$</span>
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      step={0.01}
-                                      value={cs.unitCost ?? ""}
-                                      onChange={(e) => {
-                                        const val = parseFloat(e.target.value);
-                                        updateSessions(
-                                          countSessions.map((s2) =>
-                                            s2.id === cs.id
-                                              ? { ...s2, unitCost: isNaN(val) ? undefined : val, priceMode: "per-unit" as const }
-                                              : s2
-                                          )
-                                        );
-                                      }}
-                                      onBlur={(e) => {
-                                        const val = parseFloat(e.target.value);
-                                        if (isNaN(val) || val <= 0) return;
-                                        // Check if this price differs from what's in the Material Database
-                                        const needle = cs.name.toLowerCase().trim();
-                                        const dbRow = userMaterials.find(
-                                          (m) => m.description.toLowerCase().includes(needle) ||
-                                                 needle.includes(m.description.toLowerCase())
-                                        );
-                                        const dbPrice = dbRow?.userPrice ?? dbRow?.defaultPrice ?? null;
-                                        if (dbPrice === null || Math.abs(val - dbPrice) > 0.001) {
-                                          // Price differs (or not in DB yet) — prompt user
-                                          setPriceSyncDialog({
-                                            open: true,
-                                            description: cs.name,
-                                            newPrice: val,
-                                            category: dbRow?.category ?? undefined,
-                                            unit: dbRow?.unit ?? "EA",
-                                          });
-                                        }
-                                      }}
-                                      placeholder="0.00"
-                                      className="w-14 h-5 text-[9px] font-mono bg-transparent border-b border-border/40 focus:border-[#F5C518] outline-none text-muted-foreground focus:text-foreground text-right px-0.5"
-                                    />
-                                    <span className="text-[9px] text-muted-foreground font-mono">/ea</span>
-                                  </div>
+                                  {/* Assembly badge */}
+                                  {cs.assemblyId && (
+                                    <span
+                                      className="shrink-0 text-[8px] font-bold px-1 py-0.5 rounded bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/30 font-mono uppercase tracking-wide"
+                                      title={`Assembly: ${cs.assemblyName}`}
+                                    >
+                                      ASM
+                                    </span>
+                                  )}
+                                  {/* Inline price-per-item field — hidden for assembly sessions */}
+                                  {!cs.assemblyId && (
+                                    <div
+                                      className="flex items-center gap-0.5 shrink-0"
+                                      onClick={(e) => e.stopPropagation()}
+                                      title="Custom price per item — blur to sync to Material Database"
+                                    >
+                                      <span className="text-[9px] text-muted-foreground font-mono">$</span>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step={0.01}
+                                        value={cs.unitCost ?? ""}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value);
+                                          updateSessions(
+                                            countSessions.map((s2) =>
+                                              s2.id === cs.id
+                                                ? { ...s2, unitCost: isNaN(val) ? undefined : val, priceMode: "per-unit" as const }
+                                                : s2
+                                            )
+                                          );
+                                        }}
+                                        onBlur={(e) => {
+                                          const val = parseFloat(e.target.value);
+                                          if (isNaN(val) || val <= 0) return;
+                                          // Check if this price differs from what's in the Material Database
+                                          const needle = cs.name.toLowerCase().trim();
+                                          const dbRow = userMaterials.find(
+                                            (m) => m.description.toLowerCase().includes(needle) ||
+                                                   needle.includes(m.description.toLowerCase())
+                                          );
+                                          const dbPrice = dbRow?.userPrice ?? dbRow?.defaultPrice ?? null;
+                                          if (dbPrice === null || Math.abs(val - dbPrice) > 0.001) {
+                                            // Price differs (or not in DB yet) — prompt user
+                                            setPriceSyncDialog({
+                                              open: true,
+                                              description: cs.name,
+                                              newPrice: val,
+                                              category: dbRow?.category ?? undefined,
+                                              unit: dbRow?.unit ?? "EA",
+                                            });
+                                          }
+                                        }}
+                                        placeholder="0.00"
+                                        className="w-14 h-5 text-[9px] font-mono bg-transparent border-b border-border/40 focus:border-[#F5C518] outline-none text-muted-foreground focus:text-foreground text-right px-0.5"
+                                      />
+                                      <span className="text-[9px] text-muted-foreground font-mono">/ea</span>
+                                    </div>
+                                  )}
                                   <span className="font-mono text-[10px] text-muted-foreground shrink-0">{cs.pins.length} pin{cs.pins.length !== 1 ? "s" : ""}</span>
                                   {isEditing ? (
                                     <>
@@ -2301,6 +2491,61 @@ function CivilEditor({
                               onColorChange={(hex) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: hex } : cs))}
                               onShapeChange={(id) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, iconId: id } : cs))}
                             />
+
+                            {/* ── Assembly link for this count session ── */}
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Count as Assembly</Label>
+                              {activeCountSession.assemblyId ? (
+                                <div className="flex items-center gap-2 rounded-md border border-[#F5C518]/40 bg-[#F5C518]/8 px-2.5 py-1.5">
+                                  <span className="flex-1 text-[10px] font-semibold text-[#F5C518] truncate">{activeCountSession.assemblyName ?? "Assembly"}</span>
+                                  <span className="text-[9px] text-muted-foreground font-mono">{(activeCountSession.assemblyItems?.length ?? 0)} items/ea</span>
+                                  <button
+                                    onClick={() => {
+                                      const updated = countSessions.map((cs) =>
+                                        cs.id === activeCountSession.id
+                                          ? { ...cs, assemblyId: undefined, assemblyName: undefined, assemblyItems: undefined }
+                                          : cs
+                                      );
+                                      updateSessions(updated, activeCountSession.id);
+                                    }}
+                                    className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                                    title="Unlink assembly">
+                                    <X size={11} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  <input
+                                    type="text"
+                                    value={assemblySearch}
+                                    onChange={(e) => setAssemblySearch(e.target.value)}
+                                    placeholder="Search assemblies…"
+                                    className="w-full h-7 px-2 text-[10px] font-mono bg-input border border-border rounded text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#F5C518]/60"
+                                  />
+                                  {assemblySearch.trim().length > 0 && (
+                                    <div className="max-h-32 overflow-y-auto rounded border border-border bg-popover space-y-0.5 p-1">
+                                      {masterAssemblies
+                                        .filter((a) => a.name.toLowerCase().includes(assemblySearch.toLowerCase()))
+                                        .slice(0, 10)
+                                        .map((a) => (
+                                          <button
+                                            key={a.id}
+                                            onClick={() => setPendingAssemblyId(a.id)}
+                                            className="w-full text-left px-2 py-1 rounded text-[10px] text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors font-mono truncate"
+                                          >
+                                            {a.name}
+                                          </button>
+                                        ))}
+                                      {masterAssemblies.filter((a) => a.name.toLowerCase().includes(assemblySearch.toLowerCase())).length === 0 && (
+                                        <p className="px-2 py-1 text-[10px] text-muted-foreground italic">No assemblies found</p>
+                                      )}
+                                    </div>
+                                  )}
+                                  <p className="text-[9px] text-muted-foreground/60">Link an assembly to expand each pin into its component items when saved to L&amp;M.</p>
+                                </div>
+                              )}
+                            </div>
+
                             <div className="pt-1 border-t border-border/50">
                               <button
                                 onClick={handleUndoLastPin}

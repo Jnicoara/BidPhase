@@ -160,6 +160,19 @@ export interface RunItem {
    */
   conduitOnly?: boolean;
 
+  // ── Multi-circuit conductor groups ─────────────────────────────────────────────
+  /**
+   * When present, overrides the scalar conductors/conductorMaterial/conductorSize
+   * fields. Each entry represents one circuit (conductor group) sharing this conduit.
+   * The scalar fields remain for backward compatibility with old saved data.
+   */
+  conductorGroups?: Array<{
+    id: string;                    // stable key for React lists
+    conductors: number;            // number of current-carrying conductors in this group
+    conductorMaterial: ConductorMaterial;
+    conductorSize: ConductorSize;
+  }>;
+
   // ── Grounding conductor ────────────────────────────────────────────────────────
   /** When true, include a separate grounding conductor in this run. */
   includeGround?: boolean;
@@ -254,6 +267,19 @@ export interface CountSession {
    * - "total": unitCost is the total cost; unitPrice = unitCost / pins.length
    */
   priceMode?: "per-unit" | "total";
+  /**
+   * Optional assembly link — when set, each pin represents one instance of this assembly.
+   * The BOM expands each pin into the assembly's item list × qty.
+   */
+  assemblyId?: number;           // master_assembly.id
+  assemblyName?: string;         // display name (cached to avoid extra query)
+  assemblyItems?: Array<{        // cached item list for BOM expansion
+    description: string;
+    unit: string;
+    qty: number;                 // per-assembly qty
+    masterMaterialCost: number;
+    masterLaborHours: number;
+  }>;
 }
 
 export interface AssemblyState {

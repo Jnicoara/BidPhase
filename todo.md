@@ -593,3 +593,14 @@
 - [x] Unit Count toolbar Clear Page button now uses text+icon ghost style with hover:text-destructive matching Runs toolbar Clear page button exactly
 - [x] Clear Page only shows when there is content on the page (same conditional as Runs toolbar)
 - [x] TypeScript: 0 errors
+
+## v5.53 — Assembly Add-Item Fix, Assembly Unit Counter, Multi-Circuit Runs
+- [x] Fix Assembly Builder: catalog items with null category/itemCode now pass zod validation (z.string().nullable().optional())
+- [x] Unit Count: count sessions can be linked to a master assembly — each pin represents one assembly instance
+- [x] Unit Count: assembly search picker in active session config; shows assembly name badge when linked; X to unlink
+- [x] Unit Count: "ASM" badge on session row when an assembly is linked; price-per-item field hidden for assembly sessions
+- [x] Unit Count: Save to L&M expands assembly sessions into individual line items (item.qty × pin count per item)
+- [x] Run Calculator (conduit mode): multi-circuit conductor groups — Add Circuit / Remove Circuit buttons
+- [x] Run Calculator: each circuit has its own conductor count slider, Cu/Al material toggle, and AWG size grid
+- [x] Run Calculator: wire cost and CrossPageTotals aggregate across all conductor groups per run
+- [x] TypeScript: 0 errors
