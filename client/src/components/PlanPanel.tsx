@@ -2761,7 +2761,7 @@ export default function PlanPanel({
           {mode === "set-scale-p2" && scalePoints.length >= 2 && "Enter real-world distance (ft) → Confirm."}
           {mode === "measure" && `Measuring: ${activeRun?.name} · Click=add point · Both buttons=pen lift · Dbl-click=new segment · U=undo`}
           {mode === "count" && `Unit Count · Click=place pin · Right-click=remove · U=undo · ${activeCountSession ? activeCountSession.pins.length + " total" : "No session selected"}`}
-          {mode === "none" && `Page ${currentPage}/${numPages || "–"} · Scroll=zoom · ←/→=page · M=measure`}
+          {mode === "none" && `Page ${currentPage}/${numPages || "–"} · Scroll=zoom · ←/→=page`}
         </span>
         {activeRun != null && activeRun.totalFeet != null && activeRun.totalFeet > 0 && (
           <Button
@@ -2841,7 +2841,7 @@ export default function PlanPanel({
           setPanOffset({ ...panOffsetRef.current });
         }}
       >
-        {pdfLoading ? (
+        {(pdfLoading && !globalBitmapCache.has(`${pdfHash}:${currentPage}`)) ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             Loading…
           </div>
@@ -3182,11 +3182,13 @@ export default function PlanPanel({
                 <X size={16} />
               </button>
             </div>
-            <div className="flex-1 overflow-auto p-3" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+            <div className="flex-1 overflow-y-auto p-3">
               <div className="flex flex-col gap-2">
                 {Array.from({ length: numPages }, (_, i) => {
                   const pNum = i + 1;
                   const isActive = pNum === currentPage;
+                  const cacheKey = `${pdfHash}:${pNum}`;
+                  const cachedBitmap = globalBitmapCache.get(cacheKey);
                   return (
                     <button
                       key={i}
@@ -3196,18 +3198,30 @@ export default function PlanPanel({
                         isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border bg-card hover:bg-muted/20"
                       )}
                     >
-                      {/* PDF thumbnail — full width */}
-                      <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden">
-                        <Document file={pdfFile} loading={<div className="h-32 w-full" />}>
-                          <Page
-                            pageNumber={pNum}
-                            width={440}
-                            renderAnnotationLayer={false}
-                            renderTextLayer={false}
+                      {/* Thumbnail: use cached bitmap if available, else a placeholder */}
+                      <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden" style={{ minHeight: 80 }}>
+                        {cachedBitmap ? (
+                          <canvas
+                            ref={(el) => {
+                              if (!el) return;
+                              const aspect = cachedBitmap.height / cachedBitmap.width;
+                              const w = el.parentElement?.clientWidth || 220;
+                              el.width = cachedBitmap.width;
+                              el.height = cachedBitmap.height;
+                              el.style.width = `${w}px`;
+                              el.style.height = `${w * aspect}px`;
+                              const ctx2 = el.getContext("2d");
+                              if (ctx2) ctx2.drawImage(cachedBitmap, 0, 0);
+                            }}
+                            style={{ display: "block" }}
                           />
-                        </Document>
+                        ) : (
+                          <div className="flex items-center justify-center h-20 w-full text-muted-foreground/40 text-xs font-mono">
+                            pg {pNum}
+                          </div>
+                        )}
                       </div>
-                      {/* Page number only */}
+                      {/* Page number label */}
                       <div className={cn(
                         "px-3 py-1.5 text-center",
                         isActive ? "bg-[#F5C518]/10" : "bg-card"

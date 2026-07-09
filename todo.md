@@ -689,3 +689,13 @@
 - [x] Page navigation works correctly across all projects
 - [x] Instant bitmap cache loading works across all projects
 - [x] TypeScript: 0 errors
+
+## v5.74 — Smooth All Projects + Remove M Logo
+- [ ] Fix lag/jitter on page load and navigation for all projects (match Pine St smoothness)
+- [ ] Remove M logo/icon from measurement distance display on runs
+
+## v5.74 — Smooth All Projects + M Logo Fix
+- [x] Remove "M=measure" text from hint bar (was appearing as M logo next to run distance)
+- [x] Skip pdfLoading gate when bitmap cache already has the current page — instant display on project switch
+- [x] Replace heavy react-pdf thumbnail rendering in page overview with lightweight bitmap cache canvases
+- [x] TypeScript: 0 errors
