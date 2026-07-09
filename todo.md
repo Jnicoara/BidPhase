@@ -634,3 +634,10 @@
 - [x] Added 33 new white device cover plate items to master catalog: 1G/2G/3G/4G standard, midsize (Leviton 80601-W/80714-W), jumbo (Leviton 88001-W/88014-W), screwless (Leviton 84001-W/84003-W/84014-W), combination plates; all with searchAliases
 - [x] Added smartSearch aliases: no screw, smooth plate, seamless plate, midsize plate, jumbo plate, oversized plate, double/triple/quad gang plate, 2/3/4 gang plate, combination plate, combo plate
 - [x] TypeScript: 0 errors
+
+## v5.58 — RunCard Reorder, Cover Plates Simplified, Search Engine v2
+- [x] Move conduit type/size/empty selector to directly after Run Type toggle (before conductors)
+- [x] Simplify cover plates: remove screwless/jumbo/midsize specialty items; replace with 20 standard mid-size (Midway) white cover plates (1G/2G/3G/4G × Blank/Duplex/Toggle/Decora/GFCI)
+- [x] Rewrite smartSearch v2: per-token alias expansion, prefix-aware tiered scoring (exact→starts-with→word-boundary→contains), all-tokens-must-match filter, item index cache
+- [x] Rich alias map: 150+ trade terms, abbreviations, brand names (Romex/NM-B, THHN/THWN, EMT/thin wall, GFCI/GFI, decora/rocker, outlet/receptacle, conduit bodies, panels, breakers, etc.)
+- [x] TypeScript: 0 errors

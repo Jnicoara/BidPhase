@@ -1,27 +1,44 @@
 /**
- * smartSearch.ts
+ * smartSearch.ts  — v2
  *
- * Intelligent search for electrical materials with:
- *  - Trade slang / alias expansion (e.g. "4 square" → "4-11/16 box", "romex" → "NM-B")
- *  - Abbreviation expansion (e.g. "emt" → "electrical metallic tubing")
- *  - Fuzzy substring matching with token scoring
- *  - Results ranked by relevance (exact match > alias match > partial match)
+ * Precise real-time search for electrical materials.
+ *
+ * Key improvements over v1:
+ *  - Per-token alias expansion: each typed word is expanded independently,
+ *    so "outl cov" expands "outl" → outlet/receptacle AND "cov" → cover/plate.
+ *  - Prefix-aware scoring: typing "outl" scores items whose description starts
+ *    with a token that begins with "outl" (e.g. "outlet") — feels instant.
+ *  - Tiered scoring: exact > description-starts-with > word-starts-with >
+ *    word-boundary-contains > anywhere-contains.
+ *  - All-tokens-must-match filter: every typed token (or its alias expansion)
+ *    must appear somewhere in the item — no more noise from partial alias hits.
+ *  - Rich alias map with trade slang, abbreviations, and brand names.
  */
 
+// ─── Normalize ────────────────────────────────────────────────────────────────
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[″"]/g, '"')
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // ─── Trade Alias Map ──────────────────────────────────────────────────────────
-// Each entry: [canonical search terms that should match this alias]
-// Keys are normalized query fragments; values are arrays of extra search terms
-// injected into the item's searchable text.
+// Key: a normalized term (or prefix) the user might type.
+// Value: additional normalized terms that should be treated as equivalent.
+// The engine expands EACH token in the query against this map.
 
 const ALIAS_MAP: Record<string, string[]> = {
+
   // ── Boxes ──────────────────────────────────────────────────────────────────
-  "4 square":         ["4-11/16", "4 inch square", "junction box", "square box", "4s"],
+  "4 square":         ["4-11/16", "4 inch square", "junction box", "square box"],
   "4s":               ["4-11/16", "4 inch square", "junction box", "square box"],
   "four square":      ["4-11/16", "4 inch square", "junction box", "square box"],
   "4x4":              ["4-11/16", "4 inch square", "junction box", "square box"],
   "4 11/16":          ["4-11/16 square box"],
   "411":              ["4-11/16 square box"],
-  "4 gang":           ["4-11/16", "square box"],
   "jbox":             ["junction box", "pull box", "outlet box"],
   "j-box":            ["junction box", "pull box", "outlet box"],
   "j box":            ["junction box", "pull box", "outlet box"],
@@ -38,6 +55,9 @@ const ALIAS_MAP: Record<string, string[]> = {
   "double gang":      ["2-gang", "device box"],
   "two gang":         ["2-gang", "device box"],
   "three gang":       ["3-gang", "device box"],
+  "triple gang":      ["3-gang", "device box"],
+  "quad gang":        ["4-gang", "device box"],
+  "four gang":        ["4-gang", "device box"],
   "octagon":          ["oct box", "4 inch round", "ceiling box", "fan box"],
   "oct":              ["octagon box", "4 inch round", "ceiling box"],
   "round box":        ["octagon", "ceiling box", "fan box"],
@@ -49,6 +69,21 @@ const ALIAS_MAP: Record<string, string[]> = {
   "wp":               ["weatherproof", "outdoor", "rain tight"],
   "in use":           ["in-use cover", "weatherproof cover", "while-in-use"],
   "while in use":     ["in-use cover", "weatherproof cover"],
+  "gem box":          ["1-gang box", "device box", "switch box"],
+  "switch box":       ["device box", "gem box", "1-gang box"],
+  "outlet box":       ["device box", "gem box", "1-gang box"],
+  "remodel box":      ["old work box", "cut-in box", "retrofit box"],
+  "nail on":          ["new work box", "new construction box", "nail-on box"],
+  "junction box":     ["j-box", "jbox", "4-square", "4 square"],
+  "ceiling box":      ["octagon box", "round box", "fan box", "light box"],
+  "fan rated":        ["fan-rated box", "ceiling fan box", "fan box"],
+  "utility box":      ["handy box", "surface box"],
+  "weatherproof box": ["WP box", "outdoor box", "in-use cover", "bubble cover"],
+  "in use cover":     ["weatherproof cover", "bubble cover", "WP cover"],
+  "bubble cover":     ["in-use cover", "weatherproof cover", "WP cover"],
+  "pvc box":          ["PVC device box", "plastic conduit box"],
+  "vapor barrier":    ["vapor box", "airtight box"],
+  "pancake box":      ["shallow box", "shallow ceiling box"],
 
   // ── Conduit ────────────────────────────────────────────────────────────────
   "emt":              ["electrical metallic tubing", "thin wall", "thinwall"],
@@ -70,19 +105,18 @@ const ALIAS_MAP: Record<string, string[]> = {
   "lfmc":             ["liquid tight flexible metal conduit", "liquidtight"],
   "lfnc":             ["liquid tight flexible nonmetallic", "liquidtight"],
   "sealtite":         ["LFMC", "liquid tight", "liquidtight"],
-  "half inch":        ["1/2\"", "1/2 inch", "trade size 1/2"],
-  "3/4 inch":         ["3/4\"", "trade size 3/4"],
-  "one inch":         ["1\"", "1 inch", "trade size 1"],
-  "inch and a quarter": ["1-1/4\"", "1.25 inch"],
-  "inch and a half":  ["1-1/2\"", "1.5 inch"],
-  "two inch":         ["2\"", "2 inch", "trade size 2"],
+  "ent":              ["electrical nonmetallic tubing", "smurf tube", "blue flex"],
+  "smurf tube":       ["ENT", "electrical nonmetallic tubing", "blue flex"],
+  "blue flex":        ["ENT", "smurf tube"],
+  "grc":              ["galvanized rigid conduit", "RMC", "rigid"],
+  "pvc conduit":      ["PVC", "schedule 40", "schedule 80", "grey conduit"],
 
   // ── Conduit Fittings ───────────────────────────────────────────────────────
   "connector":        ["fitting", "conduit connector", "EMT connector", "set screw", "compression"],
   "set screw":        ["connector", "coupling", "EMT set screw"],
   "compression":      ["connector", "coupling", "EMT compression", "rain tight"],
   "coupling":         ["conduit coupling", "EMT coupling", "RMC coupling"],
-  "sweep":            ["90 degree", "90° sweep", "conduit bend", "elbow"],
+  "sweep":            ["90 degree", "90 sweep", "conduit bend", "elbow"],
   "elbow":            ["sweep", "90 degree", "conduit bend", "LB", "LR", "LL"],
   "90":               ["sweep", "elbow", "90 degree bend"],
   "lb":               ["conduit body", "LB body", "back pull"],
@@ -97,38 +131,52 @@ const ALIAS_MAP: Record<string, string[]> = {
   "chase nipple":     ["locknut", "reducing bushing"],
   "strut":            ["unistrut", "channel", "slotted channel", "P1000", "P1001"],
   "unistrut":         ["strut", "channel", "slotted channel"],
+  "kindorf":          ["strut", "unistrut", "channel"],
   "channel":          ["strut", "unistrut", "slotted channel"],
-  "beam clamp":       ["strut clamp", "beam attachment", "strut attachment"],
+  "beam clamp":       ["strut clamp", "beam attachment"],
   "pipe clamp":       ["conduit clamp", "one hole strap", "two hole strap"],
   "one hole":         ["1-hole strap", "conduit strap", "pipe clamp"],
   "two hole":         ["2-hole strap", "conduit strap", "pipe clamp"],
   "strap":            ["conduit strap", "pipe strap", "one hole", "two hole"],
+  "pulling elbow":    ["conduit body", "LB", "sweep"],
 
   // ── Wire & Cable ───────────────────────────────────────────────────────────
   "romex":            ["NM-B", "nonmetallic sheathed", "house wire"],
   "nm-b":             ["romex", "nonmetallic sheathed", "house wire"],
   "nm":               ["NM-B", "romex", "nonmetallic sheathed"],
+  "nm cable":         ["Romex", "NM-B", "nonmetallic sheathed"],
   "house wire":       ["NM-B", "romex"],
   "thhn":             ["THWN", "THWN-2", "building wire", "single conductor"],
   "thwn":             ["THHN", "THWN-2", "building wire"],
   "building wire":    ["THHN", "THWN", "single conductor"],
   "mc cable":         ["metal clad", "armored cable", "MC"],
+  "metal clad":       ["MC cable", "MC", "armored cable"],
   "armored":          ["MC cable", "metal clad", "BX"],
+  "armored cable":    ["MC cable", "AC cable", "BX", "metal clad"],
   "bx":               ["MC cable", "armored cable", "metal clad"],
   "ac cable":         ["armored cable", "BX", "MC cable"],
   "ser":              ["service entrance", "SER cable", "service cable"],
   "seu":              ["service entrance", "SEU cable"],
   "service entrance": ["SER", "SEU", "service cable"],
+  "se cable":         ["SER", "service entrance", "service cable"],
+  "service cable":    ["SER", "SE cable", "service entrance cable"],
   "urd":              ["underground", "direct burial", "URD cable"],
   "direct burial":    ["URD", "underground", "USE-2"],
   "use-2":            ["URD", "direct burial", "underground"],
+  "xhhw":             ["XHHW-2", "aluminum wire", "aluminum conductor"],
+  "aluminum wire":    ["XHHW", "XHHW-2", "Al wire"],
   "cat6":             ["category 6", "ethernet", "data cable", "network cable"],
   "cat 6":            ["category 6", "ethernet", "data cable"],
+  "cat5":             ["Cat 5", "ethernet cable", "data cable"],
   "ethernet":         ["CAT6", "category 6", "data cable"],
   "coax":             ["coaxial", "RG6", "RG59", "cable TV"],
   "low voltage":      ["LV", "data", "control wire", "thermostat wire"],
   "thermostat wire":  ["low voltage", "control wire", "18/5", "18/8"],
   "control wire":     ["low voltage", "thermostat wire"],
+  "tray cable":       ["TC cable", "TC-ER", "tray"],
+  "tc cable":         ["tray cable", "TC-ER"],
+  "vfd cable":        ["VFD wire", "motor lead", "variable frequency drive cable"],
+  "data cable":       ["Cat6", "Cat5", "ethernet", "network cable"],
   "14 gauge":         ["14 AWG", "#14", "14/2", "14/3"],
   "12 gauge":         ["12 AWG", "#12", "12/2", "12/3"],
   "10 gauge":         ["10 AWG", "#10", "10/2", "10/3"],
@@ -152,6 +200,7 @@ const ALIAS_MAP: Record<string, string[]> = {
   "breaker panel":    ["load center", "panel", "distribution panel"],
   "main panel":       ["main breaker", "load center", "200 amp panel"],
   "sub panel":        ["subpanel", "sub-panel", "load center", "distribution panel"],
+  "subpanel":         ["sub panel", "sub-panel", "distribution panel"],
   "meter":            ["meter base", "meter socket", "meter can", "metering"],
   "meter base":       ["meter socket", "meter can", "meter"],
   "meter socket":     ["meter base", "meter can"],
@@ -169,6 +218,7 @@ const ALIAS_MAP: Record<string, string[]> = {
   "dual function":    ["DFCI", "AFCI/GFCI", "combination breaker"],
   "tandem":           ["twin breaker", "slimline breaker", "half-size breaker"],
   "twin":             ["tandem breaker", "slimline", "half-size"],
+  "half size":        ["tandem breaker", "slim breaker"],
   "square d":         ["Square-D", "QO", "HOM", "Homeline"],
   "qo":               ["Square D", "QO breaker"],
   "homeline":         ["HOM", "Square D", "Homeline breaker"],
@@ -184,6 +234,13 @@ const ALIAS_MAP: Record<string, string[]> = {
   "thql":             ["GE breaker", "General Electric"],
   "fuse":             ["fuse holder", "fuse block", "cartridge fuse", "class R"],
   "fuse block":       ["fuse holder", "fuse", "cartridge fuse"],
+  "service panel":    ["load center", "panel", "main panel", "breaker box"],
+  "breaker box":      ["load center", "panel", "service panel"],
+  "main breaker":     ["main disconnect", "main CB", "main circuit breaker"],
+  "transfer switch":  ["generator transfer", "ATS", "automatic transfer switch"],
+  "ats":              ["automatic transfer switch", "transfer switch"],
+  "surge protector":  ["SPD", "surge protection device", "whole house surge"],
+  "spd":              ["surge protector", "surge protection device"],
 
   // ── Devices & Trim ─────────────────────────────────────────────────────────
   "outlet":           ["receptacle", "duplex", "plug", "NEMA 5-15R", "device"],
@@ -208,7 +265,8 @@ const ALIAS_MAP: Record<string, string[]> = {
   "decora":           ["decorator", "rocker switch", "paddle"],
   "rocker":           ["decorator", "decora", "rocker switch", "paddle switch"],
   "paddle":           ["decora", "rocker switch", "decorator"],
-  "plate":            ["wall plate", "cover plate", "faceplate", "screwless"],
+  // Cover plates / wall plates
+  "plate":            ["wall plate", "cover plate", "faceplate"],
   "cover plate":      ["wall plate", "faceplate", "plate"],
   "faceplate":        ["wall plate", "cover plate", "plate"],
   "wall plate":       ["cover plate", "faceplate", "plate"],
@@ -217,23 +275,16 @@ const ALIAS_MAP: Record<string, string[]> = {
   "switch cover":     ["wall plate", "toggle plate", "switch plate", "cover plate"],
   "switch plate":     ["wall plate", "toggle plate", "cover plate"],
   "cover":            ["wall plate", "cover plate", "blank cover", "faceplate"],
-  "screwless":        ["screwless wall plate", "screwless cover", "decorator plate", "no screw plate", "smooth plate"],
-  "no screw":         ["screwless wall plate", "screwless cover", "screwless plate"],
-  "smooth plate":     ["screwless wall plate", "screwless cover", "no screw plate"],
-  "seamless plate":   ["screwless wall plate", "screwless cover", "no screw plate"],
   "blank":            ["blank plate", "blank cover", "blank wall plate"],
-  "midsize plate":    ["midsize wall plate", "mid-size cover plate", "leviton 80601", "leviton 80714"],
-  "jumbo plate":      ["jumbo wall plate", "oversized cover plate", "leviton 88001", "leviton 88014"],
-  "oversized plate":  ["jumbo wall plate", "jumbo cover plate", "leviton 88001"],
+  "midway":           ["mid-size wall plate", "midway cover plate", "standard cover plate"],
+  "mid size":         ["midway", "mid-size wall plate", "standard cover plate"],
+  "mid-size":         ["midway", "mid-size wall plate", "standard cover plate"],
   "double gang plate":["2-gang wall plate", "2 gang cover plate", "double gang cover"],
   "triple gang plate":["3-gang wall plate", "3 gang cover plate", "triple gang cover"],
   "quad plate":       ["4-gang wall plate", "4 gang cover plate", "quad gang cover"],
-  "quad gang plate":  ["4-gang wall plate", "4 gang cover plate", "quad cover"],
   "2 gang plate":     ["2-gang wall plate", "double gang wall plate", "2 gang cover plate"],
   "3 gang plate":     ["3-gang wall plate", "triple gang wall plate", "3 gang cover plate"],
   "4 gang plate":     ["4-gang wall plate", "quad gang wall plate", "4 gang cover plate"],
-  "combination plate":["combo plate", "combination wall plate", "combo cover plate"],
-  "combo plate":      ["combination plate", "combination wall plate", "combo cover"],
   "usb":              ["USB outlet", "USB receptacle", "USB-C", "USB-A", "charger outlet"],
   "charger":          ["USB outlet", "USB receptacle", "USB-C", "USB-A"],
   "tamper resistant": ["TR outlet", "tamper-resistant", "child proof", "childproof", "TR receptacle"],
@@ -243,174 +294,71 @@ const ALIAS_MAP: Record<string, string[]> = {
   "spec grade":       ["commercial grade", "specification grade", "heavy duty"],
   "commercial grade": ["spec grade", "specification grade", "heavy duty", "20A"],
   "hospital grade":   ["HG receptacle", "hospital grade outlet", "red outlet"],
-  "20 amp":           ["20A", "T-slot", "20 ampere"],
-  "15 amp":           ["15A", "standard outlet", "15 ampere"],
-  "dryer outlet":     ["30A 250V", "NEMA 10-30R", "NEMA 14-30R", "dryer receptacle"],
-  "dryer":            ["30A 250V", "NEMA 14-30R", "dryer receptacle", "dryer outlet"],
-  "range outlet":     ["50A", "NEMA 14-50R", "range receptacle", "stove outlet"],
-  "stove":            ["50A", "NEMA 14-50R", "range receptacle", "range outlet"],
-  "range":            ["50A", "NEMA 14-50R", "range receptacle"],
-  "rv outlet":        ["RV", "NEMA TT-30R", "NEMA 14-50R", "RV receptacle"],
-  "ev":               ["EV charger", "electric vehicle", "NEMA 14-50R", "Level 2"],
-  "electric vehicle": ["EV charger", "NEMA 14-50R", "Level 2 charger"],
-  "pilot light":      ["pilot switch", "illuminated switch", "lighted switch"],
-  "illuminated":      ["pilot light switch", "lighted switch"],
-  "motion sensor":    ["occupancy sensor", "motion switch", "PIR sensor"],
-  "occupancy":        ["occupancy sensor", "motion sensor", "motion switch"],
-  "pir":              ["PIR sensor", "motion sensor", "occupancy sensor"],
-  "timer switch":     ["digital timer", "timer", "time switch"],
-  "keyed switch":     ["key switch", "keyed", "security switch"],
+  "hg":               ["hospital grade", "hospital grade outlet"],
+  "20a":              ["20 amp", "20-amp", "20A receptacle", "20A outlet"],
+  "15a":              ["15 amp", "15-amp", "15A receptacle", "15A outlet"],
+  "nema 5-15":        ["15A outlet", "standard outlet", "duplex receptacle"],
+  "nema 5-20":        ["20A outlet", "20A receptacle", "T-slot outlet"],
+  "nema 6-20":        ["240V outlet", "240V receptacle", "dryer outlet"],
+  "nema 14-30":       ["dryer outlet", "30A 240V", "dryer receptacle"],
+  "nema 14-50":       ["range outlet", "50A 240V", "EV outlet", "stove outlet"],
+  "ev":               ["electric vehicle", "EV charger", "EVSE", "level 2 charger"],
+  "evse":             ["EV charger", "electric vehicle supply equipment"],
+  "level 2":          ["EV charger", "240V charger", "EVSE"],
 
   // ── Lighting ───────────────────────────────────────────────────────────────
-  "can light":        ["recessed light", "wafer light", "downlight", "pot light", "can"],
-  "can":              ["recessed light", "can light", "downlight", "pot light"],
-  "pot light":        ["recessed light", "can light", "downlight"],
-  "recessed":         ["can light", "pot light", "downlight", "wafer", "recessed housing"],
-  "recessed housing": ["can light", "new construction housing", "IC housing"],
-  "ic housing":       ["insulation contact", "recessed housing", "can light"],
-  "retrofit":         ["retrofit kit", "LED retrofit", "can retrofit", "recessed retrofit"],
-  "wafer":            ["wafer light", "slim recessed", "ultra-thin recessed", "disk light"],
-  "disk light":       ["wafer light", "slim recessed", "LED disk"],
-  "led":              ["LED light", "LED fixture", "LED wafer", "LED downlight"],
-  "downlight":        ["recessed light", "can light", "pot light", "wafer"],
-  "troffer":          ["2x4 troffer", "2x2 troffer", "fluorescent troffer", "LED troffer", "flat panel"],
-  "flat panel":       ["LED flat panel", "troffer", "2x4 LED", "2x2 LED"],
-  "2x4":              ["2x4 troffer", "2x4 fixture", "2x4 LED"],
-  "2x2":              ["2x2 troffer", "2x2 fixture", "2x2 LED"],
-  "strip light":      ["LED strip", "shop light", "strip fixture", "utility light"],
-  "shop light":       ["LED strip", "strip fixture", "vapor tight", "utility light"],
-  "vapor tight":      ["vapor proof", "wet location fixture", "shop light", "vapor-tight"],
-  "vapor proof":      ["vapor tight", "wet location", "shop light"],
-  "high bay":         ["high-bay", "warehouse light", "UFO light", "industrial light"],
-  "ufo":              ["UFO high bay", "round high bay", "LED high bay"],
-  "wall pack":        ["wall-pack", "outdoor wall light", "area light"],
-  "flood light":      ["floodlight", "area light", "outdoor flood"],
-  "exit sign":        ["exit light", "exit fixture", "egress"],
-  "emergency light":  ["emergency fixture", "bug eye", "emergency lighting", "egress"],
-  "bug eye":          ["emergency light", "emergency fixture", "twin head"],
-  "smoke detector":   ["smoke alarm", "smoke det", "fire alarm", "hardwired smoke"],
-  "smoke alarm":      ["smoke detector", "hardwired smoke", "fire alarm"],
-  "co detector":      ["carbon monoxide", "CO alarm", "CO detector"],
-  "carbon monoxide":  ["CO detector", "CO alarm", "combo detector"],
-  "smoke co":         ["smoke/CO combo", "combination detector", "combo alarm"],
-  "doorbell":         ["doorbell transformer", "chime", "bell transformer"],
-  "thermostat":       ["thermostat wire", "t-stat", "HVAC control"],
-  "t-stat":           ["thermostat", "thermostat wire", "HVAC control"],
+  "led":              ["LED light", "LED fixture", "LED downlight", "LED strip"],
+  "recessed":         ["can light", "downlight", "pot light", "recessed fixture"],
+  "can light":        ["recessed", "downlight", "pot light"],
+  "pot light":        ["recessed", "can light", "downlight"],
+  "downlight":        ["recessed", "can light", "pot light"],
+  "wafer":            ["wafer light", "LED wafer", "slim downlight", "ultra thin"],
+  "retrofit":         ["retrofit kit", "LED retrofit", "can retrofit"],
+  "troffer":          ["2x4 troffer", "2x2 troffer", "fluorescent troffer", "LED troffer"],
+  "2x4":              ["2x4 troffer", "2x4 fixture", "48 inch fixture"],
+  "2x2":              ["2x2 troffer", "2x2 fixture", "24 inch fixture"],
+  "strip light":      ["LED strip", "shop light", "vapor tight"],
+  "vapor tight":      ["vapor proof", "wet location fixture", "strip light"],
+  "exit sign":        ["exit light", "emergency exit", "egress light"],
+  "emergency":        ["emergency light", "exit sign", "battery backup"],
+  "occupancy":        ["occupancy sensor", "motion sensor", "vacancy sensor"],
+  "motion sensor":    ["occupancy sensor", "PIR sensor", "vacancy sensor"],
+  "photocell":        ["dusk to dawn", "photo eye", "light sensor"],
+  "dusk to dawn":     ["photocell", "photo eye", "outdoor sensor"],
+  "ballast":          ["fluorescent ballast", "HID ballast", "electronic ballast"],
+  "fluorescent":      ["T8", "T5", "T12", "fluorescent lamp", "fluorescent fixture"],
+  "t8":               ["T8 lamp", "T8 tube", "fluorescent T8"],
+  "t5":               ["T5 lamp", "T5 tube", "fluorescent T5"],
+  "hid":              ["high intensity discharge", "metal halide", "high pressure sodium"],
+  "metal halide":     ["HID", "MH lamp", "metal halide fixture"],
+  "high bay":         ["high bay light", "warehouse light", "LED high bay"],
+  "low bay":          ["low bay light", "shop light", "LED low bay"],
 
-  // ── Supports & Fasteners ───────────────────────────────────────────────────
-  "wire nut":         ["twist-on connector", "marrette", "wire connector", "wing nut"],
-  "marrette":         ["wire nut", "twist-on connector"],
-  "twist on":         ["wire nut", "twist-on connector"],
-  "wire connector":   ["wire nut", "twist-on connector"],
-  "staple":           ["cable staple", "NM staple", "romex staple"],
-  "romex staple":     ["cable staple", "NM staple", "staple"],
-  "threaded rod":     ["all-thread", "allthread", "hanger rod"],
-  "all thread":       ["threaded rod", "allthread", "hanger rod"],
-  "allthread":        ["threaded rod", "all-thread", "hanger rod"],
-  "hanger rod":       ["threaded rod", "all-thread"],
-  "strut nut":        ["channel nut", "spring nut", "strut channel nut"],
-  "channel nut":      ["strut nut", "spring nut"],
-  "spring nut":       ["strut nut", "channel nut"],
-  "conduit hanger":   ["conduit clamp", "pipe hanger", "clevis hanger"],
-  "clevis hanger":    ["conduit hanger", "pipe hanger"],
-  "beam clamp alt":   ["strut attachment", "beam attachment"],
-  "anchor":           ["concrete anchor", "lag shield", "wedge anchor", "drop-in anchor"],
-  "wedge anchor":     ["concrete anchor", "anchor bolt"],
-  "drop in":          ["drop-in anchor", "concrete anchor"],
-  "lag":              ["lag screw", "lag bolt", "wood screw"],
-  "self tapping":     ["sheet metal screw", "self-tapping screw", "tek screw"],
-  "tek":              ["tek screw", "self-tapping", "sheet metal screw"],
-
-  // ── Civil & Grounding ──────────────────────────────────────────────────────
-  "ground rod":       ["grounding electrode", "copper clad rod", "8 ft rod", "10 ft rod"],
-  "grounding rod":    ["ground rod", "grounding electrode"],
+  // ── Grounding & Bonding ────────────────────────────────────────────────────
+  "ground rod":       ["grounding electrode", "copper clad rod", "ground stake"],
   "ground clamp":     ["grounding clamp", "rod clamp", "acorn clamp"],
-  "acorn":            ["acorn clamp", "ground clamp", "grounding clamp"],
-  "grounding wire":   ["ground wire", "bare copper", "green wire"],
-  "bare copper":      ["grounding wire", "ground wire"],
-  "green wire":       ["grounding wire", "ground wire"],
-  "conduit seal":     ["sealing fitting", "EYS", "conduit sealing"],
-  "duct seal":        ["duct sealing compound", "conduit seal"],
-  "marking tape":     ["caution tape", "warning tape", "underground tape"],
-  "underground tape": ["marking tape", "warning tape", "caution tape"],
-  "caution tape":     ["marking tape", "warning tape"],
-  "pulling lubricant": ["wire lube", "cable lube", "pulling compound"],
-  "wire lube":        ["pulling lubricant", "cable lube"],
-  "cable lube":       ["pulling lubricant", "wire lube"],
-  "fish tape":        ["pull tape", "fish wire"],
-  "pull string":      ["pull line", "mule tape", "fish line"],
-  "mule tape":        ["pull string", "pull line"],
-  "conduit plug":     ["end cap", "conduit cap"],
-  "end cap":          ["conduit plug", "conduit cap"],
+  "acorn clamp":      ["ground clamp", "grounding clamp"],
+  "grounding":        ["ground wire", "ground rod", "grounding electrode"],
+  "bonding":          ["bonding jumper", "bonding wire", "equipotential bond"],
+  "bare copper":      ["ground wire", "bare ground", "solid bare copper"],
 
-  // ── Boxes ─────────────────────────────────────────────────────────
-  "box":              ["electrical box", "junction box", "device box", "outlet box", "switch box"],
-  "gem box":          ["single gang box", "1-gang box", "device box", "switch box", "outlet box"],
-  "blue box":         ["plastic box", "device box", "gem box", "1-gang box"],
-  "device box":       ["gem box", "1-gang box", "switch box", "outlet box"],
-  "switch box":       ["device box", "gem box", "1-gang box"],
-  "outlet box":       ["device box", "gem box", "1-gang box"],
-  "remodel box":      ["old work box", "cut-in box", "retrofit box"],
-  "nail on":          ["new work box", "new construction box", "nail-on box"],
-  "nail-on":          ["new work box", "new construction box", "nail on box"],
-  "junction box":     ["j-box", "jbox", "4-square", "4 square"],
-  "ceiling box":      ["octagon box", "round box", "fan box", "light box"],
-  "fan rated":        ["fan-rated box", "ceiling fan box", "fan box"],
-  "utility box":      ["handy box", "surface box"],
-  "weatherproof box": ["WP box", "outdoor box", "in-use cover", "bubble cover"],
-  "in use cover":     ["weatherproof cover", "bubble cover", "WP cover"],
-  "bubble cover":     ["in-use cover", "weatherproof cover", "WP cover"],
-  "pvc box":          ["PVC device box", "plastic conduit box", "Schedule 40 box"],
-  "vapor barrier":    ["vapor box", "airtight box", "vapor-barrier box"],
-  "siding box":       ["siding mount box", "exterior box", "siding fixture"],
-  "pancake box":      ["shallow box", "pancake", "shallow ceiling box"],
-
-  // ── Conduit & Fittings ────────────────────────────────────────────────
-  "grc":              ["galvanized rigid conduit", "RMC", "rigid"],
-  "pvc conduit":      ["PVC", "schedule 40", "schedule 80", "grey conduit"],
-  "ent":              ["electrical nonmetallic tubing", "smurf tube", "blue flex"],
-  "smurf tube":       ["ENT", "electrical nonmetallic tubing", "blue flex"],
-  "blue flex":        ["ENT", "smurf tube"],
-  "pulling elbow":    ["conduit body", "LB", "sweep"],
-  "kindorf":          ["strut", "unistrut", "channel"],
-
-  // ── Wire & Cable ───────────────────────────────────────────────────────
-  "nm cable":         ["Romex", "NM-B", "nonmetallic sheathed"],
-  "metal clad":       ["MC cable", "MC", "armored cable"],
-  "armored cable":    ["MC cable", "AC cable", "BX", "metal clad"],
-  "se cable":         ["SER", "service entrance", "service cable"],
-  "service cable":    ["SER", "SE cable", "service entrance cable"],
-  "xhhw":             ["XHHW-2", "aluminum wire", "aluminum conductor"],
-  "aluminum wire":    ["XHHW", "XHHW-2", "Al wire"],
-  "tray cable":       ["TC cable", "TC-ER", "tray"],
-  "tc cable":         ["tray cable", "TC-ER"],
-  "vfd cable":        ["VFD wire", "motor lead", "variable frequency drive cable"],
-  "cat5":             ["Cat 5", "ethernet cable", "data cable"],
-  "data cable":       ["Cat6", "Cat5", "ethernet", "network cable"],
-
-  // ── Panels & Breakers (additional terms) ────────────────────────────────────
-  "half size":        ["tandem breaker", "slim breaker"],
-  "service panel":    ["load center", "panel", "main panel", "breaker box"],
-  "breaker box":      ["load center", "panel", "service panel"],
-  "main breaker":     ["main disconnect", "main CB", "main circuit breaker"],
-  "subpanel":         ["sub panel", "sub-panel", "distribution panel"],
-  "transfer switch":  ["generator transfer", "ATS", "automatic transfer switch"],
-  "ats":              ["automatic transfer switch", "transfer switch"],
-  "surge protector":  ["SPD", "surge protection device", "whole house surge"],
-  "spd":              ["surge protector", "surge protection device"],
+  // ── Rough-In Hardware ──────────────────────────────────────────────────────
+  "staple":           ["cable staple", "wire staple", "NM staple", "romex staple"],
+  "nail plate":       ["nail guard", "protection plate", "stud plate"],
+  "protection plate": ["nail plate", "nail guard", "stud protector"],
+  "wire nut":         ["wire connector", "twist-on connector", "marrette"],
+  "marrette":         ["wire nut", "wire connector", "twist-on"],
+  "push in":          ["push-in connector", "wago", "lever connector"],
+  "wago":             ["push-in connector", "lever connector", "spring connector"],
+  "lever connector":  ["wago", "push-in connector", "spring connector"],
+  "fish tape":        ["pull tape", "wire fish", "snake"],
+  "pull string":      ["pull line", "fish tape", "wire pull"],
+  "box fill":         ["fill calculation", "conductor fill"],
+  "low voltage ring": ["LV ring", "low voltage bracket", "low voltage mud ring"],
+  "lv bracket":       ["low voltage bracket", "low voltage ring", "old work bracket"],
 };
 
-// ─── Normalize helper ─────────────────────────────────────────────────────────
-function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[″"]/g, '"')          // normalize Unicode inch symbols
-    .replace(/[–—]/g, "-")          // normalize dashes
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// ─── Build searchable text for an item ────────────────────────────────────────
+// ─── Build a pre-computed index for each item ─────────────────────────────────
 export interface SearchableItem {
   id: string;
   description: string;
@@ -419,69 +367,128 @@ export interface SearchableItem {
   [key: string]: unknown;
 }
 
-function buildSearchText(item: SearchableItem): string {
-  const parts = [
-    item.description,
-    item.category ?? "",
-    item.id ?? "",
-    item.unit ?? "",
-    // Include embedded trade slang / brand aliases if present
-    (() => { const a = (item as { searchAliases?: string | string[] }).searchAliases; return Array.isArray(a) ? a.join(" ") : (a ?? ""); })(),
-  ];
-  return normalize(parts.join(" "));
+interface IndexedItem<T extends SearchableItem> {
+  item: T;
+  /** Full normalized searchable text (description + category + aliases) */
+  text: string;
+  /** Individual normalized words from the description only */
+  descWords: string[];
 }
 
-// ─── Expand query with aliases ────────────────────────────────────────────────
-function expandQuery(query: string): string[] {
-  const q = normalize(query);
-  const terms = new Set<string>([q]);
+function getAliases(item: SearchableItem): string {
+  const a = (item as { searchAliases?: string | string[] }).searchAliases;
+  return Array.isArray(a) ? a.join(" ") : (a ?? "");
+}
 
-  // Add alias expansions
-  for (const [alias, expansions] of Object.entries(ALIAS_MAP)) {
-    if (q.includes(alias) || alias.includes(q)) {
-      for (const exp of expansions) {
-        terms.add(normalize(exp));
-      }
+function buildIndex<T extends SearchableItem>(items: T[]): IndexedItem<T>[] {
+  return items.map((item) => {
+    const descNorm = normalize(item.description);
+    const text = normalize(
+      [item.description, item.category ?? "", item.id ?? "", getAliases(item)].join(" ")
+    );
+    const descWords = descNorm.split(/\s+/).filter(Boolean);
+    return { item, text, descWords };
+  });
+}
+
+// ─── Expand a single token against the alias map ─────────────────────────────
+// Returns the original token plus all alias expansions (normalized).
+function expandToken(token: string): string[] {
+  const result = new Set<string>([token]);
+
+  // Direct key match (full or prefix of key)
+  for (const [key, expansions] of Object.entries(ALIAS_MAP)) {
+    const nk = normalize(key);
+    // The typed token matches the alias key (starts-with for prefix typing)
+    if (nk === token || nk.startsWith(token) || token.startsWith(nk)) {
+      result.add(nk);
+      for (const e of expansions) result.add(normalize(e));
     }
   }
 
-  // Also check if any alias value matches the query
-  for (const [alias, expansions] of Object.entries(ALIAS_MAP)) {
+  // Reverse lookup: token appears in an alias value
+  for (const [key, expansions] of Object.entries(ALIAS_MAP)) {
     for (const exp of expansions) {
-      if (normalize(exp).includes(q) || q.includes(normalize(exp))) {
-        terms.add(normalize(alias));
-        for (const e2 of expansions) {
-          terms.add(normalize(e2));
-        }
+      const ne = normalize(exp);
+      if (ne === token || ne.startsWith(token) || token.startsWith(ne)) {
+        result.add(normalize(key));
+        for (const e2 of expansions) result.add(normalize(e2));
+        break;
       }
     }
   }
 
-  return Array.from(terms);
+  return Array.from(result);
 }
 
-// ─── Score a single item against a query ─────────────────────────────────────
-function scoreItem(searchText: string, terms: string[]): number {
-  let score = 0;
-  for (const term of terms) {
-    if (!term) continue;
-    if (searchText === term) {
-      score += 100;
-    } else if (searchText.startsWith(term)) {
-      score += 60;
-    } else if (searchText.includes(term)) {
-      // Bonus for matching at word boundary
-      const wordBoundary = new RegExp(`(^|\\s)${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
-      score += wordBoundary.test(searchText) ? 40 : 20;
+// ─── Score a single indexed item against all expanded token sets ──────────────
+// Scoring tiers (per token):
+//   200 — exact full description match
+//   120 — description starts with token
+//    80 — a description word starts with token (prefix match — great for typing)
+//    50 — token appears at a word boundary in description
+//    25 — token appears anywhere in description
+//    10 — token appears in category / id / aliases
+//     0 — no match (this token disqualifies the item if ALL expansions miss)
+function scoreItem<T extends SearchableItem>(
+  indexed: IndexedItem<T>,
+  tokenExpansions: string[][]
+): number {
+  const { text, descWords } = indexed;
+  const descNorm = descWords.join(" ");
+
+  let totalScore = 0;
+
+  for (const expansions of tokenExpansions) {
+    let bestForToken = 0;
+
+    for (const exp of expansions) {
+      if (!exp) continue;
+
+      // Tier 1: exact description match
+      if (descNorm === exp) {
+        bestForToken = Math.max(bestForToken, 200);
+        continue;
+      }
+
+      // Tier 2: description starts with this expansion
+      if (descNorm.startsWith(exp)) {
+        bestForToken = Math.max(bestForToken, 120);
+        continue;
+      }
+
+      // Tier 3: any description word starts with this expansion (prefix typing)
+      const prefixMatch = descWords.some((w) => w.startsWith(exp));
+      if (prefixMatch) {
+        bestForToken = Math.max(bestForToken, 80);
+        continue;
+      }
+
+      // Tier 4: word-boundary match in description
+      const wbRe = new RegExp(`(^|\\s)${exp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+      if (wbRe.test(descNorm)) {
+        bestForToken = Math.max(bestForToken, 50);
+        continue;
+      }
+
+      // Tier 5: substring in description
+      if (descNorm.includes(exp)) {
+        bestForToken = Math.max(bestForToken, 25);
+        continue;
+      }
+
+      // Tier 6: appears in category / id / aliases (non-description text)
+      if (text.includes(exp)) {
+        bestForToken = Math.max(bestForToken, 10);
+      }
     }
-    // Token-level matching: split term into tokens and check each
-    const tokens = term.split(" ").filter(Boolean);
-    if (tokens.length > 1) {
-      const matchedTokens = tokens.filter((t) => searchText.includes(t));
-      score += (matchedTokens.length / tokens.length) * 15;
-    }
+
+    // If no expansion matched at all, this item doesn't qualify
+    if (bestForToken === 0) return 0;
+    totalScore += bestForToken;
   }
-  return score;
+
+  return totalScore;
 }
 
 // ─── Main search function ─────────────────────────────────────────────────────
@@ -489,6 +496,10 @@ export interface SmartSearchResult<T extends SearchableItem> {
   item: T;
   score: number;
 }
+
+// Cache the last index to avoid rebuilding on every keystroke when items don't change
+let _cachedItems: SearchableItem[] | null = null;
+let _cachedIndex: IndexedItem<SearchableItem>[] | null = null;
 
 export function smartSearch<T extends SearchableItem>(
   items: T[],
@@ -498,14 +509,22 @@ export function smartSearch<T extends SearchableItem>(
   const q = normalize(query);
   if (!q) return items.slice(0, maxResults);
 
-  const expandedTerms = expandQuery(q);
+  // Rebuild index only when items reference changes
+  if (items !== (_cachedItems as T[] | null)) {
+    _cachedItems = items as SearchableItem[];
+    _cachedIndex = buildIndex(items as SearchableItem[]);
+  }
+  const index = _cachedIndex as IndexedItem<T>[];
 
-  const scored: SmartSearchResult<T>[] = [];
-  for (const item of items) {
-    const searchText = buildSearchText(item);
-    const score = scoreItem(searchText, expandedTerms);
+  // Split query into tokens and expand each independently
+  const rawTokens = q.split(/\s+/).filter(Boolean);
+  const tokenExpansions = rawTokens.map(expandToken);
+
+  const scored: { item: T; score: number }[] = [];
+  for (const indexed of index) {
+    const score = scoreItem(indexed, tokenExpansions);
     if (score > 0) {
-      scored.push({ item, score });
+      scored.push({ item: indexed.item, score });
     }
   }
 
@@ -513,7 +532,7 @@ export function smartSearch<T extends SearchableItem>(
   return scored.slice(0, maxResults).map((r) => r.item);
 }
 
-// ─── Category-aware search (groups results by category) ───────────────────────
+// ─── Category-aware search ────────────────────────────────────────────────────
 export function smartSearchGrouped<T extends SearchableItem>(
   items: T[],
   query: string,

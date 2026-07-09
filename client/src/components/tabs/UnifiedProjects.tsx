@@ -835,6 +835,74 @@ function RunCard({
           </div>
         </div>
 
+        {/* ── Conduit Type / Size / Empty-Future — shown for conduit runs, directly after Run Type ── */}
+        {!isWire && (
+          <>
+            {/* Conduit Type — DB-synced, ordered most-to-least common */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Type</Label>
+              <div className="flex flex-wrap gap-1">
+                {availableConduitTypes.map((ct) => (
+                  <button key={ct}
+                    onClick={() => onUpdate(run.id, { conduitType: ct as ConduitType })}
+                    className={cn(
+                      "px-2.5 py-1 rounded text-[10px] font-mono font-semibold border transition-all",
+                      (run.conduitType ?? "EMT") === ct
+                        ? "bg-yellow-400 text-black border-yellow-400"
+                        : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                    )}>
+                    {ct}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Conduit Size */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Size</Label>
+              <div className="grid grid-cols-5 gap-1">
+                {conduitSizesForType.map((cs) => (
+                  <button key={cs.value}
+                    onClick={() => onUpdate(run.id, { conduitSize: cs.value })}
+                    className={cn(
+                      "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                      run.conduitSize === cs.value
+                        ? "bg-yellow-400 text-black border-yellow-400"
+                        : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                    )}>
+                    {cs.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Conduit-Only toggle (future pull / empty conduit) */}
+            <div className={cn(
+              "flex items-center justify-between rounded-lg border px-3 py-2 transition-all",
+              conduitOnly ? "border-yellow-400/50 bg-yellow-400/8" : "border-border/50 bg-muted/10"
+            )}>
+              <div>
+                <div className={cn("text-[11px] font-medium", conduitOnly ? "text-yellow-400" : "text-foreground")}>Empty / Future Pull</div>
+                <div className="text-[10px] text-muted-foreground">No wire — conduit only (stub-out)</div>
+              </div>
+              <button
+                onClick={() => onUpdate(run.id, { conduitOnly: !conduitOnly })}
+                className={cn(
+                  "relative w-9 h-5 rounded-full border transition-all",
+                  conduitOnly
+                    ? "bg-yellow-400 border-yellow-400"
+                    : "bg-muted/40 border-border"
+                )}
+              >
+                <span className={cn(
+                  "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
+                  conduitOnly ? "left-4" : "left-0.5"
+                )} />
+              </button>
+            </div>
+          </>
+        )}
+
         {/* ── Multi-circuit conductor groups — hidden when Empty/Future Pull is on ── */}
         {!isWire && !conduitOnly && (() => {
           // Derive active groups: use conductorGroups if present and non-empty,
@@ -1049,69 +1117,6 @@ function RunCard({
         {/* ───────────────────────── CONDUIT MODE ───────────────────────── */}
         {!isWire && (
           <>
-            {/* Conduit Type — DB-synced, ordered most-to-least common */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Type</Label>
-              <div className="flex flex-wrap gap-1">
-                {availableConduitTypes.map((ct) => (
-                  <button key={ct}
-                    onClick={() => onUpdate(run.id, { conduitType: ct as ConduitType })}
-                    className={cn(
-                      "px-2.5 py-1 rounded text-[10px] font-mono font-semibold border transition-all",
-                      (run.conduitType ?? "EMT") === ct
-                        ? "bg-yellow-400 text-black border-yellow-400"
-                        : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                    )}>
-                    {ct}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Conduit Size */}
-            <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Size</Label>
-              <div className="grid grid-cols-5 gap-1">
-                {conduitSizesForType.map((cs) => (
-                  <button key={cs.value}
-                    onClick={() => onUpdate(run.id, { conduitSize: cs.value })}
-                    className={cn(
-                      "py-1 rounded text-[10px] font-mono font-medium border transition-all",
-                      run.conduitSize === cs.value
-                        ? "bg-yellow-400 text-black border-yellow-400"
-                        : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                    )}>
-                    {cs.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Conduit-Only toggle (future pull / empty conduit) */}
-            <div className={cn(
-              "flex items-center justify-between rounded-lg border px-3 py-2 transition-all",
-              conduitOnly ? "border-yellow-400/50 bg-yellow-400/8" : "border-border/50 bg-muted/10"
-            )}>
-              <div>
-                <div className={cn("text-[11px] font-medium", conduitOnly ? "text-yellow-400" : "text-foreground")}>Empty / Future Pull</div>
-                <div className="text-[10px] text-muted-foreground">No wire — conduit only (stub-out)</div>
-              </div>
-              <button
-                onClick={() => onUpdate(run.id, { conduitOnly: !conduitOnly })}
-                className={cn(
-                  "relative w-9 h-5 rounded-full border transition-all",
-                  conduitOnly
-                    ? "bg-yellow-400 border-yellow-400"
-                    : "bg-muted/40 border-border"
-                )}
-              >
-                <span className={cn(
-                  "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
-                  conduitOnly ? "left-4" : "left-0.5"
-                )} />
-              </button>
-            </div>
-
             {/* Conduit Estimating Inputs */}
             <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
               <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
