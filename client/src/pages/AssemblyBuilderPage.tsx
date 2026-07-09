@@ -5,6 +5,10 @@ import {
   Plus, Trash2, ChevronDown, ChevronRight, Search,
   Pencil, X, Check, Package, Layers
 } from "lucide-react";
+import { CATALOG } from "@/lib/materialCatalog";
+import { smartSearch } from "@/lib/smartSearch";
+import type { SearchableItem } from "@/lib/smartSearch";
+import type { CatalogItem } from "@/lib/materialCatalog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -104,16 +108,46 @@ function AssemblyCard({
     return s + hrs * qty;
   }, 0);
 
-  const filteredItems = useMemo(() => {
+  // Build a unified searchable list: master DB items first, then catalog items not already in DB
+  const dbAsSearchable = useMemo((): (CatalogItem & SearchableItem)[] => {
     if (!allItems) return [];
-    const q = itemSearch.toLowerCase();
-    return allItems.filter(
-      (m: MasterItem) =>
-        m.description.toLowerCase().includes(q) ||
-        (m.itemCode ?? "").toLowerCase().includes(q) ||
-        (m.category ?? "").toLowerCase().includes(q)
-    );
-  }, [allItems, itemSearch]);
+    return (allItems as MasterItem[]).map((m) => ({
+      id: `db-${m.id}`,
+      description: m.description,
+      category: m.category ?? "Custom",
+      unit: m.unit,
+      searchAliases: [],
+      _dbId: m.id,
+      _source: "db" as const,
+    } as unknown as CatalogItem & SearchableItem));
+  }, [allItems]);
+
+  // Filtered results using smartSearch (trade slang + aliases)
+  const filteredItems = useMemo((): Array<{ id: string; description: string; category: string; unit: string; dbItem?: MasterItem; catalogItem?: CatalogItem }> => {
+    const q = itemSearch.trim();
+    if (!q) {
+      // No query: show DB items first, then first 20 catalog items
+      const dbResults = (allItems ?? []).map((m: MasterItem) => ({ id: `db-${m.id}`, description: m.description, category: m.category ?? "Custom", unit: m.unit, dbItem: m }));
+      const catalogResults = CATALOG.slice(0, 20).map((c) => ({ id: c.id, description: c.description, category: c.category, unit: c.unit, catalogItem: c }));
+      const seen = new Set(dbResults.map((r) => r.description.toLowerCase()));
+      const filteredCat = catalogResults.filter((r) => !seen.has(r.description.toLowerCase()));
+      return [...dbResults, ...filteredCat].slice(0, 40);
+    }
+    // Search DB items
+    const dbResults = smartSearch<CatalogItem & SearchableItem>(dbAsSearchable, q, 20).map((r) => {
+      const raw = r as unknown as { _dbId: number };
+      const dbItem = (allItems ?? []).find((m: MasterItem) => m.id === raw._dbId);
+      return { id: r.id, description: r.description, category: r.category, unit: r.unit, dbItem };
+    });
+    // Search catalog
+    const catResults = smartSearch<CatalogItem & SearchableItem>(CATALOG as (CatalogItem & SearchableItem)[], q, 30).map((c) => ({
+      id: c.id, description: c.description, category: c.category, unit: c.unit, catalogItem: c as CatalogItem,
+    }));
+    // Merge: DB first, then catalog, dedup by description
+    const seen = new Set(dbResults.map((r) => r.description.toLowerCase()));
+    const filteredCat = catResults.filter((r) => !seen.has(r.description.toLowerCase()));
+    return [...dbResults, ...filteredCat].slice(0, 50);
+  }, [allItems, dbAsSearchable, itemSearch]);
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -256,26 +290,41 @@ function AssemblyCard({
                 </Button>
               </div>
               <div className="max-h-48 overflow-y-auto rounded-lg border border-border divide-y divide-border">
-                {filteredItems.slice(0, 50).map((m: MasterItem) => (
-                  <button
-                    key={m.id}
-                    className="w-full text-left px-3 py-2 hover:bg-muted/40 transition-colors"
-                    onClick={() => addItem.mutate({ assemblyId: assembly.id, masterItemId: m.id, qty: 1 })}
-                  >
-                    <div className="text-xs font-medium truncate">{m.description}</div>
-                    <div className="text-xs text-muted-foreground flex gap-3">
-                      {m.itemCode && <span>{m.itemCode}</span>}
-                      {m.category && <span>{m.category}</span>}
-                      <span>${parseFloat(m.masterMaterialCost).toFixed(2)}/{m.unit}</span>
-                      {showLabor && parseFloat(m.masterLaborHours) > 0 && (
-                        <span>{parseFloat(m.masterLaborHours).toFixed(3)} hrs</span>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                {filteredItems.map((result) => {
+                  const isDb = !!result.dbItem;
+                  const dbItem = result.dbItem;
+                  const catItem = result.catalogItem;
+                  return (
+                    <button
+                      key={result.id}
+                      className="w-full text-left px-3 py-2 hover:bg-muted/40 transition-colors"
+                      onClick={() => {
+                        if (isDb && dbItem) {
+                          addItem.mutate({ assemblyId: assembly.id, masterItemId: dbItem.id, qty: 1 });
+                        } else if (catItem) {
+                          // Catalog item — add as manual entry with null masterItemId
+                          addItem.mutate({ assemblyId: assembly.id, masterItemId: null as unknown as number, qty: 1 });
+                        }
+                      }}
+                    >
+                      <div className="text-xs font-medium truncate flex items-center gap-1.5">
+                        {result.description}
+                        {!isDb && <span className="text-[9px] text-muted-foreground/60 bg-muted/30 px-1 rounded">catalog</span>}
+                      </div>
+                      <div className="text-xs text-muted-foreground flex gap-3">
+                        {isDb && dbItem?.itemCode && <span>{dbItem.itemCode}</span>}
+                        {result.category && <span>{result.category}</span>}
+                        {isDb && dbItem && <span>${parseFloat(dbItem.masterMaterialCost).toFixed(2)}/{result.unit}</span>}
+                        {isDb && dbItem && showLabor && parseFloat(dbItem.masterLaborHours) > 0 && (
+                          <span>{parseFloat(dbItem.masterLaborHours).toFixed(3)} hrs</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
                 {filteredItems.length === 0 && (
                   <div className="px-3 py-4 text-xs text-muted-foreground text-center">
-                    No materials found. Add items to your Materials DB first.
+                    No materials found.
                   </div>
                 )}
               </div>

@@ -2378,9 +2378,69 @@ function CivilEditor({
                   <div className="bp-card overflow-hidden border-t border-border/40">
                     <div className="px-4 py-3 space-y-3">
                       <CrossPageTotals runs={runs} countSessions={countSessions} userMaterials={userMaterials} />
-
                     </div>
+                    {/* ── Export button — bottom-right of the L&M card ── */}
+                    {runs.length > 0 && (
+                      <div className="px-4 pb-4 flex justify-end">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const rows: string[][] = [];
+                            rows.push(["BidPhase \u2014 Material Export", "", "", "", "", "", ""]);
+                            rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", ""]);
+                            rows.push([`Project: ${projectName}`, "", "", "", "", "", ""]);
+                            rows.push([]);
+                            rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft)"]);
+                            for (const run of runs) {
+                              rows.push([
+                                run.name,
+                                run.pageNumber != null ? String(run.pageNumber) : "",
+                                run.conduitType ?? "EMT",
+                                `${run.conduitSize}"`,
+                                String(run.feet),
+                                String(Math.ceil(run.feet / 10)),
+                                String(parseFloat((run.feet * (run.conductors || 1) * 1.1).toFixed(1))),
+                              ]);
+                            }
+                            const totalFt = runs.reduce((a, r) => a + r.feet, 0);
+                            const totalSticks = runs.reduce((a, r) => a + Math.ceil(r.feet / 10), 0);
+                            rows.push(["TOTAL", "", "", "", String(totalFt.toFixed(0)), String(totalSticks), ""]);
+                            const activeSessions = countSessions.filter((cs) => cs.pins.length > 0);
+                            if (activeSessions.length > 0) {
+                              rows.push([]);
+                              rows.push(["Unit Count", "", "", "", "", "", ""]);
+                              rows.push(["Session", "EA", "Count", "", "", "", ""]);
+                              for (const cs of activeSessions) {
+                                rows.push([cs.name, "EA", String(cs.pins.length), "", "", "", ""]);
+                              }
+                            }
+                            const csv = rows.map((row) => row.map((v) => {
+                              const s = String(v);
+                              return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
+                            }).join(",")).join("\n");
+                            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `${projectName.replace(/[^a-z0-9]/gi, "_")}_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            toast.success("Exported as CSV.");
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors text-xs font-medium"
+                          title="Export runs as CSV"
+                        >
+                          <Download size={12} />
+                          Export CSV
+                        </button>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Bottom padding so content isn't hidden behind any fixed UI */}
+                  <div className="h-6" />
 
                 </div>{/* end scrollable accordion area */}
               </>
