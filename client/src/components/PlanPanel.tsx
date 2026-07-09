@@ -111,6 +111,16 @@ function clearBitmapCache(pdfHash?: string) {
   }
 }
 
+function hashPdfDataUrl(dataUrl: string) {
+  const sample = dataUrl.slice(0, 2048);
+  let h = 0;
+  for (let i = 0; i < sample.length; i++) {
+    h = (Math.imul(31, h) + sample.charCodeAt(i)) | 0;
+  }
+  return (h >>> 0).toString(16);
+}
+
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Mode = "none" | "set-scale-p1" | "set-scale-p2" | "measure" | "count" | "drag-scale" | "drag-run";
 
@@ -698,7 +708,8 @@ export default function PlanPanel({
     // Immediately set pageSizeRef so overlay canvas can draw without waiting for react-pdf
     pageSizeRef.current = { w: bitmap.width, h: bitmap.height };
     setPageReady(true);
-  }, [currentPage, pdfHash]);
+    centerPage(displayZoomRef.current);
+  }, [currentPage, pdfHash, centerPage]);
 
   // ── NormPoint → canvas pixel coords (single-page: pageIndex always 0) ─────
   const normToCanvas = useCallback(
@@ -1296,10 +1307,7 @@ export default function PlanPanel({
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
-      const sample = dataUrl.slice(0, 2048);
-      let h = 0;
-      for (let i = 0; i < sample.length; i++) { h = (Math.imul(31, h) + sample.charCodeAt(i)) | 0; }
-      const hash = (h >>> 0).toString(16);
+      const hash = hashPdfDataUrl(dataUrl);
       if (pdfFile) {
         // A PDF is already loaded — ask for confirmation before replacing
         setPendingPdfFile({ dataUrl, hash });
@@ -1310,10 +1318,26 @@ export default function PlanPanel({
     reader.readAsDataURL(file);
   };
 
+  // Legacy-project migration: older saved projects may have the PDF restored from IndexedDB
+  // without a persisted pdfHash. Derive and save the hash once so bitmap caching, prefetch,
+  // and page-scale keys work the same on old and new projects.
+  useEffect(() => {
+    if (pdfLoading || !pdfFile || pdfHash) return;
+    const hash = hashPdfDataUrl(pdfFile);
+    bitmapPageRef.current = "";
+    pageSizeRef.current = null;
+    setPageReady(false);
+    setPdfHash(hash);
+    setPdfLoadId((c) => c + 1);
+  }, [pdfLoading, pdfFile, pdfHash, setPdfHash]);
+
   // ── Page render callback ───────────────────────────────────────────────────
   const onPageRenderSuccess = useCallback((page: { width: number; height: number }) => {
     pageSizeRef.current = { w: page.width, h: page.height };
     setPageReady(true);
+    // Re-center using the freshly known page dimensions so page navigation always lands
+    // with the full sheet visible, even on older projects restored from persisted state.
+    centerPage(displayZoomRef.current);
     // Always reset transient pointer/pan state when a new page renders
     // This is the safety net that ensures cursor and tools work after PDF replacement
     dragRef.current = null;
@@ -1321,7 +1345,7 @@ export default function PlanPanel({
     setIsPanning(false);
     setMousePos(null);
     setCrosshair(null);
-  }, []);
+  }, [centerPage]);
 
   // Dismiss scale prompt when scale is set (e.g. after user completes set-scale flow)
   // We do NOT auto-show the prompt on page load — only when user tries to measure
@@ -1429,6 +1453,8 @@ export default function PlanPanel({
     const vp = viewportRef.current;
     if (!vp) return;
     const onWheel = (e: WheelEvent) => {
+      // When the page overview is open, allow the browser to scroll that overlay naturally.
+      if (showPageOverview) return;
       e.preventDefault();
       // Snap to nearest 5% step in the direction of scroll
       const cur = displayZoomRef.current;
@@ -1440,7 +1466,7 @@ export default function PlanPanel({
     };
     vp.addEventListener("wheel", onWheel, { passive: false });
     return () => vp.removeEventListener("wheel", onWheel);
-  }, [applyZoom]);
+  }, [applyZoom, showPageOverview]);
 
   // ── Pinch zoom + simultaneous pan ────────────────────────────────────────────
   // KEY DESIGN: During the pinch gesture, we apply the CSS transform DIRECTLY to

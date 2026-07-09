@@ -676,3 +676,8 @@
 - [x] All ?? 10 fallback defaults in run calculations changed to ?? 0
 - [x] handlePush new run defaults changed to 0 for all estimating fields
 - [x] TypeScript: 0 errors
+## v5.72 — PlanPanel Consistency Fixes
+- [x] Page centering on navigation works for all projects (old and new) — re-center again after cached/real page render so page changes always land with the full sheet visible
+- [x] Bitmap cache and instant page load works for all projects — legacy saved PDFs now auto-derive and persist pdfHash on restore so old projects use the same bitmap cache + prefetch path
+- [x] Restore scrollable page overview panel — wheel zoom is disabled while the overview overlay is open so the page picker can scroll naturally again
+- [x] TypeScript: 0 errors
