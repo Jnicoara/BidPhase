@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import {
@@ -75,7 +75,16 @@ function AssemblyCard({
     { id: assembly.id },
     { enabled: expanded }
   );
-  const { data: allItems } = trpc.masterItems.list.useQuery(undefined, { enabled: addingItem });
+  // Always fetch items when the assembly is expanded so the search panel
+  // has fresh data immediately when opened (no stale-cache delay).
+  const { data: allItems, refetch: refetchItems } = trpc.masterItems.list.useQuery(
+    undefined,
+    { enabled: expanded, staleTime: 0 }
+  );
+  // When the add-item panel opens, force a fresh fetch so we never show stale results
+  useEffect(() => {
+    if (addingItem) { refetchItems(); }
+  }, [addingItem]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateAssembly = trpc.masterAssemblies.update.useMutation({
     onSuccess: () => { onRefresh(); setEditingName(false); },

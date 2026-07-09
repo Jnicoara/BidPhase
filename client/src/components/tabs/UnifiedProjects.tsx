@@ -42,7 +42,7 @@ import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
   Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Link2, Trash2, Pencil, Check, X, Undo2, Maximize2, Download,
+  Link2, Trash2, Pencil, Check, X, Undo2, Maximize2, Download, Layers,
 } from "lucide-react";
 import type { CatalogItem, UserMaterialRow } from "@/lib/materialCatalog";
 import { getConduitPricePerFoot, getWirePricePerFoot } from "@/lib/materialCatalog";
@@ -816,6 +816,25 @@ function RunCard({
             className="h-8 font-mono text-sm bg-input border-border" />
         </div>
 
+        {/* ── Run type toggle: Conduit vs Wire Only — FIRST so irrelevant fields hide immediately ── */}
+        <div className="space-y-1.5">
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Run Type</Label>
+          <div className="flex gap-2">
+            {(["conduit", "wire"] as const).map((rt) => (
+              <button key={rt}
+                onClick={() => onUpdate(run.id, { runType: rt, conduitOnly: false })}
+                className={cn(
+                  "flex-1 py-1.5 rounded text-xs font-medium border transition-all",
+                  (run.runType ?? "conduit") === rt
+                    ? "bg-yellow-400 text-black border-yellow-400"
+                    : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                )}>
+                {rt === "wire" ? "Wire Only" : "Conduit / Wire"}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ── Multi-circuit conductor groups (conduit mode only) ── */}
         {!isWire && (() => {
           // Derive active groups: use conductorGroups if present and non-empty,
@@ -1026,25 +1045,6 @@ function RunCard({
             )}
           </div>
         )}
-
-        {/* Run type toggle: Conduit vs Wire Only */}
-        <div className="space-y-1.5">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Run Type</Label>
-          <div className="flex gap-2">
-            {(["conduit", "wire"] as const).map((rt) => (
-              <button key={rt}
-                onClick={() => onUpdate(run.id, { runType: rt, conduitOnly: false })}
-                className={cn(
-                  "flex-1 py-1.5 rounded text-xs font-medium border transition-all",
-                  (run.runType ?? "conduit") === rt
-                    ? "bg-yellow-400 text-black border-yellow-400"
-                    : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                )}>
-                {rt === "wire" ? "Wire Only" : "Conduit / Wire"}
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* ───────────────────────── CONDUIT MODE ───────────────────────── */}
         {!isWire && (
@@ -2400,13 +2400,14 @@ function CivilEditor({
                                       onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }}
                                     >{cs.name}</span>
                                   )}
-                                  {/* Assembly badge */}
+                                  {/* Assembly badge — prominent pill showing the linked assembly name */}
                                   {cs.assemblyId && (
                                     <span
-                                      className="shrink-0 text-[8px] font-bold px-1 py-0.5 rounded bg-[#F5C518]/20 text-[#F5C518] border border-[#F5C518]/30 font-mono uppercase tracking-wide"
+                                      className="shrink-0 flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#F5C518] text-black font-mono uppercase tracking-wide"
                                       title={`Assembly: ${cs.assemblyName}`}
                                     >
-                                      ASM
+                                      <Layers size={9} />
+                                      {cs.assemblyName ? cs.assemblyName.slice(0, 12) : "ASM"}
                                     </span>
                                   )}
                                   {/* Inline price-per-item field — hidden for assembly sessions */}
@@ -2636,9 +2637,9 @@ function CivilEditor({
                     <div className="px-4 py-3 space-y-3">
                       <CrossPageTotals runs={runs} countSessions={countSessions} userMaterials={userMaterials} />
                     </div>
-                    {/* ── Export button — bottom-right of the L&M card ── */}
+                    {/* ── Export button — full-width prominent button at the bottom of the L&M card ── */}
                     {runs.length > 0 && (
-                      <div className="px-4 pb-4 flex justify-end">
+                      <div className="px-4 pb-4">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -2686,11 +2687,11 @@ function CivilEditor({
                             URL.revokeObjectURL(url);
                             toast.success("Exported as CSV.");
                           }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors text-xs font-medium"
+                          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[#F5C518] text-black hover:bg-[#F5C518]/90 active:scale-[0.98] transition-all text-sm font-bold shadow-sm"
                           title="Export runs as CSV"
                         >
-                          <Download size={12} />
-                          Export CSV
+                          <Download size={15} />
+                          Export Material List (CSV)
                         </button>
                       </div>
                     )}

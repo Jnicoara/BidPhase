@@ -674,7 +674,8 @@ export default function PlanPanel({
         return { ...run, totalFeet: parseFloat((totalPx / pxPerFt).toFixed(2)) };
       })
     );
-  }, [currentRuns.map(r => r.points.length).join(","), scaleRatio, pageReady]); // eslint-disable-line
+  // Trigger on point count changes AND coordinate changes (drag moves a point without changing count)
+  }, [currentRuns.map(r => r.points.map(p => `${p.nx?.toFixed(4)},${p.ny?.toFixed(4)}`).join("|")).join(";"), scaleRatio, pageReady]); // eslint-disable-line
 
   // ── Draw overlay canvas ────────────────────────────────────────────────────
   const drawCanvas = useCallback(() => {
@@ -1657,8 +1658,30 @@ export default function PlanPanel({
     } else {
       setMode("measure");
       modeRef.current = "measure";
+      // Auto-re-push: after dragging a run point, recalculate totalFeet and push
+      // to the right panel so the L&M totals update immediately without needing
+      // the user to press Push again.
+      if (drag.runId && scaleRatio && onPushDistance) {
+        const pxPerFt = scaleRatio * RENDER_BASE_ZOOM;
+        // Read the latest runs directly from pageRunsMap ref to avoid stale closure
+        const latestRuns = pageRunsMap[pageIdx] ?? [];
+        const run = latestRuns.find((r) => r.id === drag.runId);
+        if (run && run.points.length >= 2) {
+          let totalPx = 0;
+          for (let i = 1; i < run.points.length; i++) {
+            if (isPenLift(run.points[i]) || isPenLift(run.points[i - 1])) continue;
+            const ca = normToCanvas(run.points[i - 1]);
+            const cb = normToCanvas(run.points[i]);
+            if (ca && cb) totalPx += dist2D(ca.x, ca.y, cb.x, cb.y);
+          }
+          const ft = parseFloat((totalPx / pxPerFt).toFixed(2));
+          if (ft > 0) {
+            onPushDistance(ft, run.name, run.conduitSize, currentPage);
+          }
+        }
+      }
     }
-  }, []);
+  }, [scaleRatio, pageRunsMap, pageIdx, normToCanvas, onPushDistance, currentPage]);
 
   // ── Canvas click handler ──────────────────────────────────────────────────────
   const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {

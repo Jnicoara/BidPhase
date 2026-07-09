@@ -614,3 +614,13 @@
 - [x] Unit counter: Save to L&M button added to each session row (visible when session has ≥1 pin)
 - [x] smartSearch: added outlet cover / outlet plate / switch cover / switch plate / cover / screwless aliases
 - [x] TypeScript: 0 errors
+
+## v5.56 — Run Totals Fix, Section Reorder, Search Fix, Export Button, Assembly Badge
+
+- [x] Fix run totals not updating on drag/extend: useEffect now depends on full point coordinates; drag-end auto-re-pushes footage if run was already pushed
+- [x] Reorder RunCard: Run Type first → Current Carrying Conductors → EGC → Conduit details (Wire Only hides irrelevant fields immediately)
+- [x] Remove duplicate Run Type toggle left at old position
+- [x] Fix assembly builder search stale results: allItems fetched whenever assembly is expanded (staleTime:0) and force-refetched when add panel opens
+- [x] Restore large full-width Export Material List (CSV) button with solid yellow background
+- [x] Assembly count badge: solid yellow pill with Layers icon + assembly name (up to 12 chars)
+- [x] TypeScript: 0 errors
