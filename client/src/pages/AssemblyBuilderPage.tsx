@@ -129,18 +129,40 @@ function AssemblyCard({
   // Filtered results using smartSearch (trade slang + aliases)
   const filteredItems = useMemo((): Array<{ id: string; description: string; category: string; unit: string; dbItem?: MasterItem; catalogItem?: CatalogItem }> => {
     const q = itemSearch.trim();
+
+    // Helper: deduplicate DB items by description (keep the one with the lowest id = oldest)
+    const dedupeDb = (items: MasterItem[]): MasterItem[] => {
+      const seen = new Map<string, MasterItem>();
+      for (const m of items) {
+        const key = m.description.toLowerCase().trim();
+        if (!seen.has(key)) seen.set(key, m);
+      }
+      return Array.from(seen.values());
+    };
+
     if (!q) {
-      // No query: show DB items first, then first 20 catalog items
-      const dbResults = (allItems ?? []).map((m: MasterItem) => ({ id: `db-${m.id}`, description: m.description, category: m.category ?? "Custom", unit: m.unit, dbItem: m }));
+      // No query: show DB items first (deduped), then first 20 catalog items
+      const deduped = dedupeDb(allItems ?? []);
+      const dbResults = deduped.map((m: MasterItem) => ({ id: `db-${m.id}`, description: m.description, category: m.category ?? "Custom", unit: m.unit, dbItem: m }));
       const catalogResults = CATALOG.slice(0, 20).map((c) => ({ id: c.id, description: c.description, category: c.category, unit: c.unit, catalogItem: c }));
       const seen = new Set(dbResults.map((r) => r.description.toLowerCase()));
       const filteredCat = catalogResults.filter((r) => !seen.has(r.description.toLowerCase()));
       return [...dbResults, ...filteredCat].slice(0, 40);
     }
-    // Search DB items
-    const dbResults = smartSearch<CatalogItem & SearchableItem>(dbAsSearchable, q, 20).map((r) => {
+    // Search DB items (deduped)
+    const deduped = dedupeDb(allItems ?? []);
+    const dedupedSearchable = deduped.map((m) => ({
+      id: `db-${m.id}`,
+      description: m.description,
+      category: m.category ?? "Custom",
+      unit: m.unit,
+      searchAliases: [],
+      _dbId: m.id,
+      _source: "db" as const,
+    } as unknown as CatalogItem & SearchableItem));
+    const dbResults = smartSearch<CatalogItem & SearchableItem>(dedupedSearchable, q, 20).map((r) => {
       const raw = r as unknown as { _dbId: number };
-      const dbItem = (allItems ?? []).find((m: MasterItem) => m.id === raw._dbId);
+      const dbItem = deduped.find((m: MasterItem) => m.id === raw._dbId);
       return { id: r.id, description: r.description, category: r.category, unit: r.unit, dbItem };
     });
     // Search catalog
@@ -151,7 +173,7 @@ function AssemblyCard({
     const seen = new Set(dbResults.map((r) => r.description.toLowerCase()));
     const filteredCat = catResults.filter((r) => !seen.has(r.description.toLowerCase()));
     return [...dbResults, ...filteredCat].slice(0, 50);
-  }, [allItems, dbAsSearchable, itemSearch]);
+  }, [allItems, itemSearch]);
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">

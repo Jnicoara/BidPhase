@@ -27,7 +27,11 @@ export const masterItemsRouter = router({
       notes: z.string().max(2000).nullable().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const result = await db.createMasterItem({
+      // Upsert: if an item with the same description already exists for this user, return it instead of creating a duplicate
+      const items = await db.getMasterItems(ctx.user.id);
+      const existing = items.find(i => i.description.toLowerCase().trim() === input.description.toLowerCase().trim());
+      if (existing) return existing;
+      await db.createMasterItem({
         userId: ctx.user.id,
         itemCode: input.itemCode ?? null,
         category: input.category ?? null,
@@ -38,8 +42,8 @@ export const masterItemsRouter = router({
         notes: input.notes ?? null,
       });
       // Re-fetch to get the full row with id
-      const items = await db.getMasterItems(ctx.user.id);
-      const created = items.find(i => i.description === input.description && i.itemCode === (input.itemCode ?? null));
+      const refreshed = await db.getMasterItems(ctx.user.id);
+      const created = refreshed.find(i => i.description.toLowerCase().trim() === input.description.toLowerCase().trim());
       return created ?? { success: true };
     }),
 

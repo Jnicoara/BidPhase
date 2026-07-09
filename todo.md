@@ -604,3 +604,13 @@
 - [x] Run Calculator: each circuit has its own conductor count slider, Cu/Al material toggle, and AWG size grid
 - [x] Run Calculator: wire cost and CrossPageTotals aggregate across all conductor groups per run
 - [x] TypeScript: 0 errors
+
+## v5.55 — Assembly Search Fix + Unit Counter Save-to-L&M Button
+
+- [x] Assembly builder search: deduplicate DB results by description (keep oldest row, hide duplicates from repeated imports)
+- [x] Assembly builder: server-side upsert — importing a catalog item that already exists returns the existing DB row instead of creating a new duplicate
+- [x] Assembly builder: search panel closes immediately on item click (optimistic close, no stale results)
+- [x] Assembly builder: all result buttons disabled immediately on click (prevents duplicate adds from multi-tap)
+- [x] Unit counter: Save to L&M button added to each session row (visible when session has ≥1 pin)
+- [x] smartSearch: added outlet cover / outlet plate / switch cover / switch plate / cover / screwless aliases
+- [x] TypeScript: 0 errors

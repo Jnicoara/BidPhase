@@ -2466,7 +2466,19 @@ function CivilEditor({
                                       <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(null); }} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
                                     </>
                                   ) : (
-                                    <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive" title="Delete session"><Trash2 size={11} /></button>
+                                    <>
+                                      {/* Save to L&M button — only shown when session has pins */}
+                                      {cs.pins.length > 0 && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); handleSaveCountToLM(cs); }}
+                                          className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30 hover:bg-[#F5C518]/30 transition-colors"
+                                          title="Save count to Labor & Material list"
+                                        >
+                                          <Download size={9} /> L&amp;M
+                                        </button>
+                                      )}
+                                      <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive" title="Delete session"><Trash2 size={11} /></button>
+                                    </>
                                   )}
                                 </div>
                               );
