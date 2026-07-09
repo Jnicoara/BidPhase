@@ -658,3 +658,11 @@
 - [x] Crosshair-only redraw: snapshot canvas after full redraw; on mouse move only restore snapshot + draw crosshair lines (no full run/pin redraw on every mouse move)
 - [x] Snapshot invalidation: re-captured whenever runs, pins, or page change so crosshair always restores to correct state
 - [x] TypeScript: 0 errors
+
+## v5.70 — Smooth Crosshair Rebuild (Dedicated Canvas Approach)
+- [x] Rolled back to stable baseline before all RAF/snapshot jitter experiments
+- [x] Crosshair moved to dedicated crosshairCanvas (zIndex 11, pointer-events:none) — main canvas never redrawn on mouse move
+- [x] crosshairPosRef + RAF deduplicate crosshair draws; no React state change on mouse move = zero jitter
+- [x] Viewport cursor: grab off-page at all times, grabbing when panning; canvas cursor:none in active tool mode
+- [x] Page navigation (goToPage) now calls zoomReset() so clicking any page chip or arrow re-centers at 40% zoom
+- [x] TypeScript: 0 errors

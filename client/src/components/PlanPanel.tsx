@@ -546,6 +546,11 @@ export default function PlanPanel({
   // pdfDocRef: holds the raw pdfjs document for bitmap cache rendering
   const pdfDocRef = useRef<import("pdfjs-dist").PDFDocumentProxy | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Dedicated crosshair canvas — sits on top of main canvas, pointer-events:none.
+  // Crosshair is drawn here via RAF so the main canvas is never touched on mouse move.
+  const crosshairCanvasRef = useRef<HTMLCanvasElement>(null);
+  const crosshairRafRef = useRef<number | null>(null);
+  const crosshairPosRef = useRef<{ x: number; y: number } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);   // fixed-size overflow:hidden viewport
   const scrollAreaRef = viewportRef;                  // alias kept for legacy code
   const pagesContainerRef = useRef<HTMLDivElement>(null);
@@ -1157,42 +1162,63 @@ export default function PlanPanel({
       ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
       ctx.fillText(`S${i + 1}`, p.x + 9 * S, p.y - 7 * S);
     });
-    // ── Full-screen crosshair overlay ────────────────────────────────────────────
-    // Draws spanning hairlines from edge to edge in the active color.
-    // Color: yellow for scale mode, active run color for measure mode.
-    if (crosshair) {
-      const { x, y } = crosshair;
-      // Crosshair lines are always yellow regardless of mode
-      const hex = "#F5C518";
-      // Parse hex to rgb for rgba usage
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      ctx.save();
-      ctx.setLineDash([]);
-      // Outer soft glow
-      ctx.strokeStyle = `rgba(${r},${g},${b},0.18)`;
-      ctx.lineWidth = 8 * S;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      // Mid glow
-      ctx.strokeStyle = `rgba(${r},${g},${b},0.45)`;
-      ctx.lineWidth = 3 * S;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      // Crisp inner hairline
-      ctx.strokeStyle = `rgba(${r},${g},${b},1)`;
-      ctx.lineWidth = 1 * S;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-      ctx.restore();
-    }
-  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, crosshair, activeRunColor]);
+  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, activeRunColor]);
 
-  // Redraw canvas whenever runs/pins/page/crosshair change
-  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady, crosshair]);
-  // Clear crosshair guide whenever mode returns to idle
-  useEffect(() => { if (mode === "none") setCrosshair(null); }, [mode]);
+  // Redraw canvas whenever runs/pins/page change (crosshair is now on its own canvas)
+  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
+
+  // ── Crosshair canvas: sync size to main canvas and clear when mode is idle ──
+  // The crosshair canvas is sized to match the main canvas whenever pageReady changes.
+  // On mouse move, drawCrosshair() is called via RAF to draw only the crosshair lines.
+  const drawCrosshair = useCallback(() => {
+    const cc = crosshairCanvasRef.current;
+    const mc = canvasRef.current;
+    if (!cc || !mc) return;
+    // Keep crosshair canvas in sync with main canvas dimensions
+    if (cc.width !== mc.width || cc.height !== mc.height) {
+      cc.width = mc.width;
+      cc.height = mc.height;
+    }
+    const ctx2 = cc.getContext("2d");
+    if (!ctx2) return;
+    ctx2.clearRect(0, 0, cc.width, cc.height);
+    const pos = crosshairPosRef.current;
+    if (!pos) return;
+    const { x, y } = pos;
+    const S = mc.width / (mc.offsetWidth || mc.width);
+    const hex = "#F5C518";
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    ctx2.save();
+    ctx2.setLineDash([]);
+    // Outer soft glow
+    ctx2.strokeStyle = `rgba(${r},${g},${b},0.18)`;
+    ctx2.lineWidth = 8 * S;
+    ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, cc.height); ctx2.stroke();
+    ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(cc.width, y); ctx2.stroke();
+    // Mid glow
+    ctx2.strokeStyle = `rgba(${r},${g},${b},0.45)`;
+    ctx2.lineWidth = 3 * S;
+    ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, cc.height); ctx2.stroke();
+    ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(cc.width, y); ctx2.stroke();
+    // Crisp inner hairline
+    ctx2.strokeStyle = `rgba(${r},${g},${b},1)`;
+    ctx2.lineWidth = 1 * S;
+    ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, cc.height); ctx2.stroke();
+    ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(cc.width, y); ctx2.stroke();
+    ctx2.restore();
+  }, []);
+
+  // Clear crosshair canvas whenever mode returns to idle
+  useEffect(() => {
+    if (mode === "none") {
+      crosshairPosRef.current = null;
+      setCrosshair(null);
+      const cc = crosshairCanvasRef.current;
+      if (cc) { const ctx2 = cc.getContext("2d"); ctx2?.clearRect(0, 0, cc.width, cc.height); }
+    }
+  }, [mode]);
 
   // ── File upload ────────────────────────────────────────────────────────────
   const applyPdfLoad = useCallback((dataUrl: string, hash: string) => {
@@ -1836,22 +1862,36 @@ export default function PlanPanel({
 
   // ── Canvas mouse move (drag only) ────────────────────────────────────────
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (modeRef.current === "none") { setCrosshair(null); setMousePos(null); return; }
+    if (modeRef.current === "none") {
+      crosshairPosRef.current = null;
+      setCrosshair(null);
+      setMousePos(null);
+      const cc = crosshairCanvasRef.current;
+      if (cc) { const ctx2 = cc.getContext("2d"); ctx2?.clearRect(0, 0, cc.width, cc.height); }
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
     const scaleX = canvas.width  / canvas.offsetWidth;
     const scaleY = canvas.height / canvas.offsetHeight;
-    setCrosshair({
+    // Update crosshair position ref — no React state = no re-render on every mouse move
+    crosshairPosRef.current = {
       x: e.nativeEvent.offsetX * scaleX,
       y: e.nativeEvent.offsetY * scaleY,
+    };
+    // Schedule RAF to draw crosshair on the dedicated canvas (deduplicated per frame)
+    if (crosshairRafRef.current !== null) cancelAnimationFrame(crosshairRafRef.current);
+    crosshairRafRef.current = requestAnimationFrame(() => {
+      crosshairRafRef.current = null;
+      drawCrosshair();
     });
-    // Track viewport-relative position for the smooth overlay cursor div
+    // Track viewport-relative position for the smooth overlay cursor dot
     const viewport = viewportRef.current;
     if (viewport) {
       const rect = viewport.getBoundingClientRect();
       setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     }
-  }, []);
+  }, [drawCrosshair]);
 
   // ── Confirm scale ──────────────────────────────────────────────────────────
   const confirmScale = useCallback(() => {
@@ -2001,7 +2041,9 @@ export default function PlanPanel({
     onCurrentPageChange?.(clamped);
     setMode("none");
     modeRef.current = "none";
-  }, [numPages, setCurrentPage, onCurrentPageChange]);
+    // Reset zoom and re-center so the user is never lost in the black after navigating
+    zoomReset();
+  }, [numPages, setCurrentPage, onCurrentPageChange, zoomReset]);
 
   // ── Compute run count per page for page selector badges ───────────────────
   const getPageRunCount = useCallback((pIdx: number) => {
@@ -2646,7 +2688,7 @@ export default function PlanPanel({
         style={{
           cursor: (pendingPdfFile || deleteConfirm || showScalePrompt || !pageReady)
             ? "default"
-            : isPanning ? "grabbing" : activeCursorColor ? "none" : (mode !== "none" ? "crosshair" : "grab"),
+            : isPanning ? "grabbing" : "grab",
           // Disable ALL browser touch handling (pan, pinch-zoom, pull-to-refresh, edge-swipe).
           // Our own touch handlers in the useEffect below manage everything.
           touchAction: "none",
@@ -2816,7 +2858,7 @@ export default function PlanPanel({
                     left: 0,
                     pointerEvents: "auto",
                     zIndex: 10,
-                    cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : mode === "none" ? "inherit" : (activeCursorColor ? "none" : "crosshair"),
+                    cursor: mode === "drag-scale" || mode === "drag-run" ? "grabbing" : activeCursorColor ? "none" : "inherit",
                   }}
                   onClick={handleCanvasClick}
                   onDoubleClick={handleCanvasDoubleClick}
@@ -2824,7 +2866,27 @@ export default function PlanPanel({
                   onMouseMove={(e) => { handleCanvasMouseMove(e); handleCanvasDragMove(e); }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseUp={handleCanvasDragEnd}
-                  onMouseLeave={() => { handleCanvasDragEnd(); setCrosshair(null); setMousePos(null); }}
+                  onMouseLeave={() => {
+                    handleCanvasDragEnd();
+                    crosshairPosRef.current = null;
+                    setCrosshair(null);
+                    setMousePos(null);
+                    const cc = crosshairCanvasRef.current;
+                    if (cc) { const ctx2 = cc.getContext("2d"); ctx2?.clearRect(0, 0, cc.width, cc.height); }
+                  }}
+                />
+              )}
+              {/* Dedicated crosshair canvas — pointer-events:none, drawn via RAF, never causes main canvas redraw */}
+              {pageReady && (
+                <canvas
+                  ref={crosshairCanvasRef}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    pointerEvents: "none",
+                    zIndex: 11,
+                  }}
                 />
               )}
             </div>
