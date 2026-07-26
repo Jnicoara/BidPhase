@@ -1,5 +1,5 @@
 /**
- * BidPhase — Electrical Estimating Database
+ * HelixBid — Electrical Estimating Database
  *
  * COPYRIGHT NOTICE:
  *   All item descriptions use standard industry terminology (not copyrightable).

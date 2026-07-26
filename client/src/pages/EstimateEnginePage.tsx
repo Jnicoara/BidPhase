@@ -1,5 +1,5 @@
 /**
- * BidPhase — Estimate Engine Page (v2 — Dual-Mode Assembly/Item Engine)
+ * HelixBid — Estimate Engine Page (v2 — Dual-Mode Assembly/Item Engine)
  *
  * Workflow:
  *  1. User builds a Takeoff using Item lines (from count sessions / paste) and/or Assembly lines
@@ -517,7 +517,7 @@ export default function EstimateEnginePage({ onBack }: EstimateEnginePageProps) 
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `BidPhase-Estimate-${category.replace(/\s+/g, "-")}-${Date.now()}.csv`;
+    a.download = `HelixBid-Estimate-${category.replace(/\s+/g, "-")}-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }, [estimateRows, category]);

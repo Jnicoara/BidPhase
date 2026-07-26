@@ -1,9 +1,9 @@
 /**
- * BidPhase — Home Screen
+ * HelixBid — Home Screen
  *
  * Merged branded landing + project list.
  * Design: Tactical Dark Mode SaaS, Safety Yellow (#F5C518) accent.
- * - BidPhase branding at top
+ * - HelixBid branding at top
  * - Project list below (all 4 category stores merged into one view)
  * - "New Project" CTA prominent
  */

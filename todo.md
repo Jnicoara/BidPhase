@@ -699,3 +699,9 @@
 - [x] Skip pdfLoading gate when bitmap cache already has the current page — instant display on project switch
 - [x] Replace heavy react-pdf thumbnail rendering in page overview with lightweight bitmap cache canvases
 - [x] TypeScript: 0 errors
+
+## v5.75 — Rename to HelixBid
+- [x] Renamed all occurrences of "BidPhase" / "Bid Phase" to "HelixBid" across all source files, comments, UI text, exports, page titles, IndexedDB name, and package.json
+- [x] Renamed BidPhaseShell.tsx → HelixBidShell.tsx and BidPhaseHomePage.tsx → HelixBidHomePage.tsx
+- [x] All imports and references updated automatically
+- [x] TypeScript: 0 errors

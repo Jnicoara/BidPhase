@@ -5,7 +5,7 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AppProvider } from "./contexts/AppContext";
-import BidPhaseShell from "./pages/BidPhaseShell";
+import HelixBidShell from "./pages/HelixBidShell";
 import { useTheme } from "./contexts/ThemeContext";
 import AuthGuard from "./components/AuthGuard";
 
@@ -18,7 +18,7 @@ function Router() {
   return (
     <AuthGuard>
       <Switch>
-        <Route path={"/"} component={BidPhaseShell} />
+        <Route path={"/"} component={HelixBidShell} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

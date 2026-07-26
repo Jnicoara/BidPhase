@@ -1,5 +1,5 @@
 /**
- * BidPhase — Global Floating Export Button
+ * HelixBid — Global Floating Export Button
  *
  * Provides two export formats via a small dropdown:
  *   1. CSV  — flat spreadsheet for supplier ordering / data import
@@ -108,7 +108,7 @@ function buildPDF(
   function drawFooter() {
     doc.setFontSize(8);
     doc.setTextColor(...LIGHT);
-    doc.text(`BidPhase — Bill of Materials  ·  Page ${pageNum}`, ML, PH - 24);
+    doc.text(`HelixBid — Bill of Materials  ·  Page ${pageNum}`, ML, PH - 24);
     doc.text(dateStr, PW - MR, PH - 24, { align: "right" });
     doc.setDrawColor(...RULE);
     doc.setLineWidth(0.5);
@@ -122,11 +122,11 @@ function buildPDF(
 
   y = 48;
 
-  // BidPhase brand + "Bill of Materials" subtitle
+  // HelixBid brand + "Bill of Materials" subtitle
   doc.setFontSize(22);
   doc.setTextColor(...DARK);
   doc.setFont("helvetica", "bold");
-  doc.text("BidPhase", ML, y);
+  doc.text("HelixBid", ML, y);
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
@@ -140,7 +140,7 @@ function buildPDF(
   doc.text(dateStr, PW - MR, 48, { align: "right" });
 
   // ── Job / contractor info block ──────────────────────────────────────────
-  // Rendered to the right of the BidPhase brand, or below if fields are filled
+  // Rendered to the right of the HelixBid brand, or below if fields are filled
   const hasJobInfo = jobInfo.jobName || jobInfo.contractorName || jobInfo.address;
   if (hasJobInfo) {
     // Right-aligned info block
@@ -540,7 +540,7 @@ function exportCSV(
 ): void {
   const rows: string[][] = [];
 
-  rows.push(["BidPhase — Material Export", "", "", "", "", "", "", "", ""]);
+  rows.push(["HelixBid — Material Export", "", "", "", "", "", "", "", ""]);
   rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", "", "", ""]);
   rows.push([]);
 
@@ -631,7 +631,7 @@ function exportCSV(
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   a.href     = url;
-  a.download = `BidPhase_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `HelixBid_Export_${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -705,7 +705,7 @@ function PrintPreviewModal({
     const jobSlug = jobInfo.jobName
       ? `_${jobInfo.jobName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "")}`
       : "";
-    doc.save(`BidPhase_BOM${jobSlug}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`HelixBid_BOM${jobSlug}_${new Date().toISOString().slice(0, 10)}.pdf`);
     toast.success("Bill of Materials downloaded.");
     onClose();
   };

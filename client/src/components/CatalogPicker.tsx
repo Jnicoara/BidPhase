@@ -1,5 +1,5 @@
 /**
- * BidPhase — CatalogPicker
+ * HelixBid — CatalogPicker
  *
  * A searchable inline picker that lets the user select a material from the
  * price catalog. Uses a React portal so the dropdown escapes any

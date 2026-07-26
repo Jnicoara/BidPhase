@@ -1,12 +1,12 @@
 /**
- * BidPhaseHomePage — v5.46
+ * HelixBidHomePage — v5.46
  * Dedicated landing page reached by clicking the BP logo.
  * Clean branded entry point with CTA to navigate to Projects.
  */
 import { Zap, FolderOpen, BarChart3, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface BidPhaseHomePageProps {
+interface HelixBidHomePageProps {
   onGoToProjects: () => void;
 }
 
@@ -33,7 +33,7 @@ const FEATURES = [
   },
 ];
 
-export default function BidPhaseHomePage({ onGoToProjects }: BidPhaseHomePageProps) {
+export default function HelixBidHomePage({ onGoToProjects }: HelixBidHomePageProps) {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* ── Hero ── */}

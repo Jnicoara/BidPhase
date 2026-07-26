@@ -1,5 +1,5 @@
 /**
- * BidPhase — Unified Projects Tab
+ * HelixBid — Unified Projects Tab
  * Single tab replacing Civil / Commercial / Residential.
  * Uses CivilState/CivilProject as the canonical project type.
  * Each run has a runType toggle: "conduit" (pipe sticks + fittings) or "wire" (bare conductor).
@@ -109,7 +109,7 @@ function StrippedWireIcon({ size = 16, className = "" }: { size?: number; classN
 }
 
 // ─── Infrastructure icon ────────────────────────────────────────────────
-// Exported so BidPhaseShell can import it directly instead of duplicating the
+// Exported so HelixBidShell can import it directly instead of duplicating the
 // SVG definition. Both the sidebar nav and the editor header use this icon.
 export function CivilIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   return (
@@ -1387,7 +1387,7 @@ function ExportButton({ runs, countSessions = [], projectName }: { runs: RunItem
 
   const buildRows = () => {
     const rows: string[][] = [];
-    rows.push(["BidPhase \u2014 Material Export", "", "", "", "", "", ""]);
+    rows.push(["HelixBid \u2014 Material Export", "", "", "", "", "", ""]);
     rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", ""]);
     rows.push([`Project: ${projectName}`, "", "", "", "", "", ""]);
     rows.push([]);
@@ -1444,7 +1444,7 @@ function ExportButton({ runs, countSessions = [], projectName }: { runs: RunItem
 
   const exportPDF = () => {
     const rows = buildRows();
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>BidPhase Export</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>HelixBid Export</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 11px; margin: 24px; color: #111; }
   h1 { font-size: 16px; margin-bottom: 4px; }
@@ -1456,7 +1456,7 @@ function ExportButton({ runs, countSessions = [], projectName }: { runs: RunItem
   .section { font-weight: bold; background: #f5f5f5; padding: 4px 8px; margin-top: 16px; }
   .total { font-weight: bold; background: #fffde7; }
 </style></head><body>
-<h1>BidPhase — Material Export</h1>
+<h1>HelixBid — Material Export</h1>
 <div class="meta">Project: ${projectName} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}</div>
 <table>
 <thead><tr>${rows[4].map((h) => `<th>${h}</th>`).join("")}</tr></thead>
@@ -2456,7 +2456,7 @@ function CivilEditor({
                     onClick={() => {
                       // Build a focused CSV for this project's runs + count sessions
                       const rows: string[][] = [];
-                      rows.push(["BidPhase — Material Export", "", "", "", "", "", ""]);
+                      rows.push(["HelixBid — Material Export", "", "", "", "", "", ""]);
                       rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", ""]);
                       rows.push([`Project: ${projectName}`, "", "", "", "", "", ""]);
                       rows.push([]);

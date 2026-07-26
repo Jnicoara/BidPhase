@@ -7,7 +7,7 @@
  */
 import { useState, useEffect, useCallback } from "react";
 
-const DB_NAME = "bidphase_db";
+const DB_NAME = "helixbid_db";
 const DB_VERSION = 1;
 const STORE_NAME = "kv_store";
 

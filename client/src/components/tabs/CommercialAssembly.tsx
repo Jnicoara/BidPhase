@@ -1,5 +1,5 @@
 /**
- * BidPhase — Commercial Buildout (Assembly Multiplier)
+ * HelixBid — Commercial Buildout (Assembly Multiplier)
  * Design: Tactical Dark Mode SaaS · Space Grotesk headers · JetBrains Mono outputs
  *
  * Features:

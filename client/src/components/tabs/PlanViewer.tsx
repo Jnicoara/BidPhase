@@ -1,5 +1,5 @@
 /**
- * BidPhase — Tab 1: Digital Plan Viewer (Takeoff Tool) — v6
+ * HelixBid — Tab 1: Digital Plan Viewer (Takeoff Tool) — v6
  *
  * Zoom architecture (Native re-render):
  * ───────────────────────────────────────

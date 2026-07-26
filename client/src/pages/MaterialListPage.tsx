@@ -1,5 +1,5 @@
 /**
- * BidPhase — Labor & Material Summary Page
+ * HelixBid — Labor & Material Summary Page
  *
  * Full-screen view showing:
  *  1. Material rows (from count sessions + runs + manual additions) with catalog picker
@@ -356,7 +356,7 @@ export default function MaterialListPage({ onBack }: MaterialListPageProps) {
       }
     };
 
-    // Category-specific projects (used by BidPhaseShell)
+    // Category-specific projects (used by HelixBidShell)
     addProjectRows(activeCivilCatProject, "civil-cat");
     addProjectRows(activeCommercialCatProject, "comm-cat");
     addProjectRows(activeResidentialCatProject, "res-cat");

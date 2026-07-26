@@ -1,5 +1,5 @@
 /**
- * BidPhase — Master Electrical Material Catalog
+ * HelixBid — Master Electrical Material Catalog
  *
  * 1,000+ item master catalog covering commercial, residential, and civil:
  *   - Distribution (panels, breakers, disconnects, meter bases, transfer switches)

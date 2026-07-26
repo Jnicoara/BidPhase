@@ -1,5 +1,5 @@
 /**
- * BidPhase — Residential Rough-In (Room Configurator)
+ * HelixBid — Residential Rough-In (Room Configurator)
  * Design: Tactical Dark Mode SaaS · Space Grotesk headers · JetBrains Mono outputs
  *
  * Features:

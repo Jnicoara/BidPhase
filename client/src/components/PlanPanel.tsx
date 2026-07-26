@@ -1,5 +1,5 @@
 /**
- * BidPhase — PlanPanel (Reusable Embedded Plan Viewer)
+ * HelixBid — PlanPanel (Reusable Embedded Plan Viewer)
  *
  * Single-page view with per-page run isolation.
  * Features:

@@ -1,5 +1,5 @@
 /**
- * BidPhase — Pin Shape Library
+ * HelixBid — Pin Shape Library
  *
  * Four families, four sizes each (SM / MD / LG / XL).
  * Dots are solid filled; Circles, Squares, and Triangles are stroke-only outlines.

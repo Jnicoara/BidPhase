@@ -1,11 +1,11 @@
 /**
- * BidPhaseShell — Main layout shell v5.50
+ * HelixBidShell — Main layout shell v5.50
  * Desktop: fixed left sidebar (icon-only 64px, expands to 220px on hover)
  * Mobile:  fixed bottom navigation bar
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
  *
  * Routing (hash-based):
- *   /           → BidPhase Homepage (BP logo destination)
+ *   /           → HelixBid Homepage (BP logo destination)
  *   /projects   → Projects card grid
  *   /project/:id → Project detail (editable header + tabs)
  *   /residential → Residential estimating workspace (legacy)
@@ -29,7 +29,7 @@ import MaterialListPage from "@/pages/MaterialListPage";
 import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
 import TrashPage from "@/pages/TrashPage";
 import EstimateEnginePage from "@/pages/EstimateEnginePage";
-import BidPhaseHomePage from "@/pages/BidPhaseHomePage";
+import HelixBidHomePage from "@/pages/HelixBidHomePage";
 import ProjectsPage from "@/pages/ProjectsPage";
 import ProjectDetailPage from "@/pages/ProjectDetailPage";
 import AssemblyBuilderPage from "@/pages/AssemblyBuilderPage";
@@ -87,7 +87,7 @@ function getCurrentRouteState(): { route: Route; projectId?: number } {
   return pathToRoute(window.location.pathname);
 }
 
-export default function BidPhaseShell() {
+export default function HelixBidShell() {
   const {
     activeTab, setActiveTab,
     uiFontScale,
@@ -181,7 +181,7 @@ export default function BidPhaseShell() {
   const renderContent = () => {
     if (isInMaterial)       return <MaterialListPage onBack={closeMaterialList} />;
     if (isInMatDb)          return <MaterialDatabasePage onBack={goBack} />;
-    if (isOnHome)           return <BidPhaseHomePage onGoToProjects={() => navigate("projects")} />;
+    if (isOnHome)           return <HelixBidHomePage onGoToProjects={() => navigate("projects")} />;
     if (isOnProjects)       return <ProjectsPage />;
     if (isOnProjectDetail && activeProjectId) return (
       <ProjectDetailPage
@@ -241,7 +241,7 @@ export default function BidPhaseShell() {
         <div
           onClick={() => navigate("home")}
           className="flex items-center justify-center gap-2 px-3 py-4 h-16 border-b border-sidebar-border shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-          title="BidPhase Home"
+          title="HelixBid Home"
         >
           <span
             className="font-bold text-[#F5C518] text-sm shrink-0 group-hover:hidden"
@@ -253,7 +253,7 @@ export default function BidPhaseShell() {
             className="font-bold text-base text-foreground whitespace-nowrap hidden group-hover:block transition-opacity duration-150"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
           >
-            BidPhase
+            HelixBid
           </span>
         </div>
 
@@ -334,7 +334,7 @@ export default function BidPhaseShell() {
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
             onClick={() => navigate("home")}
           >
-            BidPhase
+            HelixBid
           </span>
           <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground font-mono">
             <ChevronRight size={12} />

@@ -1,5 +1,5 @@
 /**
- * BidPhase — Global App Context
+ * HelixBid — Global App Context
  *
  * Multi-project support for all three tabs (Civil, Commercial, Residential).
  * Each tab has its own list of named projects; the active project per tab is
@@ -588,7 +588,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [uiFontScale, setUiFontScale] = useLocalStorage<number>("bp_ui_font_scale", 1.0);
   const [showMaterialList, _setShowMaterialList] = useState(false);
   // Intercept setShowMaterialList(true) to also push the #/material hash so
-  // BidPhaseShell's hashchange listener picks it up and the sidebar stays
+  // HelixBidShell's hashchange listener picks it up and the sidebar stays
   // navigable + browser back/forward works correctly.
   const setShowMaterialList = (v: boolean) => {
     _setShowMaterialList(v);

@@ -1,5 +1,5 @@
 /**
- * BidPhase — Settings Tab
+ * HelixBid — Settings Tab
  * UI preferences: theme (Light / Dark), font size scale, and CSV material database.
  */
 import { useState, useRef } from "react";

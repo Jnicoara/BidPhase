@@ -1,5 +1,5 @@
 /**
- * BidPhase — Wire Type Library
+ * HelixBid — Wire Type Library
  *
  * 50 common wire and cable types used in residential, commercial, and
  * industrial electrical work. Types that are available in both stranded

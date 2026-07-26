@@ -1,5 +1,5 @@
 /**
- * BidPhase — Infrastructure Conduit Calculator
+ * HelixBid — Infrastructure Conduit Calculator
  * Design: Tactical Dark Mode SaaS · Space Grotesk headers · JetBrains Mono outputs
  *
  * Features:
@@ -108,7 +108,7 @@ function StrippedWireIcon({ size = 16, className = "" }: { size?: number; classN
 }
 
 // ─── Infrastructure icon ────────────────────────────────────────────────
-// Exported so BidPhaseShell can import it directly instead of duplicating the
+// Exported so HelixBidShell can import it directly instead of duplicating the
 // SVG definition. Both the sidebar nav and the editor header use this icon.
 export function CivilIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
   return (
