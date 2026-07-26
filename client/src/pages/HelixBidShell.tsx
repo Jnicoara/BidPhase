@@ -250,10 +250,10 @@ export default function HelixBidShell() {
             HB
           </span>
           <span
-            className="font-bold text-base text-foreground whitespace-nowrap hidden group-hover:block transition-opacity duration-150"
+            className="font-bold text-base whitespace-nowrap hidden group-hover:block transition-opacity duration-150"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
           >
-            HelixBid
+            <span className="text-foreground">Helix</span><span className="text-[#F5C518]">Bid</span>
           </span>
         </div>
 
