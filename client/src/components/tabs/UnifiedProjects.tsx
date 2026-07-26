@@ -1744,7 +1744,7 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
         className="text-xs font-semibold text-[#F5C518] uppercase tracking-wider mb-1 flex items-center gap-2"
         style={{ fontFamily: "'Space Grotesk', sans-serif" }}
       >
-        <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-[#F5C518]/20 text-[#F5C518] font-bold text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+        <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-[#F5C518]/20 text-[#F5C518] font-bold text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>HB</span>
         Labor & Material
         {pages.length > 0 && (
           <span className="text-[10px] font-mono text-muted-foreground normal-case tracking-normal">
@@ -2435,7 +2435,7 @@ function CivilEditor({
               <div className="flex items-center gap-2">
                 {/* BP badge */}
                 <div className="w-7 h-7 rounded-lg bg-[#F5C518]/15 flex items-center justify-center shrink-0">
-                  <span className="font-bold text-[#F5C518] text-[10px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+                  <span className="font-bold text-[#F5C518] text-[10px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>HB</span>
                 </div>
                 {/* Project name + page — only when expanded */}
                 {!rightPanelCollapsed && (

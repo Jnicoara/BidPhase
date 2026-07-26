@@ -53,8 +53,7 @@ export default function HelixBidHomePage({ onGoToProjects }: HelixBidHomePagePro
           className="text-5xl font-bold tracking-tight mb-3"
           style={{ fontFamily: "'Space Grotesk', sans-serif" }}
         >
-          <span className="text-foreground">Bid</span>
-          <span className="text-[#F5C518]">Phase</span>
+          <span className="text-foreground">Helix</span><span className="text-[#F5C518]">Bid</span>
         </h1>
         <p className="text-lg text-muted-foreground max-w-md mb-10">
           Electrical estimating built for the field. Fast takeoffs, accurate bids, less paperwork.

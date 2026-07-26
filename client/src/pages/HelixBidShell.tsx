@@ -247,7 +247,7 @@ export default function HelixBidShell() {
             className="font-bold text-[#F5C518] text-sm shrink-0 group-hover:hidden"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
           >
-            BP
+            HB
           </span>
           <span
             className="font-bold text-base text-foreground whitespace-nowrap hidden group-hover:block transition-opacity duration-150"

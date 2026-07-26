@@ -226,7 +226,7 @@ export default function CategoryLanding({
             /* Empty state */
             <div className="flex flex-col items-center justify-center py-24 gap-5 text-center">
               <div className="w-16 h-16 rounded-2xl bg-[#F5C518]/10 flex items-center justify-center">
-                <span className="font-bold text-[#F5C518] text-2xl" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>BP</span>
+                <span className="font-bold text-[#F5C518] text-2xl" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>HB</span>
               </div>
               <div>
                 <p className="text-base font-semibold text-foreground">No projects yet</p>
