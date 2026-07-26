@@ -44,7 +44,7 @@ export default function HelixBidHomePage({ onGoToProjects }: HelixBidHomePagePro
             className="font-bold text-[#F5C518] text-3xl select-none"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
           >
-            BP
+            HB
           </span>
         </div>
 
