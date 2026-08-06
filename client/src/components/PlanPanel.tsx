@@ -568,6 +568,8 @@ export default function PlanPanel({
   const bitmapPageRef = useRef<string>(""); // "pdfHash:pageNum" of what's currently drawn
   const crosshairRafRef = useRef<number | null>(null);
   const crosshairPosRef = useRef<{ x: number; y: number } | null>(null);
+  // Stable ref so drawCanvas can call drawCrosshair without a forward-reference issue
+  const drawCrosshairRef = useRef<() => void>(() => {});
   const viewportRef = useRef<HTMLDivElement>(null);   // fixed-size overflow:hidden viewport
   const scrollAreaRef = viewportRef;                  // alias kept for legacy code
   const pagesContainerRef = useRef<HTMLDivElement>(null);
@@ -816,7 +818,9 @@ export default function PlanPanel({
     canvas.style.width = `${s.w}px`;
     canvas.style.height = `${s.h}px`;
 
-    // Keep crosshair canvas in sync with main canvas at all times (zoom changes resize main canvas)
+    // Keep crosshair canvas in sync with main canvas at all times (zoom changes resize main canvas).
+    // Resizing a canvas clears it — drawCrosshair() is called after drawCanvas() completes
+    // (see the useEffect below) to restore the crosshair lines after any canvas redraw.
     const cc = crosshairCanvasRef.current;
     if (cc && (cc.width !== s.w || cc.height !== s.h)) {
       cc.width = s.w;
@@ -1250,8 +1254,8 @@ export default function PlanPanel({
     });
   }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, activeRunColor]);
 
-  // Redraw canvas whenever runs/pins/page change (crosshair is now on its own canvas)
-  useEffect(() => { drawCanvas(); }, [drawCanvas, pageReady]);
+  // Redraw canvas whenever runs/pins/page change, then redraw crosshair so it persists
+  useEffect(() => { drawCanvas(); drawCrosshairRef.current(); }, [drawCanvas, pageReady]);
 
   // ── Crosshair canvas: sync size to main canvas and clear when mode is idle ──
   // The crosshair canvas is sized to match the main canvas whenever pageReady changes.
@@ -1304,6 +1308,8 @@ export default function PlanPanel({
     ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(cc.width, y); ctx2.stroke();
     ctx2.restore();
   }, []);
+  // Keep the stable ref in sync with the latest drawCrosshair callback
+  useEffect(() => { drawCrosshairRef.current = drawCrosshair; }, [drawCrosshair]);
 
   // Clear crosshair canvas whenever mode returns to idle
   useEffect(() => {
