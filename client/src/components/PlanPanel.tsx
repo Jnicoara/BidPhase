@@ -1281,10 +1281,12 @@ export default function PlanPanel({
     ctx2.clearRect(0, 0, cc.width, cc.height);
     const pos = crosshairPosRef.current;
     if (!pos) return;
-    const { x, y } = pos;
-    // S: canvas px per 1 CSS px — derived from the crosshair canvas style width
-    const cssW = parseFloat(cc.style.width) || cc.width;
-    const S = cc.width / (cssW || cc.width);
+    // pos is stored as normalized (0-1) — convert to canvas pixels on every draw
+    // so the crosshair stays correct after zoom changes resize the canvas
+    const x = pos.x * cc.width;
+    const y = pos.y * cc.height;
+    // S: always 1 since we draw in canvas pixel space directly
+    const S = 1;
     const hex = "#F5C518";
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
@@ -1988,12 +1990,20 @@ export default function PlanPanel({
     }
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const scaleX = canvas.width  / canvas.offsetWidth;
-    const scaleY = canvas.height / canvas.offsetHeight;
-    // Update crosshair position ref — no React state = no re-render on every mouse move
+    // Use getBoundingClientRect for pixel-perfect tracking after CSS scale transforms.
+    // offsetX/offsetY can drift when the canvas container has a CSS scale() applied.
+    const rect = canvas.getBoundingClientRect();
+    const cssX = e.clientX - rect.left;
+    const cssY = e.clientY - rect.top;
+    // Convert CSS position to canvas pixel position
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const canvasX = cssX * scaleX;
+    const canvasY = cssY * scaleY;
+    // Store as normalized (0-1) so the position survives canvas resizes on zoom changes
     crosshairPosRef.current = {
-      x: e.nativeEvent.offsetX * scaleX,
-      y: e.nativeEvent.offsetY * scaleY,
+      x: canvasX / canvas.width,
+      y: canvasY / canvas.height,
     };
     // Schedule RAF to draw crosshair on the dedicated canvas (deduplicated per frame)
     if (crosshairRafRef.current !== null) cancelAnimationFrame(crosshairRafRef.current);

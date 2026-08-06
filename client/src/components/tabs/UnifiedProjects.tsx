@@ -2280,20 +2280,22 @@ function CivilEditor({
   const [resetUndoTimer, setResetUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   // Clear all runs on the current page
-  const handleClearPageRuns = useCallback(() => {
-    const next = runs.filter((r) => (r.pageNumber ?? 1) !== activePage);
+  const handleClearPageRuns = useCallback((pageNum?: number) => {
+    const pg = pageNum ?? activePage;
+    const next = runs.filter((r) => (r.pageNumber ?? 1) !== pg);
     syncRuns(next);
-    toast.info(`Cleared all runs on page ${activePage}.`);
+    toast.info(`Cleared all runs on page ${pg}.`);
   }, [runs, activePage, syncRuns]);
 
   // Clear all count pins on the current page (across all sessions)
-  const handleClearPageAllCounts = useCallback(() => {
+  const handleClearPageAllCounts = useCallback((pageNum?: number) => {
+    const pg = pageNum ?? activePage;
     const updated = countSessions.map((cs) => ({
       ...cs,
-      pins: cs.pins.filter((p) => (p.pageNumber ?? 1) !== activePage),
+      pins: cs.pins.filter((p) => (p.pageNumber ?? 1) !== pg),
     }));
     setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
-    toast.info(`Cleared all count pins on page ${activePage}.`);
+    toast.info(`Cleared all count pins on page ${pg}.`);
   }, [countSessions, activePage, s, runs, activeCountSessionId, setCivilState]);
 
   // Total reset: wipe all runs and all count pins across all pages
@@ -2370,8 +2372,8 @@ function CivilEditor({
             onPinRemoved={handleCountPinRemoved}
             onClearPagePins={handleClearPageCountPins}
             onClearPageAll={(page) => {
-              handleClearPageRuns();
-              handleClearPageAllCounts();
+              handleClearPageRuns(page);
+              handleClearPageAllCounts(page);
             }}
             onPdfReplaced={() => {
               // Silently clear all runs and count pins when PDF is replaced
