@@ -130,11 +130,11 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
         <div className="text-center mb-10">
           <h1
             className="text-4xl font-bold tracking-tight mb-2"
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-          >
-            <span className="text-foreground">Bid</span>
-            <span className="text-[#F5C518]">Phase</span>
-          </h1>
+         style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+        >
+          <span className="text-foreground">Helix</span>
+          <span className="text-[#F5C518]">Bid</span>
+        </h1>
           <p className="text-muted-foreground text-sm">
             Electrical estimating for the field
           </p>
