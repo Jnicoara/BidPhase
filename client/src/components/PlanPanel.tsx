@@ -549,6 +549,10 @@ export default function PlanPanel({
   }, [measureModeRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const [hideUnselected, setHideUnselected] = useState(false);
   const [showPageOverview, setShowPageOverview] = useState(false);
+  // Quick Count state
+  const [qcRows, setQcRows] = useState("");
+  const [qcPerRow, setQcPerRow] = useState("");
+  const [qcAddN, setQcAddN] = useState("");
   // Saved/favorite custom colors (persisted in localStorage)
   const [savedColors, setSavedColors] = useLocalStorage<string[]>("bp_saved_colors", []);
 
@@ -1041,6 +1045,7 @@ export default function PlanPanel({
     // ── Count pins ──────────────────────────────────────────────────────────
     const pinsToRender = allPagePinsRef.current;
     pinsToRender.forEach((pin, idx) => {
+      if (pin.nx < 0) return; // virtual bulk-added pin — no canvas position
       const px = normToCanvas({ pageIndex: 0, nx: pin.nx, ny: pin.ny });
       if (!px) return;
 
@@ -1255,10 +1260,17 @@ export default function PlanPanel({
     const cc = crosshairCanvasRef.current;
     const mc = canvasRef.current;
     if (!cc || !mc) return;
-    // Keep crosshair canvas in sync with main canvas dimensions
-    if (cc.width !== mc.width || cc.height !== mc.height) {
-      cc.width = mc.width;
-      cc.height = mc.height;
+    // Always sync crosshair canvas pixel buffer AND CSS size to main canvas.
+    // The old conditional guard caused glitches when CSS size differed from pixel buffer size.
+    const mw = mc.width;
+    const mh = mc.height;
+    const mStyleW = mc.style.width || `${mw}px`;
+    const mStyleH = mc.style.height || `${mh}px`;
+    if (cc.width !== mw || cc.height !== mh || cc.style.width !== mStyleW || cc.style.height !== mStyleH) {
+      cc.width = mw;
+      cc.height = mh;
+      cc.style.width = mStyleW;
+      cc.style.height = mStyleH;
     }
     const ctx2 = cc.getContext("2d");
     if (!ctx2) return;
@@ -1266,7 +1278,9 @@ export default function PlanPanel({
     const pos = crosshairPosRef.current;
     if (!pos) return;
     const { x, y } = pos;
-    const S = mc.width / (mc.offsetWidth || mc.width);
+    // S: canvas px per 1 CSS px — derived from the crosshair canvas style width
+    const cssW = parseFloat(cc.style.width) || cc.width;
+    const S = cc.width / (cssW || cc.width);
     const hex = "#F5C518";
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
@@ -2464,6 +2478,97 @@ export default function PlanPanel({
                 <Trash2 size={11} className="mr-1" />
                 Clear page
               </Button>
+            )}
+
+            {/* Quick Count calculator — visible when a count session is active */}
+            {activeCountSession && (
+              <>
+                <div className="w-px h-4 bg-border shrink-0" />
+                {/* Rows × Per Row */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Rows"
+                    value={qcRows}
+                    onChange={(e) => setQcRows(e.target.value)}
+                    className="h-7 w-14 text-xs px-1.5 text-center"
+                    title="Number of rows"
+                  />
+                  <span className="text-muted-foreground text-xs shrink-0">×</span>
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Each"
+                    value={qcPerRow}
+                    onChange={(e) => setQcPerRow(e.target.value)}
+                    className="h-7 w-14 text-xs px-1.5 text-center"
+                    title="Count per row"
+                  />
+                  {(() => {
+                    const r = parseInt(qcRows, 10);
+                    const p = parseInt(qcPerRow, 10);
+                    const total = (!isNaN(r) && !isNaN(p) && r > 0 && p > 0) ? r * p : null;
+                    return total !== null ? (
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs px-2 shrink-0 bg-[#F5C518] text-black hover:bg-[#F5C518]/90"
+                        onClick={() => {
+                          for (let i = 0; i < total; i++) {
+                            onPinAdded?.({
+                              id: `bulk-${Date.now()}-${i}`,
+                              nx: -1,
+                              ny: -1,
+                              pageNumber: currentPage,
+                            });
+                          }
+                          toast.success(`Added ${total} to "${activeCountSession.name}"`);
+                          setQcRows("");
+                          setQcPerRow("");
+                        }}
+                      >
+                        +{total}
+                      </Button>
+                    ) : null;
+                  })()}
+                </div>
+                {/* Add N directly */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Add N"
+                    value={qcAddN}
+                    onChange={(e) => setQcAddN(e.target.value)}
+                    className="h-7 w-16 text-xs px-1.5 text-center"
+                    title="Add a specific quantity directly without placing pins"
+                  />
+                  {(() => {
+                    const n = parseInt(qcAddN, 10);
+                    return (!isNaN(n) && n > 0) ? (
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs px-2 shrink-0 bg-[#F5C518]/20 border border-[#F5C518]/50 text-[#F5C518] hover:bg-[#F5C518]/30"
+                        onClick={() => {
+                          for (let i = 0; i < n; i++) {
+                            onPinAdded?.({
+                              id: `bulk-${Date.now()}-${i}`,
+                              nx: -1,
+                              ny: -1,
+                              pageNumber: currentPage,
+                            });
+                          }
+                          toast.success(`Added ${n} to "${activeCountSession.name}"`);
+                          setQcAddN("");
+                        }}
+                      >
+                        <Plus size={11} className="mr-0.5" />
+                        Add
+                      </Button>
+                    ) : null;
+                  })()}
+                </div>
+              </>
             )}
           </>
         )}
