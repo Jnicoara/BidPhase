@@ -835,16 +835,8 @@ export default function PlanPanel({
     canvas.style.width = `${s.w}px`;
     canvas.style.height = `${s.h}px`;
 
-    // Keep crosshair canvas in sync with main canvas at all times (zoom changes resize main canvas).
-    // Resizing a canvas clears it — drawCrosshair() is called after drawCanvas() completes
-    // (see the useEffect below) to restore the crosshair lines after any canvas redraw.
-    const cc = crosshairCanvasRef.current;
-    if (cc && (cc.width !== s.w || cc.height !== s.h)) {
-      cc.width = s.w;
-      cc.height = s.h;
-      cc.style.width = `${s.w}px`;
-      cc.style.height = `${s.h}px`;
-    }
+    // Crosshair canvas is now viewport-sized and positioned as a sibling to the viewport content.
+    // It does NOT need to be synced here — drawCrosshair handles its own sizing.
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -1269,7 +1261,7 @@ export default function PlanPanel({
       ctx.font = `bold ${Math.round(11 * S)}px 'JetBrains Mono', monospace`;
       ctx.fillText(`S${i + 1}`, p.x + 9 * S, p.y - 7 * S);
     });
-  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, displayZoom, currentPins, allPagePins, activeRunColor]);
+  }, [currentRuns, currentActiveRunId, scalePoints, normToCanvas, scaleRatio, pageReady, hideUnselected, currentPins, allPagePins, activeRunColor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Redraw canvas whenever runs/pins/page change, then redraw crosshair so it persists
   useEffect(() => { drawCanvas(); drawCrosshairRef.current(); }, [drawCanvas, pageReady]);
@@ -1281,28 +1273,26 @@ export default function PlanPanel({
     const cc = crosshairCanvasRef.current;
     const mc = canvasRef.current;
     if (!cc || !mc) return;
-    // Always sync crosshair canvas pixel buffer AND CSS size to main canvas.
-    // The old conditional guard caused glitches when CSS size differed from pixel buffer size.
-    const mw = mc.width;
-    const mh = mc.height;
-    const mStyleW = mc.style.width || `${mw}px`;
-    const mStyleH = mc.style.height || `${mh}px`;
-    if (cc.width !== mw || cc.height !== mh || cc.style.width !== mStyleW || cc.style.height !== mStyleH) {
-      cc.width = mw;
-      cc.height = mh;
-      cc.style.width = mStyleW;
-      cc.style.height = mStyleH;
+    // Crosshair canvas is viewport-sized (not canvas-sized).
+    // Sync to viewport dimensions so lines span the full visible area.
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const vpW = vp.clientWidth;
+    const vpH = vp.clientHeight;
+    if (cc.width !== vpW || cc.height !== vpH) {
+      cc.width = vpW;
+      cc.height = vpH;
+      cc.style.width = `${vpW}px`;
+      cc.style.height = `${vpH}px`;
     }
     const ctx2 = cc.getContext("2d");
     if (!ctx2) return;
     ctx2.clearRect(0, 0, cc.width, cc.height);
     const pos = crosshairPosRef.current;
     if (!pos) return;
-    // pos is stored as normalized (0-1) — convert to canvas pixels on every draw
-    // so the crosshair stays correct after zoom changes resize the canvas
-    const x = pos.x * cc.width;
-    const y = pos.y * cc.height;
-    // S: always 1 since we draw in canvas pixel space directly
+    // pos is in viewport CSS pixels — crosshair canvas matches viewport size exactly
+    const x = pos.x;
+    const y = pos.y;
     const S = 1;
     const hex = "#F5C518";
     const r = parseInt(hex.slice(1, 3), 16);
@@ -2022,11 +2012,16 @@ export default function PlanPanel({
     const scaleY = canvas.height / rect.height;
     const canvasX = cssX * scaleX;
     const canvasY = cssY * scaleY;
-    // Store as normalized (0-1) so the position survives canvas resizes on zoom changes
-    crosshairPosRef.current = {
-      x: canvasX / canvas.width,
-      y: canvasY / canvas.height,
-    };
+    // Store viewport-relative position for crosshair drawing.
+    // The crosshair canvas is positioned over the viewport (not inside the scaled container),
+    // so we draw in viewport coordinates directly — no coordinate math needed.
+    const vpRect2 = viewportRef.current?.getBoundingClientRect();
+    if (vpRect2) {
+      crosshairPosRef.current = {
+        x: e.clientX - vpRect2.left,
+        y: e.clientY - vpRect2.top,
+      };
+    }
     // Schedule RAF to draw crosshair on the dedicated canvas (deduplicated per frame)
     if (crosshairRafRef.current !== null) cancelAnimationFrame(crosshairRafRef.current);
     crosshairRafRef.current = requestAnimationFrame(() => {
@@ -3149,19 +3144,7 @@ export default function PlanPanel({
                   }}
                 />
               )}
-              {/* Dedicated crosshair canvas — pointer-events:none, drawn via RAF, never causes main canvas redraw */}
-              {pageReady && (
-                <canvas
-                  ref={crosshairCanvasRef}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    pointerEvents: "none",
-                    zIndex: 11,
-                  }}
-                />
-              )}
+              {/* Crosshair canvas moved to viewport level — see below */}
             </div>
           </div>
         )}
@@ -3393,6 +3376,21 @@ export default function PlanPanel({
         )}
 
         {/* Smooth overlay cursor — pointer-events:none div that tracks mouse, GPU-composited, zero lag */}
+        {/* Crosshair canvas — viewport-sized, outside the CSS-scaled container.
+             Positioned absolutely over the entire viewport. Lines are drawn in viewport
+             coordinates so zoom/pan never affects the coordinate math. */}
+        <canvas
+          ref={crosshairCanvasRef}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            pointerEvents: "none",
+            zIndex: 20,
+            display: mode === "none" ? "none" : "block",
+          }}
+        />
+
         {/* Cursor dot overlay — always mounted, position updated via ref (no React re-renders) */}
         {activeCursorColor && !isPanning && (
           <div

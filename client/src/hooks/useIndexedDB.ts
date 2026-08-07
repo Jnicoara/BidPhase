@@ -11,15 +11,23 @@ const DB_NAME = "helixbid_db";
 const DB_VERSION = 1;
 const STORE_NAME = "kv_store";
 
+// Cache the open DB connection at module level — avoids re-opening on every read
+let _dbPromise: Promise<IDBDatabase> | null = null;
+
 function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       req.result.createObjectStore(STORE_NAME);
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => {
+      _dbPromise = null; // allow retry on error
+      reject(req.error);
+    };
   });
+  return _dbPromise;
 }
 
 async function idbGet<T>(key: string): Promise<T | undefined> {
