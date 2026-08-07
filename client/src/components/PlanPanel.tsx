@@ -73,6 +73,57 @@ const globalBitmapCache = new Map<string, ImageBitmap>();
 let globalPdfDoc: import("pdfjs-dist").PDFDocumentProxy | null = null;
 let globalPdfHash: string | null = null;
 
+// ── PDF Renderer Web Worker ───────────────────────────────────────────────────
+// All page.render() calls run in a dedicated worker thread so the main thread
+// stays completely responsive during rasterization (which takes 0.5-13s per page).
+let _pdfWorker: Worker | null = null;
+let _workerLoadedHash: string | null = null;
+const _workerCallbacks = new Map<string, (bitmap: ImageBitmap | null) => void>();
+let _reqCounter = 0;
+
+function getPdfWorker(): Worker {
+  if (!_pdfWorker) {
+    _pdfWorker = new Worker(
+      new URL("../workers/pdfRenderer.worker.ts", import.meta.url),
+      { type: "module" }
+    );
+    _pdfWorker.onmessage = (e: MessageEvent) => {
+      const msg = e.data;
+      if (msg.type === "rendered") {
+        const bitmap: ImageBitmap = msg.bitmap;
+        globalBitmapCache.set(`${msg.hash}:${msg.pageNum}`, bitmap);
+        const cb = _workerCallbacks.get(msg.reqId);
+        if (cb) { cb(bitmap); _workerCallbacks.delete(msg.reqId); }
+      } else if (msg.type === "loaded") {
+        _workerLoadedHash = msg.hash;
+      } else if (msg.type === "error") {
+        const cb = _workerCallbacks.get(msg.reqId);
+        if (cb) { cb(null); _workerCallbacks.delete(msg.reqId); }
+      }
+    };
+  }
+  return _pdfWorker;
+}
+
+// Load the PDF into the worker (called once per PDF hash)
+async function loadPdfInWorker(pdfFile: string, hash: string): Promise<void> {
+  if (_workerLoadedHash === hash) return; // already loaded
+  const worker = getPdfWorker();
+  // Decode data URL to ArrayBuffer asynchronously
+  const response = await fetch(pdfFile);
+  const arrayBuffer = await response.arrayBuffer();
+  // Transfer the ArrayBuffer to the worker (zero-copy)
+  worker.postMessage({ type: "load", pdfData: arrayBuffer, hash }, [arrayBuffer]);
+  // Wait for the worker to confirm it loaded
+  await new Promise<void>((resolve) => {
+    const check = setInterval(() => {
+      if (_workerLoadedHash === hash) { clearInterval(check); resolve(); }
+    }, 20);
+    // Timeout after 10s
+    setTimeout(() => { clearInterval(check); resolve(); }, 10000);
+  });
+}
+
 const globalBitmapInFlight = new Map<string, Promise<ImageBitmap | null>>();
 
 async function renderPageBitmap(
@@ -84,27 +135,14 @@ async function renderPageBitmap(
   if (globalBitmapCache.has(cacheKey)) return globalBitmapCache.get(cacheKey)!;
   // Dedupe concurrent requests for the same page
   if (globalBitmapInFlight.has(cacheKey)) return globalBitmapInFlight.get(cacheKey)!;
-  if (!globalPdfDoc) return null;
-  const promise = (async () => {
-    try {
-      const page = await globalPdfDoc!.getPage(pageNum);
-      const viewport = page.getViewport({ scale });
-      const offscreen = new OffscreenCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-      const ctx = offscreen.getContext("2d")!;
-      await page.render({
-        canvasContext: ctx as unknown as CanvasRenderingContext2D,
-        canvas: null as unknown as HTMLCanvasElement,
-        viewport,
-      }).promise;
-      const bitmap = await createImageBitmap(offscreen);
-      globalBitmapCache.set(cacheKey, bitmap);
-      return bitmap;
-    } catch {
-      return null;
-    } finally {
-      globalBitmapInFlight.delete(cacheKey);
-    }
-  })();
+  if (_workerLoadedHash !== pdfHash) return null; // worker not ready yet
+  const reqId = `${pdfHash}:${pageNum}:${++_reqCounter}`;
+  const promise = new Promise<ImageBitmap | null>((resolve) => {
+    _workerCallbacks.set(reqId, resolve);
+    getPdfWorker().postMessage({ type: "render", pageNum, scale, hash: pdfHash, reqId });
+  }).finally(() => {
+    globalBitmapInFlight.delete(cacheKey);
+  });
   globalBitmapInFlight.set(cacheKey, promise);
   return promise;
 }
@@ -157,7 +195,7 @@ type PageRunsMap = Record<number, MeasureRun[]>;
 type PageActiveRunMap = Record<number, string>;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const BASE_DPI = 1.5;
+const BASE_DPI = 1.0; // Reduced from 1.5 — cuts render time by ~56% while keeping sharp display at typical zoom levels
 /** Sentinel NormPoint inserted on double-click to "lift the pen" between segments of the same run */
 const PEN_LIFT: NormPoint = { pageIndex: -1, nx: -2, ny: -2 };
 const isPenLift = (p: NormPoint) => p.nx === -2 && p.ny === -2;
@@ -783,31 +821,14 @@ export default function PlanPanel({
     (async () => {
       try {
         const t0 = performance.now();
-        // Reuse globalPdfDoc if already loaded for this hash (avoids re-parsing on page navigation)
-        let doc = (globalPdfDoc && globalPdfHash === hash) ? globalPdfDoc : null;
-        if (!doc) {
-          // Load the PDF directly via pdfjs (not through react-pdf)
-          const pdfjsLib = await import("pdfjs-dist");
-          const t1 = performance.now();
-          // Use fetch() to decode the data URL to ArrayBuffer asynchronously (non-blocking).
-          // atob() on a 10MB PDF (13MB base64 string) blocks the main thread for 2-5 seconds.
-          // fetch() + arrayBuffer() does the same work off the main thread.
-          const response = await fetch(pdfFile);
-          const arrayBuffer = await response.arrayBuffer();
-          console.log(`[HB] data URL decode: ${(performance.now()-t1).toFixed(0)}ms`);
-          const t1b = performance.now();
-          const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
-          doc = await loadingTask.promise as unknown as import("pdfjs-dist").PDFDocumentProxy;
-          console.log(`[HB] pdfjs.getDocument: ${(performance.now()-t1b).toFixed(0)}ms`);
-          if (cancelled) return;
-          globalPdfDoc = doc;
-          globalPdfHash = hash;
-        }
+        // Load PDF into the worker (non-blocking — runs on worker thread)
+        await loadPdfInWorker(pdfFile, hash);
+        console.log(`[HB] worker loaded PDF: ${(performance.now()-t0).toFixed(0)}ms`);
         if (cancelled) return;
         const t2 = performance.now();
-        // Render current page to bitmap cache
+        // Render current page via worker (non-blocking — main thread stays responsive)
         const bitmap = await renderPageBitmap(page, scale, hash);
-        console.log(`[HB] renderPageBitmap p${page}: ${(performance.now()-t2).toFixed(0)}ms | total: ${(performance.now()-t0).toFixed(0)}ms`);
+        console.log(`[HB] worker renderPage p${page}: ${(performance.now()-t2).toFixed(0)}ms | total: ${(performance.now()-t0).toFixed(0)}ms`);
         if (cancelled || !bitmap) return;
         // Draw to bitmapCanvas immediately
         const bc = bitmapCanvasRef.current;
@@ -824,15 +845,13 @@ export default function PlanPanel({
         pageSizeRef.current = { w: bitmap.width, h: bitmap.height };
         setPageReady(true);
         centerPage(displayZoomRef.current);
-        // Prefetch adjacent pages in background
-        const total = (doc as unknown as { numPages: number }).numPages;
-        if (total > 0) setNumPages(total);
+        // Prefetch adjacent pages in background via worker
         [page + 1, page - 1, page + 2, page - 2]
-          .filter((p) => p >= 1 && p <= total)
+          .filter((p) => p >= 1 && p <= numPages)
           .forEach((p, i) => {
             setTimeout(() => {
               if (!cancelled) renderPageBitmap(p, scale, hash);
-            }, (i + 1) * 80);
+            }, (i + 1) * 100);
           });
       } catch {
         // Fall through to react-pdf's normal render
