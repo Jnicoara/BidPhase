@@ -427,6 +427,41 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
   );
 }
 
+// ── OverviewThumbnail ─────────────────────────────────────────────────────────
+// Self-contained thumbnail component that draws a bitmap to a canvas using useEffect.
+// The ref-callback approach doesn't re-fire when the bitmap arrives after mount,
+// so we use a proper effect that re-runs whenever the bitmap prop changes.
+function OverviewThumbnail({ bitmap, pageNum }: { bitmap: ImageBitmap | null; pageNum: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (!bitmap) {
+      // Clear canvas and show placeholder
+      const ctx = el.getContext("2d");
+      if (ctx) { ctx.clearRect(0, 0, el.width, el.height); }
+      return;
+    }
+    const aspect = bitmap.height / bitmap.width;
+    const w = el.parentElement?.clientWidth || 220;
+    el.width = bitmap.width;
+    el.height = bitmap.height;
+    el.style.width = `${w}px`;
+    el.style.height = `${Math.round(w * aspect)}px`;
+    const ctx = el.getContext("2d");
+    if (ctx) ctx.drawImage(bitmap, 0, 0);
+  }, [bitmap]);
+
+  if (!bitmap) {
+    return (
+      <div className="flex items-center justify-center h-20 w-full text-muted-foreground/40 text-xs font-mono">
+        pg {pageNum}
+      </div>
+    );
+  }
+  return <canvas ref={ref} style={{ display: "block" }} />;
+}
+
 interface PlanPanelProps {
   tabKey: string;
   /** Database project ID — used for S3 PDF upload/download for cross-device access */
@@ -495,6 +530,18 @@ export default function PlanPanel({
 
   // ── Current page (1-indexed) ───────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useLocalStorage<number>(`bp_page_${tabKey}`, 1);
+
+  // ── Hidden pages (per project, persisted) ─────────────────────────────────
+  // Set of page numbers (1-indexed) that the user has hidden from the page selector
+  const [hiddenPages, setHiddenPages] = useLocalStorage<number[]>(`bp_hidden_${tabKey}`, []);
+  const hiddenPagesSet = useMemo(() => new Set(hiddenPages), [hiddenPages]);
+  const toggleHidePage = useCallback((pNum: number) => {
+    setHiddenPages((prev) => {
+      const s = new Set(prev);
+      if (s.has(pNum)) { s.delete(pNum); } else { s.add(pNum); }
+      return Array.from(s);
+    });
+  }, [setHiddenPages]);
 
   // ── Zoom state ────────────────────────────────────────────────────────────
   // PDF renders ONCE at RENDER_BASE_ZOOM (fixed high-res). All zoom is pure CSS scale.
@@ -2974,10 +3021,11 @@ export default function PlanPanel({
             <ChevronLeft size={14} />
           </button>
 
-          {/* Page number chips */}
+          {/* Page number chips — hidden pages filtered out */}
           <div className="flex items-center gap-0.5 overflow-x-auto">
             {Array.from({ length: numPages }, (_, i) => {
               const pNum = i + 1;
+              if (hiddenPagesSet.has(pNum)) return null;
               const isActive = pNum === currentPage;
               const runCount = getPageRunCount(i);
               return (
@@ -3002,6 +3050,16 @@ export default function PlanPanel({
                 </button>
               );
             })}
+            {hiddenPages.length > 0 && (
+              <button
+                onClick={() => setShowPageOverview(true)}
+                className="flex items-center gap-1 h-7 px-2 rounded text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors shrink-0"
+                title={`${hiddenPages.length} page${hiddenPages.length !== 1 ? "s" : ""} hidden — open overview to manage`}
+              >
+                <EyeOff size={10} />
+                {hiddenPages.length}
+              </button>
+            )}
           </div>
 
           {/* Next page */}
@@ -3483,32 +3541,13 @@ export default function PlanPanel({
                         isActive ? "border-[#F5C518] ring-1 ring-[#F5C518]/30" : "border-border bg-card hover:bg-muted/20"
                       )}
                     >
-                      {/* Thumbnail: use cached bitmap if available, else a placeholder */}
-                      <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden" style={{ minHeight: 80 }}>
-                        {cachedBitmap ? (
-                          <canvas
-                            ref={(el) => {
-                              if (!el) return;
-                              const aspect = cachedBitmap.height / cachedBitmap.width;
-                              const w = el.parentElement?.clientWidth || 220;
-                              el.width = cachedBitmap.width;
-                              el.height = cachedBitmap.height;
-                              el.style.width = `${w}px`;
-                              el.style.height = `${w * aspect}px`;
-                              const ctx2 = el.getContext("2d");
-                              if (ctx2) ctx2.drawImage(cachedBitmap, 0, 0);
-                            }}
-                            style={{ display: "block" }}
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-20 w-full text-muted-foreground/40 text-xs font-mono">
-                            pg {pNum}
-                          </div>
-                        )}
+                      {/* Thumbnail: always render canvas, draw bitmap when available */}
+                      <div className="w-full bg-muted/30 flex items-center justify-center overflow-hidden relative" style={{ minHeight: 80 }}>
+                        <OverviewThumbnail bitmap={cachedBitmap ?? null} pageNum={pNum} />
                       </div>
-                      {/* Page number label */}
+                      {/* Page number label + hide button */}
                       <div className={cn(
-                        "px-3 py-1.5 text-center",
+                        "px-3 py-1.5 flex items-center justify-between gap-2",
                         isActive ? "bg-[#F5C518]/10" : "bg-card"
                       )}>
                         <span className={cn(
@@ -3517,6 +3556,13 @@ export default function PlanPanel({
                         )}>
                           {isActive ? "▶ " : ""}Page {pNum}
                         </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleHidePage(pNum); }}
+                          className="text-muted-foreground/40 hover:text-red-400 transition-colors shrink-0"
+                          title={hiddenPagesSet.has(pNum) ? "Show this page" : "Hide this page from page bar"}
+                        >
+                          {hiddenPagesSet.has(pNum) ? <Eye size={11} /> : <EyeOff size={11} />}
+                        </button>
                       </div>
                     </button>
                   );
