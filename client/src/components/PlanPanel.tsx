@@ -622,6 +622,8 @@ export default function PlanPanel({
   }, [measureModeRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const [hideUnselected, setHideUnselected] = useState(false);
   const [showPageOverview, setShowPageOverview] = useState(false);
+  // Counter to force re-render of page overview when new bitmaps arrive in cache
+  const [overviewCacheVersion, setOverviewCacheVersion] = useState(0);
   // Quick Count state
   const [qcRows, setQcRows] = useState("");
   const [qcPerRow, setQcPerRow] = useState("");
@@ -1543,6 +1545,34 @@ export default function PlanPanel({
     })();
   }, [pdfLoading, pdfFile, s3PdfData, applyPdfLoad]);
 
+  // ── Page overview: background render all pages when overview opens ────────
+  useEffect(() => {
+    if (!showPageOverview || !pdfHash || !numPages) return;
+    const scale = BASE_DPI * RENDER_BASE_ZOOM;
+    const hash = pdfHash;
+    // Render all uncached pages in background, starting from current page outward
+    const order: number[] = [];
+    for (let offset = 1; offset <= numPages; offset++) {
+      if (currentPage + offset <= numPages) order.push(currentPage + offset);
+      if (currentPage - offset >= 1) order.push(currentPage - offset);
+    }
+    let i = 0;
+    const renderNext = () => {
+      if (i >= order.length) return;
+      const p = order[i++];
+      if (!globalBitmapCache.has(`${hash}:${p}`)) {
+        renderPageBitmap(p, scale, hash).then(() => {
+          // Bump version to force overview to re-render with new thumbnail
+          setOverviewCacheVersion((v) => v + 1);
+          renderNext();
+        });
+      } else {
+        renderNext();
+      }
+    };
+    renderNext();
+  }, [showPageOverview, pdfHash, numPages, currentPage]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Page render callback ───────────────────────────────────────────────────
   const onPageRenderSuccess = useCallback((page: { width: number; height: number }) => {
     pageSizeRef.current = { w: page.width, h: page.height };
@@ -2343,7 +2373,13 @@ export default function PlanPanel({
     modeRef.current = "none";
     // Reset zoom and re-center so the user is never lost in the black after navigating
     zoomReset();
-  }, [numPages, setCurrentPage, onCurrentPageChange, zoomReset]);
+    // If the target page is not yet cached, immediately kick off its render
+    // so it arrives as fast as possible (don't wait for the useEffect cycle)
+    if (pdfHash && !globalBitmapCache.has(`${pdfHash}:${clamped}`)) {
+      const scale = BASE_DPI * RENDER_BASE_ZOOM;
+      renderPageBitmap(clamped, scale, pdfHash);
+    }
+  }, [numPages, pdfHash, setCurrentPage, onCurrentPageChange, zoomReset]);
 
   // ── Compute run count per page for page selector badges ───────────────────
   const getPageRunCount = useCallback((pIdx: number) => {
@@ -3430,10 +3466,13 @@ export default function PlanPanel({
             </div>
             <div className="flex-1 overflow-y-auto p-3">
               <div className="flex flex-col gap-2">
+                {/* overviewCacheVersion forces re-render when new bitmaps arrive */}
                 {Array.from({ length: numPages }, (_, i) => {
                   const pNum = i + 1;
                   const isActive = pNum === currentPage;
                   const cacheKey = `${pdfHash}:${pNum}`;
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                  const _v = overviewCacheVersion; // dependency to force re-render
                   const cachedBitmap = globalBitmapCache.get(cacheKey);
                   return (
                     <button
