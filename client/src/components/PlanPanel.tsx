@@ -75,37 +75,66 @@ let globalPdfHash: string | null = null;
 
 const globalBitmapInFlight = new Map<string, Promise<ImageBitmap | null>>();
 
-async function renderPageBitmap(
+// Preview cache: low-res bitmaps shown immediately while full-res renders in background
+const globalPreviewCache = new Map<string, ImageBitmap>();
+const PREVIEW_SCALE_FACTOR = 0.35; // render at 35% of full res for instant preview
+
+async function renderPageBitmapAtScale(
   pageNum: number,
   scale: number,
-  pdfHash: string
+  pdfHash: string,
+  cacheKey: string
 ): Promise<ImageBitmap | null> {
-  const cacheKey = `${pdfHash}:${pageNum}`;
-  if (globalBitmapCache.has(cacheKey)) return globalBitmapCache.get(cacheKey)!;
-  // Dedupe concurrent requests for the same page
-  if (globalBitmapInFlight.has(cacheKey)) return globalBitmapInFlight.get(cacheKey)!;
-  if (!globalPdfDoc) return null;
-  const promise = (async () => {
   try {
-    const page = await globalPdfDoc.getPage(pageNum);
+    const page = await globalPdfDoc!.getPage(pageNum);
     const viewport = page.getViewport({ scale });
     const offscreen = new OffscreenCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
     const ctx = offscreen.getContext("2d")!;
-    // pdfjs RenderParameters requires `canvas` (the DOM canvas) alongside `canvasContext`.
-    // For OffscreenCanvas we pass null for canvas and cast ctx to satisfy the type.
     await page.render({
       canvasContext: ctx as unknown as CanvasRenderingContext2D,
       canvas: null as unknown as HTMLCanvasElement,
       viewport,
     }).promise;
     const bitmap = await createImageBitmap(offscreen);
-    globalBitmapCache.set(cacheKey, bitmap);
     return bitmap;
   } catch {
     return null;
   } finally {
     globalBitmapInFlight.delete(cacheKey);
   }
+}
+
+async function renderPageBitmap(
+  pageNum: number,
+  scale: number,
+  pdfHash: string,
+  onPreviewReady?: (bitmap: ImageBitmap) => void
+): Promise<ImageBitmap | null> {
+  const cacheKey = `${pdfHash}:${pageNum}`;
+  if (globalBitmapCache.has(cacheKey)) return globalBitmapCache.get(cacheKey)!;
+  // Dedupe concurrent requests for the same page
+  if (globalBitmapInFlight.has(cacheKey)) return globalBitmapInFlight.get(cacheKey)!;
+  if (!globalPdfDoc) return null;
+
+  const promise = (async () => {
+    // Pass 1: render low-res preview immediately if not already cached
+    const previewKey = `${pdfHash}:preview:${pageNum}`;
+    if (!globalPreviewCache.has(previewKey) && onPreviewReady) {
+      const previewScale = scale * PREVIEW_SCALE_FACTOR;
+      renderPageBitmapAtScale(pageNum, previewScale, pdfHash, previewKey).then((preview) => {
+        if (preview) {
+          globalPreviewCache.set(previewKey, preview);
+          onPreviewReady(preview);
+        }
+      });
+    } else if (globalPreviewCache.has(previewKey) && onPreviewReady) {
+      onPreviewReady(globalPreviewCache.get(previewKey)!);
+    }
+
+    // Pass 2: render full resolution
+    const bitmap = await renderPageBitmapAtScale(pageNum, scale, pdfHash, cacheKey);
+    if (bitmap) globalBitmapCache.set(cacheKey, bitmap);
+    return bitmap;
   })();
   globalBitmapInFlight.set(cacheKey, promise);
   return promise;
@@ -784,36 +813,52 @@ export default function PlanPanel({
     let cancelled = false;
     (async () => {
       try {
+        const t0 = performance.now();
         // Reuse globalPdfDoc if already loaded for this hash (avoids re-parsing on page navigation)
         let doc = (globalPdfDoc && globalPdfHash === hash) ? globalPdfDoc : null;
         if (!doc) {
           // Load the PDF directly via pdfjs (not through react-pdf)
           const pdfjsLib = await import("pdfjs-dist");
+          const t1 = performance.now();
           const loadingTask = pdfjsLib.getDocument({ data: atob(pdfFile.split(",")[1]) });
           doc = await loadingTask.promise as unknown as import("pdfjs-dist").PDFDocumentProxy;
+          console.log(`[HB] pdfjs.getDocument: ${(performance.now()-t1).toFixed(0)}ms`);
           if (cancelled) return;
           globalPdfDoc = doc;
           globalPdfHash = hash;
         }
         if (cancelled) return;
-        // Render current page to bitmap cache
-        const bitmap = await renderPageBitmap(page, scale, hash);
+        const t2 = performance.now();
+
+        // Helper to draw a bitmap (preview or full-res) to the bitmapCanvas
+        const drawBitmap = (bmp: ImageBitmap, isPreview: boolean) => {
+          if (cancelled) return;
+          const bc = bitmapCanvasRef.current;
+          if (!bc) return;
+          bc.width = bmp.width;
+          bc.height = bmp.height;
+          bc.style.width = `${bmp.width}px`;
+          bc.style.height = `${bmp.height}px`;
+          const ctx2 = bc.getContext("2d");
+          if (ctx2) ctx2.drawImage(bmp, 0, 0);
+          if (!isPreview) bitmapPageRef.current = cacheKey;
+          // Set pageSizeRef to full-res dimensions (preview is scaled down but we want real size)
+          // For preview: use scaled-up dimensions so overlay canvas coords are correct
+          const fullW = isPreview ? Math.round(bmp.width / PREVIEW_SCALE_FACTOR) : bmp.width;
+          const fullH = isPreview ? Math.round(bmp.height / PREVIEW_SCALE_FACTOR) : bmp.height;
+          pageSizeRef.current = { w: fullW, h: fullH };
+          setPageReady(true);
+          centerPage(displayZoomRef.current);
+        };
+
+        // Render current page — pass onPreviewReady so low-res preview shows immediately
+        const bitmap = await renderPageBitmap(page, scale, hash, (preview) => {
+          if (!cancelled) drawBitmap(preview, true);
+        });
+        console.log(`[HB] renderPageBitmap p${page}: ${(performance.now()-t2).toFixed(0)}ms | total: ${(performance.now()-t0).toFixed(0)}ms`);
         if (cancelled || !bitmap) return;
-        // Draw to bitmapCanvas immediately
-        const bc = bitmapCanvasRef.current;
-        if (bc) {
-          bc.width = bitmap.width;
-          bc.height = bitmap.height;
-          bc.style.width = `${bitmap.width}px`;
-          bc.style.height = `${bitmap.height}px`;
-          const ctx = bc.getContext("2d");
-          if (ctx) ctx.drawImage(bitmap, 0, 0);
-          bitmapPageRef.current = cacheKey;
-        }
-        // Set pageSizeRef and pageReady so overlay canvas activates
-        pageSizeRef.current = { w: bitmap.width, h: bitmap.height };
-        setPageReady(true);
-        centerPage(displayZoomRef.current);
+        // Full-res is ready — swap in (replaces preview)
+        drawBitmap(bitmap, false);
         // Prefetch adjacent pages in background
         const total = (doc as unknown as { numPages: number }).numPages;
         if (total > 0) setNumPages(total);

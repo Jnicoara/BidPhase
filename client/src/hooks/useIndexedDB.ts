@@ -57,7 +57,10 @@ export function useIndexedDB<T>(key: string, initialValue: T) {
   // Load from IndexedDB on mount
   useEffect(() => {
     let cancelled = false;
+    const t0 = performance.now();
     idbGet<T>(key).then((stored) => {
+      const elapsed = (performance.now() - t0).toFixed(0);
+      console.log(`[HB] IndexedDB read "${key}": ${elapsed}ms, found=${stored !== undefined}`);
       if (!cancelled && stored !== undefined) {
         setValueState(stored);
       }
