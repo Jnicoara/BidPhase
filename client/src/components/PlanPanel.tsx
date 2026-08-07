@@ -73,6 +73,8 @@ const globalBitmapCache = new Map<string, ImageBitmap>();
 let globalPdfDoc: import("pdfjs-dist").PDFDocumentProxy | null = null;
 let globalPdfHash: string | null = null;
 
+const globalBitmapInFlight = new Map<string, Promise<ImageBitmap | null>>();
+
 async function renderPageBitmap(
   pageNum: number,
   scale: number,
@@ -80,7 +82,10 @@ async function renderPageBitmap(
 ): Promise<ImageBitmap | null> {
   const cacheKey = `${pdfHash}:${pageNum}`;
   if (globalBitmapCache.has(cacheKey)) return globalBitmapCache.get(cacheKey)!;
+  // Dedupe concurrent requests for the same page
+  if (globalBitmapInFlight.has(cacheKey)) return globalBitmapInFlight.get(cacheKey)!;
   if (!globalPdfDoc) return null;
+  const promise = (async () => {
   try {
     const page = await globalPdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale });
@@ -98,7 +103,12 @@ async function renderPageBitmap(
     return bitmap;
   } catch {
     return null;
+  } finally {
+    globalBitmapInFlight.delete(cacheKey);
   }
+  })();
+  globalBitmapInFlight.set(cacheKey, promise);
+  return promise;
 }
 
 function clearBitmapCache(pdfHash?: string) {
@@ -570,6 +580,8 @@ export default function PlanPanel({
   const crosshairPosRef = useRef<{ x: number; y: number } | null>(null);
   // Stable ref so drawCanvas can call drawCrosshair without a forward-reference issue
   const drawCrosshairRef = useRef<() => void>(() => {});
+  // Direct DOM ref for the cursor dot overlay — avoids React re-renders on every mousemove
+  const cursorDotRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);   // fixed-size overflow:hidden viewport
   const scrollAreaRef = viewportRef;                  // alias kept for legacy code
   const pagesContainerRef = useRef<HTMLDivElement>(null);
@@ -718,11 +730,16 @@ export default function PlanPanel({
   // Reset page render state when page changes (NOT on pdfFile change — that's handled by applyPdfLoad
   // and the Document key={pdfHash} remount. Including pdfFile here would race with onRenderSuccess.)
   useEffect(() => {
-    pageSizeRef.current = null;
-    setPageReady(false);
+    // Only clear pageReady if we don't already have this page in the bitmap cache.
+    // If cached, the instant-display effect below will set pageReady=true immediately,
+    // so clearing it here just causes an unnecessary flash.
+    if (!pdfHash || !globalBitmapCache.has(`${pdfHash}:${currentPage}`)) {
+      pageSizeRef.current = null;
+      setPageReady(false);
+    }
     setMode("none");
     modeRef.current = "none";
-  }, [currentPage]);
+  }, [currentPage, pdfHash]);
 
   // ── Instant page display from bitmap cache ────────────────────────────────
   // When navigating to a page that's already in the bitmap cache, draw it immediately
@@ -1447,11 +1464,16 @@ export default function PlanPanel({
     const clampedOy = nat ? clamp(newOy, -(nat.h * newZoom - MARGIN), vp.clientHeight - MARGIN) : newOy;
 
     panOffsetRef.current = { x: clampedOx, y: clampedOy };
-    setPanOffset({ x: clampedOx, y: clampedOy });
-
-    // Pure CSS scale — no PDF re-render needed
-    setDisplayZoom(newZoom);
     displayZoomRef.current = newZoom;
+
+    // Write CSS transform directly to DOM IMMEDIATELY — before React re-renders.
+    // This makes zoom feel instant instead of waiting for the next render cycle.
+    const el = pagesContainerRef.current;
+    if (el) el.style.transform = `translate(${clampedOx}px, ${clampedOy}px) scale(${newZoom / RENDER_BASE_ZOOM})`;
+
+    // Batch both state updates into a single React render (React 18 auto-batching)
+    setPanOffset({ x: clampedOx, y: clampedOy });
+    setDisplayZoom(newZoom);
   }, [pageNatSize]);
 
   // DEFINITIVE TRANSFORM DRIVER:
@@ -2011,11 +2033,18 @@ export default function PlanPanel({
       crosshairRafRef.current = null;
       drawCrosshair();
     });
-    // Track viewport-relative position for the smooth overlay cursor dot
-    const viewport = viewportRef.current;
-    if (viewport) {
-      const rect = viewport.getBoundingClientRect();
-      setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    // Move cursor dot via direct DOM style mutation — zero React re-renders on mousemove
+    const dot = cursorDotRef.current;
+    if (dot) {
+      const viewport = viewportRef.current;
+      if (viewport) {
+        const vpRect = viewport.getBoundingClientRect();
+        const dx = e.clientX - vpRect.left;
+        const dy = e.clientY - vpRect.top;
+        dot.style.left = `${dx}px`;
+        dot.style.top = `${dy}px`;
+        dot.style.display = "block";
+      }
     }
   }, [drawCrosshair]);
 
@@ -3114,6 +3143,7 @@ export default function PlanPanel({
                     crosshairPosRef.current = null;
                     setCrosshair(null);
                     setMousePos(null);
+                    if (cursorDotRef.current) cursorDotRef.current.style.display = "none";
                     const cc = crosshairCanvasRef.current;
                     if (cc) { const ctx2 = cc.getContext("2d"); ctx2?.clearRect(0, 0, cc.width, cc.height); }
                   }}
@@ -3363,14 +3393,15 @@ export default function PlanPanel({
         )}
 
         {/* Smooth overlay cursor — pointer-events:none div that tracks mouse, GPU-composited, zero lag */}
-        {mousePos && activeCursorColor && !isPanning && (
+        {/* Cursor dot overlay — always mounted, position updated via ref (no React re-renders) */}
+        {activeCursorColor && !isPanning && (
           <div
+            ref={cursorDotRef}
             className="absolute pointer-events-none z-[50]"
             style={{
-              left: mousePos.x,
-              top: mousePos.y,
+              display: "none",
               transform: "translate(-50%, -50%)",
-              willChange: "transform",
+              willChange: "left, top",
             }}
           >
             {/* Dot */}
