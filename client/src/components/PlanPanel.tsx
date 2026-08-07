@@ -789,9 +789,16 @@ export default function PlanPanel({
           // Load the PDF directly via pdfjs (not through react-pdf)
           const pdfjsLib = await import("pdfjs-dist");
           const t1 = performance.now();
-          const loadingTask = pdfjsLib.getDocument({ data: atob(pdfFile.split(",")[1]) });
+          // Use fetch() to decode the data URL to ArrayBuffer asynchronously (non-blocking).
+          // atob() on a 10MB PDF (13MB base64 string) blocks the main thread for 2-5 seconds.
+          // fetch() + arrayBuffer() does the same work off the main thread.
+          const response = await fetch(pdfFile);
+          const arrayBuffer = await response.arrayBuffer();
+          console.log(`[HB] data URL decode: ${(performance.now()-t1).toFixed(0)}ms`);
+          const t1b = performance.now();
+          const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
           doc = await loadingTask.promise as unknown as import("pdfjs-dist").PDFDocumentProxy;
-          console.log(`[HB] pdfjs.getDocument: ${(performance.now()-t1).toFixed(0)}ms`);
+          console.log(`[HB] pdfjs.getDocument: ${(performance.now()-t1b).toFixed(0)}ms`);
           if (cancelled) return;
           globalPdfDoc = doc;
           globalPdfHash = hash;
