@@ -61,6 +61,7 @@ import { CONDUIT_SIZES, type ConduitSize, type CountPin, type CountSession } fro
 import { Eye, EyeOff } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { DEFAULT_ICON_ID } from "@/lib/CountIcons";
+import { trpc } from "@/lib/trpc";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -413,6 +414,8 @@ function RunChip({ run, isActive, runColor, canDelete, savedColors, onActivate, 
 
 interface PlanPanelProps {
   tabKey: string;
+  /** Database project ID — used for S3 PDF upload/download for cross-device access */
+  projectId?: number;
   onPushDistance?: (ft: number, runName: string, conduitSize?: string, pageNumber?: number, segmentFeet?: number[]) => void;
   onDeleteRun?: (runName: string, pageNumber?: number) => void;
   onCurrentPageChange?: (page: number) => void;
@@ -443,6 +446,7 @@ interface PlanPanelProps {
 
 export default function PlanPanel({
   tabKey,
+  projectId,
   onPushDistance,
   onDeleteRun,
   onCurrentPageChange,
@@ -465,6 +469,14 @@ export default function PlanPanel({
   const [numPages, setNumPages] = useState<number>(0);
   // Counter that increments on every PDF load to force Document remount even if hash is the same
   const [pdfLoadId, setPdfLoadId] = useState(0);
+
+  // ── S3 PDF sync ───────────────────────────────────────────────────────────────
+  // Upload PDF to S3 after local load; fetch from S3 if IndexedDB is empty (cross-device)
+  const uploadPdfMutation = trpc.projects.uploadPdf.useMutation();
+  const { data: s3PdfData } = trpc.projects.getPdfUrl.useQuery(
+    { projectId: projectId! },
+    { enabled: !!projectId && !pdfLoading && !pdfFile }
+  );
 
   // ── Current page (1-indexed) ───────────────────────────────────────────────
   const [currentPage, setCurrentPage] = useLocalStorage<number>(`bp_page_${tabKey}`, 1);
@@ -1468,6 +1480,14 @@ export default function PlanPanel({
         setPendingPdfFile({ dataUrl, hash });
       } else {
         applyPdfLoad(dataUrl, hash);
+        // Upload to S3 in background for cross-device access
+        if (projectId) {
+          uploadPdfMutation.mutate({
+            projectId,
+            dataUrl,
+            filename: file.name,
+          });
+        }
       }
     };
     reader.readAsDataURL(file);
@@ -1485,6 +1505,30 @@ export default function PlanPanel({
     setPdfHash(hash);
     setPdfLoadId((c) => c + 1);
   }, [pdfLoading, pdfFile, pdfHash, setPdfHash]);
+
+  // ── S3 cross-device PDF fetch ─────────────────────────────────────────────────
+  // If IndexedDB has no PDF for this project (different device), fetch from S3
+  useEffect(() => {
+    if (pdfLoading || pdfFile || !s3PdfData?.url) return;
+    // Fetch the PDF from S3 and store it in IndexedDB for future use
+    (async () => {
+      try {
+        const resp = await fetch(s3PdfData.url);
+        if (!resp.ok) return;
+        const blob = await resp.blob();
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const dataUrl = ev.target?.result as string;
+          if (!dataUrl) return;
+          const hash = hashPdfDataUrl(dataUrl);
+          applyPdfLoad(dataUrl, hash);
+        };
+        reader.readAsDataURL(blob);
+      } catch {
+        // S3 fetch failed — user will need to re-upload
+      }
+    })();
+  }, [pdfLoading, pdfFile, s3PdfData, applyPdfLoad]);
 
   // ── Page render callback ───────────────────────────────────────────────────
   const onPageRenderSuccess = useCallback((page: { width: number; height: number }) => {

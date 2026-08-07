@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
+import { storagePut } from "../storage";
 
 const PROJECT_STATUS = ["Bidding", "Won", "In Progress", "Lost"] as const;
 
@@ -95,5 +96,45 @@ export const projectsRouter = router({
     .mutation(async ({ input, ctx }) => {
       await db.deleteProject(input.id, ctx.user.id);
       return { success: true };
+    }),
+
+  /** Upload a PDF for a project — stores to S3, saves url+key to project row */
+  uploadPdf: protectedProcedure
+    .input(
+      z.object({
+        projectId: z.number().int().positive(),
+        dataUrl: z.string().min(1),
+        filename: z.string().max(512).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const project = await db.getProjectById(input.projectId, ctx.user.id);
+      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found." });
+      const base64 = input.dataUrl.split(",")[1];
+      if (!base64) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid data URL." });
+      const buffer = Buffer.from(base64, "base64");
+      const filename = input.filename ?? "plan.pdf";
+      const storageKey = `pdfs/${ctx.user.id}/${input.projectId}/${filename}`;
+      const { key, url } = await storagePut(storageKey, buffer, "application/pdf");
+      await db.updateProject(input.projectId, ctx.user.id, {
+        pdfUrl: url,
+        pdfKey: key,
+        pdfFilename: filename,
+      } as Parameters<typeof db.updateProject>[2]);
+      return { key, url, filename };
+    }),
+
+  /** Get the stored PDF URL for a project */
+  getPdfUrl: protectedProcedure
+    .input(z.object({ projectId: z.number().int().positive() }))
+    .query(async ({ input, ctx }) => {
+      const project = await db.getProjectById(input.projectId, ctx.user.id);
+      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found." });
+      if (!project.pdfKey) return { url: null, key: null, filename: null };
+      return {
+        url: `/manus-storage/${project.pdfKey}`,
+        key: project.pdfKey,
+        filename: project.pdfFilename ?? null,
+      };
     }),
 });

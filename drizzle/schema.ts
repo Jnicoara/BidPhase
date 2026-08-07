@@ -49,6 +49,10 @@ export const projects = mysqlTable(
     status: mysqlEnum("status", ["Bidding", "Won", "In Progress", "Lost"]).default("Bidding").notNull(),
     metadata: json("metadata"),
     isArchived: boolean("isArchived").default(false).notNull(),
+    // ── PDF storage (S3) ──
+    pdfUrl: text("pdfUrl"),
+    pdfKey: text("pdfKey"),
+    pdfFilename: varchar("pdfFilename", { length: 512 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },

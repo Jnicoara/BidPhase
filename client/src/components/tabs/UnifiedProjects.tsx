@@ -2363,6 +2363,7 @@ function CivilEditor({
         <ResizablePanel defaultSize={60} minSize={55} maxSize={80}>
           <PlanPanel
             tabKey={`unified_${projectId}`}
+            projectId={parseInt(projectId, 10)}
             onPushDistance={(ft, runName, conduitSize, pageNumber, segmentFeet) => handlePush(ft, runName, conduitSize, pageNumber, segmentFeet)}
             onDeleteRun={(name, page) => handleDeleteRun(name, page)}
             onCurrentPageChange={(page) => setActivePage(page)}
