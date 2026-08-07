@@ -107,22 +107,37 @@ function getPdfWorker(): Worker {
 }
 
 // Load the PDF into the worker (called once per PDF hash)
+// Pending load promises keyed by hash — resolved when worker sends "loaded"
+const _workerLoadPromises = new Map<string, Promise<void>>();
+
 async function loadPdfInWorker(pdfFile: string, hash: string): Promise<void> {
   if (_workerLoadedHash === hash) return; // already loaded
+  // Return existing in-flight load promise if one exists for this hash
+  if (_workerLoadPromises.has(hash)) return _workerLoadPromises.get(hash)!;
   const worker = getPdfWorker();
   // Decode data URL to ArrayBuffer asynchronously
   const response = await fetch(pdfFile);
   const arrayBuffer = await response.arrayBuffer();
+  // Create a promise that resolves when the worker sends "loaded" for this hash
+  const loadPromise = new Promise<void>((resolve) => {
+    const originalOnMessage = worker.onmessage;
+    const handler = (e: MessageEvent) => {
+      if (e.data.type === "loaded" && e.data.hash === hash) {
+        _workerLoadedHash = hash;
+        _workerLoadPromises.delete(hash);
+        worker.removeEventListener("message", handler);
+        resolve();
+      }
+    };
+    worker.addEventListener("message", handler);
+    // Timeout after 15s
+    setTimeout(() => { _workerLoadPromises.delete(hash); resolve(); }, 15000);
+    void originalOnMessage; // keep linter happy
+  });
+  _workerLoadPromises.set(hash, loadPromise);
   // Transfer the ArrayBuffer to the worker (zero-copy)
   worker.postMessage({ type: "load", pdfData: arrayBuffer, hash }, [arrayBuffer]);
-  // Wait for the worker to confirm it loaded
-  await new Promise<void>((resolve) => {
-    const check = setInterval(() => {
-      if (_workerLoadedHash === hash) { clearInterval(check); resolve(); }
-    }, 20);
-    // Timeout after 10s
-    setTimeout(() => { clearInterval(check); resolve(); }, 10000);
-  });
+  return loadPromise;
 }
 
 const globalBitmapInFlight = new Map<string, Promise<ImageBitmap | null>>();
@@ -857,13 +872,11 @@ export default function PlanPanel({
         pageSizeRef.current = { w: bitmap.width, h: bitmap.height };
         setPageReady(true);
         centerPage(displayZoomRef.current);
-        // Prefetch adjacent pages in background via worker
+        // Prefetch adjacent pages immediately — worker queues them naturally
         [page + 1, page - 1, page + 2, page - 2]
           .filter((p) => p >= 1 && p <= numPages)
-          .forEach((p, i) => {
-            setTimeout(() => {
-              if (!cancelled) renderPageBitmap(p, scale, hash);
-            }, (i + 1) * 100);
+          .forEach((p) => {
+            if (!cancelled) renderPageBitmap(p, scale, hash);
           });
       } catch {
         // Fall through to react-pdf's normal render
@@ -3123,11 +3136,7 @@ export default function PlanPanel({
           setPanOffset({ ...panOffsetRef.current });
         }}
       >
-        {(pdfLoading && !globalBitmapCache.has(`${pdfHash}:${currentPage}`)) ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-            Loading…
-          </div>
-        ) : !pdfFile ? (
+        {!pdfFile && !pdfLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-6 select-none">
             {/* Large icon */}
             <div className="w-24 h-24 rounded-2xl bg-muted/60 border-2 border-dashed border-border flex items-center justify-center">
@@ -3199,43 +3208,9 @@ export default function PlanPanel({
                   renderTextLayer={false}
                   onRenderSuccess={(page) => {
                     onPageRenderSuccess({ width: page.width, height: page.height });
-                    // After react-pdf renders the current page:
-                    // 1. Render it to the bitmapCanvas and cache it for instant future navigation
-                    // 2. Kick off background prefetch of adjacent pages (±2)
-                    if (pdfHash && pdfDocRef.current) {
-                      const scale = BASE_DPI * RENDER_BASE_ZOOM;
-                      const hash = pdfHash;
-                      const total = numPages;
-                      const cacheKey = `${hash}:${currentPage}`;
-                      // Render current page to bitmap cache + draw to bitmapCanvas
-                      renderPageBitmap(currentPage, scale, hash).then((bitmap) => {
-                        if (!bitmap) return;
-                        const bc = bitmapCanvasRef.current;
-                        if (bc && bitmapPageRef.current !== cacheKey) {
-                          bc.width = bitmap.width;
-                          bc.height = bitmap.height;
-                          bc.style.width = `${bitmap.width}px`;
-                          bc.style.height = `${bitmap.height}px`;
-                          const ctx = bc.getContext("2d");
-                          if (ctx) ctx.drawImage(bitmap, 0, 0);
-                          bitmapPageRef.current = cacheKey;
-                        }
-                      });
-                      // Prefetch adjacent pages: ±1, ±2
-                      const pagesToPrefetch = [
-                        currentPage + 1,
-                        currentPage - 1,
-                        currentPage + 2,
-                        currentPage - 2,
-                      ].filter((p) => p >= 1 && p <= total);
-                      let delay = 50;
-                      pagesToPrefetch.forEach((p) => {
-                        setTimeout(() => {
-                          renderPageBitmap(p, scale, hash);
-                        }, delay);
-                        delay += 50;
-                      });
-                    }
+                    // The worker-based direct render effect already handles bitmap caching
+                    // and prefetch. onRenderSuccess only needs to update pageSizeRef here.
+                    // (Duplicate renderPageBitmap calls removed — worker path is faster.)
                   }}
                 />
               </Document>
