@@ -395,13 +395,43 @@ export async function deleteMasterLaborRate(id: number, userId: number) {
 }
 
 // ─── Project Assemblies ───────────────────────────────────────────────────────
+// All access below is scoped to rows whose parent project belongs to userId —
+// project assemblies/items have no userId column of their own, so ownership is
+// resolved by walking up to the owning project (same rule as the Master* tables).
 
-export async function getProjectAssemblies(projectId: number) {
+export async function getProjectAssemblies(projectId: number, userId: number) {
   const db = await getDb();
   if (!db) return [];
+  const project = await getProjectById(projectId, userId);
+  if (!project) return [];
   return db.select().from(projectAssemblies)
     .where(eq(projectAssemblies.projectId, projectId))
     .orderBy(asc(projectAssemblies.sortOrder), asc(projectAssemblies.createdAt));
+}
+
+/** Resolve the owning userId for a project assembly, or undefined if it doesn't exist. */
+export async function getProjectAssemblyOwnerId(assemblyId: number): Promise<number | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select({ userId: projects.userId })
+    .from(projectAssemblies)
+    .innerJoin(projects, eq(projectAssemblies.projectId, projects.id))
+    .where(eq(projectAssemblies.id, assemblyId))
+    .limit(1);
+  return row?.userId;
+}
+
+/** Resolve the owning userId for a project assembly item, or undefined if it doesn't exist. */
+async function getProjectAssemblyItemOwnerId(id: number): Promise<number | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select({ userId: projects.userId })
+    .from(projectAssemblyItems)
+    .innerJoin(projectAssemblies, eq(projectAssemblyItems.projectAssemblyId, projectAssemblies.id))
+    .innerJoin(projects, eq(projectAssemblies.projectId, projects.id))
+    .where(eq(projectAssemblyItems.id, id))
+    .limit(1);
+  return row?.userId;
 }
 
 export async function getProjectAssemblyWithItems(assemblyId: number) {
@@ -419,10 +449,10 @@ export async function getProjectAssemblyWithItems(assemblyId: number) {
   return { ...assembly, items };
 }
 
-export async function getProjectAssembliesWithItems(projectId: number) {
+export async function getProjectAssembliesWithItems(projectId: number, userId: number) {
   const db = await getDb();
   if (!db) return [];
-  const assemblies = await getProjectAssemblies(projectId);
+  const assemblies = await getProjectAssemblies(projectId, userId);
   return Promise.all(assemblies.map(a => getProjectAssemblyWithItems(a.id)));
 }
 
@@ -433,16 +463,20 @@ export async function createProjectAssembly(data: InsertProjectAssembly) {
   return result;
 }
 
-export async function updateProjectAssembly(id: number, data: Partial<InsertProjectAssembly>) {
+export async function updateProjectAssembly(id: number, userId: number, data: Partial<InsertProjectAssembly>) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const ownerId = await getProjectAssemblyOwnerId(id);
+  if (ownerId !== userId) return;
   await db.update(projectAssemblies).set({ ...data, updatedAt: new Date() })
     .where(eq(projectAssemblies.id, id));
 }
 
-export async function deleteProjectAssembly(id: number) {
+export async function deleteProjectAssembly(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const ownerId = await getProjectAssemblyOwnerId(id);
+  if (ownerId !== userId) return;
   await db.delete(projectAssemblies).where(eq(projectAssemblies.id, id));
 }
 
@@ -452,16 +486,20 @@ export async function createProjectAssemblyItem(data: InsertProjectAssemblyItem)
   await db.insert(projectAssemblyItems).values(data);
 }
 
-export async function updateProjectAssemblyItem(id: number, data: Partial<InsertProjectAssemblyItem>) {
+export async function updateProjectAssemblyItem(id: number, userId: number, data: Partial<InsertProjectAssemblyItem>) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const ownerId = await getProjectAssemblyItemOwnerId(id);
+  if (ownerId !== userId) return;
   await db.update(projectAssemblyItems).set({ ...data, updatedAt: new Date() })
     .where(eq(projectAssemblyItems.id, id));
 }
 
-export async function resetProjectAssemblyItemToMaster(id: number) {
+export async function resetProjectAssemblyItemToMaster(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const ownerId = await getProjectAssemblyItemOwnerId(id);
+  if (ownerId !== userId) return;
   // Reset overrides to master values
   await db.execute(sql`
     UPDATE project_assembly_items
@@ -472,20 +510,38 @@ export async function resetProjectAssemblyItemToMaster(id: number) {
   `);
 }
 
-export async function deleteProjectAssemblyItem(id: number) {
+export async function deleteProjectAssemblyItem(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const ownerId = await getProjectAssemblyItemOwnerId(id);
+  if (ownerId !== userId) return;
   await db.delete(projectAssemblyItems).where(eq(projectAssemblyItems.id, id));
 }
 
 // ─── Project Items (Standalone) ───────────────────────────────────────────────
+// Same rule as above: project items have no userId column, so ownership is
+// resolved by walking up to the owning project.
 
-export async function getProjectItems(projectId: number) {
+export async function getProjectItems(projectId: number, userId: number) {
   const db = await getDb();
   if (!db) return [];
+  const project = await getProjectById(projectId, userId);
+  if (!project) return [];
   return db.select().from(projectItems)
     .where(eq(projectItems.projectId, projectId))
     .orderBy(asc(projectItems.sortOrder), asc(projectItems.createdAt));
+}
+
+/** Resolve the owning userId for a project item, or undefined if it doesn't exist. */
+async function getProjectItemOwnerId(id: number): Promise<number | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select({ userId: projects.userId })
+    .from(projectItems)
+    .innerJoin(projects, eq(projectItems.projectId, projects.id))
+    .where(eq(projectItems.id, id))
+    .limit(1);
+  return row?.userId;
 }
 
 export async function createProjectItem(data: InsertProjectItem) {
@@ -494,16 +550,20 @@ export async function createProjectItem(data: InsertProjectItem) {
   await db.insert(projectItems).values(data);
 }
 
-export async function updateProjectItem(id: number, data: Partial<InsertProjectItem>) {
+export async function updateProjectItem(id: number, userId: number, data: Partial<InsertProjectItem>) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const ownerId = await getProjectItemOwnerId(id);
+  if (ownerId !== userId) return;
   await db.update(projectItems).set({ ...data, updatedAt: new Date() })
     .where(eq(projectItems.id, id));
 }
 
-export async function resetProjectItemToMaster(id: number) {
+export async function resetProjectItemToMaster(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const ownerId = await getProjectItemOwnerId(id);
+  if (ownerId !== userId) return;
   await db.execute(sql`
     UPDATE project_items
     SET overrideMaterialCost = masterMaterialCost,
@@ -513,26 +573,33 @@ export async function resetProjectItemToMaster(id: number) {
   `);
 }
 
-export async function deleteProjectItem(id: number) {
+export async function deleteProjectItem(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const ownerId = await getProjectItemOwnerId(id);
+  if (ownerId !== userId) return;
   await db.delete(projectItems).where(eq(projectItems.id, id));
 }
 
 // ─── Bid Summary ──────────────────────────────────────────────────────────────
+// bidSummary has no userId column either — scoped via the owning project.
 
-export async function getBidSummary(projectId: number) {
+export async function getBidSummary(projectId: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
+  const project = await getProjectById(projectId, userId);
+  if (!project) return undefined;
   const result = await db.select().from(bidSummary)
     .where(eq(bidSummary.projectId, projectId))
     .limit(1);
   return result[0];
 }
 
-export async function upsertBidSummary(data: InsertBidSummary) {
+export async function upsertBidSummary(data: InsertBidSummary, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+  const project = await getProjectById(data.projectId, userId);
+  if (!project) return;
   await db.insert(bidSummary).values(data).onDuplicateKeyUpdate({
     set: {
       percentageLaborFactor: data.percentageLaborFactor,
