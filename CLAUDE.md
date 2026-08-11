@@ -30,6 +30,40 @@ Whenever you commit a meaningful change, **also add a one-or-two-line plain-Engl
 - Write for a non-programmer reading it months later: what changed and why it matters, not which functions moved. "Fixed a security gap that let any logged-in user read another contractor's bid pricing" beats "added ownership checks to projectItemsRouter".
 - Skip it for trivial changes — typo fixes, formatting, comment-only edits.
 
+## Responsiveness — standing rules for new screens
+
+The app is used on a laptop in a truck, one-handed, against a supply-house
+deadline. It should feel like a native tool, not a web form. Apply these to any
+screen or list you build without being asked:
+
+**1. Edits apply instantly and save in the background.** A simple change — a
+price, a name, a quantity, a category — updates the UI the moment the user
+commits it, and the mutation goes out behind that. Do not `await` a mutation and
+then `await refetch()` before showing the result; that turns a 1-character edit
+into a visible stall. Use the React Query optimistic path (`onMutate` writes the
+new value into the cache via `utils.<router>.<proc>.setData`, `onError` restores
+the snapshot it returned, `onSettled` invalidates). Reserve blocking saves for
+operations that genuinely cannot be predicted client-side.
+
+**2. Lists load a window, never the whole table.** Anything that grows with the
+user's business — materials, takeoff items, project items, assemblies, plan
+pages — is paginated at the query (cursor-based `useInfiniteQuery`, not
+`.slice()` on a full fetch) and virtualised in the DOM if it renders long. A
+screen that is fine at 28 rows and unusable at 5,000 is a bug, not a future
+optimisation. Search and filtering belong server-side for the same reason.
+
+**3. Only genuinely slow work gets a loading indicator.** Spinners on fast
+operations read as the app being slow. The bar is roughly: under ~300ms show
+nothing, and let the optimistic result stand in. Real work — PDF page rendering
+(0.5–13s), plan uploads, bulk imports — gets an honest indicator, ideally with
+progress rather than an indeterminate spinner. Prefer skeletons over spinners
+for a first load, and never replace already-rendered content with a spinner on
+refetch.
+
+These are forward-looking. Screens built before this section predate the rules —
+do not retrofit them as a side effect of unrelated work; that is its own task and
+its own commit.
+
 ## Architecture
 
 **Stack:** Express + tRPC (v11, superjson transformer) on the server, React 19 + Vite + Wouter (hash-based routing) on the client, Drizzle ORM against MySQL. Single dev process — Vite runs as Express middleware in development (`server/_core/vite.ts`), and the client is served statically in production.
