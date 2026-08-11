@@ -28,7 +28,28 @@ All paths below are relative to the repo root.
 
 ```bash
 pnpm install
+pnpm db:push
 ```
+
+**`pnpm db:push` is required on a fresh checkout, before the first `pnpm dev`.**
+It applies the migrations in `drizzle/`, and skipping it does not fail loudly —
+the server starts and serves pages, so it looks like a working app with broken
+data. Re-run it after any `git pull` that brings new files into `drizzle/`.
+
+What a skipped migration looks like:
+
+- `[BaselineMaterials] Seed failed: ... Unknown column 'category'` in the server
+  log, once at startup. The seeder is wrapped in a `.catch()`, so this is a
+  warning, not a crash — easy to scroll past.
+- Materials render as one flat list with no category sections, because the
+  column the screen groups by does not exist.
+- Per-material trade slang finds nothing: "1900", "gem box" and "load center"
+  return no results, since `searchAliases` is missing too. Note that slang
+  carried by the global `ALIAS_MAP` — "romex", "j box", "rheostat" — keeps
+  working, so search looks fine until you try the item-specific terms.
+
+These are all one missing migration, not a bug in the app. `pnpm db:push` fixes
+them; the seeder repairs the data itself on the next start.
 
 ## Run the server (agent path)
 
@@ -151,3 +172,6 @@ foreach ($p in 3000..3005) { $c = Get-NetTCPConnection -LocalPort $p -State List
 | `Failed to sync user info` in server log | That `openId` is not in `users`. Use `--list-users`. |
 | `'NODE_ENV' is not recognized` | Checkout predates the `cross-env` fix, or deps not installed. `pnpm install`. |
 | `ER_NO_REFERENCED_ROW_2` on a material insert | The `userId` has no row in `users`. |
+| `Unknown column '<name>'` in a `Seed failed` warning | Migrations not applied. `pnpm db:push`. |
+| Materials show no category sections | Same — `pnpm db:push`, then restart. |
+| "1900" / "gem box" find nothing, but "romex" works | Same — `searchAliases` column is missing; only global-map slang still resolves. |
