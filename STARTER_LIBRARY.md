@@ -10,7 +10,7 @@ Reference content for the shipped baseline library — the "real starter library
 
 ## Labor Rates
 
-Starting estimates — adjust to local market.
+Starting estimates — adjust to local market. The user now owns a real **NECA Manual of Labor Units** and will replace these with real numbers over time.
 
 | Role | Hourly Cost |
 |---|---|
@@ -233,6 +233,6 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 ## Important Notes
 
-- **Labor units are not AI-generated.** Any labor unit appearing here or in future entries is a placeholder/reference estimate only. Real labor units must come from the user's own field experience and/or the **NECA Manual of Labor Units** — a real, purchasable industry reference. Never treat an AI-produced labor unit as fact.
+- **Labor units are not AI-generated.** Any labor unit appearing here or in future entries is a placeholder/reference estimate only. Real labor units must come from the user's own field experience and/or the **NECA Manual of Labor Units** — a real, purchasable industry reference, which the user now owns. Never treat an AI-produced labor unit as fact.
 - **Box material and wiring method are NOT separate assemblies.** Metal vs plastic boxes, Romex vs conduit — these are handled by swapping materials within a single assembly, or by a user forking their own variant. Splitting them would multiply the library without adding value.
 - **Conduit and wire runs are intentionally excluded** from the assembly list. They're handled by traced, dynamically-calculated footage on the takeoff page (see ASSEMBLIES_PLAN.md § CONDUIT & WIRE CALCULATION), not as fixed assemblies.
