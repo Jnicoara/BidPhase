@@ -22,6 +22,7 @@ import { useCallback, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { selectOnFocus } from "@/lib/selectOnFocus";
 import { Archive, ArchiveRestore, Check, Pencil, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -136,6 +137,7 @@ function ModifierRow({
             onChange={e => setDraft({ ...draft, percent: e.target.value })}
             className="h-8 w-24 text-sm text-right"
             inputMode="decimal"
+            onFocus={selectOnFocus}
             placeholder="12"
             aria-label="Labor adjustment percent"
           />
@@ -464,6 +466,7 @@ export default function ModifiersPage() {
                       onChange={e => setNewDraft({ ...newDraft, percent: e.target.value })}
                       className="h-8 w-24 text-sm text-right"
                       inputMode="decimal"
+                      onFocus={selectOnFocus}
                       placeholder="12"
                       aria-label="Labor adjustment percent"
                     />

@@ -33,6 +33,9 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { InlineNumberField } from "@/components/InlineNumberField";
+import { asPercent, fromPercent } from "@/lib/inlineEdit";
+import { selectOnFocus } from "@/lib/selectOnFocus";
 
 const STATUSES = ["Draft", "Active", "Won", "Lost"] as const;
 type Status = (typeof STATUSES)[number];
@@ -122,6 +125,7 @@ function DuplicateUnitPanel({
           onChange={e => setStartNumber(e.target.value)}
           className="h-8 w-20 text-sm text-right"
           inputMode="numeric"
+          onFocus={selectOnFocus}
           aria-label="Start number"
         />
         <span className="text-xs text-muted-foreground">×</span>
@@ -130,6 +134,7 @@ function DuplicateUnitPanel({
           onChange={e => setCount(e.target.value)}
           className="h-8 w-16 text-sm text-right"
           inputMode="numeric"
+          onFocus={selectOnFocus}
           aria-label="How many copies"
         />
         <Button
@@ -302,6 +307,7 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   onChange={e => setAddQty(e.target.value)}
                   className="h-8 w-16 text-sm text-right"
                   inputMode="decimal"
+                  onFocus={selectOnFocus}
                   aria-label="Quantity"
                 />
                 <Input
@@ -387,16 +393,12 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                             </div>
                           ) : null}
                         </div>
-                        <Input
-                          value={String(Number(line.qty))}
-                          onChange={e => {
-                            const qty = Number(e.target.value);
-                            if (Number.isNaN(qty) || qty < 0) return;
-                            updateLine.mutate({ bidId, id: line.id, qty });
-                          }}
-                          className="h-7 w-16 text-sm text-right"
-                          inputMode="decimal"
-                          aria-label={`Quantity of ${line.name}`}
+                        <InlineNumberField
+                          value={Number(line.qty)}
+                          onSave={qty => updateLine.mutate({ bidId, id: line.id, qty })}
+                          rules={{ min: 0, max: 999999 }}
+                          className="h-7 w-16 text-sm"
+                          ariaLabel={`Quantity of ${line.name}`}
                         />
                         <span className="font-mono text-xs w-24 text-right shrink-0 text-muted-foreground">
                           {round(line.breakdown.totalLaborHours, 2)} h
@@ -506,23 +508,20 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                         <SelectItem value="flat">Flat $</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input
-                      defaultValue={String(
+                    <InlineNumberField
+                      value={
                         bid.overheadMode === "flat"
                           ? Number(bid.overheadValue ?? 0)
-                          : round(Number(bid.overheadValue ?? 0) * 100, 4)
-                      )}
-                      onBlur={e => {
-                        const raw = Number(e.target.value);
-                        if (Number.isNaN(raw) || raw < 0) return;
-                        updateBid.mutate({
-                          id: bid.id,
-                          overheadValue: bid.overheadMode === "flat" ? raw : raw / 100,
-                        });
-                      }}
-                      className="h-7 w-20 text-xs text-right"
-                      inputMode="decimal"
-                      aria-label="Overhead value"
+                          : asPercent(Number(bid.overheadValue ?? 0))
+                      }
+                      onSave={raw => updateBid.mutate({
+                        id: bid.id,
+                        overheadValue: bid.overheadMode === "flat" ? raw : fromPercent(raw),
+                      })}
+                      rules={{ min: 0 }}
+                      className="h-7 w-20 text-xs"
+                      ariaLabel="Overhead value"
+                      suffix={bid.overheadMode === "flat" ? undefined : "%"}
                     />
                   </div>
                 )}
@@ -553,16 +552,14 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   </SelectContent>
                 </Select>
                 {bid.profitMethod && (
-                  <Input
-                    defaultValue={String(round(Number(bid.profitValue ?? 0) * 100, 4))}
-                    onBlur={e => {
-                      const raw = Number(e.target.value);
-                      if (Number.isNaN(raw) || raw < 0 || raw >= 99) return;
-                      updateBid.mutate({ id: bid.id, profitValue: raw / 100 });
-                    }}
-                    className="h-7 w-20 text-xs text-right"
-                    inputMode="decimal"
-                    aria-label="Profit value"
+                  <InlineNumberField
+                    value={asPercent(Number(bid.profitValue ?? 0))}
+                    onSave={raw => updateBid.mutate({ id: bid.id, profitValue: fromPercent(raw) })}
+                    // Below 99%: at 100% the target-margin formula divides by zero.
+                    rules={{ min: 0, max: 98.99 }}
+                    className="h-7 w-20 text-xs"
+                    ariaLabel="Profit value"
+                    suffix="%"
                   />
                 )}
                 <p className="text-xs text-muted-foreground">

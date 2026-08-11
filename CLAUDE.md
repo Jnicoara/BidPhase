@@ -57,6 +57,43 @@ The global `ALIAS_MAP` in `client/src/lib/smartSearch.ts` is a *query-side*
 synonym table shared by every search box, and is the wrong place for facts about
 one material. Put per-material vocabulary on the material.
 
+## Editing fields — standing rules for every input
+
+Accuracy is this app's whole value. A contractor who cannot tell whether a
+number saved will stop trusting the total, and a wrong total loses a job. So
+every field follows the same four rules, without being asked:
+
+**1. A numeric field selects its value on focus.** Click or tab into a rate,
+percentage, quantity or hour count and the existing text is selected, so the
+first keystroke replaces it. Nobody should have to clear a field by hand before
+typing. Use `onFocus={selectOnFocus}` from `@/lib/selectOnFocus`.
+
+**2. A self-saving field commits on Enter and on blur.** Both, not one. Enter
+keeps focus and re-selects, so a column of figures can be typed straight down.
+
+**3. Escape abandons the edit.** The field snaps back to the last *saved* value
+and writes nothing. Escape reverts to what is stored now — not to the text the
+edit started from, which goes stale the moment anything saves.
+
+**4. A successful save shows a brief confirmation.** The field itself flashes
+green for about a second — border, tint and text together — plus an `aria-live`
+announcement for anyone who cannot see colour. The cue lives ON the field rather
+than as a floating tick beside it, so a scrolling row cannot clip it and nothing
+shifts. Only on a real write: an unchanged value or a reverted one must NOT
+flash, because a confirmation for a save that did not happen is worse than no
+confirmation at all.
+
+Invalid input reverts rather than erroring — an inline field has nowhere to put
+a message, and leaving a bad draft on screen is how someone comes to believe
+they saved something they did not. Blank never silently becomes zero unless the
+field opts in with `allowEmpty`: a zero quantity prices work at nothing.
+
+**Do not hand-roll this.** `InlineNumberField` (`@/components/InlineNumberField`)
+implements all four for self-saving numbers; the decisions live in
+`@/lib/inlineEdit` and are tested there. For a numeric input inside an explicit
+Save/Cancel form, rules 2–4 belong to the form's buttons, but rule 1 still
+applies — attach `selectOnFocus`.
+
 ## Responsiveness — standing rules for new screens
 
 The app is used on a laptop in a truck, one-handed, against a supply-house

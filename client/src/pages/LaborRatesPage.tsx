@@ -22,6 +22,7 @@ import { useCallback, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { selectOnFocus } from "@/lib/selectOnFocus";
 import { Check, HardHat, Pencil, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -181,6 +182,7 @@ function RateFields({
             onChange={e => onChange({ ...draft, hourlyCost: e.target.value })}
             className="h-8 w-24 text-sm text-right"
             inputMode="decimal"
+            onFocus={selectOnFocus}
             placeholder="0.00"
             aria-label="Hourly rate"
           />
@@ -193,6 +195,7 @@ function RateFields({
             onChange={e => onChange({ ...draft, annualSalary: e.target.value })}
             className="h-8 w-28 text-sm text-right"
             inputMode="decimal"
+            onFocus={selectOnFocus}
             placeholder="60000"
             aria-label="Annual salary"
           />
@@ -203,6 +206,7 @@ function RateFields({
             className="h-8 w-20 text-sm text-right"
             inputMode="decimal"
             placeholder={String(DEFAULT_ANNUAL_HOURS)}
+            onFocus={selectOnFocus}
             aria-label="Working hours per year"
           />
           <span className="text-xs text-muted-foreground">h</span>

@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { selectOnFocus } from "@/lib/selectOnFocus";
 import {
   ArrowLeft, Check, Layers, Pencil, Plus, RotateCcw, Search, Trash2, X,
 } from "lucide-react";
@@ -255,6 +256,7 @@ function CostPreview({
                 onChange={e => setOverheadValue(e.target.value)}
                 className="h-7 w-20 text-xs text-right"
                 inputMode="decimal"
+                onFocus={selectOnFocus}
                 aria-label="Overhead value"
               />
             </>
@@ -276,6 +278,7 @@ function CostPreview({
               onChange={e => setProfitValue(e.target.value)}
               className="h-7 w-20 text-xs text-right"
               inputMode="decimal"
+              onFocus={selectOnFocus}
               aria-label="Profit value"
             />
           )}
@@ -538,6 +541,7 @@ function AssemblyBuilder({
                       }}
                       className="h-7 w-20 text-sm text-right"
                       inputMode="decimal"
+                      onFocus={selectOnFocus}
                       aria-label={`Quantity of ${line.name}`}
                     />
                     <span className="text-xs text-muted-foreground w-12 shrink-0">
@@ -592,6 +596,7 @@ function AssemblyBuilder({
                     onChange={e => { setHoursTouched(true); setDraft({ ...draft, baseLaborHours: e.target.value }); }}
                     className="h-8 w-24 text-sm text-right"
                     inputMode="decimal"
+                    onFocus={selectOnFocus}
                     aria-label="Base labor hours"
                   />
                   <span className="text-xs text-muted-foreground">

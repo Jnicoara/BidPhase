@@ -14,6 +14,7 @@ import { useCallback, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { selectOnFocus } from "@/lib/selectOnFocus";
 import { Boxes, Check, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -221,6 +222,7 @@ function MaterialRow({
           onChange={e => setDraft({ ...draft, costPerUnit: e.target.value })}
           className="h-8 w-28 text-sm text-right"
           inputMode="decimal"
+          onFocus={selectOnFocus}
           placeholder="0.00"
         />
         <div className="flex items-center gap-1">
@@ -534,6 +536,7 @@ export default function MaterialsLibraryPage() {
                 onChange={e => setNewDraft({ ...newDraft, costPerUnit: e.target.value })}
                 className="h-8 w-28 text-sm text-right"
                 inputMode="decimal"
+                onFocus={selectOnFocus}
                 placeholder="0.00"
               />
               <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={handleCreate} disabled={createMaterial.isPending}>
