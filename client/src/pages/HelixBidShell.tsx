@@ -46,6 +46,7 @@ import ModifiersPage from "@/pages/ModifiersPage";
 import AssembliesLibraryPage from "@/pages/AssembliesLibraryPage";
 import BidsPage from "@/pages/BidsPage";
 import QuickBidPage from "@/pages/QuickBidPage";
+import KitsPage from "@/pages/KitsPage";
 import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +69,7 @@ type Route =
   | "library-labor-rates"
   | "library-modifiers"
   | "library-assemblies"
+  | "library-kits"
   | "bids"
   | "quickbid"
   | "admin";
@@ -103,6 +105,7 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
     if (parts[1] === "labor-rates") return { route: "library-labor-rates" };
     if (parts[1] === "modifiers") return { route: "library-modifiers" };
     if (parts[1] === "assemblies") return { route: "library-assemblies" };
+    if (parts[1] === "kits") return { route: "library-kits" };
     if (!parts[1] || parts[1] === "materials") return { route: "library-materials" };
   }
   if (p === "admin") return { route: "admin" };
@@ -150,6 +153,8 @@ export default function HelixBidShell() {
       window.location.hash = "/library/modifiers";
     } else if (r === "library-assemblies") {
       window.location.hash = "/library/assemblies";
+    } else if (r === "library-kits") {
+      window.location.hash = "/library/kits";
     } else {
       window.location.hash = `/${r}`;
     }
@@ -206,6 +211,7 @@ export default function HelixBidShell() {
   const isInLaborRates    = route === "library-labor-rates";
   const isInModifiers     = route === "library-modifiers";
   const isInLibraryAsms   = route === "library-assemblies";
+  const isInLibraryKits   = route === "library-kits";
   const isInBids          = route === "bids";
   const isInQuickBid      = route === "quickbid";
   const isInAdmin         = route === "admin";
@@ -241,6 +247,7 @@ export default function HelixBidShell() {
     if (isInLaborRates)  return <LaborRatesPage />;
     if (isInModifiers)   return <ModifiersPage />;
     if (isInLibraryAsms) return <AssembliesLibraryPage />;
+    if (isInLibraryKits) return <KitsPage />;
     if (isInBids)        return <BidsPage />;
     if (isInQuickBid)    return <QuickBidPage />;
     if (isInAdmin)       return <AdminSettingsPage />;
@@ -363,6 +370,13 @@ export default function HelixBidShell() {
             icon={Layers}
             label="Assemblies"
             title="Assemblies (Library)"
+          />
+          <NavBtn
+            onClick={() => navigate("library-kits")}
+            isActive={isInLibraryKits}
+            icon={Package}
+            label="Kits"
+            title="Kits (Library)"
           />
           <NavBtn
             onClick={() => navigate("quickbid")}

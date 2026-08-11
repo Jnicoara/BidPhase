@@ -64,6 +64,7 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
   const utils = trpc.useUtils();
   const detailQuery = trpc.bids.get.useQuery({ id: bidId });
   const { data: assemblies = [] } = trpc.assemblies.list.useQuery();
+  const { data: kits = [] } = trpc.kits.list.useQuery();
   const { data: units = [] } = trpc.bids.units.useQuery({ bidId });
 
   const refresh = useCallback(() => {
@@ -74,6 +75,17 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
   const addAssembly = trpc.bids.addAssembly.useMutation({
     onError: error => toast.error(error.message),
+    onSettled: refresh,
+  });
+
+  const addKit = trpc.bids.addKit.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: result => {
+      toast.success(
+        `Added ${result.kitName} — ${result.lineIds.length} line${result.lineIds.length === 1 ? "" : "s"}` +
+        (result.skipped.length ? `, skipped ${result.skipped.length}` : "")
+      );
+    },
     onSettled: refresh,
   });
 
@@ -287,6 +299,39 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               </p>
             )}
           </div>
+
+          {/* Whole rooms in one go */}
+          {kits.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Or drop in a kit
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {kits.map(kit => (
+                  <button
+                    key={kit.id}
+                    onClick={() => {
+                      const amount = Number(qty);
+                      addKit.mutate({
+                        bidId,
+                        kitId: kit.id,
+                        qty: Number.isFinite(amount) && amount > 0 ? amount : 1,
+                        unitLabel: unitLabel.trim() || null,
+                      });
+                      focusSearch();
+                    }}
+                    className="px-2.5 py-1 rounded-md text-xs border border-border text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                  >
+                    {kit.name}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A kit lands as separate line items, each frozen and each editable — so one room
+                being different is just an edit to that line.
+              </p>
+            </div>
+          )}
 
           {/* Repeating units — the same generator the Bids screen uses */}
           <div className="space-y-2">

@@ -27,13 +27,17 @@
  * it is a hand-built catalog of recipes, bounded by curation. If it ever grows
  * into the thousands this is the screen to revisit first.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import {
-  ArrowLeft, Check, Layers, Pencil, Plus, RotateCcw, Search, Trash2, X,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  ArrowLeft, Check, Copy as CopyIcon, Layers, Pencil, Plus, RotateCcw, Search, Trash2, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -319,8 +323,18 @@ function AssemblyBuilder({
   const [hoursTouched, setHoursTouched] = useState(false);
 
   const { data: materials = [] } = trpc.materials.list.useQuery();
+  const { data: recentMaterials = [] } = trpc.materials.recent.useQuery({ limit: 8 });
   const { data: laborRates = [] } = trpc.laborRates.list.useQuery();
   const { data: modifiers = [] } = trpc.modifiers.list.useQuery({ status: "active" });
+
+  /** Keyboard state for the material picker: which result Enter would take. */
+  const [materialHighlight, setMaterialHighlight] = useState(0);
+  const materialSearchRef = useRef<HTMLInputElement>(null);
+  /**
+   * Set to the materialId just added so its quantity input can grab focus once
+   * React has rendered the new row — the second half of the keyboard loop.
+   */
+  const [focusQtyFor, setFocusQtyFor] = useState<number | null>(null);
 
   const isNew = initial.name === "";
 
@@ -346,19 +360,31 @@ function AssemblyBuilder({
   );
 
   type CatalogMaterial = {
-    id: number; name: string; unitOfSale: string; costPerUnit: string; category: string | null;
+    id: number; name: string; unitOfSale: string; costPerUnit: string;
+    category: string | null; defaultQty: string | null;
   };
 
+  /**
+   * With nothing typed, offer what this user reached for most recently — the
+   * same dozen parts go into most recipes, and one click beats a search. Once
+   * they start typing, ranking takes over completely.
+   */
   const materialResults = useMemo<CatalogMaterial[]>(() => {
-    if (!materialQuery.trim()) return [];
+    const all = materials as unknown as CatalogMaterial[];
+    if (!materialQuery.trim()) {
+      const chosen = new Set(draft.materials.map(l => l.materialId));
+      return (recentMaterials as unknown as CatalogMaterial[])
+        .filter(m => !chosen.has(m.id))
+        .slice(0, 6);
+    }
     const hits = smartSearch(searchable, materialQuery, 8);
-    const byId = new Map(
-      (materials as unknown as CatalogMaterial[]).map(m => [m.id, m])
-    );
+    const byId = new Map(all.map(m => [m.id, m]));
     return hits
       .map(hit => byId.get(Number(hit.id)))
       .filter((m): m is CatalogMaterial => Boolean(m));
-  }, [materialQuery, searchable, materials]);
+  }, [materialQuery, searchable, materials, recentMaterials, draft.materials]);
+
+  const showingRecent = !materialQuery.trim() && materialResults.length > 0;
 
   const selectedRate = laborRates.find(r => r.id === draft.laborRateId);
   const laborRate = selectedRate?.effectiveHourlyRate ?? 0;
@@ -372,24 +398,66 @@ function AssemblyBuilder({
 
   const addMaterial = (material: {
     id: number; name: string; unitOfSale: string; costPerUnit: string;
+    defaultQty?: string | null;
   }) => {
+    let already = false;
     setDraft(d => {
       if (d.materials.some(line => line.materialId === material.id)) {
-        toast.info(`"${material.name}" is already in this assembly — adjust its quantity instead.`);
+        already = true;
         return d;
       }
       return {
         ...d,
         materials: [...d.materials, {
           materialId: material.id,
-          qty: 1,
+          // Consumables carry a suggested count — you never fit one wire nut.
+          // Still just a suggestion: the field focuses next, ready to change.
+          qty: material.defaultQty != null ? Number(material.defaultQty) : 1,
           name: material.name,
           unitOfSale: material.unitOfSale as MaterialLine["unitOfSale"],
           costPerUnit: Number(material.costPerUnit),
         }],
       };
     });
+
+    if (already) {
+      toast.info(`"${material.name}" is already in this assembly — adjust its quantity instead.`);
+      materialSearchRef.current?.focus();
+      return;
+    }
+
     setMaterialQuery("");
+    setMaterialHighlight(0);
+    // Hand the keyboard to the new row's quantity, which selects its own text.
+    setFocusQtyFor(material.id);
+  };
+
+  // The second half of the keyboard loop is handled by `autoFocus` on the new
+  // row's quantity input — see the material list below. An effect that hunted
+  // for the node raced React's commit and lost; autoFocus fires on mount, which
+  // is exactly the moment the row appears.
+
+  const onMaterialSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setMaterialHighlight(h => Math.min(h + 1, materialResults.length - 1));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setMaterialHighlight(h => Math.max(h - 1, 0));
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const chosen = materialResults[materialHighlight];
+      if (chosen) addMaterial(chosen);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setMaterialQuery("");
+    }
   };
 
   const save = () => {
@@ -493,27 +561,52 @@ function AssemblyBuilder({
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                   <Input
+                    ref={materialSearchRef}
                     value={materialQuery}
-                    onChange={e => setMaterialQuery(e.target.value)}
+                    onChange={e => { setMaterialQuery(e.target.value); setMaterialHighlight(0); }}
+                    onKeyDown={onMaterialSearchKeyDown}
                     placeholder="Search materials to add — try “1900”, “romex”, “gem box”…"
                     className="h-8 pl-9 text-sm"
+                    aria-label="Search materials to add"
                   />
                 </div>
                 {materialResults.length > 0 && (
-                  <div className="mt-2 rounded-lg border border-border overflow-hidden">
-                    {materialResults.map(m => (
-                      <button
-                        key={m.id}
-                        onClick={() => addMaterial(m)}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40 transition-colors border-b border-border last:border-0"
-                      >
-                        <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                        <span className="flex-1 truncate">{m.name}</span>
-                        <span className="text-xs text-muted-foreground">{m.category ?? "—"}</span>
-                        <span className="font-mono text-xs">{money(Number(m.costPerUnit))}</span>
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    {showingRecent && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Recently used — <span className="text-foreground">↑↓</span> then{" "}
+                        <span className="text-foreground">Enter</span>, or start typing to search.
+                      </div>
+                    )}
+                    <div className="mt-2 rounded-lg border border-border overflow-hidden">
+                      {materialResults.map((m, index) => (
+                        <button
+                          key={m.id}
+                          onMouseEnter={() => setMaterialHighlight(index)}
+                          onClick={() => addMaterial(m)}
+                          className={cn(
+                            "w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors border-b border-border last:border-0",
+                            index === materialHighlight
+                              ? "bg-[#F5C518]/10 text-foreground"
+                              : "hover:bg-muted/40"
+                          )}
+                        >
+                          <Plus className={cn(
+                            "w-3.5 h-3.5 shrink-0",
+                            index === materialHighlight ? "text-[#F5C518]" : "text-muted-foreground"
+                          )} />
+                          <span className="flex-1 truncate">{m.name}</span>
+                          {m.defaultQty != null && (
+                            <span className="text-xs text-muted-foreground">
+                              ×{Number(m.defaultQty)}
+                            </span>
+                          )}
+                          <span className="text-xs text-muted-foreground">{m.category ?? "—"}</span>
+                          <span className="font-mono text-xs">{money(Number(m.costPerUnit))}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -541,7 +634,30 @@ function AssemblyBuilder({
                       }}
                       className="h-7 w-20 text-sm text-right"
                       inputMode="decimal"
-                      onFocus={selectOnFocus}
+                      onFocus={e => {
+                        const el = e.currentTarget;
+                        selectOnFocus(e);
+                        // autoFocus fires during React's commit, which can land
+                        // before the value is in the DOM — so the synchronous
+                        // select finds nothing. Re-select a frame later for
+                        // that path only, leaving ordinary focus untouched.
+                        if (line.materialId === focusQtyFor) {
+                          window.setTimeout(() => el.select(), 0);
+                        }
+                        setFocusQtyFor(null);
+                      }}
+                      data-qty-for={line.materialId}
+                      // Mounts focused when this is the row just added, handing
+                      // the keyboard straight to the quantity.
+                      autoFocus={line.materialId === focusQtyFor}
+                      onKeyDown={e => {
+                        // Close the loop: Enter here hands the keyboard back to
+                        // search, ready for the next material.
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          materialSearchRef.current?.focus();
+                        }
+                      }}
                       aria-label={`Quantity of ${line.name}`}
                     />
                     <span className="text-xs text-muted-foreground w-12 shrink-0">
@@ -677,6 +793,8 @@ export default function AssembliesLibraryPage() {
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
+  /** The assembly being duplicated, and the name proposed for the copy. */
+  const [duplicating, setDuplicating] = useState<{ id: number; name: string } | null>(null);
 
   const utils = trpc.useUtils();
   const { data: assemblies = [], isLoading } = trpc.assemblies.list.useQuery();
@@ -711,6 +829,16 @@ export default function AssembliesLibraryPage() {
       refresh();
       if (editingId !== null) void utils.assemblies.get.invalidate({ id: editingId });
     },
+  });
+
+  const duplicateAssembly = trpc.assemblies.duplicate.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: copy => {
+      if (!copy) return;
+      toast.success(`Created "${copy.name}" — an independent copy.`);
+      setEditingId(copy.id);
+    },
+    onSettled: refresh,
   });
 
   const removeAssembly = trpc.assemblies.remove.useMutation({
@@ -921,6 +1049,18 @@ export default function AssembliesLibraryPage() {
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
+
+                      <Button
+                        size="sm" variant="ghost"
+                        className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                        onClick={() => setDuplicating({
+                          id: assembly.id, name: `${assembly.name} (copy)`,
+                        })}
+                        title="Duplicate — a separate assembly, not a copy of this one"
+                        aria-label={`Duplicate ${assembly.name}`}
+                      >
+                        <CopyIcon className="w-3.5 h-3.5" />
+                      </Button>
                       {assembly.userId !== null && (
                         <Button
                           size="sm" variant="ghost"
@@ -945,6 +1085,49 @@ export default function AssembliesLibraryPage() {
           never changes because a material price moved later.
         </p>
       </div>
+
+      {/* Naming the copy. A duplicate is a NEW assembly, so it needs its own name. */}
+      <AlertDialog
+        open={duplicating !== null}
+        onOpenChange={open => !open && setDuplicating(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Duplicate assembly</AlertDialogTitle>
+            <AlertDialogDescription>
+              This makes a separate assembly with the same materials, labor and modifiers. It is
+              not linked to the original — editing either one leaves the other alone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={duplicating?.name ?? ""}
+            onChange={e => setDuplicating(d => d && { ...d, name: e.target.value })}
+            onFocus={selectOnFocus}
+            onKeyDown={e => {
+              if (e.key !== "Enter" || !duplicating?.name.trim()) return;
+              e.preventDefault();
+              duplicateAssembly.mutate({ id: duplicating.id, name: duplicating.name.trim() });
+              setDuplicating(null);
+            }}
+            className="h-9 text-sm"
+            placeholder="Name for the copy"
+            aria-label="Name for the duplicate"
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!duplicating?.name.trim()) { toast.error("Give the copy a name."); return; }
+                duplicateAssembly.mutate({ id: duplicating.id, name: duplicating.name.trim() });
+                setDuplicating(null);
+              }}
+            >
+              Duplicate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

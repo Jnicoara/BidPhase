@@ -413,6 +413,15 @@ export const materials = mysqlTable(
      * the two can converge later. Nullable: an alias-less material still works.
      */
     searchAliases: text("searchAliases"),
+    /**
+     * Suggested quantity when this material is added to an assembly. NULL = 1.
+     *
+     * Exists for the consumables nobody uses one of — you do not fit a single
+     * wire nut to a device. Only a handful of materials set it, and it is a
+     * SUGGESTION: the builder pre-fills it and the estimator edits it like any
+     * other quantity. Adding more is a data change, not a code change.
+     */
+    defaultQty: decimal("defaultQty", { precision: 10, scale: 4 }),
 
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -706,6 +715,15 @@ export const bidLineItems = mysqlTable(
      */
     unitLabel: varchar("unitLabel", { length: 128 }),
 
+    /**
+     * The kit this line came from, by NAME at add time — provenance for display,
+     * never a live link. Deliberately not a foreign key: a kit is a shortcut for
+     * adding several assemblies at once, and once they are on the bid each line
+     * stands on its own and is separately editable. Renaming or deleting the kit
+     * afterwards must not touch the bid.
+     */
+    sourceKitName: varchar("sourceKitName", { length: 255 }),
+
     // ── The snapshot: four inputs, frozen ──
     /** Material cost for ONE of this assembly. */
     snapshotMaterialCost: decimal("snapshotMaterialCost", { precision: 12, scale: 4 }).default("0").notNull(),
@@ -731,6 +749,67 @@ export const bidLineItems = mysqlTable(
 
 export type BidLineItem = typeof bidLineItems.$inferSelect;
 export type InsertBidLineItem = typeof bidLineItems.$inferInsert;
+
+// ─── Kits ─────────────────────────────────────────────────────────────────────
+/**
+ * A named bundle of assemblies at fixed quantities — "Bedroom package" being
+ * 4 receptacles, a switch and a light.
+ *
+ * ── Scope, deliberately narrow ───────────────────────────────────────────────
+ *  • A kit holds ASSEMBLIES only, never raw materials. One level of nesting:
+ *    Kit → Assemblies → Materials. No kits inside kits.
+ *  • Quantities are set BY HAND from the estimator's own judgement. Nothing
+ *    here derives a count from square footage, room dimensions or code spacing
+ *    — that is a separate, much larger feature and is not being built.
+ *  • A kit is a shortcut for adding several assemblies to a bid at once. It is
+ *    not a thing that lives on the bid: adding one produces ordinary line
+ *    items, each snapshotted and each independently editable afterwards.
+ *
+ * Same baseline/fork ownership as every other library table.
+ */
+export const kits = mysqlTable(
+  "kits",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
+    baselineId: int("baselineId"),
+    baselineVersion: int("baselineVersion"),
+    version: int("version").default(1).notNull(),
+
+    name: varchar("name", { length: 255 }).notNull(),
+    description: varchar("description", { length: 512 }),
+
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("kits_userId_idx").on(t.userId),
+    index("kits_baselineId_idx").on(t.baselineId),
+  ]
+);
+
+export type Kit = typeof kits.$inferSelect;
+export type InsertKit = typeof kits.$inferInsert;
+
+/** Which assemblies are in a kit, and how many of each. */
+export const kitAssemblies = mysqlTable(
+  "kit_assemblies",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    kitId: int("kitId").notNull().references(() => kits.id, { onDelete: "cascade" }),
+    assemblyId: int("assemblyId").notNull().references(() => assemblies.id, { onDelete: "cascade" }),
+    qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
+    sortOrder: int("sortOrder").default(0).notNull(),
+  },
+  t => [
+    index("kit_assemblies_kitId_idx").on(t.kitId),
+    index("kit_assemblies_assemblyId_idx").on(t.assemblyId),
+  ]
+);
+
+export type KitAssembly = typeof kitAssemblies.$inferSelect;
+export type InsertKitAssembly = typeof kitAssemblies.$inferInsert;
 
 // ─── Feature Flags ────────────────────────────────────────────────────────────
 // Admin-controlled toggles that gate features for the Contractor role.

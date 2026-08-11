@@ -38,6 +38,19 @@ export const materialsRouter = router({
     return db.getLibraryMaterials(ctx.user.id);
   }),
 
+  /**
+   * The materials this user reached for most recently, newest first.
+   *
+   * The Assembly Builder shows these before anything is typed — the same dozen
+   * parts go into most recipes, and making them a click away beats making them
+   * a search away.
+   */
+  recent: protectedProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(24).default(8) }).optional())
+    .query(async ({ input, ctx }) => {
+      return db.getRecentMaterialsForUser(ctx.user.id, input?.limit ?? 8);
+    }),
+
   get: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {

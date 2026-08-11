@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import {
   seedBaselineAssemblies,
+  seedBaselineKits,
   seedBaselineLaborRates,
   seedBaselineMaterials,
   seedBaselineModifiers,
@@ -78,7 +79,9 @@ async function startServer() {
       seedBaselineModifiers().catch(err => console.warn("[BaselineModifiers] Seed failed:", err)),
     ])
       .then(() => seedBaselineAssemblies())
-      .catch(err => console.warn("[BaselineAssemblies] Seed failed:", err));
+      // Kits reference assemblies by name, so they come last of all.
+      .then(() => seedBaselineKits())
+      .catch(err => console.warn("[BaselineAssemblies/Kits] Seed failed:", err));
   });
 }
 

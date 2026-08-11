@@ -99,6 +99,13 @@
       "when": 1786487930370,
       "tag": "0013_tense_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1786491402777,
+      "tag": "0014_long_jack_power",
+      "breakpoints": true
     }
   ]
 }

@@ -37,6 +37,14 @@ export type BaselineMaterial = {
    *    an alias for a receptacle; that is what caused the "recep" mis-ranking.
    */
   searchAliases: string;
+  /**
+   * Suggested quantity when this material is added to an assembly. Omitted = 1.
+   *
+   * Only for consumables nobody fits one of — you do not put a single wire nut
+   * on a device. Kept deliberately short: four entries, easy to extend, and the
+   * builder treats every one as an editable suggestion rather than a rule.
+   */
+  defaultQty?: number;
 };
 
 export const BASELINE_MATERIALS: BaselineMaterial[] = [
@@ -73,11 +81,14 @@ export const BASELINE_MATERIALS: BaselineMaterial[] = [
   // Connectors are named by how they grip: set-screw (indoor) vs compression
   // (wet). A single strap is a "one-hole" or, by brand, a Minerallac.
   { name: 'EMT connector 1/2"', unitOfSale: "each", costPerUnit: "0.6000", category: "Conduit Fittings",
-    searchAliases: "set screw compression rain tight steel die cast half inch box fitting" },
+    searchAliases: "set screw compression rain tight steel die cast half inch box fitting",
+    defaultQty: 2 },
   { name: 'EMT connector 3/4"', unitOfSale: "each", costPerUnit: "0.8500", category: "Conduit Fittings",
-    searchAliases: "set screw compression rain tight steel die cast three quarter box fitting" },
+    searchAliases: "set screw compression rain tight steel die cast three quarter box fitting",
+    defaultQty: 2 },
   { name: "EMT strap", unitOfSale: "each", costPerUnit: "0.3500", category: "Conduit Fittings",
-    searchAliases: "one hole 1 hole two hole 2 hole conduit pipe clamp minerallac hanger" },
+    searchAliases: "one hole 1 hole two hole 2 hole conduit pipe clamp minerallac hanger",
+    defaultQty: 3 },
 
   // ── Boxes ──
   // Trade names run deep here: a single-gang is a "gem box" or "switch box",
@@ -110,7 +121,8 @@ export const BASELINE_MATERIALS: BaselineMaterial[] = [
   { name: "Wall plate", unitOfSale: "each", costPerUnit: "1.2500", category: "Wall Plates & Misc",
     searchAliases: "cover faceplate face switch device trim midway blank decora" },
   { name: "Wire nuts", unitOfSale: "each", costPerUnit: "0.0800", category: "Wall Plates & Misc",
-    searchAliases: "nut connector marrette marette twist on twister splice cap winged" },
+    searchAliases: "nut connector marrette marette twist on twister splice cap winged",
+    defaultQty: 3 },
 
   // ── Panels & Breakers ──
   // "20/2" is trade shorthand for two-pole; the panel is a load center or,

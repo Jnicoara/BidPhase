@@ -169,6 +169,30 @@ export const assembliesRouter = router({
       return db.getAssemblyDetail(forkId, ctx.user.id);
     }),
 
+  /**
+   * Copy an assembly into a new, fully independent one.
+   *
+   * Distinct from `fork`, and the difference is the whole point: a fork
+   * REPLACES its starter in the library and remembers where it came from, so it
+   * can be reverted. A duplicate stands alongside the original with no link
+   * back — editing it can never reach the thing it was copied from.
+   */
+  duplicate: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), name: nameSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const existing = await db.getLibraryAssemblies(ctx.user.id);
+      const clash = existing.find(a => a.name.toLowerCase() === input.name.toLowerCase());
+      if (clash) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `An assembly named "${clash.name}" already exists. Pick a different name.`,
+        });
+      }
+
+      const id = await db.duplicateAssembly(input.id, ctx.user.id, input.name);
+      return db.getAssemblyDetail(id, ctx.user.id);
+    }),
+
   /** Discard edits and restore the starter recipe — header and lines together. */
   revert: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))

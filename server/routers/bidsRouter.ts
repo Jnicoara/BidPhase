@@ -212,6 +212,36 @@ export const bidsRouter = router({
       return { line, merged };
     }),
 
+  /**
+   * Add a whole kit to the bid, snapshotting every assembly inside it.
+   *
+   * The kit does not become a row: it expands into ordinary line items, which
+   * is exactly what makes each item's quantity editable afterwards. A bedroom
+   * needing a fifth receptacle is then just an edit to that line, with no
+   * kit-shaped container in the way. `qty` multiplies through, so 2 x a package
+   * containing 4 receptacles lands 8.
+   */
+  addKit: protectedProcedure
+    .input(z.object({
+      bidId: z.number().int().positive(),
+      kitId: z.number().int().positive(),
+      qty: qtySchema.default(1),
+      unitLabel: labelSchema.nullable().default(null),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requireBid(input.bidId, ctx.user.id);
+      try {
+        return await db.addKitToBid(
+          input.bidId, ctx.user.id, input.kitId, input.qty, input.unitLabel
+        );
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error instanceof Error ? error.message : "Could not add that kit.",
+        });
+      }
+    }),
+
   updateLine: protectedProcedure
     .input(z.object({
       bidId: z.number().int().positive(),

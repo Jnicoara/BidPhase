@@ -38,6 +38,10 @@ import {
   InsertBidLineItem,
   BidLineItem,
   bidLineItems,
+  InsertKit,
+  Kit,
+  kits,
+  kitAssemblies,
   projects,
   userMaterialsDb,
   users,
@@ -56,6 +60,7 @@ import { BASELINE_MATERIALS } from "./seed/baselineMaterials";
 import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
 import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
 import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
+import { BASELINE_KITS } from "./seed/baselineKits";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -769,7 +774,7 @@ async function withSeedLock(name: string, run: () => Promise<void>): Promise<voi
  * Runs inside the seed lock, before inserting, so it never fights a live writer.
  */
 async function dedupeBaselineRows(
-  table: "materials" | "labor_rates" | "modifiers" | "assemblies"
+  table: "materials" | "labor_rates" | "modifiers" | "assemblies" | "kits"
 ): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -960,6 +965,7 @@ async function seedBaselineMaterialsUnlocked(): Promise<void> {
       costPerUnit: m.costPerUnit,
       category: m.category,
       searchAliases: m.searchAliases,
+      defaultQty: m.defaultQty != null ? m.defaultQty.toFixed(4) : null,
       userId: null,
     }));
 
@@ -994,6 +1000,7 @@ async function backfillMaterialMetadata(): Promise<void> {
     name: materials.name,
     category: materials.category,
     searchAliases: materials.searchAliases,
+    defaultQty: materials.defaultQty,
   }).from(materials).where(isNull(materials.userId));
 
   const seedByName = new Map(BASELINE_MATERIALS.map(m => [m.name, m]));
@@ -1007,6 +1014,10 @@ async function backfillMaterialMetadata(): Promise<void> {
     const patch: Partial<InsertMaterial> = {};
     if (row.category !== intended.category) patch.category = intended.category;
     if (row.searchAliases !== intended.searchAliases) patch.searchAliases = intended.searchAliases;
+
+    const wantQty = intended.defaultQty != null ? intended.defaultQty.toFixed(4) : null;
+    if (row.defaultQty !== wantQty) patch.defaultQty = wantQty;
+
     if (Object.keys(patch).length > 0) {
       await db.update(materials).set(patch).where(eq(materials.id, row.id));
     }
@@ -1017,12 +1028,17 @@ async function backfillMaterialMetadata(): Promise<void> {
     baselineId: materials.baselineId,
     category: materials.category,
     searchAliases: materials.searchAliases,
+    defaultQty: materials.defaultQty,
   })
     .from(materials)
     .where(and(
       isNotNull(materials.userId),
       isNotNull(materials.baselineId),
-      or(isNull(materials.category), isNull(materials.searchAliases))
+      or(
+        isNull(materials.category),
+        isNull(materials.searchAliases),
+        isNull(materials.defaultQty)
+      )
     ));
 
   for (const fork of staleForks) {
@@ -1032,6 +1048,12 @@ async function backfillMaterialMetadata(): Promise<void> {
     const patch: Partial<InsertMaterial> = {};
     if (fork.category === null) patch.category = source.category;
     if (fork.searchAliases === null) patch.searchAliases = source.searchAliases;
+    // A fork made before this column existed shows NULL, which the builder
+    // reads as "1" — so a forked box of wire nuts would lose its suggestion.
+    // Only NULL is filled; a material with no default legitimately stays NULL.
+    if (fork.defaultQty === null && source.defaultQty != null) {
+      patch.defaultQty = source.defaultQty.toFixed(4);
+    }
     if (Object.keys(patch).length > 0) {
       await db.update(materials).set(patch).where(eq(materials.id, fork.id));
     }
@@ -1938,4 +1960,354 @@ export async function duplicateBidUnit(
 
   if (rows.length > 0) await db.insert(bidLineItems).values(rows);
   return { created, skipped };
+}
+
+// ─── Recently used materials ──────────────────────────────────────────────────
+
+/**
+ * Materials this user has most recently put into one of their own assemblies.
+ *
+ * Powers the "start here" list the Assembly Builder shows before anything is
+ * typed. Ordered by the assembly_materials row id, which is insertion order and
+ * therefore recency, and de-duplicated so a material used ten times appears
+ * once, at its most recent position.
+ *
+ * Scoped to the user's OWN assemblies — the shipped starter recipes are not
+ * something this user reached for, so counting them would put the same handful
+ * of materials at the top for everybody, forever.
+ */
+export async function getRecentMaterialsForUser(userId: number, limit = 8): Promise<Material[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({ materialId: assemblyMaterials.materialId, at: assemblyMaterials.id })
+    .from(assemblyMaterials)
+    .innerJoin(assemblies, eq(assemblyMaterials.assemblyId, assemblies.id))
+    .where(and(eq(assemblies.userId, userId), eq(assemblies.isActive, true)))
+    .orderBy(desc(assemblyMaterials.id))
+    .limit(limit * 8); // over-fetch, then de-duplicate down to `limit`
+
+  const seen: number[] = [];
+  for (const row of rows) {
+    if (!seen.includes(row.materialId)) seen.push(row.materialId);
+    if (seen.length >= limit) break;
+  }
+  if (seen.length === 0) return [];
+
+  // Re-read through the library view so forks and visibility rules apply.
+  const visible = await getLibraryMaterials(userId);
+  const byId = new Map(visible.map(m => [m.id, m]));
+  return seen.map(id => byId.get(id)).filter((m): m is Material => Boolean(m));
+}
+
+// ─── Duplicating an assembly ──────────────────────────────────────────────────
+
+/**
+ * Copy an assembly into a brand-new, fully independent one.
+ *
+ * Distinct from forkAssembly, and the difference matters: a fork REPLACES its
+ * starter in the user's library and remembers where it came from, so it can be
+ * reverted. A duplicate is a separate assembly that stands alongside the
+ * original with `baselineId` NULL — no link back, nothing to revert to, and
+ * editing it can never affect what it was copied from.
+ */
+export async function duplicateAssembly(
+  sourceId: number,
+  userId: number,
+  newName: string
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const source = await getAssemblyById(sourceId, userId);
+  if (!source) throw new Error("Assembly not found");
+
+  const [result] = await db.insert(assemblies).values({
+    ...contentFields<Assembly, InsertAssembly>(source),
+    name: newName,
+    userId,
+    // The whole point: no baseline link, so this is nobody's copy but its own.
+    baselineId: null,
+    baselineVersion: null,
+  } as InsertAssembly);
+  const newId = result.insertId;
+
+  await copyAssemblyChildren(source.id, newId);
+  return newId;
+}
+
+// ─── Kits ─────────────────────────────────────────────────────────────────────
+
+export type KitItemLine = {
+  id: number;
+  assemblyId: number;
+  qty: string;
+  sortOrder: number;
+  name: string;
+  category: Assembly["category"];
+  baseLaborHours: string;
+  laborRateId: number | null;
+};
+
+export type KitDetail = Kit & { items: KitItemLine[] };
+
+/** Starter kits plus the user's own, forked starters collapsed away. */
+export async function getLibraryKits(userId: number): Promise<Kit[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(kits)
+    .where(and(
+      or(isNull(kits.userId), eq(kits.userId, userId)),
+      eq(kits.isActive, true)
+    ))
+    .orderBy(asc(kits.name));
+  return mergeLibraryRows(rows, userId);
+}
+
+export async function getKitById(id: number, userId: number): Promise<Kit | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(kits)
+    .where(and(eq(kits.id, id), or(isNull(kits.userId), eq(kits.userId, userId))))
+    .limit(1);
+  return row;
+}
+
+export async function getKitItems(kitId: number): Promise<KitItemLine[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: kitAssemblies.id,
+      assemblyId: kitAssemblies.assemblyId,
+      qty: kitAssemblies.qty,
+      sortOrder: kitAssemblies.sortOrder,
+      name: assemblies.name,
+      category: assemblies.category,
+      baseLaborHours: assemblies.baseLaborHours,
+      laborRateId: assemblies.laborRateId,
+    })
+    .from(kitAssemblies)
+    .innerJoin(assemblies, eq(kitAssemblies.assemblyId, assemblies.id))
+    .where(eq(kitAssemblies.kitId, kitId))
+    .orderBy(asc(kitAssemblies.sortOrder), asc(kitAssemblies.id));
+}
+
+export async function getKitDetail(id: number, userId: number): Promise<KitDetail | undefined> {
+  const kit = await getKitById(id, userId);
+  if (!kit) return undefined;
+  return { ...kit, items: await getKitItems(id) };
+}
+
+export async function createKit(data: InsertKit): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(kits).values(data);
+  return result.insertId;
+}
+
+export async function updateKit(id: number, userId: number, data: Partial<InsertKit>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
+  await db.update(kits).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(kits.id, id), eq(kits.userId, userId)));
+}
+
+export async function deactivateKit(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(kits).set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(kits.id, id), eq(kits.userId, userId)));
+}
+
+/** Replace a kit's contents wholesale — same rule as assembly children. */
+export async function setKitItems(
+  kitId: number,
+  items: Array<{ assemblyId: number; qty: string }>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(kitAssemblies).where(eq(kitAssemblies.kitId, kitId));
+  if (items.length === 0) return;
+  await db.insert(kitAssemblies).values(
+    items.map((item, index) => ({
+      kitId,
+      assemblyId: item.assemblyId,
+      qty: item.qty,
+      sortOrder: index,
+    }))
+  );
+}
+
+export async function forkKit(baselineId: number, userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [existing] = await db.select().from(kits)
+    .where(and(eq(kits.userId, userId), eq(kits.baselineId, baselineId)))
+    .limit(1);
+  if (existing) return existing.id;
+
+  const [baseline] = await db.select().from(kits)
+    .where(and(eq(kits.id, baselineId), isNull(kits.userId)))
+    .limit(1);
+  if (!baseline) throw new Error("Baseline kit not found");
+
+  const [result] = await db.insert(kits).values({
+    ...contentFields<Kit, InsertKit>(baseline),
+    userId,
+    baselineId: baseline.id,
+    baselineVersion: baseline.version,
+  } as InsertKit);
+  const forkId = result.insertId;
+
+  const items = await getKitItems(baseline.id);
+  await setKitItems(forkId, items.map(i => ({ assemblyId: i.assemblyId, qty: i.qty })));
+  return forkId;
+}
+
+export async function revertKitToBaseline(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [fork] = await db.select().from(kits)
+    .where(and(eq(kits.id, id), eq(kits.userId, userId))).limit(1);
+  if (!fork) throw new Error("Kit not found");
+  if (fork.baselineId == null) {
+    throw new Error("Kit was created from scratch — there is no original to revert to");
+  }
+
+  const [baseline] = await db.select().from(kits)
+    .where(and(eq(kits.id, fork.baselineId), isNull(kits.userId))).limit(1);
+  if (!baseline) throw new Error("Baseline kit no longer exists");
+
+  await db.update(kits)
+    .set({
+      ...contentFields<Kit, InsertKit>(baseline),
+      baselineVersion: baseline.version,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(kits.id, id), eq(kits.userId, userId)));
+
+  const items = await getKitItems(baseline.id);
+  await setKitItems(id, items.map(i => ({ assemblyId: i.assemblyId, qty: i.qty })));
+}
+
+/** Copy a kit into a new, independent one. Same distinction as duplicateAssembly. */
+export async function duplicateKit(
+  sourceId: number,
+  userId: number,
+  newName: string
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const source = await getKitById(sourceId, userId);
+  if (!source) throw new Error("Kit not found");
+
+  const [result] = await db.insert(kits).values({
+    ...contentFields<Kit, InsertKit>(source),
+    name: newName,
+    userId,
+    baselineId: null,
+    baselineVersion: null,
+  } as InsertKit);
+  const newId = result.insertId;
+
+  const items = await getKitItems(source.id);
+  await setKitItems(newId, items.map(i => ({ assemblyId: i.assemblyId, qty: i.qty })));
+  return newId;
+}
+
+/**
+ * Add every assembly in a kit to a bid, snapshotting each one.
+ *
+ * A kit does NOT become a row on the bid. It expands into ordinary line items,
+ * which is what makes the per-item quantities editable afterwards — one bedroom
+ * needing a fifth receptacle is just an edit to that line, with no kit-shaped
+ * container in the way.
+ *
+ * Each line snapshots independently through the existing addAssemblyToBid, so
+ * kit lines and hand-added lines are the same kind of thing and price
+ * identically. `qty` multiplies through: 2 × "Bedroom package" containing
+ * 4 receptacles lands 8 receptacles.
+ */
+export async function addKitToBid(
+  bidId: number,
+  userId: number,
+  kitId: number,
+  qty: number,
+  unitLabel: string | null = null
+): Promise<{ lineIds: number[]; kitName: string; skipped: string[] }> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const kit = await getKitDetail(kitId, userId);
+  if (!kit) throw new Error("Kit not found");
+
+  const lineIds: number[] = [];
+  const skipped: string[] = [];
+
+  for (const item of kit.items) {
+    try {
+      const { id } = await addAssemblyToBid(
+        bidId, userId, item.assemblyId, Number(item.qty) * qty, unitLabel
+      );
+      await db.update(bidLineItems)
+        .set({ sourceKitName: kit.name })
+        .where(eq(bidLineItems.id, id));
+      lineIds.push(id);
+    } catch {
+      // One unreachable assembly must not abandon the rest of the kit
+      // half-added; report it instead.
+      skipped.push(item.name);
+    }
+  }
+
+  return { lineIds, kitName: kit.name, skipped };
+}
+
+/** Seed the shipped starter kits. Runs after assemblies, matched by name. */
+export async function seedBaselineKits(): Promise<void> {
+  await withSeedLock("helixbid:seed:kits", async () => {
+    const db = await getDb();
+    if (!db) return;
+
+    await dedupeBaselineRows("kits");
+
+    const existingRows = await db.select({ name: kits.name }).from(kits)
+      .where(isNull(kits.userId));
+    const alreadySeeded = new Set(existingRows.map(row => row.name));
+
+    const pending = BASELINE_KITS.filter(k => !alreadySeeded.has(k.name));
+    if (pending.length === 0) return;
+
+    const baselineAssemblies = await db.select({ id: assemblies.id, name: assemblies.name })
+      .from(assemblies).where(isNull(assemblies.userId));
+    const idByName = new Map(baselineAssemblies.map(row => [row.name, row.id]));
+
+    for (const spec of pending) {
+      const items = spec.items.map(item => ({
+        assemblyId: idByName.get(item.assembly),
+        qty: item.qty.toFixed(4),
+      }));
+      if (items.some(item => item.assemblyId === undefined)) {
+        const missing = spec.items
+          .filter(item => !idByName.has(item.assembly))
+          .map(item => item.assembly);
+        console.warn(`[BaselineKits] Skipping "${spec.name}" — missing assemblies: ${missing.join(", ")}`);
+        continue;
+      }
+
+      const [result] = await db.insert(kits).values({
+        userId: null,
+        name: spec.name,
+        description: spec.description,
+      });
+      await setKitItems(result.insertId, items as Array<{ assemblyId: number; qty: string }>);
+    }
+  });
 }
