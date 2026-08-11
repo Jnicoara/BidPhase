@@ -14,6 +14,7 @@ import { materialsRouter } from "./routers/materialsRouter";
 import { laborRatesRouter } from "./routers/laborRatesRouter";
 import { modifiersRouter } from "./routers/modifiersRouter";
 import { assembliesRouter } from "./routers/assembliesRouter";
+import { bidsRouter } from "./routers/bidsRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -31,6 +32,7 @@ export const appRouter = router({
   laborRates: laborRatesRouter,
   modifiers: modifiersRouter,
   assemblies: assembliesRouter,
+  bids: bidsRouter,
 });
 
 export type AppRouter = typeof appRouter;

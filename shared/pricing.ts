@@ -157,6 +157,80 @@ export function roundMoney(value: number): number {
   return fromCents(toCents(value));
 }
 
+// ─── Company defaults vs per-bid overrides ────────────────────────────────────
+
+/** Overhead and profit as stored at company level. Profit method is always set. */
+export type CompanyPricingDefaults = {
+  overheadEnabled: boolean;
+  overheadMode: "percentage" | "flat";
+  overheadValue: number;
+  profitMethod: ProfitSetting["method"];
+  profitValue: number;
+};
+
+/**
+ * A bid's overrides. NULL/undefined on the GROUP KEY means "inherit".
+ *
+ *   overheadEnabled == null → inherit the whole overhead group
+ *   profitMethod    == null → inherit the whole profit group
+ */
+export type BidPricingOverrides = {
+  overheadEnabled?: boolean | null;
+  overheadMode?: "percentage" | "flat" | null;
+  overheadValue?: number | null;
+  profitMethod?: ProfitSetting["method"] | null;
+  profitValue?: number | null;
+};
+
+export type ResolvedPricingSettings = {
+  overhead: OverheadSetting;
+  profit: ProfitSetting;
+  /** Which level each group came from — the UI says "company default" or "this bid". */
+  overheadSource: "company" | "bid";
+  profitSource: "company" | "bid";
+};
+
+/**
+ * Work out what a bid actually prices with.
+ *
+ * Resolution is per GROUP, never per field. A bid that overrides its profit
+ * takes both the method and the value from itself; it can never end up with its
+ * own percentage applied under the company's method, which would silently
+ * re-price the bid the day someone changes the company setting.
+ */
+export function resolveBidPricingSettings(
+  company: CompanyPricingDefaults,
+  overrides: BidPricingOverrides = {}
+): ResolvedPricingSettings {
+  const overridesOverhead = overrides.overheadEnabled !== null
+    && overrides.overheadEnabled !== undefined;
+  const overridesProfit = overrides.profitMethod !== null
+    && overrides.profitMethod !== undefined;
+
+  const overhead: OverheadSetting = overridesOverhead
+    ? (overrides.overheadEnabled
+        ? {
+            enabled: true,
+            mode: overrides.overheadMode ?? company.overheadMode,
+            value: overrides.overheadValue ?? 0,
+          }
+        : { enabled: false })
+    : (company.overheadEnabled
+        ? { enabled: true, mode: company.overheadMode, value: company.overheadValue }
+        : { enabled: false });
+
+  const profit: ProfitSetting = overridesProfit
+    ? { method: overrides.profitMethod!, value: overrides.profitValue ?? 0 }
+    : { method: company.profitMethod, value: company.profitValue };
+
+  return {
+    overhead,
+    profit,
+    overheadSource: overridesOverhead ? "bid" : "company",
+    profitSource: overridesProfit ? "bid" : "company",
+  };
+}
+
 // ─── Labor rates ──────────────────────────────────────────────────────────────
 
 /** The conventional full-time year: 40 h × 52 weeks. A starting point, not a fact. */

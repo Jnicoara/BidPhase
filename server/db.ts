@@ -29,6 +29,15 @@ import {
   assemblies,
   assemblyMaterials,
   assemblyModifiers,
+  InsertPricingDefaults,
+  PricingDefaults,
+  pricingDefaults,
+  InsertBid,
+  Bid,
+  bids,
+  InsertBidLineItem,
+  BidLineItem,
+  bidLineItems,
   projects,
   userMaterialsDb,
   users,
@@ -1637,4 +1646,264 @@ export async function seedBaselineAssemblies(): Promise<void> {
       await setAssemblyModifiers(assemblyId, modifierIds);
     }
   });
+}
+
+// â”€â”€â”€ Pricing Defaults (company level) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+/** The shipped defaults for a user who has never opened the settings. */
+const FALLBACK_PRICING_DEFAULTS = {
+  overheadEnabled: false,
+  overheadMode: "percentage" as const,
+  overheadValue: "0",
+  profitMethod: "markup" as const,
+  profitValue: "0",
+};
+
+/** A user's company-level pricing defaults, creating the row on first read. */
+export async function getPricingDefaults(userId: number): Promise<PricingDefaults | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [existing] = await db.select().from(pricingDefaults)
+    .where(eq(pricingDefaults.userId, userId)).limit(1);
+  if (existing) return existing;
+
+  await db.insert(pricingDefaults).values({ userId, ...FALLBACK_PRICING_DEFAULTS });
+  const [created] = await db.select().from(pricingDefaults)
+    .where(eq(pricingDefaults.userId, userId)).limit(1);
+  return created;
+}
+
+export async function updatePricingDefaults(
+  userId: number,
+  data: Partial<InsertPricingDefaults>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await getPricingDefaults(userId); // ensure the row exists
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db.update(pricingDefaults).set({ ...safe, updatedAt: new Date() })
+    .where(eq(pricingDefaults.userId, userId));
+}
+
+// â”€â”€â”€ Bids â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export async function getBidsByUser(userId: number): Promise<Bid[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(bids)
+    .where(and(eq(bids.userId, userId), eq(bids.isArchived, false)))
+    .orderBy(desc(bids.updatedAt));
+}
+
+export async function getBidById(id: number, userId: number): Promise<Bid | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(bids)
+    .where(and(eq(bids.id, id), eq(bids.userId, userId))).limit(1);
+  return row;
+}
+
+export async function createBid(data: InsertBid): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(bids).values(data);
+  return result.insertId;
+}
+
+export async function updateBid(id: number, userId: number, data: Partial<InsertBid>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db.update(bids).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(bids.id, id), eq(bids.userId, userId)));
+}
+
+export async function archiveBid(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(bids).set({ isArchived: true, updatedAt: new Date() })
+    .where(and(eq(bids.id, id), eq(bids.userId, userId)));
+}
+
+// â”€â”€â”€ Bid line items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export async function getBidLineItems(bidId: number): Promise<BidLineItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(bidLineItems)
+    .where(eq(bidLineItems.bidId, bidId))
+    .orderBy(asc(bidLineItems.sortOrder), asc(bidLineItems.id));
+}
+
+export async function getBidLineItem(id: number, bidId: number): Promise<BidLineItem | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(bidLineItems)
+    .where(and(eq(bidLineItems.id, id), eq(bidLineItems.bidId, bidId))).limit(1);
+  return row;
+}
+
+/** Next free sort position, so appended lines land at the bottom. */
+async function nextBidSortOrder(bidId: number): Promise<number> {
+  const rows = await getBidLineItems(bidId);
+  return rows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+}
+
+/**
+ * Take a live assembly and freeze its cost inputs onto a bid.
+ *
+ * This is the snapshot boundary. Everything the assembly currently resolves to
+ * â€” its materials at today's prices, its hours, its role's rate, its modifier
+ * total â€” is copied onto the line and never consulted again. Editing the
+ * library assembly afterwards has no effect on this bid, which is the whole
+ * point (ASSEMBLIES_PLAN.md Â§ PROJECT ESTIMATES).
+ */
+export async function addAssemblyToBid(
+  bidId: number,
+  userId: number,
+  assemblyId: number,
+  qty: number,
+  unitLabel: string | null = null
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const detail = await getAssemblyDetail(assemblyId, userId);
+  if (!detail) throw new Error("Assembly not found");
+
+  const [activeModifiers, rates] = await Promise.all([
+    getLibraryModifiers(userId, "active"),
+    getLibraryLaborRates(userId),
+  ]);
+
+  const applied = activeModifiers.filter(m => detail.modifierIds.includes(m.id));
+  const modifierPct = applied.reduce((sum, m) => sum + Number(m.laborAdjustmentPct), 0);
+
+  const role = rates.find(r => r.id === detail.laborRateId);
+  const laborRate = !role
+    ? 0
+    : role.rateType === "hourly"
+      ? Number(role.hourlyCost)
+      : (Number(role.annualHours) > 0
+          ? Number(role.annualSalary ?? 0) / Number(role.annualHours)
+          : 0);
+
+  const materialCost = detail.materials.reduce(
+    (sum, line) => sum + Number(line.costPerUnit) * Number(line.qty),
+    0
+  );
+
+  const [result] = await db.insert(bidLineItems).values({
+    bidId,
+    assemblyId: detail.id,
+    name: detail.name,
+    qty: qty.toFixed(4),
+    unitLabel,
+    snapshotMaterialCost: materialCost.toFixed(4),
+    snapshotLaborHours: Number(detail.baseLaborHours).toFixed(4),
+    snapshotModifierPct: modifierPct.toFixed(4),
+    snapshotLaborRate: laborRate.toFixed(4),
+    snapshotModifierNames: applied.map(m => m.name),
+    sortOrder: await nextBidSortOrder(bidId),
+  });
+  return result.insertId;
+}
+
+export async function updateBidLineItem(
+  id: number,
+  bidId: number,
+  data: Partial<InsertBidLineItem>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.bidId;
+  await db.update(bidLineItems).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(bidLineItems.id, id), eq(bidLineItems.bidId, bidId)));
+}
+
+export async function deleteBidLineItem(id: number, bidId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(bidLineItems)
+    .where(and(eq(bidLineItems.id, id), eq(bidLineItems.bidId, bidId)));
+}
+
+/** Distinct unit labels present on a bid, in first-appearance order. */
+export async function getBidUnitLabels(bidId: number): Promise<string[]> {
+  const rows = await getBidLineItems(bidId);
+  const seen: string[] = [];
+  for (const row of rows) {
+    if (row.unitLabel && !seen.includes(row.unitLabel)) seen.push(row.unitLabel);
+  }
+  return seen;
+}
+
+/**
+ * Copy a repeating unit N times, auto-numbering the copies.
+ *
+ * The source is every line carrying `sourceUnitLabel` â€” a hotel room type, a
+ * floor-plan spec. Copies are plain rows from the moment they exist: nothing
+ * links them back to the source, so editing "Room 104" later touches only that
+ * room, which is what the product asks for.
+ *
+ * Labels that would collide with one already on the bid are skipped rather than
+ * silently duplicated, and the skipped list is returned so the caller can say so.
+ */
+export async function duplicateBidUnit(
+  bidId: number,
+  sourceUnitLabel: string,
+  baseName: string,
+  startNumber: number,
+  count: number
+): Promise<{ created: string[]; skipped: string[] }> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const all = await getBidLineItems(bidId);
+  const source = all.filter(row => row.unitLabel === sourceUnitLabel);
+  if (source.length === 0) throw new Error(`No line items found for unit "${sourceUnitLabel}"`);
+
+  const existingLabels = new Set(all.map(row => row.unitLabel).filter(Boolean) as string[]);
+  let sortOrder = await nextBidSortOrder(bidId);
+
+  const created: string[] = [];
+  const skipped: string[] = [];
+  const rows: InsertBidLineItem[] = [];
+
+  for (let index = 0; index < count; index++) {
+    const label = `${baseName} ${startNumber + index}`;
+    if (existingLabels.has(label)) { skipped.push(label); continue; }
+    existingLabels.add(label);
+    created.push(label);
+
+    for (const line of source) {
+      rows.push({
+        bidId,
+        assemblyId: line.assemblyId,
+        name: line.name,
+        qty: line.qty,
+        unitLabel: label,
+        // Copies inherit the SOURCE's snapshot rather than re-reading the
+        // library: 200 hotel rooms generated from one template must all price
+        // identically, even if a material moved between add and duplicate.
+        snapshotMaterialCost: line.snapshotMaterialCost,
+        snapshotLaborHours: line.snapshotLaborHours,
+        snapshotModifierPct: line.snapshotModifierPct,
+        snapshotLaborRate: line.snapshotLaborRate,
+        snapshotModifierNames: line.snapshotModifierNames,
+        snapshotAt: line.snapshotAt,
+        sortOrder: sortOrder++,
+      });
+    }
+  }
+
+  if (rows.length > 0) await db.insert(bidLineItems).values(rows);
+  return { created, skipped };
 }

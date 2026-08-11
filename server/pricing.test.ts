@@ -19,11 +19,78 @@ import {
   calculateProfit,
   fromCents,
   priceLineItems,
+  resolveBidPricingSettings,
   roundMoney,
   sumDirectCost,
   sumModifiers,
   toCents,
 } from "@shared/pricing";
+
+// ─── Company defaults vs per-bid overrides ────────────────────────────────────
+
+describe("resolveBidPricingSettings", () => {
+  const company = {
+    overheadEnabled: true,
+    overheadMode: "percentage" as const,
+    overheadValue: 0.1,
+    profitMethod: "markup" as const,
+    profitValue: 0.2,
+  };
+
+  it("inherits both groups when the bid overrides nothing", () => {
+    const resolved = resolveBidPricingSettings(company, {});
+    expect(resolved.overheadSource).toBe("company");
+    expect(resolved.profitSource).toBe("company");
+    expect(resolved.profit).toEqual({ method: "markup", value: 0.2 });
+  });
+
+  it("treats explicit nulls as inherit, not as off", () => {
+    const resolved = resolveBidPricingSettings(company, {
+      overheadEnabled: null, profitMethod: null,
+    });
+    expect(resolved.overhead).toEqual({ enabled: true, mode: "percentage", value: 0.1 });
+    expect(resolved.profitSource).toBe("company");
+  });
+
+  it("takes both profit fields from the bid when it overrides", () => {
+    // The group rule: a bid can never end up with its own percentage under the
+    // company's method, which would re-price it when the company setting moves.
+    const resolved = resolveBidPricingSettings(company, {
+      profitMethod: "margin", profitValue: 0.3,
+    });
+    expect(resolved.profit).toEqual({ method: "margin", value: 0.3 });
+    expect(resolved.profitSource).toBe("bid");
+    expect(resolved.overheadSource).toBe("company");
+  });
+
+  it("lets a bid switch overhead off while the company has it on", () => {
+    const resolved = resolveBidPricingSettings(company, { overheadEnabled: false });
+    expect(resolved.overhead).toEqual({ enabled: false });
+    expect(resolved.overheadSource).toBe("bid");
+  });
+
+  it("lets a bid switch overhead on while the company has it off", () => {
+    const resolved = resolveBidPricingSettings(
+      { ...company, overheadEnabled: false },
+      { overheadEnabled: true, overheadMode: "flat", overheadValue: 750 }
+    );
+    expect(resolved.overhead).toEqual({ enabled: true, mode: "flat", value: 750 });
+  });
+
+  it("falls back to the company mode when the bid overrides value but not mode", () => {
+    const resolved = resolveBidPricingSettings(company, {
+      overheadEnabled: true, overheadValue: 0.25,
+    });
+    expect(resolved.overhead).toEqual({ enabled: true, mode: "percentage", value: 0.25 });
+  });
+
+  it("feeds straight into calculateBidPrice", () => {
+    const resolved = resolveBidPricingSettings(company, {});
+    const bid = calculateBidPrice({ directCost: 100, ...resolved });
+    // 100 → +10% overhead = 110 → +20% markup = 132
+    expect(bid.finalPrice).toBeCloseTo(132, 10);
+  });
+});
 
 // ─── Salary → effective hourly rate ───────────────────────────────────────────
 

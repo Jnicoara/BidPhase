@@ -22,6 +22,7 @@
  *   /library/labor-rates → Labor Rates (roles and what they cost per hour)
  *   /library/modifiers   → Modifiers (job-condition labor adjustments)
  *   /library/assemblies  → Assembly Builder (materials + labor + modifiers)
+ *   /bids                → Bids (Foundation bid layer; NOT legacy /projects)
  *   /admin       → Admin Settings (admin role only)
  */
 import { useApp } from "@/contexts/AppContext";
@@ -42,7 +43,8 @@ import MaterialsLibraryPage from "@/pages/MaterialsLibraryPage";
 import LaborRatesPage from "@/pages/LaborRatesPage";
 import ModifiersPage from "@/pages/ModifiersPage";
 import AssembliesLibraryPage from "@/pages/AssembliesLibraryPage";
-import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers } from "lucide-react";
+import BidsPage from "@/pages/BidsPage";
+import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Route =
@@ -64,6 +66,7 @@ type Route =
   | "library-labor-rates"
   | "library-modifiers"
   | "library-assemblies"
+  | "bids"
   | "admin";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
@@ -88,6 +91,9 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   if (p === "settings") return { route: "settings" };
   if (p === "trash") return { route: "trash" };
   if (p === "assemblies") return { route: "assemblies" };
+  // Foundation bid layer. Distinct from /projects, which is the legacy
+  // master_* system with its PDF/takeoff state.
+  if (p === "bids") return { route: "bids" };
   // Library § …. Bare /library lands on Materials; Assemblies is still to come.
   if (p === "library") {
     if (parts[1] === "labor-rates") return { route: "library-labor-rates" };
@@ -196,6 +202,7 @@ export default function HelixBidShell() {
   const isInLaborRates    = route === "library-labor-rates";
   const isInModifiers     = route === "library-modifiers";
   const isInLibraryAsms   = route === "library-assemblies";
+  const isInBids          = route === "bids";
   const isInAdmin         = route === "admin";
 
   const currentCategory = isInCategory
@@ -229,6 +236,7 @@ export default function HelixBidShell() {
     if (isInLaborRates)  return <LaborRatesPage />;
     if (isInModifiers)   return <ModifiersPage />;
     if (isInLibraryAsms) return <AssembliesLibraryPage />;
+    if (isInBids)        return <BidsPage />;
     if (isInAdmin)       return <AdminSettingsPage />;
     // Legacy category workspace
     return <UnifiedProjects category={currentCategory} />;
@@ -349,6 +357,13 @@ export default function HelixBidShell() {
             icon={Layers}
             label="Assemblies"
             title="Assemblies (Library)"
+          />
+          <NavBtn
+            onClick={() => navigate("bids")}
+            isActive={isInBids}
+            icon={FileText}
+            label="Bids"
+            title="Bids"
           />
         </nav>
 

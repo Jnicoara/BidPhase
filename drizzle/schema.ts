@@ -625,6 +625,113 @@ export const pricingDefaults = mysqlTable(
 export type PricingDefaults = typeof pricingDefaults.$inferSelect;
 export type InsertPricingDefaults = typeof pricingDefaults.$inferInsert;
 
+// ─── Bids ─────────────────────────────────────────────────────────────────────
+// The Foundation bid layer. Deliberately NOT the legacy `projects` table, which
+// belongs to the master_* system and carries PDF/takeoff state — see the divider
+// comment above. Do not wire the two together.
+
+export const BID_STATUSES = ["Draft", "Active", "Won", "Lost"] as const;
+export type BidStatus = (typeof BID_STATUSES)[number];
+
+export const bids = mysqlTable(
+  "bids",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+    name: varchar("name", { length: 255 }).notNull(),
+    status: mysqlEnum("status", BID_STATUSES).default("Draft").notNull(),
+    /** Trades unlocked for this bid. One bid may mix line items from several. */
+    trades: json("trades").$type<string[]>(),
+
+    /**
+     * Per-bid pricing overrides. NULL means "inherit the company default" from
+     * `pricing_defaults`, and inheritance is per GROUP, not per field:
+     *
+     *   overheadEnabled NULL → the whole overhead group is inherited.
+     *   profitMethod    NULL → the whole profit group is inherited.
+     *
+     * Grouping them avoids the half-overridden state where a bid has its own
+     * profit percentage but the company's method — which reads as a bug to a
+     * user and silently changes the price when the company default moves.
+     */
+    overheadEnabled: boolean("overheadEnabled"),
+    overheadMode: mysqlEnum("overheadMode", ["percentage", "flat"]),
+    overheadValue: decimal("overheadValue", { precision: 12, scale: 4 }),
+    profitMethod: mysqlEnum("profitMethod", ["markup", "margin"]),
+    profitValue: decimal("profitValue", { precision: 6, scale: 4 }),
+
+    isArchived: boolean("isArchived").default(false).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("bids_userId_idx").on(t.userId),
+    index("bids_status_idx").on(t.status),
+  ]
+);
+
+export type Bid = typeof bids.$inferSelect;
+export type InsertBid = typeof bids.$inferInsert;
+
+// ─── Bid Line Items ───────────────────────────────────────────────────────────
+/**
+ * One assembly placed into a bid, at a quantity, with its cost SNAPSHOT.
+ *
+ * The snapshot is the point of this table (ASSEMBLIES_PLAN.md § PROJECT
+ * ESTIMATES): the four pricing inputs are frozen when the line is added, so a
+ * submitted bid never changes because a material price or labor rate moved
+ * afterwards. `assemblyId` is kept for provenance only and is `set null` on
+ * delete — deleting a library assembly must never alter a bid that used it.
+ *
+ * Only the raw INPUTS are stored, never a computed total. Every figure the UI
+ * shows is recomputed from these through shared/pricing.ts, so a line can never
+ * disagree with the engine that priced it.
+ */
+export const bidLineItems = mysqlTable(
+  "bid_line_items",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId").notNull().references(() => bids.id, { onDelete: "cascade" }),
+    /** Provenance only. Null once the source assembly is gone. */
+    assemblyId: int("assemblyId").references(() => assemblies.id, { onDelete: "set null" }),
+
+    /** Assembly name at add time — the bid reads the same after a rename. */
+    name: varchar("name", { length: 255 }).notNull(),
+    qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
+
+    /**
+     * Which repeating unit this line belongs to, e.g. "Room 101". NULL for a
+     * one-off line. Mass-duplicate copies a whole unit's lines under new labels.
+     */
+    unitLabel: varchar("unitLabel", { length: 128 }),
+
+    // ── The snapshot: four inputs, frozen ──
+    /** Material cost for ONE of this assembly. */
+    snapshotMaterialCost: decimal("snapshotMaterialCost", { precision: 12, scale: 4 }).default("0").notNull(),
+    /** Base labor hours before modifiers. */
+    snapshotLaborHours: decimal("snapshotLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
+    /** Summed modifier fraction, e.g. 0.32 for +32%. Already added, not compounded. */
+    snapshotModifierPct: decimal("snapshotModifierPct", { precision: 6, scale: 4 }).default("0").notNull(),
+    /** Hourly cost of the role assigned at add time. */
+    snapshotLaborRate: decimal("snapshotLaborRate", { precision: 10, scale: 4 }).default("0").notNull(),
+    /** Modifier names at add time, for showing why the hours are what they are. */
+    snapshotModifierNames: json("snapshotModifierNames").$type<string[]>(),
+    snapshotAt: timestamp("snapshotAt").defaultNow().notNull(),
+
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("bid_line_items_bidId_idx").on(t.bidId),
+    index("bid_line_items_unitLabel_idx").on(t.unitLabel),
+  ]
+);
+
+export type BidLineItem = typeof bidLineItems.$inferSelect;
+export type InsertBidLineItem = typeof bidLineItems.$inferInsert;
+
 // ─── Feature Flags ────────────────────────────────────────────────────────────
 // Admin-controlled toggles that gate features for the Contractor role.
 // Each row is identified by a unique flagKey string.
