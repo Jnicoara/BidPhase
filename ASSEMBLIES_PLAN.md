@@ -114,12 +114,20 @@ Underlying PDF rendering engine **stays as-is**. This redesigns the surrounding 
 4. **Persistent legend panel** — extracted symbol legend stays visible while working elsewhere.
 5. **Live synced running list** — counted/measured items appear instantly; clicking highlights location on drawing.
 6. **Visual marking of already-counted items** — avoids double-counts or misses.
+7. **Stamp tool** — pick an assembly **once**, then click multiple locations on the plan to drop it repeatedly without re-selecting each time. Each drop feeds the live running list (5) and visual marking (6) already described. The behavior is identical for residential (fewer, spread-out drops) and commercial (many drops per sheet) — only the volume differs. Clicking an existing pin selects it, so it can be moved or deleted.
+8. **AI auto-fill** — AI drives the *same* stamp tool to detect and drop pins automatically for a chosen symbol type, color-coded by confidence (matching the existing AI review-queue pattern). Every AI-dropped pin behaves **identically to a manually placed one**: same live list, same visual marking, same editability. And the same rule applies — once a human touches a pin, AI never silently overwrites it again.
+9. **Symbol-to-assembly linking** — clicking or circling a symbol in the persistent legend panel (4) loads that assembly for stamping, instead of searching for it by name. The first click on an unlinked symbol prompts a one-time *"which assembly does this match?"*; every future click loads it instantly.
+   - This link table is also **what AI auto-fill (8) reads to interpret the plan**, rather than guessing generically. Unlinked symbols get proposed at lower confidence for the user to confirm.
+   - Ties directly into the **legend memory per architect** feature — links learned on one job carry forward to the next set of plans from the same architect.
 
 **Priority order:**
 1. Sheet index + split-screen
 2. Auto scale + legend panel
-3. Live list + visual marking
-4. AI-assisted detection with review-queue pattern
+3. Live list + visual marking + stamp tool
+4. Symbol-to-assembly linking
+5. AI-assisted detection with review-queue pattern, including AI auto-fill
+
+Stamp tool sits in tier 3 because the live list and visual marking are what a drop feeds — the three ship as one working loop. Symbol linking precedes AI because it's the lookup table AI depends on.
 
 ## LAYERS
 

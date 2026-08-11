@@ -4,6 +4,10 @@ Plain-English record of what changed and when. Newest first.
 
 This is the human-readable companion to the git history — read this to see what happened, read the commits for the technical detail.
 
+## [2026-08-11]
+
+- Planned out three ways to speed up counting items on a plan: a stamp tool that lets you pick an assembly once and click to drop it as many times as needed, AI that can drop those same pins for you automatically, and the ability to click a symbol in the legend to load its assembly instead of searching by name. Planning only — none of it is built yet.
+
 ## [2026-08-10]
 
 - Fixed a real access-control security gap on project line items, assemblies, and bid summary settings
