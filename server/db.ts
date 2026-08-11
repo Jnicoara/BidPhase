@@ -1,4 +1,4 @@
-import { and, desc, eq, asc, or, like, sql } from "drizzle-orm";
+import { and, desc, eq, asc, isNull, or, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -14,6 +14,9 @@ import {
   InsertBidSummary,
   InsertFeatureFlag,
   FeatureFlag,
+  InsertMaterial,
+  Material,
+  materials,
   projects,
   userMaterialsDb,
   users,
@@ -28,6 +31,7 @@ import {
   featureFlags,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { BASELINE_MATERIALS } from "./seed/baselineMaterials";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -660,4 +664,201 @@ export async function seedDefaultFeatureFlags(): Promise<void> {
       await upsertFeatureFlag(flag);
     }
   }
+}
+
+// ─── Materials (Foundation library) ───────────────────────────────────────────
+//
+// NOTE: distinct from `user_materials_db` / getUserMaterials() further up. That
+// one is the supply-house price list behind the /matdb screen. This is the
+// Foundation catalog that assemblies are built from. The two are expected to
+// converge eventually — see the field-copy note on materialContentFields().
+//
+// Row ownership:
+//   userId IS NULL  → baseline library row, shipped with the app, read-only.
+//   userId = <id>   → that user's own row, either fully custom or a fork.
+//
+// A fork stores `baselineId`, which does two jobs: it hides the baseline row it
+// replaces from the merged list, and it makes "revert to original" possible.
+
+/**
+ * Ownership/bookkeeping columns. Everything NOT listed here is treated as user
+ * content and is copied wholesale by fork and revert.
+ *
+ * This is deliberately a denylist rather than an allowlist: when columns get
+ * added to `materials` later (item code, list price, price-updated date — the
+ * /matdb fields), they start copying correctly with no change here. An
+ * allowlist would silently drop them instead.
+ */
+const MATERIAL_OWNERSHIP_FIELDS = [
+  "id",
+  "userId",
+  "baselineId",
+  "baselineVersion",
+  "version",
+  "createdAt",
+  "updatedAt",
+] as const;
+
+/** Strip ownership columns, leaving only the content worth copying. */
+function materialContentFields(row: Material): Partial<InsertMaterial> {
+  const copy: Record<string, unknown> = { ...row };
+  for (const field of MATERIAL_OWNERSHIP_FIELDS) delete copy[field];
+  return copy as Partial<InsertMaterial>;
+}
+
+/**
+ * Collapse baseline + user rows into the one list a user should see.
+ *
+ * A user's fork replaces the baseline it came from, so the baseline is dropped.
+ * Exported and kept pure so it can be tested without a database, and reused for
+ * labor rates / modifiers / assemblies, which have the same ownership shape.
+ */
+export function mergeLibraryRows<T extends { id: number; userId: number | null; baselineId: number | null }>(
+  rows: T[],
+  userId: number
+): T[] {
+  const supersededBaselineIds = new Set<number>();
+  for (const row of rows) {
+    if (row.userId === userId && row.baselineId != null) supersededBaselineIds.add(row.baselineId);
+  }
+  return rows.filter(row => !(row.userId === null && supersededBaselineIds.has(row.id)));
+}
+
+/** Baseline rows plus the user's own, forked baselines collapsed away. */
+export async function getLibraryMaterials(userId: number): Promise<Material[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(materials)
+    .where(and(
+      or(isNull(materials.userId), eq(materials.userId, userId)),
+      eq(materials.isActive, true)
+    ))
+    .orderBy(asc(materials.name));
+  return mergeLibraryRows(rows, userId);
+}
+
+/** A single material the user is allowed to see — their own, or a baseline. */
+export async function getMaterialById(id: number, userId: number): Promise<Material | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(materials)
+    .where(and(
+      eq(materials.id, id),
+      or(isNull(materials.userId), eq(materials.userId, userId))
+    ))
+    .limit(1);
+  return result[0];
+}
+
+/** Create a material owned by the user. Returns the new row id. */
+export async function createMaterial(data: InsertMaterial): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(materials).values(data);
+  return result.insertId;
+}
+
+/**
+ * Update one of the user's own materials.
+ *
+ * Baseline rows have userId IS NULL and so can never match here — that is what
+ * keeps them read-only. Ownership columns in `data` are ignored rather than
+ * trusted, so a caller cannot reassign a row to another user.
+ */
+export async function updateMaterial(id: number, userId: number, data: Partial<InsertMaterial>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  for (const field of MATERIAL_OWNERSHIP_FIELDS) delete safe[field];
+  await db.update(materials).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(materials.id, id), eq(materials.userId, userId)));
+}
+
+/** Soft-delete one of the user's own materials — assemblies may still point at it. */
+export async function deactivateMaterial(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(materials).set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(materials.id, id), eq(materials.userId, userId)));
+}
+
+/**
+ * Give the user their own editable copy of a baseline material.
+ * Idempotent — forking twice returns the existing copy instead of duplicating.
+ */
+export async function forkMaterial(baselineId: number, userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [existing] = await db.select().from(materials)
+    .where(and(eq(materials.userId, userId), eq(materials.baselineId, baselineId)))
+    .limit(1);
+  if (existing) return existing.id;
+
+  const [baseline] = await db.select().from(materials)
+    .where(and(eq(materials.id, baselineId), isNull(materials.userId)))
+    .limit(1);
+  if (!baseline) throw new Error("Baseline material not found");
+
+  // Cast: materialContentFields returns Partial, but `name` is always present
+  // on a real row, so the result satisfies InsertMaterial.
+  const [result] = await db.insert(materials).values({
+    ...materialContentFields(baseline),
+    userId,
+    baselineId: baseline.id,
+    baselineVersion: baseline.version,
+  } as InsertMaterial);
+  return result.insertId;
+}
+
+/**
+ * Discard the user's edits and restore the current baseline content.
+ *
+ * The row id is kept rather than deleting and re-reading the baseline, so
+ * anything already referencing this material keeps working.
+ */
+export async function revertMaterialToBaseline(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [fork] = await db.select().from(materials)
+    .where(and(eq(materials.id, id), eq(materials.userId, userId)))
+    .limit(1);
+  if (!fork) throw new Error("Material not found");
+  if (fork.baselineId == null) throw new Error("Material is fully custom — there is no original to revert to");
+
+  const [baseline] = await db.select().from(materials)
+    .where(and(eq(materials.id, fork.baselineId), isNull(materials.userId)))
+    .limit(1);
+  if (!baseline) throw new Error("Baseline material no longer exists");
+
+  await db.update(materials)
+    .set({
+      ...materialContentFields(baseline),
+      // Re-stamp the version so any future "update available" check starts clean.
+      baselineVersion: baseline.version,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(materials.id, id), eq(materials.userId, userId)));
+}
+
+/**
+ * Seed the shipped baseline materials. Called at server startup; a no-op once
+ * they exist. Matched by name, so renaming a baseline row here would insert a
+ * new one rather than rename the old — intentional, since users may have forked it.
+ */
+export async function seedBaselineMaterials(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const existing = await db.select({ name: materials.name }).from(materials)
+    .where(isNull(materials.userId));
+  const alreadySeeded = new Set(existing.map(row => row.name));
+
+  const missing = BASELINE_MATERIALS
+    .filter(m => !alreadySeeded.has(m.name))
+    .map(m => ({ name: m.name, unitOfSale: m.unitOfSale, costPerUnit: m.costPerUnit, userId: null }));
+
+  if (missing.length === 0) return;
+  await db.insert(materials).values(missing);
 }
