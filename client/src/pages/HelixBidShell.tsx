@@ -16,8 +16,9 @@
  *   /estimate    → Estimate Engine
  *   /settings    → Settings
  *   /trash       → Trash
- *   /matdb       → Material Database
+ *   /matdb       → Material Database (supply-house price list)
  *   /assemblies  → Assembly Builder
+ *   /library/materials → Materials (Foundation library catalog)
  *   /admin       → Admin Settings (admin role only)
  */
 import { useApp } from "@/contexts/AppContext";
@@ -34,7 +35,8 @@ import ProjectsPage from "@/pages/ProjectsPage";
 import ProjectDetailPage from "@/pages/ProjectDetailPage";
 import AssemblyBuilderPage from "@/pages/AssemblyBuilderPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
-import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield } from "lucide-react";
+import MaterialsLibraryPage from "@/pages/MaterialsLibraryPage";
+import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Route =
@@ -52,6 +54,7 @@ type Route =
   | "estimate"
   | "matdb"
   | "assemblies"
+  | "library-materials"
   | "admin";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
@@ -76,6 +79,9 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   if (p === "settings") return { route: "settings" };
   if (p === "trash") return { route: "trash" };
   if (p === "assemblies") return { route: "assemblies" };
+  // Library § Materials. Bare /library lands on Materials until the other
+  // Library screens (Labor Rates, Assemblies) exist.
+  if (p === "library" && (!parts[1] || parts[1] === "materials")) return { route: "library-materials" };
   if (p === "admin") return { route: "admin" };
   // Default: show homepage
   return { route: "home" };
@@ -113,6 +119,8 @@ export default function HelixBidShell() {
       window.location.hash = "/projects";
     } else if (r === "project-detail" && id) {
       window.location.hash = `/project/${id}`;
+    } else if (r === "library-materials") {
+      window.location.hash = "/library/materials";
     } else {
       window.location.hash = `/${r}`;
     }
@@ -165,6 +173,7 @@ export default function HelixBidShell() {
   const isInMaterial      = route === "material";
   const isInMatDb         = route === "matdb";
   const isInAssemblies    = route === "assemblies";
+  const isInLibraryMats   = route === "library-materials";
   const isInAdmin         = route === "admin";
 
   const currentCategory = isInCategory
@@ -194,6 +203,7 @@ export default function HelixBidShell() {
     if (isInSettings)    return <SettingsTab onBack={goBack} />;
     if (isInEstimate)    return <EstimateEnginePage onBack={goBack} />;
     if (isInAssemblies)  return <AssemblyBuilderPage />;
+    if (isInLibraryMats) return <MaterialsLibraryPage />;
     if (isInAdmin)       return <AdminSettingsPage />;
     // Legacy category workspace
     return <UnifiedProjects category={currentCategory} />;
@@ -287,6 +297,13 @@ export default function HelixBidShell() {
             label="Assembly Builder"
             title="Assembly Builder"
           />
+          <NavBtn
+            onClick={() => navigate("library-materials")}
+            isActive={isInLibraryMats}
+            icon={Boxes}
+            label="Materials"
+            title="Materials (Library)"
+          />
         </nav>
 
         {/* Bottom section */}
@@ -347,6 +364,7 @@ export default function HelixBidShell() {
                 : isInEstimate       ? "Estimate Engine"
                 : isInMaterial       ? "Labor & Material"
                 : isInAssemblies     ? "Assembly Builder"
+                : isInLibraryMats    ? "Materials"
                 : isInAdmin          ? "Admin Settings"
                 : "Workspace"}
             </span>

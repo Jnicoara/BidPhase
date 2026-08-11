@@ -1,0 +1,469 @@
+/**
+ * MaterialsLibraryPage — the Foundation material catalog (Library § Materials).
+ *
+ * Distinct from MaterialDatabasePage (/matdb), which is the supply-house price
+ * list. This is the catalog assemblies are built from.
+ *
+ * Fork behaviour is intentionally invisible here: the row is edited by id and
+ * the server decides whether that means editing the user's own copy or forking
+ * a shipped baseline first. The only UI consequence is the toast that appears
+ * the first time a starter material is edited, and the fact that the row's id
+ * can change underneath us — hence the refetch after every mutation.
+ */
+import { useCallback, useMemo, useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { Boxes, Check, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { smartSearch } from "@/lib/smartSearch";
+
+// ─── Types & helpers ──────────────────────────────────────────────────────────
+
+type Material = {
+  id: number;
+  userId: number | null;
+  baselineId: number | null;
+  name: string;
+  unitOfSale: "each" | "foot" | "box";
+  costPerUnit: string;
+};
+
+const UNITS: Material["unitOfSale"][] = ["each", "foot", "box"];
+
+/** decimal(10,4) — mirrors the bound the router enforces. */
+const MAX_COST = 999999.9999;
+
+const formatCost = (value: string) =>
+  Number(value).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+
+const UNIT_LABEL: Record<Material["unitOfSale"], string> = {
+  each: "each",
+  foot: "per ft",
+  box: "per box",
+};
+
+type Draft = { name: string; unitOfSale: Material["unitOfSale"]; costPerUnit: string };
+
+const emptyDraft: Draft = { name: "", unitOfSale: "each", costPerUnit: "" };
+
+/** Shared validation for both the add form and inline edits. */
+function validateDraft(draft: Draft): string | null {
+  if (!draft.name.trim()) return "Give the material a name.";
+  const cost = Number(draft.costPerUnit);
+  if (draft.costPerUnit.trim() === "" || Number.isNaN(cost)) return "Enter a cost.";
+  if (cost < 0) return "Cost cannot be negative.";
+  if (cost > MAX_COST) return "That cost is too large.";
+  return null;
+}
+
+// ─── Origin badge ─────────────────────────────────────────────────────────────
+
+function OriginBadge({ material }: { material: Material }) {
+  if (material.userId === null) {
+    return <Badge variant="outline" className="text-xs text-muted-foreground">Starter</Badge>;
+  }
+  if (material.baselineId != null) {
+    // "Your copy" rather than "Edited" on purpose: after a revert the row is
+    // still the user's own fork, just holding starter content again. Labelling
+    // by ownership is always true; labelling by edited-ness would go stale.
+    return (
+      <Badge variant="outline" className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30">
+        Your copy
+      </Badge>
+    );
+  }
+  return <Badge variant="outline" className="text-xs">Yours</Badge>;
+}
+
+// ─── Editable row ─────────────────────────────────────────────────────────────
+
+function MaterialRow({
+  material,
+  isBusy,
+  onSave,
+  onRevert,
+  onRemove,
+}: {
+  material: Material;
+  isBusy: boolean;
+  onSave: (id: number, draft: Draft) => Promise<void>;
+  onRevert: (material: Material) => void;
+  onRemove: (material: Material) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  const startEditing = () => {
+    setDraft({
+      name: material.name,
+      unitOfSale: material.unitOfSale,
+      costPerUnit: String(Number(material.costPerUnit)),
+    });
+    setEditing(true);
+  };
+
+  const save = async () => {
+    const problem = validateDraft(draft);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    await onSave(material.id, draft);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border last:border-0 bg-muted/20">
+        <Input
+          value={draft.name}
+          onChange={e => setDraft({ ...draft, name: e.target.value })}
+          className="h-8 flex-1 min-w-[12rem] text-sm"
+          placeholder="Material name"
+          autoFocus
+        />
+        <Select
+          value={draft.unitOfSale}
+          onValueChange={value => setDraft({ ...draft, unitOfSale: value as Material["unitOfSale"] })}
+        >
+          <SelectTrigger className="h-8 w-28 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {UNITS.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Input
+          value={draft.costPerUnit}
+          onChange={e => setDraft({ ...draft, costPerUnit: e.target.value })}
+          className="h-8 w-28 text-sm text-right"
+          inputMode="decimal"
+          placeholder="0.00"
+        />
+        <div className="flex items-center gap-1">
+          <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={save} disabled={isBusy}>
+            {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setEditing(false)}
+            disabled={isBusy}
+          >
+            <X className="w-3 h-3" /> Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors group">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium truncate">{material.name}</span>
+          <OriginBadge material={material} />
+        </div>
+      </div>
+
+      <span className="text-xs text-muted-foreground w-16 shrink-0">{UNIT_LABEL[material.unitOfSale]}</span>
+      <span className="text-sm font-mono w-24 text-right shrink-0">{formatCost(material.costPerUnit)}</span>
+
+      <div className="flex items-center gap-0.5 w-28 justify-end shrink-0">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+          onClick={startEditing}
+          disabled={isBusy}
+          title={material.userId === null ? "Edit — creates your own copy" : "Edit"}
+          aria-label={`Edit ${material.name}`}
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </Button>
+
+        {material.baselineId != null && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            onClick={() => onRevert(material)}
+            disabled={isBusy}
+            title="Undo your changes and restore the starter version"
+            aria-label={`Revert ${material.name}`}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
+        )}
+
+        {material.userId !== null && (
+          confirmRemove ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+              onClick={() => { setConfirmRemove(false); onRemove(material); }}
+              disabled={isBusy}
+            >
+              Sure?
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+              onClick={() => {
+                setConfirmRemove(true);
+                window.setTimeout(() => setConfirmRemove(false), 3000);
+              }}
+              disabled={isBusy}
+              title="Remove from your library"
+              aria-label={`Remove ${material.name}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+export default function MaterialsLibraryPage() {
+  const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [newDraft, setNewDraft] = useState<Draft>(emptyDraft);
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const { data: materials = [], isLoading, refetch } = trpc.materials.list.useQuery();
+
+  const onError = (e: { message: string }) => toast.error(e.message);
+
+  const createMaterial = trpc.materials.create.useMutation({ onError });
+  const updateMaterial = trpc.materials.update.useMutation({ onError });
+  const revertMaterial = trpc.materials.revert.useMutation({ onError });
+  const deactivateMaterial = trpc.materials.deactivate.useMutation({ onError });
+
+  const isBusy =
+    createMaterial.isPending || updateMaterial.isPending ||
+    revertMaterial.isPending || deactivateMaterial.isPending;
+
+  // smartSearch caches its index by array identity, so this must stay memoised.
+  const searchable = useMemo(
+    () => materials.map(m => ({ id: String(m.id), description: m.name, unit: m.unitOfSale })),
+    [materials]
+  );
+
+  const visible = useMemo(() => {
+    if (!query.trim()) return materials;
+    const hits = smartSearch(searchable, query, 500);
+    const order = new Map(hits.map((hit, index) => [Number(hit.id), index]));
+    return materials
+      .filter(m => order.has(m.id))
+      .sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  }, [materials, searchable, query]);
+
+  const handleSave = useCallback(async (id: number, draft: Draft) => {
+    setBusyId(id);
+    try {
+      const result = await updateMaterial.mutateAsync({
+        id,
+        name: draft.name.trim(),
+        unitOfSale: draft.unitOfSale,
+        costPerUnit: Number(draft.costPerUnit),
+      });
+      if (result.forked) {
+        toast.success(`Saved as your own copy — the starter "${result.material?.name}" is unchanged.`);
+      } else {
+        toast.success("Material updated");
+      }
+      await refetch();
+    } catch {
+      // onError already surfaced it
+    } finally {
+      setBusyId(null);
+    }
+  }, [updateMaterial, refetch]);
+
+  const handleRevert = useCallback(async (material: Material) => {
+    setBusyId(material.id);
+    try {
+      await revertMaterial.mutateAsync({ id: material.id });
+      toast.success("Restored the starter version");
+      await refetch();
+    } catch {
+      /* handled by onError */
+    } finally {
+      setBusyId(null);
+    }
+  }, [revertMaterial, refetch]);
+
+  const handleRemove = useCallback(async (material: Material) => {
+    setBusyId(material.id);
+    try {
+      await deactivateMaterial.mutateAsync({ id: material.id });
+      toast.success(`Removed "${material.name}"`);
+      await refetch();
+    } catch {
+      /* handled by onError */
+    } finally {
+      setBusyId(null);
+    }
+  }, [deactivateMaterial, refetch]);
+
+  const handleCreate = useCallback(async () => {
+    const problem = validateDraft(newDraft);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    try {
+      await createMaterial.mutateAsync({
+        name: newDraft.name.trim(),
+        unitOfSale: newDraft.unitOfSale,
+        costPerUnit: Number(newDraft.costPerUnit),
+      });
+      toast.success(`Added "${newDraft.name.trim()}"`);
+      setNewDraft(emptyDraft);
+      setAdding(false);
+      await refetch();
+    } catch {
+      /* handled by onError */
+    }
+  }, [createMaterial, newDraft, refetch]);
+
+  return (
+    <div className="flex flex-col h-full bg-background">
+      {/* Header */}
+      <div className="border-b border-border px-6 py-4">
+        <div className="flex items-center gap-3">
+          <Boxes className="w-5 h-5 text-primary" />
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-semibold">Materials</h1>
+            <p className="text-xs text-muted-foreground">
+              The catalog your assemblies are built from. Starter prices are estimates — replace them with your own.
+            </p>
+          </div>
+          <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setAdding(v => !v)}>
+            <Plus className="w-3.5 h-3.5" /> Add material
+          </Button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        {/* Search */}
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search materials…"
+            className="h-9 pl-9 text-sm"
+          />
+          {query && (
+            <button
+              onClick={() => setQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Add form */}
+        {adding && (
+          <div className="rounded-xl border border-border bg-card px-4 py-3 mb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={newDraft.name}
+                onChange={e => setNewDraft({ ...newDraft, name: e.target.value })}
+                className="h-8 flex-1 min-w-[12rem] text-sm"
+                placeholder="Material name"
+                autoFocus
+              />
+              <Select
+                value={newDraft.unitOfSale}
+                onValueChange={value => setNewDraft({ ...newDraft, unitOfSale: value as Material["unitOfSale"] })}
+              >
+                <SelectTrigger className="h-8 w-28 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {UNITS.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Input
+                value={newDraft.costPerUnit}
+                onChange={e => setNewDraft({ ...newDraft, costPerUnit: e.target.value })}
+                className="h-8 w-28 text-sm text-right"
+                inputMode="decimal"
+                placeholder="0.00"
+              />
+              <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={handleCreate} disabled={createMaterial.isPending}>
+                {createMaterial.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Add
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => { setAdding(false); setNewDraft(emptyDraft); }}
+              >
+                <X className="w-3 h-3" /> Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Table */}
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          {/* Column headers */}
+          <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
+            <span className="flex-1">Material</span>
+            <span className="w-16 shrink-0">Unit</span>
+            <span className="w-24 text-right shrink-0">Cost</span>
+            <span className="w-28 shrink-0" />
+          </div>
+
+          {isLoading ? (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading materials…</div>
+          ) : visible.length === 0 ? (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              {query
+                ? <>No materials match “{query}”.</>
+                : <>No materials yet. Add your first one to get started.</>}
+            </div>
+          ) : (
+            visible.map(material => (
+              <MaterialRow
+                key={material.id}
+                material={material as Material}
+                isBusy={isBusy && busyId === material.id}
+                onSave={handleSave}
+                onRevert={handleRevert}
+                onRemove={handleRemove}
+              />
+            ))
+          )}
+        </div>
+
+        <p className={cn("text-xs text-muted-foreground mt-2")}>
+          Editing a starter material gives you your own copy — the original stays untouched, and you can restore it any
+          time with the undo button.
+        </p>
+      </div>
+    </div>
+  );
+}
