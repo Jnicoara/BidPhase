@@ -21,6 +21,7 @@ Planning document for the assemblies/estimating rebuild. No code changes — thi
 - Baseline updates **never auto-overwrite** a user's personalized copy — surfaced as "update available" instead.
 - Users can create fully **custom** materials / labor rates / assemblies with no baseline link.
 - **"Revert to Original"** — discards a user's personal changes and restores the current baseline version.
+- **Category is NOT user-extendable.** It stays a small, deliberately curated list — users pick from it when building a custom assembly but cannot add new entries to it. This keeps the category-as-layer reuse (see [LAYERS](#layers)) safe from clutter: no user action can silently add a new layer to every takeoff sheet.
 
 ## PRICING FLOW
 
@@ -39,6 +40,9 @@ Settings exist at two levels:
 ## PROJECT ESTIMATES
 
 - When an assembly is added to a project, **snapshot its current costs into the project record** rather than linking live to master pricing — so a submitted bid never silently changes if master rates update later.
+- **Snapshot timing is unconditional.** Costs snapshot the moment an assembly is added to *any* bid, regardless of that bid's status. There is no live-linked mode.
+- **The "update available" nudge is status-gated.** It appears only on bids still in **Draft**. Once a bid is **Submitted**, it is fully frozen — no nudge at all, even if the underlying baseline or the user's own library item changes.
+  - Corollary: the nudge is a Draft-only affordance. Won / Lost / Complete bids inherit Submitted's frozen behavior.
 
 ## CONDUIT & WIRE CALCULATION
 
