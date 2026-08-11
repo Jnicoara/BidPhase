@@ -33,7 +33,7 @@ Labor-hour adjustments. Remember these **ADD** rather than compound — height +
 | Isolated ground circuit | +40% | assembly |
 | After-hours / occupied space | +30% | global |
 
-\* **Scope is inferred, please confirm.** ASSEMBLIES_PLAN.md names isolated ground as its example of an *assembly-specific* one-off modifier, so it's marked `assembly` here while the rest are `global`. Worth a second look before these are seeded.
+\* **Scope is confirmed.** Isolated ground is intentionally **assembly-scoped** — it applies only to specific assemblies such as data and register/computer circuits, not to work generally. The other five (height, outdoor, retrofit, tight space, after-hours) are the shared **global** list, available to most assemblies. This matches ASSEMBLIES_PLAN.md § DATA MODEL, which names isolated ground as its example of an assembly-specific one-off modifier.
 
 ---
 
@@ -100,9 +100,9 @@ Labor-hour adjustments. Remember these **ADD** rather than compound — height +
 
 Two tiers: **CORE** gets built first, **PHASE 2** is deferred. Groupings match the five values of the `assemblies.category` enum exactly.
 
-Each entry is tagged **Residential / Commercial / Both**.
+Each entry carries a **Project Type** tag: Residential / Commercial / Both.
 
-> **Note on the Res/Comm tag:** this is a *market segment* label for organizing the starter content. It is **not** the schema's `trade` field, which distinguishes electrical from plumbing/HVAC for multi-trade unlocking. Two different axes — don't wire them together.
+> **Note on Project Type:** this is the same optional tag defined in ASSEMBLIES_PLAN.md § DATA MODEL. It is a **filter**, not a structural split — Materials, Labor Rates, and Modifiers stay fully shared across both. It is also **not** the schema's `trade` field, which distinguishes electrical from plumbing/HVAC for multi-trade unlocking. Two independent axes — don't wire them together.
 
 > **Labor hours are deliberately absent.** See [Important Notes](#important-notes) — they must not be invented.
 
@@ -110,7 +110,7 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 **Devices**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | Duplex receptacle standard | Both |
 | Duplex receptacle retrofit | Both |
@@ -125,7 +125,7 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 **Lighting**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | Recessed can new construction | Both |
 | Recessed can retrofit | Both |
@@ -136,7 +136,7 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 **Panels**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | Service upgrade 200A | Residential |
 | Panel replacement like-for-like | Both |
@@ -146,7 +146,7 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 **Equipment Connections**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | HVAC condenser disconnect + whip | Both |
 | Electric water heater connection | Both |
@@ -155,7 +155,7 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 **Low Voltage/EMS**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | Data/network drop | Both |
 | Combination smoke/CO detector | Residential |
@@ -164,7 +164,7 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 **Devices**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | AFCI receptacle | Both |
 | Quad receptacle | Commercial |
@@ -180,7 +180,7 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 **Lighting**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | Pendant light | Residential |
 | Chandelier heavy bracing | Residential |
@@ -194,14 +194,14 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 **Panels**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | Generator transfer switch | Residential |
 | Load center relocate | Both |
 
 **Equipment Connections**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | Furnace/air handler connection | Residential |
 | Pool pump connection | Residential |
@@ -211,7 +211,7 @@ Each entry is tagged **Residential / Commercial / Both**.
 
 **Low Voltage/EMS**
 
-| Assembly | Segment |
+| Assembly | Project Type |
 |---|---|
 | Cable TV drop | Residential |
 | Video doorbell wiring | Residential |
@@ -228,6 +228,288 @@ Each entry is tagged **Residential / Commercial / Both**.
 | Equipment Connections | 4 | 5 | 9 |
 | Low Voltage/EMS | 2 | 4 | 6 |
 | **Total** | **27** | **31** | **58** |
+
+---
+
+## CORE Assembly Bills of Material
+
+A typical bill of materials for each of the 27 CORE assemblies, drawn from the [Materials](#materials) list above. PHASE 2 assemblies are deliberately not covered here — they're deferred.
+
+> **Labor hours are absent by design.** Every assembly below is materials-only. Labor units come from the NECA Manual of Labor Units and field experience — see [Important Notes](#important-notes). Do not backfill them from this document.
+
+**Baseline assumptions** — state these so the quantities are interpretable, and change them freely:
+
+- **Residential Romex baseline.** Cable-fed (NM-B) unless the assembly is inherently commercial or outdoor. Per [Important Notes](#important-notes), Romex-vs-conduit is a *material swap inside one assembly*, not a separate assembly — so a commercial user swaps NM-B for THHN + EMT on the same recipe.
+- **Plastic device boxes** assumed, same swap logic for metal.
+- **Circuit sizing:** receptacles on 20A / 12-2, lighting and switching on 15A / 14-2.
+- **Run lengths are per-device allowances**, not home runs: ~25 ft for a receptacle, ~20 ft for a switch leg, ~30–40 ft where the assembly includes its own home run to the panel. These are the single biggest guess here and the first thing worth tuning against real jobs.
+- **Breakers are included only where the assembly creates a new circuit**, not where it extends an existing one.
+- **Fixtures and appliances are owner/GC-supplied** unless noted — the assembly covers the wiring, box, and connection.
+
+**† marks a material not yet in the Materials list above.** These are collected in [Materials Still Needed](#materials-still-needed) at the end of this section.
+
+### Devices
+
+**Duplex receptacle standard** *(Both)*
+- Single-gang box × 1
+- Duplex receptacle × 1
+- Wall plate × 1
+- 12-2 NM-B × 25 ft
+- Wire nuts × 3
+
+**Duplex receptacle retrofit** *(Both)*
+- Old-work / remodel single-gang box † × 1
+- Duplex receptacle × 1
+- Wall plate × 1
+- 12-2 NM-B × 25 ft
+- Wire nuts × 3
+- Carries the **Existing/retrofit +35%** modifier. Materially near-identical to the standard version — the old-work box and the labor adder are the whole difference.
+
+**GFCI receptacle** *(Both)*
+- Single-gang box × 1
+- GFCI receptacle × 1
+- Wall plate × 1
+- 12-2 NM-B × 25 ft
+- Wire nuts × 3
+
+**Dedicated 20A receptacle** *(Both)*
+- Single-gang box × 1
+- Duplex receptacle × 1
+- Wall plate × 1
+- 12-2 NM-B × 35 ft *(includes home run)*
+- 20A breaker × 1
+- Wire nuts × 3
+
+**Single-pole switch** *(Both)*
+- Single-gang box × 1
+- Single-pole switch × 1
+- Wall plate × 1
+- 14-2 NM-B × 20 ft
+- Wire nuts × 3
+
+**3-way switch** *(Both)* — the assembly is the **pair**, not one device
+- Single-gang box × 2
+- 3-way switch × 2
+- Wall plate × 2
+- 14-2 NM-B × 20 ft
+- 14-3 NM-B † × 20 ft *(traveler run between the two boxes)*
+- Wire nuts × 6
+
+**Dimmer switch** *(Both)*
+- Single-gang box × 1
+- Dimmer × 1
+- Wall plate × 1
+- 14-2 NM-B × 20 ft
+- Wire nuts × 3
+
+**Range receptacle** *(Residential)* — 50A
+- 4" square box × 1
+- 50A range receptacle † × 1
+- 6-3 NM-B † × 30 ft
+- 50A 2-pole breaker † × 1
+- Wire nuts × 3
+- **Conductor size needs your confirmation.** #8 THHN is on the Materials list and is commonly used for 40A ranges; 50A typically wants #6. Sized here at #6 (6-3) for a 50A device — verify against how you actually run these before it's treated as settled.
+
+**Dryer receptacle** *(Residential)* — 30A
+- 4" square box × 1
+- 30A dryer receptacle † × 1
+- 10-3 NM-B † × 30 ft
+- 30A 2-pole breaker † × 1
+- Wire nuts × 3
+
+**EV charger circuit** *(Both)* — 50A, EVSE owner-supplied
+- 4" square box × 1
+- 50A 2-pole breaker † × 1
+- #8 THHN × 3 conductors × 40 ft *(2 hot + ground)*
+- 3/4" EMT × 40 ft
+- EMT connector 3/4" × 2
+- EMT strap × 8
+- EVSE disconnect † × 1 *(where required by location/AHJ)*
+- Wire nuts × 3
+
+### Lighting
+
+**Recessed can new construction** *(Both)*
+- Recessed housing, new-construction † × 1 *(integral bar hangers — no separate bracket)*
+- Trim/baffle † × 1
+- 14-2 NM-B × 20 ft
+- Wire nuts × 3
+
+**Recessed can retrofit** *(Both)*
+- Retrofit can or LED retrofit disc † × 1
+- 14-2 NM-B × 20 ft
+- Wire nuts × 3
+- Carries the **Existing/retrofit +35%** modifier.
+
+**Surface-mount ceiling fixture** *(Both)*
+- 4" square box × 1
+- Fixture mounting bracket × 1
+- 14-2 NM-B × 20 ft
+- Wire nuts × 3
+- Fixture owner-supplied.
+
+**Ceiling fan standard** *(Residential)*
+- Fan-rated ceiling box × 1
+- 14-3 NM-B † × 20 ft *(separate switching for fan and light)*
+- Single-gang box × 1
+- Wall plate × 1
+- Wire nuts × 5
+- Fan unit owner-supplied. Uses 14-3 on the assumption of independent fan/light control; drop to 14-2 for single-switch control.
+
+**Exit sign** *(Commercial)*
+- 4" square box × 1
+- Exit sign fixture † × 1
+- 6ft MC whip × 1
+- #12 THHN × 3 conductors × 15 ft
+- Wire nuts × 3
+
+**Emergency battery unit** *(Commercial)*
+- 4" square box × 1
+- Emergency battery/bug-eye unit † × 1
+- 6ft MC whip × 1
+- #12 THHN × 3 conductors × 15 ft
+- Wire nuts × 3
+
+### Panels
+
+**Service upgrade 200A** *(Residential)*
+- 200A main panel × 1
+- Meter socket † × 1
+- Service entrance conductors † × 25 ft
+- Weatherhead † × 1
+- 2" service mast/conduit † × 10 ft
+- Ground rods † × 2
+- #6 bare grounding electrode conductor † × 25 ft
+- Intersystem bonding bridge † × 1
+- 20A breaker × 12, 20/2 breaker × 3 *(typical repopulation — varies per panel schedule)*
+- Wire nuts × 20
+- **The most incomplete BOM here.** Most of what a service upgrade consumes isn't in the Materials list yet, and the breaker counts are a stand-in for an actual panel schedule.
+
+**Panel replacement like-for-like** *(Both)*
+- 200A main panel × 1
+- 20A breaker × 12
+- 20/2 breaker × 3
+- Wire nuts × 20
+- Breaker mix is illustrative — real quantity comes from the existing panel being replaced.
+
+**Breaker add/replace** *(Both)*
+- 20A breaker × 1 *(or 20/2 for a 2-pole replacement)*
+
+**Subpanel install** *(Both)* — 60A feeder
+- Subpanel / load center † × 1
+- 60A 2-pole feeder breaker † × 1
+- Ground bar kit † × 1
+- #6 THHN † × 4 conductors × 40 ft
+- 1" EMT × 40 ft
+- 1" EMT connector † × 2
+- EMT strap × 8
+- Wire nuts × 6
+- Sized for a 60A feeder. #8 THHN *is* on the Materials list and suits a 40–50A feeder if that's the more common case for you.
+
+**Whole-house surge protector** *(Residential)*
+- Type 2 SPD † × 1
+- 20/2 breaker × 1
+- Wire nuts × 3
+- Most SPDs ship with integral leads, so no separate conductor line.
+
+### Equipment Connections
+
+**HVAC condenser disconnect + whip** *(Both)*
+- AC disconnect switch † × 1
+- 6ft MC whip × 1
+- #10 THHN × 3 conductors × 30 ft
+- 1/2" PVC × 20 ft
+- 1/2" PVC fittings † × 4
+- 30A 2-pole breaker † × 1
+- Wire nuts × 3
+- Carries the **Outdoor/weather +15%** modifier.
+
+**Electric water heater connection** *(Both)*
+- 4" square box × 1
+- 30A 2-pole breaker † × 1
+- #10 THHN × 3 conductors × 30 ft
+- 1/2" EMT × 20 ft
+- EMT connector 1/2" × 2
+- EMT strap × 4
+- Water heater disconnect † × 1 *(where not within sight of the panel)*
+- Wire nuts × 3
+
+**Dishwasher connection** *(Residential)*
+- Single-gang box × 1
+- 20A breaker × 1
+- 12-2 NM-B × 25 ft
+- Dishwasher connection kit / whip † × 1
+- Wire nuts × 3
+
+**Bath exhaust fan wiring** *(Residential)*
+- Single-gang box × 1
+- Single-pole switch × 1
+- Wall plate × 1
+- 14-2 NM-B × 25 ft
+- Wire nuts × 4
+- Fan unit owner-supplied. Add a second switch leg for a fan/light combo — that's the PHASE 2 *Fan/light combo switch* assembly.
+
+### Low Voltage/EMS
+
+**Data/network drop** *(Both)*
+- Cat6 cable † × 60 ft
+- RJ45 keystone jack † × 1
+- Low-voltage mud ring † × 1
+- Wall plate × 1
+- Patch panel port termination † × 1
+- No breaker, no line voltage. This is the assembly the **Isolated ground +40%** modifier is scoped to, where the drop serves a circuit requiring one.
+
+**Combination smoke/CO detector** *(Residential)*
+- 4" square box × 1
+- Combination smoke/CO detector † × 1
+- 14-3 NM-B † × 25 ft *(interconnect between detectors)*
+- Wire nuts × 4
+- 14-3 carries the interconnect conductor; a standalone non-interconnected unit uses 14-2.
+
+### Materials Still Needed
+
+Every † above, consolidated. These are referenced by CORE assemblies but absent from the [Materials](#materials) list — the list needs them (with your pricing) before these assemblies can be fully costed.
+
+| Material | Suggested Unit | Needed by |
+|---|---|---|
+| Old-work / remodel single-gang box | each | Duplex receptacle retrofit |
+| 14-3 NM-B | foot | 3-way switch, Ceiling fan, Smoke/CO detector |
+| 10-3 NM-B | foot | Dryer receptacle |
+| 6-3 NM-B | foot | Range receptacle |
+| #6 THHN | foot | Subpanel install |
+| #6 bare grounding electrode conductor | foot | Service upgrade 200A |
+| 30A 2-pole breaker | each | Dryer receptacle, HVAC condenser, Water heater |
+| 50A 2-pole breaker | each | Range receptacle, EV charger circuit |
+| 60A 2-pole feeder breaker | each | Subpanel install |
+| 30A dryer receptacle | each | Dryer receptacle |
+| 50A range receptacle | each | Range receptacle |
+| Subpanel / load center | each | Subpanel install |
+| Ground bar kit | each | Subpanel install |
+| Type 2 surge protective device | each | Whole-house surge protector |
+| Meter socket | each | Service upgrade 200A |
+| Service entrance conductors | foot | Service upgrade 200A |
+| Weatherhead | each | Service upgrade 200A |
+| 2" service mast / conduit | foot | Service upgrade 200A |
+| Ground rod | each | Service upgrade 200A |
+| Intersystem bonding bridge | each | Service upgrade 200A |
+| AC disconnect switch | each | HVAC condenser disconnect + whip |
+| Water heater disconnect | each | Electric water heater connection |
+| EVSE disconnect | each | EV charger circuit |
+| Dishwasher connection kit / whip | each | Dishwasher connection |
+| 1" EMT connector | each | Subpanel install |
+| 1/2" PVC fittings | each | HVAC condenser disconnect + whip |
+| Recessed housing, new-construction | each | Recessed can new construction |
+| Recessed can trim / baffle | each | Recessed can new construction |
+| Retrofit can / LED retrofit disc | each | Recessed can retrofit |
+| Exit sign fixture | each | Exit sign |
+| Emergency battery / bug-eye unit | each | Emergency battery unit |
+| Combination smoke/CO detector | each | Combination smoke/CO detector |
+| Cat6 cable | foot | Data/network drop |
+| RJ45 keystone jack | each | Data/network drop |
+| Low-voltage mud ring | each | Data/network drop |
+| Patch panel port | each | Data/network drop |
+
+**No prices are proposed for these.** The existing Materials list came from you; inventing 36 more placeholder costs would bury real numbers under guesses. Add them with your own supplier pricing.
 
 ---
 
