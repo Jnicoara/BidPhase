@@ -13,6 +13,16 @@ Planning document for the assemblies/estimating rebuild. No code changes — thi
 - **Assemblies** — bundle materials + base labor hours + applicable modifiers into a reusable recipe. Each assembly belongs to:
   - A **Category**: Devices, Lighting, Panels, Equipment Connections, Low Voltage/EMS.
   - A **Trade** field, for future multi-trade expansion.
+  - An optional **Project Type** tag: Residential / Commercial / Both.
+
+### Project Type is a filter, not a structural split
+
+Project Type exists to **filter** the library, nothing more. It does not fork the catalog in two:
+
+- **Materials, Labor Rates, and Modifiers stay fully shared** across residential and commercial. There is no residential copy and commercial copy of anything.
+- Where labor genuinely differs by context, that is handled through the existing fork/customize system (see [CUSTOMIZATION MODEL](#customization-model)) — a user forks the one assembly and adjusts it. The library is never duplicated wholesale.
+
+**Not the same thing as Trade.** Trade separates electrical from plumbing/HVAC for unlock gating; Project Type separates residential from commercial work *within* a trade. Two independent axes — every starter assembly in [STARTER_LIBRARY.md](STARTER_LIBRARY.md) already carries this tag.
 
 ## CUSTOMIZATION MODEL
 
@@ -43,8 +53,18 @@ Settings exist at two levels:
 - **Snapshot timing is unconditional.** Costs snapshot the moment an assembly is added to *any* bid, regardless of that bid's status. There is no live-linked mode.
 - **The "update available" nudge is status-gated.** It appears only on bids still in **Draft**. Once a bid is **Submitted**, it is fully frozen — no nudge at all, even if the underlying baseline or the user's own library item changes.
   - Corollary: the nudge is a Draft-only affordance. Won / Lost / Complete bids inherit Submitted's frozen behavior.
+- **Bids carry a Project Type tag too** — the same optional Residential / Commercial / Both value used on assemblies (see [DATA MODEL](#data-model)). This is what lets the [DASHBOARD](#dashboard) split reporting by residential vs. commercial later: win rate, average margin, and outstanding value per project type.
 
 ## CONDUIT & WIRE CALCULATION
+
+### Two path types
+
+The tracing tool supports two kinds of run, chosen per path:
+
+1. **Conduit + pulled wire** — EMT, PVC, rigid. Conduit and wire are calculated **separately**, per the rules below.
+2. **Cable run** — Romex/NM-B, MC cable. **Cable footage only**, because the cable *is* the raceway. There is no separate conduit quantity to count.
+
+The rules that follow describe path type 1. A cable run still gets length, termination allowance, live tally, and waste factor — but the conduit-specific rules (shared-run conductor multiplication, conduit fill) simply do not apply to it.
 
 - Trace conduit runs on the plan; **length calculates automatically including offsets**.
 - **Wire footage auto-calculates** from conduit length + termination allowance (2–3 ft at panel, 6–12 inches per device) × number of conductors — built into the calculation directly.
