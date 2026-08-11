@@ -22,6 +22,14 @@ Run a single test file: `pnpm vitest run server/materials.test.ts`. Tests use `a
 
 There is no separate lint script; `pnpm check` (TypeScript strict mode) is the correctness gate.
 
+## Changelog — do this on every meaningful commit
+
+Whenever you commit a meaningful change, **also add a one-or-two-line plain-English entry to `CHANGELOG.md`** describing what changed, in addition to the normal commit message. Do this automatically, as part of the same commit — do not wait to be asked.
+
+- Group entries under a `## [YYYY-MM-DD]` heading, newest date first. Add to today's heading if it already exists; create it if it doesn't.
+- Write for a non-programmer reading it months later: what changed and why it matters, not which functions moved. "Fixed a security gap that let any logged-in user read another contractor's bid pricing" beats "added ownership checks to projectItemsRouter".
+- Skip it for trivial changes — typo fixes, formatting, comment-only edits.
+
 ## Architecture
 
 **Stack:** Express + tRPC (v11, superjson transformer) on the server, React 19 + Vite + Wouter (hash-based routing) on the client, Drizzle ORM against MySQL. Single dev process — Vite runs as Express middleware in development (`server/_core/vite.ts`), and the client is served statically in production.
