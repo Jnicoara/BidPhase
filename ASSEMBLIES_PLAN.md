@@ -24,6 +24,25 @@ Project Type exists to **filter** the library, nothing more. It does not fork th
 
 **Not the same thing as Trade.** Trade separates electrical from plumbing/HVAC for unlock gating; Project Type separates residential from commercial work *within* a trade. Two independent axes — every starter assembly in [STARTER_LIBRARY.md](STARTER_LIBRARY.md) already carries this tag.
 
+### Where labor hours come from
+
+The CORE assemblies in [STARTER_LIBRARY.md](STARTER_LIBRARY.md) ship with materials but **no labor hours**. Those get populated by the user, from their own field experience, with the **NECA Manual of Labor Units** as a general reference.
+
+**Read for understanding, then write independently.** Numbers are arrived at in the user's own terms and expressed in their own words — never transcribed or copied across from the manual. NECA's tables inform judgement; they are not a source to be reproduced.
+
+### Modifiers replace difficulty tiers — don't build both
+
+NECA expresses job difficulty as **Normal / Difficult / Very Difficult** columns. The [Modifiers](#data-model) system already does that job, additively and with more granularity: height, outdoor, retrofit, tight space, and so on stack to describe *why* a particular install is harder, rather than collapsing it into one of three buckets.
+
+So:
+
+- **There is no separate difficulty-tier field, and one should not be added.** It would duplicate Modifiers and force the user to answer the same question twice.
+- **A single baseline hour per assembly**, with modifiers applied on top. NECA's "Normal" column serves only as an informal reference point when settling on that baseline — not as a stored tier.
+
+### Linear-footage assemblies use per-100-ft or per-1000-ft rates
+
+Conduit and wire labor is conventionally quoted per 100 ft or per 1000 ft rather than per foot. That is **standard industry practice and needs no special handling** — it is simply the unit the hours are expressed in. Nothing in the data model has to change to accommodate it; it does not imply a second rate system or a distinct assembly type.
+
 ## CUSTOMIZATION MODEL
 
 - Users get a personal **fork/copy** of baseline library items and can edit freely.
