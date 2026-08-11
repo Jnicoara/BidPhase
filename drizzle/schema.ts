@@ -282,6 +282,238 @@ export const bidSummary = mysqlTable(
 export type BidSummary = typeof bidSummary.$inferSelect;
 export type InsertBidSummary = typeof bidSummary.$inferInsert;
 
+// ══════════════════════════════════════════════════════════════════════════════
+// FOUNDATION (v2 library) — see ASSEMBLIES_PLAN.md
+// ══════════════════════════════════════════════════════════════════════════════
+// These tables are the new Foundation data model. They live ALONGSIDE the legacy
+// master_items / master_assemblies / master_labor_rates tables, which stay in
+// place and keep serving the current UI until the step-4 validation gate passes
+// (see ASSEMBLIES_PLAN.md BUILD ORDER). Do not wire the two systems together —
+// the legacy tables get removed wholesale once the new Library screens prove out.
+//
+// Baseline vs. user rows (CUSTOMIZATION MODEL):
+//   • Baseline row  — userId IS NULL. The shipped starter library. Never edited
+//                     by a user; `version` bumps when we publish an update.
+//   • Forked row    — userId set, baselineId set. A user's personal copy. The
+//                     `baselineVersion` records which baseline version it was
+//                     forked from, so a newer baseline surfaces as "update
+//                     available" rather than silently overwriting.
+//   • Custom row    — userId set, baselineId NULL. No baseline link at all.
+//
+// "Revert to Original" = copy the baseline's fields back over the forked row and
+// reset baselineVersion to the baseline's current version.
+
+/** Curated, NOT user-extendable — doubles as the takeoff layer grouping. */
+export const ASSEMBLY_CATEGORIES = [
+  "Devices",
+  "Lighting",
+  "Panels",
+  "Equipment Connections",
+  "Low Voltage/EMS",
+] as const;
+
+export const MATERIAL_UNITS_OF_SALE = ["each", "foot", "box"] as const;
+export const LABOR_ROLES = ["apprentice", "journeyman", "foreman"] as const;
+
+// ─── Materials ────────────────────────────────────────────────────────────────
+// Cost only. Labor lives on the assembly, never on the material.
+export const materials = mysqlTable(
+  "materials",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    /** NULL = baseline library row. Set = belongs to that user. */
+    userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
+    /** The baseline row this was forked from. NULL = baseline itself, or fully custom. */
+    baselineId: int("baselineId"),
+    /** Baseline `version` at fork time — drives the "update available" nudge. */
+    baselineVersion: int("baselineVersion"),
+    /** Bumped when a baseline row is republished. Meaningless on user rows. */
+    version: int("version").default(1).notNull(),
+
+    name: varchar("name", { length: 512 }).notNull(),
+    unitOfSale: mysqlEnum("unitOfSale", MATERIAL_UNITS_OF_SALE).default("each").notNull(),
+    costPerUnit: decimal("costPerUnit", { precision: 10, scale: 4 }).default("0").notNull(),
+
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("materials_userId_idx").on(t.userId),
+    index("materials_baselineId_idx").on(t.baselineId),
+  ]
+);
+
+export type Material = typeof materials.$inferSelect;
+export type InsertMaterial = typeof materials.$inferInsert;
+
+// ─── Labor Rates ──────────────────────────────────────────────────────────────
+// Fully separate from assemblies — an assembly stores hours, never a rate.
+export const laborRates = mysqlTable(
+  "labor_rates",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
+    baselineId: int("baselineId"),
+    baselineVersion: int("baselineVersion"),
+    version: int("version").default(1).notNull(),
+
+    role: mysqlEnum("role", LABOR_ROLES).notNull(),
+    hourlyCost: decimal("hourlyCost", { precision: 10, scale: 4 }).default("0").notNull(),
+
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("labor_rates_userId_idx").on(t.userId),
+    index("labor_rates_baselineId_idx").on(t.baselineId),
+  ]
+);
+
+export type LaborRate = typeof laborRates.$inferSelect;
+export type InsertLaborRate = typeof laborRates.$inferInsert;
+
+// ─── Modifiers ────────────────────────────────────────────────────────────────
+// Adjust labor hours by a percentage. CRITICAL: multiple modifiers on one line
+// item ADD together, never compound. +15% height and +10% outdoor = +25% total,
+// NOT 1.15 × 1.10. The pricing engine in shared/pricing.ts enforces this.
+export const modifiers = mysqlTable(
+  "modifiers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
+    baselineId: int("baselineId"),
+    baselineVersion: int("baselineVersion"),
+    version: int("version").default(1).notNull(),
+
+    name: varchar("name", { length: 255 }).notNull(),
+    /** Fractional labor adjustment: 0.15 = +15% hours, -0.10 = -10% hours. */
+    laborAdjustmentPct: decimal("laborAdjustmentPct", { precision: 6, scale: 4 }).default("0").notNull(),
+    /**
+     * "global"   — shared list (height, outdoor, retrofit); assemblies opt in.
+     * "assembly" — one-off for a single assembly (e.g. isolated ground).
+     */
+    scope: mysqlEnum("scope", ["global", "assembly"]).default("global").notNull(),
+
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("modifiers_userId_idx").on(t.userId),
+    index("modifiers_baselineId_idx").on(t.baselineId),
+  ]
+);
+
+export type Modifier = typeof modifiers.$inferSelect;
+export type InsertModifier = typeof modifiers.$inferInsert;
+
+// ─── Assemblies ───────────────────────────────────────────────────────────────
+// A reusable recipe: materials + base labor hours + applicable modifiers.
+export const assemblies = mysqlTable(
+  "assemblies",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").references(() => users.id, { onDelete: "cascade" }),
+    baselineId: int("baselineId"),
+    baselineVersion: int("baselineVersion"),
+    version: int("version").default(1).notNull(),
+
+    name: varchar("name", { length: 255 }).notNull(),
+    /** Curated list — users pick, never add. Also drives takeoff layer grouping. */
+    category: mysqlEnum("category", ASSEMBLY_CATEGORIES).notNull(),
+    /** Unlock-gated at the app layer, not the schema, so new trades need no migration. */
+    trade: varchar("trade", { length: 64 }).default("electrical").notNull(),
+    baseLaborHours: decimal("baseLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
+
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("assemblies_userId_idx").on(t.userId),
+    index("assemblies_baselineId_idx").on(t.baselineId),
+    index("assemblies_category_idx").on(t.category),
+    index("assemblies_trade_idx").on(t.trade),
+  ]
+);
+
+export type Assembly = typeof assemblies.$inferSelect;
+export type InsertAssembly = typeof assemblies.$inferInsert;
+
+// ─── Assembly Materials ───────────────────────────────────────────────────────
+// Which materials (and how many) make up an assembly.
+export const assemblyMaterials = mysqlTable(
+  "assembly_materials",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    assemblyId: int("assemblyId").notNull().references(() => assemblies.id, { onDelete: "cascade" }),
+    materialId: int("materialId").notNull().references(() => materials.id, { onDelete: "cascade" }),
+    qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
+    sortOrder: int("sortOrder").default(0).notNull(),
+  },
+  t => [
+    index("assembly_materials_assemblyId_idx").on(t.assemblyId),
+    index("assembly_materials_materialId_idx").on(t.materialId),
+  ]
+);
+
+export type AssemblyMaterial = typeof assemblyMaterials.$inferSelect;
+export type InsertAssemblyMaterial = typeof assemblyMaterials.$inferInsert;
+
+// ─── Assembly Modifiers ───────────────────────────────────────────────────────
+// Which modifiers are *applicable* to an assembly. Being applicable is not the
+// same as being applied — a takeoff line item chooses which of these to switch
+// on. Global modifiers are opted into here; assembly-scoped ones live here only.
+export const assemblyModifiers = mysqlTable(
+  "assembly_modifiers",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    assemblyId: int("assemblyId").notNull().references(() => assemblies.id, { onDelete: "cascade" }),
+    modifierId: int("modifierId").notNull().references(() => modifiers.id, { onDelete: "cascade" }),
+    sortOrder: int("sortOrder").default(0).notNull(),
+  },
+  t => [
+    index("assembly_modifiers_assemblyId_idx").on(t.assemblyId),
+    index("assembly_modifiers_modifierId_idx").on(t.modifierId),
+  ]
+);
+
+export type AssemblyModifier = typeof assemblyModifiers.$inferSelect;
+export type InsertAssemblyModifier = typeof assemblyModifiers.$inferInsert;
+
+// ─── Pricing Defaults ─────────────────────────────────────────────────────────
+// Company-level defaults that auto-fill new estimates. The per-project override
+// layer is deliberately NOT here — that belongs to Bid/Project structure (build
+// step 3), so this table stays the single company-wide source.
+export const pricingDefaults = mysqlTable(
+  "pricing_defaults",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+
+    // Overhead — optional, applied BEFORE profit.
+    overheadEnabled: boolean("overheadEnabled").default(false).notNull(),
+    overheadMode: mysqlEnum("overheadMode", ["percentage", "flat"]).default("percentage").notNull(),
+    /** Fraction when percentage (0.10 = 10%); currency amount when flat. */
+    overheadValue: decimal("overheadValue", { precision: 12, scale: 4 }).default("0").notNull(),
+
+    // Profit — the method is always an explicit choice, never assumed.
+    profitMethod: mysqlEnum("profitMethod", ["markup", "margin"]).default("markup").notNull(),
+    /** Fraction: 0.20 = 20% markup, or 20% target margin, per profitMethod. */
+    profitValue: decimal("profitValue", { precision: 6, scale: 4 }).default("0").notNull(),
+
+    defaultLaborRateId: int("defaultLaborRateId").references(() => laborRates.id, { onDelete: "set null" }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  }
+);
+
+export type PricingDefaults = typeof pricingDefaults.$inferSelect;
+export type InsertPricingDefaults = typeof pricingDefaults.$inferInsert;
+
 // ─── Feature Flags ────────────────────────────────────────────────────────────
 // Admin-controlled toggles that gate features for the Contractor role.
 // Each row is identified by a unique flagKey string.
