@@ -39,7 +39,13 @@ Labor-hour adjustments. Remember these **ADD** rather than compound — height +
 
 ## Materials
 
-`Unit` maps to the `materials.unitOfSale` column (`each` / `foot` / `box`).
+`Unit` maps to the `materials.unitOfSale` column (`each` / `foot` / `box`), and
+each heading below is a value of the `materials.category` column — the curated
+list in `MATERIAL_CATEGORIES` (`drizzle/schema.ts`), in display order.
+
+These shelve materials by what they physically are. They are a different axis
+from `ASSEMBLY_CATEGORIES`, which groups assemblies by what they accomplish.
+The two are intentionally separate; do not merge them.
 
 ### Wire & Cable
 
@@ -52,7 +58,7 @@ Labor-hour adjustments. Remember these **ADD** rather than compound — height +
 | 14-2 NM-B | $0.65 | foot |
 | 12-2 NM-B | $0.90 | foot |
 
-### Conduit & Fittings
+### Conduit
 
 | Material | Cost | Unit |
 |---|---|---|
@@ -60,22 +66,47 @@ Labor-hour adjustments. Remember these **ADD** rather than compound — height +
 | 3/4" EMT | $1.20 | foot |
 | 1" EMT | $1.80 | foot |
 | 1/2" PVC | $0.45 | foot |
+
+### Conduit Fittings
+
+| Material | Cost | Unit |
+|---|---|---|
 | EMT connector 1/2" | $0.60 | each |
 | EMT connector 3/4" | $0.85 | each |
 | EMT strap | $0.35 | each |
 
-### Boxes & Devices
+### Boxes
 
 | Material | Cost | Unit |
 |---|---|---|
 | Single-gang box | $1.25 | each |
 | 4" square box | $1.75 | each |
 | Fan-rated ceiling box | $6.50 | each |
+
+### Receptacles
+
+| Material | Cost | Unit |
+|---|---|---|
 | Duplex receptacle | $1.50 | each |
 | GFCI receptacle | $16.00 | each |
+
+### Switches
+
+A dimmer is a switch device, so it shelves here rather than under Lighting
+Hardware, which is fixture-mounting hardware only.
+
+| Material | Cost | Unit |
+|---|---|---|
 | Single-pole switch | $1.75 | each |
 | 3-way switch | $4.50 | each |
 | Dimmer | $22.00 | each |
+
+### Wall Plates & Misc
+
+The catch-all shelf: trim and consumables belonging to no single system.
+
+| Material | Cost | Unit |
+|---|---|---|
 | Wall plate | $1.25 | each |
 | Wire nuts | $0.08 | each |
 

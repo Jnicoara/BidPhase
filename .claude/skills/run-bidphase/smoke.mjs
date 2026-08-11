@@ -4,8 +4,8 @@
  *
  * This is the agent's primary handle on the app. It authenticates the way a
  * browser does, then exercises the Materials library end to end: list, create,
- * fork-on-edit, revert, and the two refusals (removing a starter material,
- * duplicate names). Most work in this repo lands in server/db.ts and
+ * categories, fork-on-edit, revert, and the refusals (removing a starter
+ * material, duplicate names, an off-list category). Most work lands in server/db.ts and
  * server/routers/*, so this covers the layer PRs actually touch.
  *
  * Start the server first (see SKILL.md), then:
@@ -135,12 +135,40 @@ check("baseline rows are owned by nobody", initial.some(m => m.userId === null))
 const names = initial.map(m => m.name);
 check("no duplicate names in the merged list", new Set(names).size === names.length);
 
+// ── Categories ──────────────────────────────────────────────────────────────
+console.log("\nmaterial categories");
+const uncategorisedStarters = initial.filter(m => m.userId === null && !m.category);
+check("every starter material is shelved", uncategorisedStarters.length === 0,
+  `uncategorised: ${uncategorisedStarters.map(m => m.name).join(", ")}`);
+check("wire is shelved under Wire & Cable",
+  initial.find(m => m.name === "#12 THHN")?.category === "Wire & Cable");
+check("conduit and its fittings are on separate shelves",
+  initial.find(m => m.name === '1/2" EMT')?.category === "Conduit" &&
+  initial.find(m => m.name === "EMT strap")?.category === "Conduit Fittings");
+check("a dimmer counts as a switch",
+  initial.find(m => m.name === "Dimmer")?.category === "Switches");
+
 // ── Create ──────────────────────────────────────────────────────────────────
 console.log("\nmaterials.create");
 const uniqueName = `Smoke widget ${Date.now()}`;
-const created = await api.mutate("materials.create", { name: uniqueName, unitOfSale: "box", costPerUnit: 12.34 });
+const created = await api.mutate("materials.create", {
+  name: uniqueName, unitOfSale: "box", costPerUnit: 12.34, category: "Boxes",
+});
 check("creates a user-owned material", created?.userId != null);
 check("stores cost exactly", Number(created?.costPerUnit) === 12.34, `got ${created?.costPerUnit}`);
+check("stores the chosen category", created?.category === "Boxes", `got ${created?.category}`);
+
+await expectReject(
+  "refuses a category outside the curated list",
+  api.mutate("materials.create", { name: `Bad shelf ${Date.now()}`, unitOfSale: "each", costPerUnit: 1, category: "Plumbing" }),
+  /./
+);
+
+const uncategorised = await api.mutate("materials.create", {
+  name: `Smoke unshelved ${Date.now()}`, unitOfSale: "each", costPerUnit: 1,
+});
+check("category is optional on create", uncategorised?.category === null, `got ${uncategorised?.category}`);
+await api.mutate("materials.deactivate", { id: uncategorised.id });
 
 await expectReject(
   "refuses a duplicate name",
@@ -163,11 +191,12 @@ if (before?.baselineId != null) await api.mutate("materials.revert", { id: befor
 const target = (await api.query("materials.list")).find(m => m.name === TARGET);
 const wasBaseline = target.userId === null;
 
-const edited = await api.mutate("materials.update", { id: target.id, costPerUnit: 0.99 });
+const edited = await api.mutate("materials.update", { id: target.id, costPerUnit: 0.99, category: "Boxes" });
 check("editing a starter material forks it", wasBaseline ? edited.forked === true : true);
 check("the edit lands on a user-owned row", edited.material?.userId != null);
 check("the fork points back at its baseline", edited.material?.baselineId != null);
 check("the new cost is saved", Number(edited.material?.costPerUnit) === 0.99);
+check("the copy can be re-shelved", edited.material?.category === "Boxes", `got ${edited.material?.category}`);
 
 const afterFork = await api.query("materials.list");
 check(
@@ -186,6 +215,7 @@ console.log("\nmaterials.revert");
 const reverted = await api.mutate("materials.revert", { id: edited.material.id });
 check("revert keeps the same row id", reverted?.id === edited.material.id);
 check("revert restores the starter cost", Number(reverted?.costPerUnit) === 0.08, `got ${reverted?.costPerUnit}`);
+check("revert restores the starter category", reverted?.category === "Wall Plates & Misc", `got ${reverted?.category}`);
 check("the row is still the user's own copy after revert", reverted?.baselineId != null);
 
 await expectReject(

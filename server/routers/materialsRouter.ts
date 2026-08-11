@@ -12,13 +12,19 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { MATERIAL_UNITS_OF_SALE } from "../../drizzle/schema";
+import { MATERIAL_CATEGORIES, MATERIAL_UNITS_OF_SALE } from "../../drizzle/schema";
 import * as db from "../db";
 
 /** decimal(10,4) — four decimal places, and it must stay under 10 total digits. */
 const MAX_COST = 999999.9999;
 const costSchema = z.number().min(0).max(MAX_COST);
 const nameSchema = z.string().trim().min(1).max(512);
+
+/**
+ * Optional everywhere. `null` is a real value meaning "unshelve this" — distinct
+ * from omitting the key, which leaves the existing category alone.
+ */
+const categorySchema = z.enum(MATERIAL_CATEGORIES).nullable();
 
 /** Money crosses the boundary as a number and is stored as an exact decimal string. */
 const toDecimal = (value: number) => value.toFixed(4);
@@ -42,6 +48,7 @@ export const materialsRouter = router({
       name: nameSchema,
       unitOfSale: z.enum(MATERIAL_UNITS_OF_SALE).default("each"),
       costPerUnit: costSchema.default(0),
+      category: categorySchema.default(null),
     }))
     .mutation(async ({ input, ctx }) => {
       // Block exact-name duplicates against everything the user can already see.
@@ -60,6 +67,7 @@ export const materialsRouter = router({
         name: input.name,
         unitOfSale: input.unitOfSale,
         costPerUnit: toDecimal(input.costPerUnit),
+        category: input.category,
       });
       return db.getMaterialById(id, ctx.user.id);
     }),
@@ -77,6 +85,7 @@ export const materialsRouter = router({
       name: nameSchema.optional(),
       unitOfSale: z.enum(MATERIAL_UNITS_OF_SALE).optional(),
       costPerUnit: costSchema.optional(),
+      category: categorySchema.optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const { id, costPerUnit, ...rest } = input;

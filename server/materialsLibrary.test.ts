@@ -114,6 +114,85 @@ describe.skipIf(!hasDb)("baseline material seeding", () => {
   });
 });
 
+describe.skipIf(!hasDb)("material categories", () => {
+  beforeAll(async () => {
+    await seedBaselineMaterials();
+  });
+
+  it("shelves every starter material under the category the seed file declares", async () => {
+    const rows = await getLibraryMaterials(USER);
+    for (const seeded of BASELINE_MATERIALS) {
+      const found = rows.find(r => r.name === seeded.name && r.userId === null);
+      expect(found?.category, `wrong category for ${seeded.name}`).toBe(seeded.category);
+    }
+  });
+
+  it("leaves no starter material uncategorised", async () => {
+    const rows = await getLibraryMaterials(USER);
+    const baselines = rows.filter(r => r.userId === null);
+    expect(baselines.every(r => r.category !== null)).toBe(true);
+  });
+
+  it("re-stamps a baseline row whose category was lost, so the seed file stays the authority", async () => {
+    const db = await getDb();
+    const before = await getLibraryMaterials(USER);
+    const target = before.find(r => r.userId === null && r.name === "EMT strap")!;
+
+    await db!.update(materials).set({ category: null }).where(eq(materials.id, target.id));
+    await seedBaselineMaterials();
+
+    const after = await getMaterialById(target.id, USER);
+    expect(after?.category).toBe("Conduit Fittings");
+  });
+
+  it("backfills a fork that predates the column from the baseline it came from", async () => {
+    const rows = await getLibraryMaterials(USER);
+    const baseline = rows.find(r => r.userId === null && r.name === "3-way switch")!;
+    const forkId = await forkMaterial(baseline.id, USER);
+
+    // Simulate a row forked before `category` existed.
+    const db = await getDb();
+    await db!.update(materials).set({ category: null }).where(eq(materials.id, forkId));
+
+    await seedBaselineMaterials();
+
+    const fork = await getMaterialById(forkId, USER);
+    expect(fork?.category).toBe("Switches");
+  });
+
+  it("does not overwrite a category the user chose for their own copy", async () => {
+    const rows = await getLibraryMaterials(USER);
+    const baseline = rows.find(r => r.userId === null && r.name === "Fan-rated ceiling box")!;
+    const forkId = await forkMaterial(baseline.id, USER);
+
+    await updateMaterial(forkId, USER, { category: "Wall Plates & Misc" });
+    await seedBaselineMaterials();
+
+    const fork = await getMaterialById(forkId, USER);
+    expect(fork?.category).toBe("Wall Plates & Misc");
+  });
+
+  it("carries the category onto a fresh fork without any category-specific code", async () => {
+    const rows = await getLibraryMaterials(USER);
+    const baseline = rows.find(r => r.userId === null && r.name === "GFCI receptacle")!;
+    const forkId = await forkMaterial(baseline.id, USER);
+    const fork = await getMaterialById(forkId, USER);
+    expect(fork?.category).toBe("Receptacles");
+  });
+
+  it("restores the starter category on revert", async () => {
+    const rows = await getLibraryMaterials(USER);
+    const baseline = rows.find(r => r.userId === null && r.name === "6ft MC whip")!;
+    const forkId = await forkMaterial(baseline.id, USER);
+
+    await updateMaterial(forkId, USER, { category: "Boxes" });
+    expect((await getMaterialById(forkId, USER))?.category).toBe("Boxes");
+
+    await revertMaterialToBaseline(forkId, USER);
+    expect((await getMaterialById(forkId, USER))?.category).toBe("Lighting Hardware");
+  });
+});
+
 describe.skipIf(!hasDb)("fork and revert", () => {
   let baselineId: number;
 

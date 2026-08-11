@@ -315,6 +315,30 @@ export const ASSEMBLY_CATEGORIES = [
 export const MATERIAL_UNITS_OF_SALE = ["each", "foot", "box"] as const;
 export const LABOR_ROLES = ["apprentice", "journeyman", "foreman"] as const;
 
+/**
+ * How the material catalog is shelved. Curated, NOT user-extendable.
+ *
+ * Declaration order is the display order on the Materials screen — keep them in
+ * the order an estimator walks a job (wire, raceway, boxes, devices, gear).
+ *
+ * Deliberately NOT the same axis as ASSEMBLY_CATEGORIES above: that groups
+ * assemblies by what they accomplish ("Lighting"), this groups materials by
+ * what they physically are ("Conduit Fittings"). Do not merge them.
+ */
+export const MATERIAL_CATEGORIES = [
+  "Wire & Cable",
+  "Conduit",
+  "Conduit Fittings",
+  "Boxes",
+  "Receptacles",
+  "Switches",
+  "Wall Plates & Misc",
+  "Panels & Breakers",
+  "Lighting Hardware",
+] as const;
+
+export type MaterialCategory = (typeof MATERIAL_CATEGORIES)[number];
+
 // ─── Materials ────────────────────────────────────────────────────────────────
 // Cost only. Labor lives on the assembly, never on the material.
 export const materials = mysqlTable(
@@ -333,6 +357,12 @@ export const materials = mysqlTable(
     name: varchar("name", { length: 512 }).notNull(),
     unitOfSale: mysqlEnum("unitOfSale", MATERIAL_UNITS_OF_SALE).default("each").notNull(),
     costPerUnit: decimal("costPerUnit", { precision: 10, scale: 4 }).default("0").notNull(),
+    /**
+     * Nullable on purpose. Rows created before this column existed are honestly
+     * uncategorised rather than wrongly guessed, and a quick add does not force
+     * a filing decision. The UI shelves NULL under "Uncategorized", last.
+     */
+    category: mysqlEnum("category", MATERIAL_CATEGORIES),
 
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),

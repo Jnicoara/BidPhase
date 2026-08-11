@@ -25,6 +25,25 @@ import { smartSearch } from "@/lib/smartSearch";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
+/**
+ * Mirrors MATERIAL_CATEGORIES in drizzle/schema.ts, which is the source of
+ * truth — the client does not import from drizzle, so this is kept in step by
+ * hand, same as UNITS below. Order here is the order the sections render in.
+ */
+const CATEGORIES = [
+  "Wire & Cable",
+  "Conduit",
+  "Conduit Fittings",
+  "Boxes",
+  "Receptacles",
+  "Switches",
+  "Wall Plates & Misc",
+  "Panels & Breakers",
+  "Lighting Hardware",
+] as const;
+
+type Category = (typeof CATEGORIES)[number];
+
 type Material = {
   id: number;
   userId: number | null;
@@ -32,9 +51,16 @@ type Material = {
   name: string;
   unitOfSale: "each" | "foot" | "box";
   costPerUnit: string;
+  category: Category | null;
 };
 
 const UNITS: Material["unitOfSale"][] = ["each", "foot", "box"];
+
+/**
+ * Radix Select cannot hold an empty-string value, so "no category" travels
+ * through the pickers as this sentinel and is converted at the edges.
+ */
+const NO_CATEGORY = "__none__";
 
 /** decimal(10,4) — mirrors the bound the router enforces. */
 const MAX_COST = 999999.9999;
@@ -53,9 +79,14 @@ const UNIT_LABEL: Record<Material["unitOfSale"], string> = {
   box: "per box",
 };
 
-type Draft = { name: string; unitOfSale: Material["unitOfSale"]; costPerUnit: string };
+type Draft = {
+  name: string;
+  unitOfSale: Material["unitOfSale"];
+  costPerUnit: string;
+  category: Category | null;
+};
 
-const emptyDraft: Draft = { name: "", unitOfSale: "each", costPerUnit: "" };
+const emptyDraft: Draft = { name: "", unitOfSale: "each", costPerUnit: "", category: null };
 
 /** Shared validation for both the add form and inline edits. */
 function validateDraft(draft: Draft): string | null {
@@ -65,6 +96,38 @@ function validateDraft(draft: Draft): string | null {
   if (cost < 0) return "Cost cannot be negative.";
   if (cost > MAX_COST) return "That cost is too large.";
   return null;
+}
+
+// ─── Category picker ──────────────────────────────────────────────────────────
+
+/** Shared by the add form and the inline editor so both offer the same shelves. */
+function CategorySelect({
+  value,
+  onChange,
+  className,
+}: {
+  value: Category | null;
+  onChange: (value: Category | null) => void;
+  className?: string;
+}) {
+  return (
+    <Select
+      value={value ?? NO_CATEGORY}
+      onValueChange={next => onChange(next === NO_CATEGORY ? null : (next as Category))}
+    >
+      <SelectTrigger className={cn("h-8 w-44 text-sm", className)} aria-label="Category">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={NO_CATEGORY}>
+          <span className="text-muted-foreground">No category</span>
+        </SelectItem>
+        {CATEGORIES.map(category => (
+          <SelectItem key={category} value={category}>{category}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 // ─── Origin badge ─────────────────────────────────────────────────────────────
@@ -91,12 +154,15 @@ function OriginBadge({ material }: { material: Material }) {
 function MaterialRow({
   material,
   isBusy,
+  showCategory,
   onSave,
   onRevert,
   onRemove,
 }: {
   material: Material;
   isBusy: boolean;
+  /** True while searching, where the flat list has no section header to lean on. */
+  showCategory: boolean;
   onSave: (id: number, draft: Draft) => Promise<void>;
   onRevert: (material: Material) => void;
   onRemove: (material: Material) => void;
@@ -110,6 +176,7 @@ function MaterialRow({
       name: material.name,
       unitOfSale: material.unitOfSale,
       costPerUnit: String(Number(material.costPerUnit)),
+      category: material.category,
     });
     setEditing(true);
   };
@@ -133,6 +200,10 @@ function MaterialRow({
           className="h-8 flex-1 min-w-[12rem] text-sm"
           placeholder="Material name"
           autoFocus
+        />
+        <CategorySelect
+          value={draft.category}
+          onChange={category => setDraft({ ...draft, category })}
         />
         <Select
           value={draft.unitOfSale}
@@ -174,6 +245,11 @@ function MaterialRow({
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium truncate">{material.name}</span>
           <OriginBadge material={material} />
+          {showCategory && (
+            <span className="text-xs text-muted-foreground truncate">
+              {material.category ?? "Uncategorized"}
+            </span>
+          )}
         </div>
       </div>
 
@@ -267,14 +343,39 @@ export default function MaterialsLibraryPage() {
     [materials]
   );
 
+  const searching = query.trim().length > 0;
+
   const visible = useMemo(() => {
-    if (!query.trim()) return materials;
+    if (!searching) return materials;
     const hits = smartSearch(searchable, query, 500);
     const order = new Map(hits.map((hit, index) => [Number(hit.id), index]));
     return materials
       .filter(m => order.has(m.id))
       .sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  }, [materials, searchable, query]);
+  }, [materials, searchable, query, searching]);
+
+  /**
+   * Browsing shelves the catalog by category, in the declared order, with
+   * Uncategorized last and empty sections dropped. Searching deliberately does
+   * NOT group: sections would bury the best match under whichever shelf it
+   * happens to sit on, so those results stay flat and relevance-ordered, and
+   * each row prints its own category instead.
+   *
+   * Rows arrive name-sorted from the server, so no per-group sort is needed.
+   */
+  const groups = useMemo(() => {
+    if (searching) return [];
+    const byCategory = new Map<string, Material[]>();
+    for (const material of visible as Material[]) {
+      const key = material.category ?? "Uncategorized";
+      const bucket = byCategory.get(key);
+      if (bucket) bucket.push(material);
+      else byCategory.set(key, [material]);
+    }
+    return [...CATEGORIES, "Uncategorized"]
+      .map(label => ({ label, items: byCategory.get(label) ?? [] }))
+      .filter(group => group.items.length > 0);
+  }, [visible, searching]);
 
   const handleSave = useCallback(async (id: number, draft: Draft) => {
     setBusyId(id);
@@ -284,6 +385,7 @@ export default function MaterialsLibraryPage() {
         name: draft.name.trim(),
         unitOfSale: draft.unitOfSale,
         costPerUnit: Number(draft.costPerUnit),
+        category: draft.category,
       });
       if (result.forked) {
         toast.success(`Saved as your own copy — the starter "${result.material?.name}" is unchanged.`);
@@ -335,6 +437,7 @@ export default function MaterialsLibraryPage() {
         name: newDraft.name.trim(),
         unitOfSale: newDraft.unitOfSale,
         costPerUnit: Number(newDraft.costPerUnit),
+        category: newDraft.category,
       });
       toast.success(`Added "${newDraft.name.trim()}"`);
       setNewDraft(emptyDraft);
@@ -396,6 +499,10 @@ export default function MaterialsLibraryPage() {
                 placeholder="Material name"
                 autoFocus
               />
+              <CategorySelect
+                value={newDraft.category}
+                onChange={category => setNewDraft({ ...newDraft, category })}
+              />
               <Select
                 value={newDraft.unitOfSale}
                 onValueChange={value => setNewDraft({ ...newDraft, unitOfSale: value as Material["unitOfSale"] })}
@@ -445,16 +552,39 @@ export default function MaterialsLibraryPage() {
                 ? <>No materials match “{query}”.</>
                 : <>No materials yet. Add your first one to get started.</>}
             </div>
-          ) : (
+          ) : searching ? (
             visible.map(material => (
               <MaterialRow
                 key={material.id}
                 material={material as Material}
                 isBusy={isBusy && busyId === material.id}
+                showCategory
                 onSave={handleSave}
                 onRevert={handleRevert}
                 onRemove={handleRemove}
               />
+            ))
+          ) : (
+            groups.map(group => (
+              <div key={group.label}>
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/40 border-b border-border">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {group.label}
+                  </span>
+                  <span className="text-xs text-muted-foreground/70">{group.items.length}</span>
+                </div>
+                {group.items.map(material => (
+                  <MaterialRow
+                    key={material.id}
+                    material={material}
+                    isBusy={isBusy && busyId === material.id}
+                    showCategory={false}
+                    onSave={handleSave}
+                    onRevert={handleRevert}
+                    onRemove={handleRemove}
+                  />
+                ))}
+              </div>
             ))
           )}
         </div>

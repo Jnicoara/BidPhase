@@ -1,4 +1,4 @@
-import { and, desc, eq, asc, isNull, or, like, sql } from "drizzle-orm";
+import { and, desc, eq, asc, isNull, isNotNull, or, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -857,8 +857,67 @@ export async function seedBaselineMaterials(): Promise<void> {
 
   const missing = BASELINE_MATERIALS
     .filter(m => !alreadySeeded.has(m.name))
-    .map(m => ({ name: m.name, unitOfSale: m.unitOfSale, costPerUnit: m.costPerUnit, userId: null }));
+    .map(m => ({
+      name: m.name,
+      unitOfSale: m.unitOfSale,
+      costPerUnit: m.costPerUnit,
+      category: m.category,
+      userId: null,
+    }));
 
-  if (missing.length === 0) return;
-  await db.insert(materials).values(missing);
+  if (missing.length > 0) await db.insert(materials).values(missing);
+
+  await backfillMaterialCategories();
+}
+
+/**
+ * Bring `category` up to date on rows that predate the column.
+ *
+ * Two passes, both idempotent and both cheap enough to run on every startup:
+ *
+ *  1. Baseline rows are re-stamped from BASELINE_MATERIALS unconditionally.
+ *    They are app-owned and read-only to users, so the seed file stays the
+ *    authority — re-shelving a material there fixes live databases for free.
+ *  2. User forks that are still NULL inherit from the baseline they came from.
+ *    Only NULL is touched: a category the user chose is theirs to keep, and a
+ *    fork is allowed to sit on a different shelf than its original.
+ *
+ * Fully custom rows (no baselineId) are left alone — there is nothing to
+ * inherit from, and guessing would be worse than "Uncategorized".
+ */
+async function backfillMaterialCategories(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const baselines = await db.select({
+    id: materials.id,
+    name: materials.name,
+    category: materials.category,
+  }).from(materials).where(isNull(materials.userId));
+
+  const byName = new Map(BASELINE_MATERIALS.map(m => [m.name, m.category]));
+  const categoryById = new Map<number, (typeof BASELINE_MATERIALS)[number]["category"]>();
+
+  for (const row of baselines) {
+    const intended = byName.get(row.name);
+    if (!intended) continue; // a baseline row no longer in the seed file
+    categoryById.set(row.id, intended);
+    if (row.category !== intended) {
+      await db.update(materials).set({ category: intended }).where(eq(materials.id, row.id));
+    }
+  }
+
+  const staleForks = await db.select({ id: materials.id, baselineId: materials.baselineId })
+    .from(materials)
+    .where(and(
+      isNotNull(materials.userId),
+      isNotNull(materials.baselineId),
+      isNull(materials.category)
+    ));
+
+  for (const fork of staleForks) {
+    const inherited = fork.baselineId != null ? categoryById.get(fork.baselineId) : undefined;
+    if (!inherited) continue;
+    await db.update(materials).set({ category: inherited }).where(eq(materials.id, fork.id));
+  }
 }

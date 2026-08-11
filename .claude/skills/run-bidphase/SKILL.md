@@ -57,7 +57,7 @@ JWT_SECRET=local-dev-secret node .claude/skills/run-bidphase/smoke.mjs
 
 Finds the server (probing ports 3000–3005), authenticates, and exercises the
 Materials library end to end: listing, create, fork-on-edit, revert, and the
-refusals. Prints `22 passed, 0 failed` / `Smoke OK` and exits 0.
+refusals. Prints `31 passed, 0 failed` / `Smoke OK` and exits 0.
 
 It is **idempotent** — safe to re-run; it normalises any fork left by a
 previous run and uses timestamped names for created rows.

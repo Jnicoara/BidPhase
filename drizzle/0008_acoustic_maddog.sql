@@ -1,0 +1,1 @@
+ALTER TABLE `materials` ADD `category` enum('Wire & Cable','Conduit','Conduit Fittings','Boxes','Receptacles','Switches','Wall Plates & Misc','Panels & Breakers','Lighting Hardware');
