@@ -101,6 +101,64 @@ describe("prefix typing stays responsive", () => {
   });
 });
 
+describe("per-item search aliases", () => {
+  // Mirrors how MaterialsLibraryPage feeds the index: slang lives on the item,
+  // not in the global ALIAS_MAP, because it is a fact about one material.
+  const withAliases = [
+    { id: "1", description: "Duplex receptacle", searchAliases: "outlet plug recep wall outlet" },
+    { id: "2", description: '4" square box', searchAliases: "1900 box nineteen hundred j box" },
+    { id: "3", description: "Wall plate", searchAliases: "cover plate faceplate switch plate" },
+    { id: "4", description: "Plug gauge", searchAliases: "" },
+  ];
+  const find = (q: string) => smartSearch(withAliases, q, 10).map(r => r.description);
+
+  it("finds a material by slang that appears nowhere in its name", () => {
+    expect(find("1900")).toContain('4" square box');
+  });
+
+  it("ranks a real name match above an alias-only match for the same word", () => {
+    // "Plug gauge" has "plug" in its NAME; "Duplex receptacle" only in aliases.
+    const results = find("plug");
+    expect(results.indexOf("Plug gauge")).toBeLessThan(results.indexOf("Duplex receptacle"));
+    expect(results).toContain("Duplex receptacle");
+  });
+
+  it("an empty alias string does not match everything", () => {
+    expect(find("zzzz")).toHaveLength(0);
+  });
+
+  it("does not match a term in the middle of a word", () => {
+    // ALIAS_MAP holds two-letter maker codes; "breaker" reaches "ch" via the
+    // "eaton" entry, and an unanchored substring test found it inside "switch".
+    const boxes = [
+      { id: "1", description: "Single-gang box", searchAliases: "gem switch device" },
+      { id: "2", description: "200A main panel", searchAliases: "load center breaker box" },
+    ];
+    const results = smartSearch(boxes, "breaker", 5).map(r => r.description);
+    expect(results).toContain("200A main panel");
+    expect(results).not.toContain("Single-gang box");
+  });
+
+  it("ignores two-letter maker codes reached by association", () => {
+    // "breaker" inherits "br" from the "eaton" entry, which starts "brace".
+    const boxes = [
+      { id: "1", description: "Fan-rated ceiling box", searchAliases: "brace octagon round" },
+      { id: "2", description: "200A main panel", searchAliases: "load center breaker box" },
+    ];
+    expect(smartSearch(boxes, "breaker box", 5).map(r => r.description)).toEqual(["200A main panel"]);
+  });
+
+  it("still searches a two-letter code when it is typed directly", () => {
+    const items = [{ id: "1", description: "CH 20A breaker", searchAliases: "" }];
+    expect(smartSearch(items, "ch", 5)).toHaveLength(1);
+  });
+
+  it("still allows prefix typing against alias text", () => {
+    const nuts = [{ id: "1", description: "Wire nuts", searchAliases: "marrette twist on" }];
+    expect(smartSearch(nuts, "marret", 5)).toHaveLength(1);
+  });
+});
+
 describe("basics", () => {
   it("returns everything (capped) for an empty query", () => {
     expect(search("")).toHaveLength(MATERIALS.length);

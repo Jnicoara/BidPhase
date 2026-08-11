@@ -463,7 +463,12 @@ function matchTier(term: string, descNorm: string, descWords: string[], text: st
   const wbRe = new RegExp(`(^|\\s)${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
   if (wbRe.test(descNorm)) return 4;
   if (descNorm.includes(term)) return 5;
-  if (text.includes(term)) return 6;
+  // Tier 6 anchors at a word boundary rather than testing a raw substring.
+  // The alias map holds two-letter manufacturer codes ("ch", "cb", "br"), and
+  // an unanchored includes() found "ch" inside "switch" — which made searching
+  // "breaker" return a single-gang box. Still prefix-friendly (a word may start
+  // with the term), so typing "marret" continues to reach "marrette".
+  if (wbRe.test(text)) return 6;
   return 0;
 }
 
@@ -485,6 +490,19 @@ const TYPED_POINTS = [0, 200, 120, 80, 50, 25, 10];
  */
 const ALIAS_POINTS = [0, 70, 60, 50, 30, 15, 5];
 
+/**
+ * Alias-derived terms shorter than this are ignored.
+ *
+ * ALIAS_MAP carries two-letter manufacturer and spec codes — "ch", "cb", "br",
+ * "qo", "tr", "hg". Typed deliberately they are useful; dragged in by
+ * association they are noise, because a two-letter fragment starts a great many
+ * ordinary words. Typing "breaker" reaches the "eaton" entry and so inherits
+ * "br", which then matched "brace" and put a fan box above the panel.
+ *
+ * Only ALIAS terms are filtered. Typing "ch" yourself still searches for "ch".
+ */
+const MIN_ALIAS_TERM_LENGTH = 3;
+
 function scoreItem<T extends SearchableItem>(
   indexed: IndexedItem<T>,
   tokenExpansions: TokenExpansion[]
@@ -498,6 +516,7 @@ function scoreItem<T extends SearchableItem>(
     let bestForToken = TYPED_POINTS[matchTier(typed, descNorm, descWords, text)];
 
     for (const alias of aliases) {
+      if (alias.length < MIN_ALIAS_TERM_LENGTH) continue;
       const points = ALIAS_POINTS[matchTier(alias, descNorm, descWords, text)];
       if (points > bestForToken) bestForToken = points;
     }

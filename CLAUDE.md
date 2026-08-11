@@ -30,6 +30,33 @@ Whenever you commit a meaningful change, **also add a one-or-two-line plain-Engl
 - Write for a non-programmer reading it months later: what changed and why it matters, not which functions moved. "Fixed a security gap that let any logged-in user read another contractor's bid pricing" beats "added ownership checks to projectItemsRouter".
 - Skip it for trivial changes — typo fixes, formatting, comment-only edits.
 
+## Materials — always ship trade slang with a new material
+
+Every material added to the catalog gets `searchAliases` populated with the
+terms an electrician would actually type, not just its formal catalog name. This
+is not optional polish: a material nobody can find is a material nobody uses. An
+estimator searches "1900", "romex", "gem box", "plug" — never "4\" square box",
+"12-2 NM-B", "Single-gang box", "Duplex receptacle".
+
+Applies to `BASELINE_MATERIALS` (`server/seed/baselineMaterials.ts`) and to any
+other catalog seeded into `materials`. When adding one, ask what it is called on
+a job site, at the counter, and by the size or colour people call out — then
+write those down. Guidance and worked examples are in that file's header.
+
+Rules that keep the aliases useful rather than noisy:
+
+- **Only what the name does not already contain.** "Dimmer" needs no "dimmer".
+- **Include the spellings people type**: "12/2" as well as "12-2", "gfi" as well
+  as "gfci", "grey" as well as "gray", "jbox"/"j box".
+- **Never alias one material to a different material.** A wall plate is not an
+  alias for a receptacle. Cross-aliasing devices is exactly what made searching
+  "recep" rank "Wall plate" first (fixed in `3ad4db9`); aliases must surface a
+  material, never outrank one the query genuinely names.
+
+The global `ALIAS_MAP` in `client/src/lib/smartSearch.ts` is a *query-side*
+synonym table shared by every search box, and is the wrong place for facts about
+one material. Put per-material vocabulary on the material.
+
 ## Responsiveness — standing rules for new screens
 
 The app is used on a laptop in a truck, one-handed, against a supply-house

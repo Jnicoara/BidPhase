@@ -8,7 +8,7 @@
  * skipped without DATABASE_URL, matching how v545.test.ts expects a real DB.
  */
 import { describe, it, expect, beforeAll } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, isNull } from "drizzle-orm";
 import {
   createMaterial,
   deactivateMaterial,
@@ -190,6 +190,73 @@ describe.skipIf(!hasDb)("material categories", () => {
 
     await revertMaterialToBaseline(forkId, USER);
     expect((await getMaterialById(forkId, USER))?.category).toBe("Lighting Hardware");
+  });
+});
+
+describe.skipIf(!hasDb)("material search aliases", () => {
+  beforeAll(async () => {
+    await seedBaselineMaterials();
+  });
+
+  it("gives every starter material trade slang to be found by", async () => {
+    // Read baselines straight from the table, not through getLibraryMaterials:
+    // the merged list hides any baseline an earlier test forked.
+    const db = await getDb();
+    const rows = await db!.select().from(materials).where(isNull(materials.userId));
+    for (const seeded of BASELINE_MATERIALS) {
+      const found = rows.find(r => r.name === seeded.name);
+      expect(found?.searchAliases, `no aliases for ${seeded.name}`).toBeTruthy();
+    }
+  });
+
+  it("never repeats a word already in the material's own name", async () => {
+    // An alias that restates the name is dead weight — the name already matches,
+    // and at a higher tier than alias text can reach.
+    for (const seeded of BASELINE_MATERIALS) {
+      const nameWords = new Set(
+        seeded.name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 2)
+      );
+      const aliasWords = seeded.searchAliases.toLowerCase().split(/\s+/);
+      const restated = aliasWords.filter(w => w.length > 2 && nameWords.has(w));
+      expect(restated, `${seeded.name} restates: ${restated.join(", ")}`).toHaveLength(0);
+    }
+  });
+
+  it("re-stamps aliases that were lost, so the seed file stays the authority", async () => {
+    const db = await getDb();
+    const before = await getLibraryMaterials(USER);
+    const target = before.find(r => r.userId === null && r.name === '4" square box')!;
+
+    await db!.update(materials).set({ searchAliases: null }).where(eq(materials.id, target.id));
+    await seedBaselineMaterials();
+
+    const after = await getMaterialById(target.id, USER);
+    expect(after?.searchAliases).toContain("1900");
+  });
+
+  it("backfills a fork that predates the column from its baseline", async () => {
+    const rows = await getLibraryMaterials(USER);
+    const baseline = rows.find(r => r.userId === null && r.name === "Wire nuts")!;
+    const forkId = await forkMaterial(baseline.id, USER);
+
+    const db = await getDb();
+    await db!.update(materials).set({ searchAliases: null }).where(eq(materials.id, forkId));
+    await seedBaselineMaterials();
+
+    const fork = await getMaterialById(forkId, USER);
+    expect(fork?.searchAliases).toContain("marrette");
+  });
+
+  it("does not overwrite aliases the user wrote themselves", async () => {
+    const rows = await getLibraryMaterials(USER);
+    const baseline = rows.find(r => r.userId === null && r.name === "EMT strap")!;
+    const forkId = await forkMaterial(baseline.id, USER);
+
+    await updateMaterial(forkId, USER, { searchAliases: "my own words" });
+    await seedBaselineMaterials();
+
+    const fork = await getMaterialById(forkId, USER);
+    expect(fork?.searchAliases).toBe("my own words");
   });
 });
 

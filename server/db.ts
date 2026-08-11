@@ -862,30 +862,33 @@ export async function seedBaselineMaterials(): Promise<void> {
       unitOfSale: m.unitOfSale,
       costPerUnit: m.costPerUnit,
       category: m.category,
+      searchAliases: m.searchAliases,
       userId: null,
     }));
 
   if (missing.length > 0) await db.insert(materials).values(missing);
 
-  await backfillMaterialCategories();
+  await backfillMaterialMetadata();
 }
 
 /**
- * Bring `category` up to date on rows that predate the column.
+ * Bring catalog metadata — `category` and `searchAliases` — up to date on rows
+ * that predate those columns.
  *
  * Two passes, both idempotent and both cheap enough to run on every startup:
  *
  *  1. Baseline rows are re-stamped from BASELINE_MATERIALS unconditionally.
  *    They are app-owned and read-only to users, so the seed file stays the
- *    authority — re-shelving a material there fixes live databases for free.
+ *    authority — re-shelving a material or adding slang to it there fixes live
+ *    databases for free, with no migration.
  *  2. User forks that are still NULL inherit from the baseline they came from.
- *    Only NULL is touched: a category the user chose is theirs to keep, and a
- *    fork is allowed to sit on a different shelf than its original.
+ *    Only NULL is touched: a value the user chose is theirs to keep, and a fork
+ *    is allowed to sit on a different shelf than its original.
  *
  * Fully custom rows (no baselineId) are left alone — there is nothing to
- * inherit from, and guessing would be worse than "Uncategorized".
+ * inherit from, and guessing would be worse than leaving them blank.
  */
-async function backfillMaterialCategories(): Promise<void> {
+async function backfillMaterialMetadata(): Promise<void> {
   const db = await getDb();
   if (!db) return;
 
@@ -893,31 +896,47 @@ async function backfillMaterialCategories(): Promise<void> {
     id: materials.id,
     name: materials.name,
     category: materials.category,
+    searchAliases: materials.searchAliases,
   }).from(materials).where(isNull(materials.userId));
 
-  const byName = new Map(BASELINE_MATERIALS.map(m => [m.name, m.category]));
-  const categoryById = new Map<number, (typeof BASELINE_MATERIALS)[number]["category"]>();
+  const seedByName = new Map(BASELINE_MATERIALS.map(m => [m.name, m]));
+  const seedById = new Map<number, (typeof BASELINE_MATERIALS)[number]>();
 
   for (const row of baselines) {
-    const intended = byName.get(row.name);
+    const intended = seedByName.get(row.name);
     if (!intended) continue; // a baseline row no longer in the seed file
-    categoryById.set(row.id, intended);
-    if (row.category !== intended) {
-      await db.update(materials).set({ category: intended }).where(eq(materials.id, row.id));
+    seedById.set(row.id, intended);
+
+    const patch: Partial<InsertMaterial> = {};
+    if (row.category !== intended.category) patch.category = intended.category;
+    if (row.searchAliases !== intended.searchAliases) patch.searchAliases = intended.searchAliases;
+    if (Object.keys(patch).length > 0) {
+      await db.update(materials).set(patch).where(eq(materials.id, row.id));
     }
   }
 
-  const staleForks = await db.select({ id: materials.id, baselineId: materials.baselineId })
+  const staleForks = await db.select({
+    id: materials.id,
+    baselineId: materials.baselineId,
+    category: materials.category,
+    searchAliases: materials.searchAliases,
+  })
     .from(materials)
     .where(and(
       isNotNull(materials.userId),
       isNotNull(materials.baselineId),
-      isNull(materials.category)
+      or(isNull(materials.category), isNull(materials.searchAliases))
     ));
 
   for (const fork of staleForks) {
-    const inherited = fork.baselineId != null ? categoryById.get(fork.baselineId) : undefined;
-    if (!inherited) continue;
-    await db.update(materials).set({ category: inherited }).where(eq(materials.id, fork.id));
+    const source = fork.baselineId != null ? seedById.get(fork.baselineId) : undefined;
+    if (!source) continue;
+
+    const patch: Partial<InsertMaterial> = {};
+    if (fork.category === null) patch.category = source.category;
+    if (fork.searchAliases === null) patch.searchAliases = source.searchAliases;
+    if (Object.keys(patch).length > 0) {
+      await db.update(materials).set(patch).where(eq(materials.id, fork.id));
+    }
   }
 }

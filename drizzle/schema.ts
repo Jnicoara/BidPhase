@@ -363,6 +363,17 @@ export const materials = mysqlTable(
      * a filing decision. The UI shelves NULL under "Uncategorized", last.
      */
     category: mysqlEnum("category", MATERIAL_CATEGORIES),
+    /**
+     * Trade slang the catalog name does not contain, space-separated, so an
+     * electrician finds "Duplex receptacle" by typing "plug" and "4\" square
+     * box" by typing "1900". Matched as loose text by smartSearch, which scores
+     * it below the item's real name — an alias should surface a material, never
+     * outrank one that genuinely matches.
+     *
+     * Same shape as the older CATALOG's `searchAliases` field, deliberately, so
+     * the two can converge later. Nullable: an alias-less material still works.
+     */
+    searchAliases: text("searchAliases"),
 
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),

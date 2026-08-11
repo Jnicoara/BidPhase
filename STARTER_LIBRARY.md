@@ -47,6 +47,12 @@ These shelve materials by what they physically are. They are a different axis
 from `ASSEMBLY_CATEGORIES`, which groups assemblies by what they accomplish.
 The two are intentionally separate; do not merge them.
 
+Every material also carries `searchAliases` — the trade slang an electrician
+actually types ("1900" for a 4" square box, "romex" for NM-B, "gem box" for a
+single-gang). Those strings are not duplicated here; they live beside each row
+in `server/seed/baselineMaterials.ts`, which is where to edit them. Adding a new
+material means adding its slang too — see CLAUDE.md § Materials.
+
 ### Wire & Cable
 
 | Material | Cost | Unit |

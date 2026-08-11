@@ -52,6 +52,8 @@ type Material = {
   unitOfSale: "each" | "foot" | "box";
   costPerUnit: string;
   category: Category | null;
+  /** Space-separated trade slang, fed to smartSearch. Not shown in the UI. */
+  searchAliases: string | null;
 };
 
 const UNITS: Material["unitOfSale"][] = ["each", "foot", "box"];
@@ -338,8 +340,23 @@ export default function MaterialsLibraryPage() {
     revertMaterial.isPending || deactivateMaterial.isPending;
 
   // smartSearch caches its index by array identity, so this must stay memoised.
+  //
+  // searchAliases feeds the index's non-name text, which scores below the name
+  // itself — enough to surface "Duplex receptacle" for "plug", never enough to
+  // outrank an item the query actually names.
+  //
+  // `category` is deliberately NOT indexed. It reads like a free win, but every
+  // item on a shelf inherits the shelf's words: indexing it made "panel" return
+  // both breakers (category "Panels & Breakers") and "cover plate" return wire
+  // nuts (category "Wall Plates & Misc"). The sections are already visible on
+  // screen; the search box should match materials, not shelves.
   const searchable = useMemo(
-    () => materials.map(m => ({ id: String(m.id), description: m.name, unit: m.unitOfSale })),
+    () => materials.map(m => ({
+      id: String(m.id),
+      description: m.name,
+      unit: m.unitOfSale,
+      searchAliases: m.searchAliases,
+    })),
     [materials]
   );
 
