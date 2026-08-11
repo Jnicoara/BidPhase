@@ -10,6 +10,7 @@ import { projectAssembliesRouter } from "./routers/projectAssembliesRouter";
 import { projectItemsRouter } from "./routers/projectItemsRouter";
 import { bidSummaryRouter } from "./routers/bidSummaryRouter";
 import { featureFlagsRouter } from "./routers/featureFlagsRouter";
+import { materialsRouter } from "./routers/materialsRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -23,6 +24,7 @@ export const appRouter = router({
   projectItems: projectItemsRouter,
   bidSummary: bidSummaryRouter,
   featureFlags: featureFlagsRouter,
+  materials: materialsRouter,
 });
 
 export type AppRouter = typeof appRouter;
