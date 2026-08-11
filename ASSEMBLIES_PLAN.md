@@ -216,6 +216,7 @@ Chat panel on the takeoff page. Helps interpret dense/confusing plan sheets:
 
 1. **Foundation** — data model, customization model, pricing math. *This must exist before anything else can be built or shown.*
 2. **Library screens** — immediately after Foundation, so the data becomes visible/usable right away.
+   - **Open question for the Assemblies screen:** consider whether it should carry a *"show labor hours to contractors"* visibility toggle. An `enable_labor_units` feature flag already exists and does exactly this for the **old** Assembly Builder screen, which the Library screens replace. Decide when that screen is actually being designed — whether the behavior gets rebuilt here, moved into Settings, or dropped. Not a reason to touch the existing flag now.
 3. **Bid/Project structure** — status flow, cost-snapshot behavior.
 4. **Quick-bid (no plans) flow** — fast quantity-based bidding on top of Foundation + Library. Useful for smaller/residential jobs.
 
