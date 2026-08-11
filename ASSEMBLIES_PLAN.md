@@ -229,6 +229,8 @@ Chat panel on the takeoff page. Helps interpret dense/confusing plan sheets:
 > This is the first point in the build order where that's possible: Foundation + Library + Bid structure + Quick-bid together make a usable product without plans or takeoff. Everything from step 5 on is expansion on top of a foundation that has *not* yet been proven with a real user.
 >
 > Enforces the [STRATEGY_NOTES.md](STRATEGY_NOTES.md) verdict: *validate with real outside users before expanding scope.*
+>
+> **Blocker to clear first — login is not usable by anyone but the builder.** With `VITE_OAUTH_PORTAL_URL` unset, `getLoginUrl` throws `TypeError: Invalid URL` inside `AuthGuard`, which is a whole-app error boundary rather than a login screen — *no* page renders. Local dev currently only works by hand-setting throwaway OAuth/JWT env vars. Real user accounts have to work end-to-end before an outside electrician is handed the app, so this needs fixing before the gate, not after. Not urgent for solo development today.
 
 5. **Dashboard**
 6. **Takeoff page redesign**
