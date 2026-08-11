@@ -103,11 +103,41 @@ Underlying PDF rendering engine **stays as-is**. This redesigns the surrounding 
 
 ## LAYERS
 
-- Reuse the existing assembly **Category** field as the default layer grouping — a toggleable, color-coded checklist.
-- Affects **both** the drawing view and the live counted-items list.
-- Optional **custom tags** (e.g. "underground") for extra grouping beyond category.
-- Scales to multi-trade later via the **Trade** field.
+*Revised design — supersedes the earlier single-grouping-plus-custom-tags approach.*
+
+**Two independent, toggleable layer groups** rather than one.
+
+### 1. By System
+
+Reuses the existing assembly **Category** field: Devices, Lighting, Panels, Equipment Connections, Low Voltage/EMS.
+
+### 2. By Location
+
+A new, **separate** list: Underground, Slab/Floor, Wall, Ceiling/Overhead, Exposed, Roof.
+
+### Why these are two different kinds of thing
+
+This is the distinction that drives the whole design:
+
+- **Category is a fixed property of the assembly itself.** A duplex receptacle is always "Devices," on every job, forever. It travels with the library item.
+- **Location is NOT fixed to the assembly.** It's tagged on the **specific placed item** at the moment it's counted on a takeoff plan — because the same assembly can sit in different physical locations on different jobs, or even on the same job.
+
+Collapsing these into one list would force a false choice; keeping them separate is what makes both useful.
+
+### Behavior
+
+- Both groups toggle **independently** and **combine** — e.g. show only Electrical **and** only Underground at once.
+- Layer state affects **both** the drawing view and the live counted-items list.
+- Color-coded checklist.
 - Default: **all layers on** when a sheet is first opened.
+
+### Trade-agnostic by design
+
+The Location list is **shared across all trades** — "Underground" means the same thing for electrical conduit and plumbing pipe. That shared vocabulary is what enables **cross-trade conflict visibility** later, once more than one trade exists (see [MULTI-TRADE STRUCTURE](#multi-trade-structure)). System/Category grouping stays trade-scoped via the **Trade** field.
+
+### Implementation timing
+
+**Location tagging is not part of Foundation.** It lands with the [TAKEOFF PAGE REDESIGN](#takeoff-page-redesign) (build step 6), because a location tag only exists once there's a placed item on a plan to attach it to. Nothing in the Foundation schema stores it today — Category alone is live.
 
 ## MULTI-TRADE STRUCTURE
 
