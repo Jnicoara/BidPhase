@@ -10,6 +10,9 @@
  *    with a token that begins with "outl" (e.g. "outlet") — feels instant.
  *  - Tiered scoring: exact > description-starts-with > word-starts-with >
  *    word-boundary-contains > anywhere-contains.
+ *  - Typed words outrank aliases: the same tier ladder is priced twice, once
+ *    for what the user typed and once, lower, for anything the alias map
+ *    reached. See TYPED_POINTS / ALIAS_POINTS.
  *  - All-tokens-must-match filter: every typed token (or its alias expansion)
  *    must appear somewhere in the item — no more noise from partial alias hits.
  *  - Rich alias map with trade slang, abbreviations, and brand names.
@@ -392,17 +395,34 @@ function buildIndex<T extends SearchableItem>(items: T[]): IndexedItem<T>[] {
 }
 
 // ─── Expand a single token against the alias map ─────────────────────────────
-// Returns the original token plus all alias expansions (normalized).
-function expandToken(token: string): string[] {
-  const result = new Set<string>([token]);
+/**
+ * What one typed word matched, kept split by provenance.
+ *
+ * The split matters because alias expansion is lossy in one direction: an entry
+ * matches if ANY of its values matches, and then ALL of its values join the set.
+ * So typing "recep" pulls in "wall plate", because "outlet cover" happens to
+ * list both "receptacle plate" and "wall plate". That association is real and
+ * worth keeping — it is what makes "outl cov" find wall plates — but it is much
+ * weaker evidence than the word the user actually typed, and scoreItem prices
+ * the two differently.
+ */
+interface TokenExpansion {
+  /** Exactly what the user typed, normalized. */
+  typed: string;
+  /** Everything reached through ALIAS_MAP. Never includes `typed`. */
+  aliases: string[];
+}
+
+function expandToken(token: string): TokenExpansion {
+  const aliases = new Set<string>();
 
   // Direct key match (full or prefix of key)
   for (const [key, expansions] of Object.entries(ALIAS_MAP)) {
     const nk = normalize(key);
     // The typed token matches the alias key (starts-with for prefix typing)
     if (nk === token || nk.startsWith(token) || token.startsWith(nk)) {
-      result.add(nk);
-      for (const e of expansions) result.add(normalize(e));
+      aliases.add(nk);
+      for (const e of expansions) aliases.add(normalize(e));
     }
   }
 
@@ -411,79 +431,78 @@ function expandToken(token: string): string[] {
     for (const exp of expansions) {
       const ne = normalize(exp);
       if (ne === token || ne.startsWith(token) || token.startsWith(ne)) {
-        result.add(normalize(key));
-        for (const e2 of expansions) result.add(normalize(e2));
+        aliases.add(normalize(key));
+        for (const e2 of expansions) aliases.add(normalize(e2));
         break;
       }
     }
   }
 
-  return Array.from(result);
+  aliases.delete(token);
+  return { typed: token, aliases: Array.from(aliases) };
 }
 
 // ─── Score a single indexed item against all expanded token sets ──────────────
-// Scoring tiers (per token):
-//   200 — exact full description match
-//   120 — description starts with token
-//    80 — a description word starts with token (prefix match — great for typing)
-//    50 — token appears at a word boundary in description
-//    25 — token appears anywhere in description
-//    10 — token appears in category / id / aliases
-//     0 — no match (this token disqualifies the item if ALL expansions miss)
+
+/**
+ * How strongly a term matches an item. 0 = not at all; 1 is strongest.
+ *
+ *   1 — exact full description match
+ *   2 — description starts with the term
+ *   3 — a description word starts with the term (prefix match — great for typing)
+ *   4 — the term appears at a word boundary (only reachable by multi-word terms,
+ *       which tier 3 cannot see because descWords holds single words)
+ *   5 — the term appears anywhere in the description
+ *   6 — the term appears only in category / id / alias text
+ */
+function matchTier(term: string, descNorm: string, descWords: string[], text: string): number {
+  if (!term) return 0;
+  if (descNorm === term) return 1;
+  if (descNorm.startsWith(term)) return 2;
+  if (descWords.some((w) => w.startsWith(term))) return 3;
+  const wbRe = new RegExp(`(^|\\s)${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+  if (wbRe.test(descNorm)) return 4;
+  if (descNorm.includes(term)) return 5;
+  if (text.includes(term)) return 6;
+  return 0;
+}
+
+/** Points per tier for the word the user actually typed. Index 0 is unused. */
+const TYPED_POINTS = [0, 200, 120, 80, 50, 25, 10];
+
+/**
+ * Points per tier for a term reached through the alias map.
+ *
+ * The whole band sits below TYPED_POINTS[3]: even a perfect alias match (70)
+ * loses to an item whose own name merely starts one of its words with what was
+ * typed (80). That ordering is the point of this table — without it, searching
+ * "recep" ranked "Wall plate" (an exact hit on the alias "wall plate", dragged
+ * in via "outlet cover") above "Duplex receptacle" (a real prefix hit on the
+ * typed word). Keep ALIAS_POINTS[1] < TYPED_POINTS[3] or that returns.
+ *
+ * Alias matches stay well above zero because they are often the ONLY signal —
+ * "romex" finds "14-2 NM-B" purely by association, and must still rank.
+ */
+const ALIAS_POINTS = [0, 70, 60, 50, 30, 15, 5];
+
 function scoreItem<T extends SearchableItem>(
   indexed: IndexedItem<T>,
-  tokenExpansions: string[][]
+  tokenExpansions: TokenExpansion[]
 ): number {
   const { text, descWords } = indexed;
   const descNorm = descWords.join(" ");
 
   let totalScore = 0;
 
-  for (const expansions of tokenExpansions) {
-    let bestForToken = 0;
+  for (const { typed, aliases } of tokenExpansions) {
+    let bestForToken = TYPED_POINTS[matchTier(typed, descNorm, descWords, text)];
 
-    for (const exp of expansions) {
-      if (!exp) continue;
-
-      // Tier 1: exact description match
-      if (descNorm === exp) {
-        bestForToken = Math.max(bestForToken, 200);
-        continue;
-      }
-
-      // Tier 2: description starts with this expansion
-      if (descNorm.startsWith(exp)) {
-        bestForToken = Math.max(bestForToken, 120);
-        continue;
-      }
-
-      // Tier 3: any description word starts with this expansion (prefix typing)
-      const prefixMatch = descWords.some((w) => w.startsWith(exp));
-      if (prefixMatch) {
-        bestForToken = Math.max(bestForToken, 80);
-        continue;
-      }
-
-      // Tier 4: word-boundary match in description
-      const wbRe = new RegExp(`(^|\\s)${exp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
-      if (wbRe.test(descNorm)) {
-        bestForToken = Math.max(bestForToken, 50);
-        continue;
-      }
-
-      // Tier 5: substring in description
-      if (descNorm.includes(exp)) {
-        bestForToken = Math.max(bestForToken, 25);
-        continue;
-      }
-
-      // Tier 6: appears in category / id / aliases (non-description text)
-      if (text.includes(exp)) {
-        bestForToken = Math.max(bestForToken, 10);
-      }
+    for (const alias of aliases) {
+      const points = ALIAS_POINTS[matchTier(alias, descNorm, descWords, text)];
+      if (points > bestForToken) bestForToken = points;
     }
 
-    // If no expansion matched at all, this item doesn't qualify
+    // If neither the typed word nor any alias matched, this item doesn't qualify
     if (bestForToken === 0) return 0;
     totalScore += bestForToken;
   }
