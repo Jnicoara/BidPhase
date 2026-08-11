@@ -157,6 +157,38 @@ export function roundMoney(value: number): number {
   return fromCents(toCents(value));
 }
 
+// ─── Labor rates ──────────────────────────────────────────────────────────────
+
+/** The conventional full-time year: 40 h × 52 weeks. A starting point, not a fact. */
+export const DEFAULT_ANNUAL_HOURS = 2080;
+
+/**
+ * Effective hourly rate for a salaried role, for use in bidding and overhead.
+ *
+ * `annualHours` is deliberately an input rather than a constant. 2,080 is the
+ * payroll year, but a shop that loses time to travel, training and shop work
+ * may only bill 1,850 — and billing a $60k project manager at 2,080 hours
+ * quietly under-recovers their cost on every job. Whoever knows the real number
+ * should be able to type it in.
+ *
+ * Rounds to whole cents: an unrounded rate multiplied across hundreds of takeoff
+ * hours drifts, and the rate is a figure people read and sanity-check.
+ */
+export function effectiveHourlyRate(annualSalary: number, annualHours: number): number {
+  assertFinite(annualSalary, "annualSalary");
+  assertFinite(annualHours, "annualHours");
+
+  if (annualSalary < 0) {
+    throw new Error(`annualSalary cannot be negative, received: ${annualSalary}`);
+  }
+  // Zero hours has no meaningful rate — it is a division by zero, not "free".
+  if (annualHours <= 0) {
+    throw new Error(`annualHours must be greater than zero, received: ${annualHours}`);
+  }
+
+  return fromCents(roundToInt(toCents(annualSalary) / annualHours));
+}
+
 // ─── Step 1 — Direct Cost ─────────────────────────────────────────────────────
 
 /**

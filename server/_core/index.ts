@@ -8,7 +8,12 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { seedBaselineMaterials, seedDefaultFeatureFlags } from "../db";
+import {
+  seedBaselineLaborRates,
+  seedBaselineMaterials,
+  seedBaselineModifiers,
+  seedDefaultFeatureFlags,
+} from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -65,6 +70,9 @@ async function startServer() {
     seedDefaultFeatureFlags().catch(err => console.warn("[FeatureFlags] Seed failed:", err));
     // Seed the baseline material library (no-op if already seeded)
     seedBaselineMaterials().catch(err => console.warn("[BaselineMaterials] Seed failed:", err));
+    // Seed the baseline labor roles and job-condition modifiers (no-ops if seeded)
+    seedBaselineLaborRates().catch(err => console.warn("[BaselineLaborRates] Seed failed:", err));
+    seedBaselineModifiers().catch(err => console.warn("[BaselineModifiers] Seed failed:", err));
   });
 }
 

@@ -10,6 +10,8 @@
 import { describe, it, expect } from "vitest";
 import {
   applyModifiersToHours,
+  DEFAULT_ANNUAL_HOURS,
+  effectiveHourlyRate,
   calculateBidPrice,
   calculateLineItem,
   calculateMaterialCost,
@@ -22,6 +24,63 @@ import {
   sumModifiers,
   toCents,
 } from "@shared/pricing";
+
+// ─── Salary → effective hourly rate ───────────────────────────────────────────
+
+describe("effectiveHourlyRate", () => {
+  it("converts the starter project manager at the payroll year", () => {
+    // $60,000 ÷ 2,080 h = $28.846… → $28.85
+    expect(effectiveHourlyRate(60000, DEFAULT_ANNUAL_HOURS)).toBeCloseTo(28.85, 10);
+  });
+
+  it("defaults to a 2,080-hour year", () => {
+    expect(DEFAULT_ANNUAL_HOURS).toBe(2080);
+  });
+
+  it("charges more per hour when fewer hours are actually billable", () => {
+    // The whole reason hours are editable: the same salary over a shorter
+    // productive year has to be recovered at a higher rate.
+    const payrollYear = effectiveHourlyRate(60000, 2080);
+    const realYear = effectiveHourlyRate(60000, 1850);
+    expect(realYear).toBeGreaterThan(payrollYear);
+    expect(realYear).toBeCloseTo(32.43, 10);
+  });
+
+  it("rounds to whole cents so the rate is a figure people can read", () => {
+    const rate = effectiveHourlyRate(100000, 2080);
+    expect(rate).toBeCloseTo(48.08, 10);
+    expect(Math.round(rate * 100)).toBe(rate * 100);
+  });
+
+  it("treats zero salary as a zero rate rather than an error", () => {
+    expect(effectiveHourlyRate(0, 2080)).toBe(0);
+  });
+
+  it("refuses zero hours — that is a division by zero, not a free employee", () => {
+    expect(() => effectiveHourlyRate(60000, 0)).toThrow(/greater than zero/i);
+  });
+
+  it("refuses negative hours", () => {
+    expect(() => effectiveHourlyRate(60000, -100)).toThrow(/greater than zero/i);
+  });
+
+  it("refuses a negative salary", () => {
+    expect(() => effectiveHourlyRate(-1, 2080)).toThrow(/cannot be negative/i);
+  });
+
+  it("rejects non-finite inputs", () => {
+    expect(() => effectiveHourlyRate(Number.NaN, 2080)).toThrow(/finite/i);
+    expect(() => effectiveHourlyRate(60000, Number.POSITIVE_INFINITY)).toThrow(/finite/i);
+  });
+
+  it("feeds a line item exactly like an hourly rate does", () => {
+    // The point of deriving a rate: downstream pricing cannot tell the
+    // difference between a salaried role and an hourly one.
+    const rate = effectiveHourlyRate(60000, 2080);
+    const line = calculateLineItem({ materials: [], baseLaborHours: 10, laborRate: rate });
+    expect(line.laborCost).toBeCloseTo(288.5, 10);
+  });
+});
 
 // ─── Modifiers: ADD, never compound ───────────────────────────────────────────
 

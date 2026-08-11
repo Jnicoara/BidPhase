@@ -11,6 +11,8 @@ import { projectItemsRouter } from "./routers/projectItemsRouter";
 import { bidSummaryRouter } from "./routers/bidSummaryRouter";
 import { featureFlagsRouter } from "./routers/featureFlagsRouter";
 import { materialsRouter } from "./routers/materialsRouter";
+import { laborRatesRouter } from "./routers/laborRatesRouter";
+import { modifiersRouter } from "./routers/modifiersRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -25,6 +27,8 @@ export const appRouter = router({
   bidSummary: bidSummaryRouter,
   featureFlags: featureFlagsRouter,
   materials: materialsRouter,
+  laborRates: laborRatesRouter,
+  modifiers: modifiersRouter,
 });
 
 export type AppRouter = typeof appRouter;

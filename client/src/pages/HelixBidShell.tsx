@@ -18,7 +18,9 @@
  *   /trash       → Trash
  *   /matdb       → Material Database (supply-house price list)
  *   /assemblies  → Assembly Builder
- *   /library/materials → Materials (Foundation library catalog)
+ *   /library/materials   → Materials (Foundation library catalog)
+ *   /library/labor-rates → Labor Rates (roles and what they cost per hour)
+ *   /library/modifiers   → Modifiers (job-condition labor adjustments)
  *   /admin       → Admin Settings (admin role only)
  */
 import { useApp } from "@/contexts/AppContext";
@@ -36,7 +38,9 @@ import ProjectDetailPage from "@/pages/ProjectDetailPage";
 import AssemblyBuilderPage from "@/pages/AssemblyBuilderPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
 import MaterialsLibraryPage from "@/pages/MaterialsLibraryPage";
-import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes } from "lucide-react";
+import LaborRatesPage from "@/pages/LaborRatesPage";
+import ModifiersPage from "@/pages/ModifiersPage";
+import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes, HardHat, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Route =
@@ -55,6 +59,8 @@ type Route =
   | "matdb"
   | "assemblies"
   | "library-materials"
+  | "library-labor-rates"
+  | "library-modifiers"
   | "admin";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
@@ -79,9 +85,12 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   if (p === "settings") return { route: "settings" };
   if (p === "trash") return { route: "trash" };
   if (p === "assemblies") return { route: "assemblies" };
-  // Library § Materials. Bare /library lands on Materials until the other
-  // Library screens (Labor Rates, Assemblies) exist.
-  if (p === "library" && (!parts[1] || parts[1] === "materials")) return { route: "library-materials" };
+  // Library § …. Bare /library lands on Materials; Assemblies is still to come.
+  if (p === "library") {
+    if (parts[1] === "labor-rates") return { route: "library-labor-rates" };
+    if (parts[1] === "modifiers") return { route: "library-modifiers" };
+    if (!parts[1] || parts[1] === "materials") return { route: "library-materials" };
+  }
   if (p === "admin") return { route: "admin" };
   // Default: show homepage
   return { route: "home" };
@@ -121,6 +130,10 @@ export default function HelixBidShell() {
       window.location.hash = `/project/${id}`;
     } else if (r === "library-materials") {
       window.location.hash = "/library/materials";
+    } else if (r === "library-labor-rates") {
+      window.location.hash = "/library/labor-rates";
+    } else if (r === "library-modifiers") {
+      window.location.hash = "/library/modifiers";
     } else {
       window.location.hash = `/${r}`;
     }
@@ -174,6 +187,8 @@ export default function HelixBidShell() {
   const isInMatDb         = route === "matdb";
   const isInAssemblies    = route === "assemblies";
   const isInLibraryMats   = route === "library-materials";
+  const isInLaborRates    = route === "library-labor-rates";
+  const isInModifiers     = route === "library-modifiers";
   const isInAdmin         = route === "admin";
 
   const currentCategory = isInCategory
@@ -204,6 +219,8 @@ export default function HelixBidShell() {
     if (isInEstimate)    return <EstimateEnginePage onBack={goBack} />;
     if (isInAssemblies)  return <AssemblyBuilderPage />;
     if (isInLibraryMats) return <MaterialsLibraryPage />;
+    if (isInLaborRates)  return <LaborRatesPage />;
+    if (isInModifiers)   return <ModifiersPage />;
     if (isInAdmin)       return <AdminSettingsPage />;
     // Legacy category workspace
     return <UnifiedProjects category={currentCategory} />;
@@ -303,6 +320,20 @@ export default function HelixBidShell() {
             icon={Boxes}
             label="Materials"
             title="Materials (Library)"
+          />
+          <NavBtn
+            onClick={() => navigate("library-labor-rates")}
+            isActive={isInLaborRates}
+            icon={HardHat}
+            label="Labor Rates"
+            title="Labor Rates (Library)"
+          />
+          <NavBtn
+            onClick={() => navigate("library-modifiers")}
+            isActive={isInModifiers}
+            icon={SlidersHorizontal}
+            label="Modifiers"
+            title="Modifiers (Library)"
           />
         </nav>
 

@@ -313,7 +313,34 @@ export const ASSEMBLY_CATEGORIES = [
 ] as const;
 
 export const MATERIAL_UNITS_OF_SALE = ["each", "foot", "box"] as const;
-export const LABOR_ROLES = ["apprentice", "journeyman", "foreman"] as const;
+
+/**
+ * How a labor role is paid.
+ *
+ * Replaces the old fixed LABOR_ROLES enum (apprentice/journeyman/foreman):
+ * roles are a contractor's own org chart, so the NAME is free text and only the
+ * pay shape is constrained. Nothing consumed the old enum — labor_rates had no
+ * router or screen — so it was dropped rather than migrated.
+ */
+export const LABOR_RATE_TYPES = ["hourly", "salary"] as const;
+export type LaborRateType = (typeof LABOR_RATE_TYPES)[number];
+
+/**
+ * Lifecycle of a modifier.
+ *
+ *   active   — in the working list.
+ *   archived — removed from the working list but restorable. This is what
+ *              "delete" does; there is no hard delete from the active list.
+ *   deleted  — a tombstone, shown nowhere and not restorable.
+ *
+ * The tombstone exists because of the fork model. Archiving a starter modifier
+ * forks it, and that fork is what hides the shared starter row from the list.
+ * Hard-deleting the fork would resurrect the starter, so "Delete Forever" on a
+ * starter-derived row marks it `deleted` instead. Fully custom rows have no
+ * starter to suppress and ARE hard-deleted.
+ */
+export const MODIFIER_STATUSES = ["active", "archived", "deleted"] as const;
+export type ModifierStatus = (typeof MODIFIER_STATUSES)[number];
 
 /**
  * How the material catalog is shelved. Curated, NOT user-extendable.
@@ -399,8 +426,24 @@ export const laborRates = mysqlTable(
     baselineVersion: int("baselineVersion"),
     version: int("version").default(1).notNull(),
 
-    role: mysqlEnum("role", LABOR_ROLES).notNull(),
+    /** Free text. Roles are the contractor's own org chart, not a fixed list. */
+    name: varchar("name", { length: 255 }).notNull(),
+    rateType: mysqlEnum("rateType", LABOR_RATE_TYPES).default("hourly").notNull(),
+
+    /** The rate for an hourly role. Ignored when rateType is "salary". */
     hourlyCost: decimal("hourlyCost", { precision: 10, scale: 4 }).default("0").notNull(),
+
+    /**
+     * Salary inputs, kept RAW and separate from any computed rate.
+     *
+     * The effective hourly rate is derived on read (see effectiveHourlyRate in
+     * shared/pricing.ts), never stored — storing it would let the number drift
+     * out of step with the salary and hours it came from. Both stay editable
+     * because a contractor revises them independently: a raise changes the
+     * salary, a shop that really works 1,900 productive hours changes the hours.
+     */
+    annualSalary: decimal("annualSalary", { precision: 12, scale: 2 }),
+    annualHours: decimal("annualHours", { precision: 8, scale: 2 }),
 
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -437,6 +480,11 @@ export const modifiers = mysqlTable(
      */
     scope: mysqlEnum("scope", ["global", "assembly"]).default("global").notNull(),
 
+    /** active / archived / deleted — see MODIFIER_STATUSES. */
+    status: mysqlEnum("status", MODIFIER_STATUSES).default("active").notNull(),
+    /** When it left the active list. Orders the Archived view, newest first. */
+    archivedAt: timestamp("archivedAt"),
+
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -444,6 +492,7 @@ export const modifiers = mysqlTable(
   t => [
     index("modifiers_userId_idx").on(t.userId),
     index("modifiers_baselineId_idx").on(t.baselineId),
+    index("modifiers_status_idx").on(t.status),
   ]
 );
 

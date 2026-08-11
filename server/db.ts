@@ -17,6 +17,13 @@ import {
   InsertMaterial,
   Material,
   materials,
+  InsertLaborRate,
+  LaborRate,
+  laborRates,
+  InsertModifier,
+  Modifier,
+  ModifierStatus,
+  modifiers,
   projects,
   userMaterialsDb,
   users,
@@ -32,6 +39,8 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { BASELINE_MATERIALS } from "./seed/baselineMaterials";
+import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
+import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -689,7 +698,7 @@ export async function seedDefaultFeatureFlags(): Promise<void> {
  * /matdb fields), they start copying correctly with no change here. An
  * allowlist would silently drop them instead.
  */
-const MATERIAL_OWNERSHIP_FIELDS = [
+const LIBRARY_OWNERSHIP_FIELDS = [
   "id",
   "userId",
   "baselineId",
@@ -697,14 +706,79 @@ const MATERIAL_OWNERSHIP_FIELDS = [
   "version",
   "createdAt",
   "updatedAt",
+  // Lifecycle, not content. A fresh fork starts `active` from the column
+  // default, and reverting a modifier to its starter values must not silently
+  // pull an archived row back into the working list.
+  "status",
+  "archivedAt",
 ] as const;
 
-/** Strip ownership columns, leaving only the content worth copying. */
-function materialContentFields(row: Material): Partial<InsertMaterial> {
-  const copy: Record<string, unknown> = { ...row };
-  for (const field of MATERIAL_OWNERSHIP_FIELDS) delete copy[field];
-  return copy as Partial<InsertMaterial>;
+/**
+ * Run a seeder under a MySQL advisory lock, so two processes cannot both decide
+ * a starter row is missing and both insert it.
+ *
+ * This is not hypothetical: seeding is check-then-insert with no uniqueness
+ * constraint to fall back on, and the dev server (which reseeds on every tsx
+ * watch restart) plus vitest's parallel test files hit the same database at
+ * once. That race duplicated every labor rate and modifier on first run.
+ *
+ * A named lock is the right tool because the tables cannot express this as a
+ * UNIQUE index: baseline rows are keyed by `userId IS NULL`, and MySQL lets any
+ * number of NULLs coexist in a unique index.
+ */
+async function withSeedLock(name: string, run: () => Promise<void>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  // 10s is generous for a handful of inserts; on timeout we skip rather than
+  // seed unguarded, and the next startup tries again.
+  const [rows] = await db.execute(sql`SELECT GET_LOCK(${name}, 10) AS acquired`);
+  const acquired = (rows as unknown as Array<{ acquired: number | null }>)[0]?.acquired;
+  if (acquired !== 1) {
+    console.warn(`[Seed] Could not acquire lock "${name}" — skipping this pass.`);
+    return;
+  }
+
+  try {
+    await run();
+  } finally {
+    await db.execute(sql`SELECT RELEASE_LOCK(${name})`);
+  }
 }
+
+/**
+ * Drop duplicate baseline rows left by a pre-lock race, keeping the lowest id.
+ *
+ * Self-healing rather than a migration: the duplicates are data damage, not a
+ * schema change, and any database that ran the old seeder concurrently has them.
+ * Runs inside the seed lock, before inserting, so it never fights a live writer.
+ */
+async function dedupeBaselineRows(table: "materials" | "labor_rates" | "modifiers"): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Table name is a compile-time constant from the union above, never user input.
+  await db.execute(sql.raw(
+    `DELETE dupe FROM \`${table}\` dupe
+     JOIN \`${table}\` keeper
+       ON dupe.name = keeper.name AND dupe.id > keeper.id
+     WHERE dupe.userId IS NULL AND keeper.userId IS NULL`
+  ));
+}
+
+/**
+ * Strip ownership columns, leaving only the content worth copying.
+ *
+ * Shared by materials, labor rates and modifiers — all three have the identical
+ * baseline/fork shape, so the copy rule is identical too.
+ */
+function contentFields<TRow extends object, TInsert>(row: TRow): Partial<TInsert> {
+  const copy: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+  for (const field of LIBRARY_OWNERSHIP_FIELDS) delete copy[field];
+  return copy as Partial<TInsert>;
+}
+
+/** Back-compat alias — materials read better with the specific name. */
+const materialContentFields = (row: Material) => contentFields<Material, InsertMaterial>(row);
 
 /**
  * Collapse baseline + user rows into the one list a user should see.
@@ -769,7 +843,7 @@ export async function updateMaterial(id: number, userId: number, data: Partial<I
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
-  for (const field of MATERIAL_OWNERSHIP_FIELDS) delete safe[field];
+  for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
   await db.update(materials).set({ ...safe, updatedAt: new Date() })
     .where(and(eq(materials.id, id), eq(materials.userId, userId)));
 }
@@ -848,8 +922,14 @@ export async function revertMaterialToBaseline(id: number, userId: number) {
  * new one rather than rename the old — intentional, since users may have forked it.
  */
 export async function seedBaselineMaterials(): Promise<void> {
+  await withSeedLock("helixbid:seed:materials", seedBaselineMaterialsUnlocked);
+}
+
+async function seedBaselineMaterialsUnlocked(): Promise<void> {
   const db = await getDb();
   if (!db) return;
+
+  await dedupeBaselineRows("materials");
 
   const existing = await db.select({ name: materials.name }).from(materials)
     .where(isNull(materials.userId));
@@ -939,4 +1019,318 @@ async function backfillMaterialMetadata(): Promise<void> {
       await db.update(materials).set(patch).where(eq(materials.id, fork.id));
     }
   }
+}
+
+// â”€â”€â”€ Labor Rates (Foundation library) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//
+// Same ownership model as Materials: userId NULL is a shipped starter row, a
+// user editing one gets a fork, revert restores the starter content.
+//
+// A salaried role stores annualSalary and annualHours and NEVER a computed
+// rate â€” see effectiveHourlyRate in shared/pricing.ts for why.
+
+/** Starter rows plus the user's own, forked starters collapsed away. */
+export async function getLibraryLaborRates(userId: number): Promise<LaborRate[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(laborRates)
+    .where(and(
+      or(isNull(laborRates.userId), eq(laborRates.userId, userId)),
+      eq(laborRates.isActive, true)
+    ))
+    .orderBy(asc(laborRates.name));
+  return mergeLibraryRows(rows, userId);
+}
+
+/** A single labor rate the user may see â€” their own, or a starter. */
+export async function getLaborRateById(id: number, userId: number): Promise<LaborRate | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(laborRates)
+    .where(and(
+      eq(laborRates.id, id),
+      or(isNull(laborRates.userId), eq(laborRates.userId, userId))
+    ))
+    .limit(1);
+  return result[0];
+}
+
+export async function createLaborRate(data: InsertLaborRate): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(laborRates).values(data);
+  return result.insertId;
+}
+
+/** Update one of the user's own rates. Starter rows have userId NULL and never match. */
+export async function updateLaborRate(id: number, userId: number, data: Partial<InsertLaborRate>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
+  await db.update(laborRates).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(laborRates.id, id), eq(laborRates.userId, userId)));
+}
+
+/** Soft-delete â€” assemblies may already price against this role. */
+export async function deactivateLaborRate(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(laborRates).set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(laborRates.id, id), eq(laborRates.userId, userId)));
+}
+
+/** Give the user their own editable copy of a starter rate. Idempotent. */
+export async function forkLaborRate(baselineId: number, userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [existing] = await db.select().from(laborRates)
+    .where(and(eq(laborRates.userId, userId), eq(laborRates.baselineId, baselineId)))
+    .limit(1);
+  if (existing) return existing.id;
+
+  const [baseline] = await db.select().from(laborRates)
+    .where(and(eq(laborRates.id, baselineId), isNull(laborRates.userId)))
+    .limit(1);
+  if (!baseline) throw new Error("Baseline labor rate not found");
+
+  const [result] = await db.insert(laborRates).values({
+    ...contentFields<LaborRate, InsertLaborRate>(baseline),
+    userId,
+    baselineId: baseline.id,
+    baselineVersion: baseline.version,
+  } as InsertLaborRate);
+  return result.insertId;
+}
+
+/** Discard the user's edits, restoring the starter content. Keeps the row id. */
+export async function revertLaborRateToBaseline(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [fork] = await db.select().from(laborRates)
+    .where(and(eq(laborRates.id, id), eq(laborRates.userId, userId)))
+    .limit(1);
+  if (!fork) throw new Error("Labor rate not found");
+  if (fork.baselineId == null) {
+    throw new Error("Labor rate was created from scratch â€” there is no original to revert to");
+  }
+
+  const [baseline] = await db.select().from(laborRates)
+    .where(and(eq(laborRates.id, fork.baselineId), isNull(laborRates.userId)))
+    .limit(1);
+  if (!baseline) throw new Error("Baseline labor rate no longer exists");
+
+  await db.update(laborRates)
+    .set({
+      ...contentFields<LaborRate, InsertLaborRate>(baseline),
+      baselineVersion: baseline.version,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(laborRates.id, id), eq(laborRates.userId, userId)));
+}
+
+/** Seed the shipped starter roles. Idempotent, matched by name. */
+export async function seedBaselineLaborRates(): Promise<void> {
+  await withSeedLock("helixbid:seed:labor_rates", async () => {
+    const db = await getDb();
+    if (!db) return;
+
+    await dedupeBaselineRows("labor_rates");
+
+    const existing = await db.select({ name: laborRates.name }).from(laborRates)
+      .where(isNull(laborRates.userId));
+    const alreadySeeded = new Set(existing.map(row => row.name));
+
+    const missing = BASELINE_LABOR_RATES
+      .filter(r => !alreadySeeded.has(r.name))
+      .map(r => ({ ...r, userId: null }));
+
+    if (missing.length > 0) await db.insert(laborRates).values(missing);
+  });
+}
+
+// â”€â”€â”€ Modifiers (Foundation library) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//
+// Ownership works exactly as it does for materials and labor rates. What is
+// different is the lifecycle: modifiers are never hard-deleted out of the
+// working list, they are archived and can be restored. See MODIFIER_STATUSES.
+//
+// `isActive` on this table is vestigial â€” `status` is authoritative. It is left
+// at its default so the column shape still matches the other library tables.
+
+/**
+ * Modifiers in one lifecycle state.
+ *
+ * Merge runs BEFORE the status filter, and that order matters: a user's fork
+ * hides the starter row it came from regardless of what state the fork is in,
+ * which is exactly how archiving a starter modifier makes it disappear from the
+ * active list without touching the shared row.
+ */
+export async function getLibraryModifiers(
+  userId: number,
+  status: ModifierStatus = "active"
+): Promise<Modifier[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(modifiers)
+    .where(or(isNull(modifiers.userId), eq(modifiers.userId, userId)))
+    .orderBy(asc(modifiers.name));
+
+  return mergeLibraryRows(rows, userId).filter(row => row.status === status);
+}
+
+export async function getModifierById(id: number, userId: number): Promise<Modifier | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(modifiers)
+    .where(and(
+      eq(modifiers.id, id),
+      or(isNull(modifiers.userId), eq(modifiers.userId, userId))
+    ))
+    .limit(1);
+  return result[0];
+}
+
+export async function createModifier(data: InsertModifier): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(modifiers).values(data);
+  return result.insertId;
+}
+
+export async function updateModifier(id: number, userId: number, data: Partial<InsertModifier>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
+  await db.update(modifiers).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
+}
+
+export async function forkModifier(baselineId: number, userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [existing] = await db.select().from(modifiers)
+    .where(and(eq(modifiers.userId, userId), eq(modifiers.baselineId, baselineId)))
+    .limit(1);
+  if (existing) return existing.id;
+
+  const [baseline] = await db.select().from(modifiers)
+    .where(and(eq(modifiers.id, baselineId), isNull(modifiers.userId)))
+    .limit(1);
+  if (!baseline) throw new Error("Baseline modifier not found");
+
+  const [result] = await db.insert(modifiers).values({
+    ...contentFields<Modifier, InsertModifier>(baseline),
+    userId,
+    baselineId: baseline.id,
+    baselineVersion: baseline.version,
+  } as InsertModifier);
+  return result.insertId;
+}
+
+export async function revertModifierToBaseline(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [fork] = await db.select().from(modifiers)
+    .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)))
+    .limit(1);
+  if (!fork) throw new Error("Modifier not found");
+  if (fork.baselineId == null) {
+    throw new Error("Modifier was created from scratch â€” there is no original to revert to");
+  }
+
+  const [baseline] = await db.select().from(modifiers)
+    .where(and(eq(modifiers.id, fork.baselineId), isNull(modifiers.userId)))
+    .limit(1);
+  if (!baseline) throw new Error("Baseline modifier no longer exists");
+
+  await db.update(modifiers)
+    .set({
+      ...contentFields<Modifier, InsertModifier>(baseline),
+      baselineVersion: baseline.version,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
+}
+
+/**
+ * Move a modifier out of the working list. Returns the row that holds the
+ * archived state â€” for a starter that is a NEW fork id, not the id passed in.
+ */
+export async function archiveModifier(id: number, userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const target = await getModifierById(id, userId);
+  if (!target) throw new Error("Modifier not found");
+
+  // A starter row is shared with every other user, so it cannot itself be
+  // archived. Fork first; the fork then hides the starter from the list.
+  const ownId = target.userId === null ? await forkModifier(id, userId) : id;
+
+  await db.update(modifiers)
+    .set({ status: "archived", archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(modifiers.id, ownId), eq(modifiers.userId, userId)));
+  return ownId;
+}
+
+/** Put an archived modifier back in the working list. */
+export async function restoreModifier(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(modifiers)
+    .set({ status: "active", archivedAt: null, updatedAt: new Date() })
+    .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
+}
+
+/**
+ * Permanent, unrecoverable removal. Only ever reached from the Archived view.
+ *
+ * A fully custom row is really deleted. A row forked from a starter becomes a
+ * `deleted` tombstone instead: the fork is the only thing hiding the shared
+ * starter row, so dropping it would resurrect the very modifier the user just
+ * said to remove forever. Either way it is gone from every view, permanently.
+ */
+export async function deleteModifierForever(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [row] = await db.select().from(modifiers)
+    .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)))
+    .limit(1);
+  if (!row) throw new Error("Modifier not found");
+
+  if (row.baselineId == null) {
+    await db.delete(modifiers).where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
+    return;
+  }
+
+  await db.update(modifiers)
+    .set({ status: "deleted", updatedAt: new Date() })
+    .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
+}
+
+/** Seed the shipped starter modifiers. Idempotent, matched by name. */
+export async function seedBaselineModifiers(): Promise<void> {
+  await withSeedLock("helixbid:seed:modifiers", async () => {
+    const db = await getDb();
+    if (!db) return;
+
+    await dedupeBaselineRows("modifiers");
+
+    const existing = await db.select({ name: modifiers.name }).from(modifiers)
+      .where(isNull(modifiers.userId));
+    const alreadySeeded = new Set(existing.map(row => row.name));
+
+    const missing = BASELINE_MODIFIERS
+      .filter(m => !alreadySeeded.has(m.name))
+      .map(m => ({ ...m, userId: null }));
+
+    if (missing.length > 0) await db.insert(modifiers).values(missing);
+  });
 }

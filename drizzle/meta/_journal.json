@@ -71,6 +71,20 @@
       "when": 1786480794171,
       "tag": "0009_sleepy_gressill",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1786483509835,
+      "tag": "0010_shiny_giant_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1786483526117,
+      "tag": "0011_bent_tyrannus",
+      "breakpoints": true
     }
   ]
 }
