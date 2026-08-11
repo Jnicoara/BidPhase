@@ -23,6 +23,7 @@
  *   /library/modifiers   → Modifiers (job-condition labor adjustments)
  *   /library/assemblies  → Assembly Builder (materials + labor + modifiers)
  *   /bids                → Bids (Foundation bid layer; NOT legacy /projects)
+ *   /quickbid            → Quick bid (keyboard counting entry onto the same bids)
  *   /admin       → Admin Settings (admin role only)
  */
 import { useApp } from "@/contexts/AppContext";
@@ -44,7 +45,8 @@ import LaborRatesPage from "@/pages/LaborRatesPage";
 import ModifiersPage from "@/pages/ModifiersPage";
 import AssembliesLibraryPage from "@/pages/AssembliesLibraryPage";
 import BidsPage from "@/pages/BidsPage";
-import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText } from "lucide-react";
+import QuickBidPage from "@/pages/QuickBidPage";
+import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Route =
@@ -67,6 +69,7 @@ type Route =
   | "library-modifiers"
   | "library-assemblies"
   | "bids"
+  | "quickbid"
   | "admin";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
@@ -94,6 +97,7 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   // Foundation bid layer. Distinct from /projects, which is the legacy
   // master_* system with its PDF/takeoff state.
   if (p === "bids") return { route: "bids" };
+  if (p === "quickbid") return { route: "quickbid" };
   // Library § …. Bare /library lands on Materials; Assemblies is still to come.
   if (p === "library") {
     if (parts[1] === "labor-rates") return { route: "library-labor-rates" };
@@ -203,6 +207,7 @@ export default function HelixBidShell() {
   const isInModifiers     = route === "library-modifiers";
   const isInLibraryAsms   = route === "library-assemblies";
   const isInBids          = route === "bids";
+  const isInQuickBid      = route === "quickbid";
   const isInAdmin         = route === "admin";
 
   const currentCategory = isInCategory
@@ -237,6 +242,7 @@ export default function HelixBidShell() {
     if (isInModifiers)   return <ModifiersPage />;
     if (isInLibraryAsms) return <AssembliesLibraryPage />;
     if (isInBids)        return <BidsPage />;
+    if (isInQuickBid)    return <QuickBidPage />;
     if (isInAdmin)       return <AdminSettingsPage />;
     // Legacy category workspace
     return <UnifiedProjects category={currentCategory} />;
@@ -357,6 +363,13 @@ export default function HelixBidShell() {
             icon={Layers}
             label="Assemblies"
             title="Assemblies (Library)"
+          />
+          <NavBtn
+            onClick={() => navigate("quickbid")}
+            isActive={isInQuickBid}
+            icon={Zap}
+            label="Quick bid"
+            title="Quick bid — count without a plan"
           />
           <NavBtn
             onClick={() => navigate("bids")}

@@ -120,7 +120,7 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
   it("freezes material cost, hours, rate and modifier total onto the line", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    const line = await caller().bids.addAssembly({
+    const { line } = await caller().bids.addAssembly({
       bidId: bid.id, assemblyId: assembly.id, qty: 1,
     });
 
@@ -181,7 +181,7 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
     await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
 
     await caller().assemblies.update({ id: assembly.id, baseLaborHours: 3 });
-    const second = await caller().bids.addAssembly({
+    const { line: second } = await caller().bids.addAssembly({
       bidId: bid.id, assemblyId: assembly.id, qty: 1,
     });
 
@@ -210,7 +210,7 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
     });
 
     const bid = await newBid();
-    const line = await caller().bids.addAssembly({
+    const { line } = await caller().bids.addAssembly({
       bidId: bid.id, assemblyId: forked.assembly!.id, qty: 1,
     });
     expect(Number(line!.snapshotModifierPct)).toBeCloseTo(0.12, 4);
@@ -224,7 +224,7 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
   it("changing a line quantity moves the total", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    const line = await caller().bids.addAssembly({
+    const { line } = await caller().bids.addAssembly({
       bidId: bid.id, assemblyId: assembly.id, qty: 1,
     });
     const before = await caller().bids.get({ id: bid.id });
@@ -237,13 +237,161 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
   it("removing a line drops it out of the total", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    const line = await caller().bids.addAssembly({
+    const { line } = await caller().bids.addAssembly({
       bidId: bid.id, assemblyId: assembly.id, qty: 1,
     });
     await caller().bids.removeLine({ bidId: bid.id, id: line!.id });
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.lines).toHaveLength(0);
     expect(detail.totals.directCost).toBe(0);
+  });
+});
+
+describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
+  it("stacks a repeat count onto the existing line instead of a new row", async () => {
+    const assembly = await readyAssembly();
+    const bid = await newBid();
+
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 6, merge: true });
+    const second = await caller().bids.addAssembly({
+      bidId: bid.id, assemblyId: assembly.id, qty: 4, merge: true,
+    });
+
+    expect(second.merged).toBe(true);
+    const detail = await caller().bids.get({ id: bid.id });
+    expect(detail.lines).toHaveLength(1);
+    expect(Number(detail.lines[0].qty)).toBeCloseTo(10, 4);
+  });
+
+  it("prices a merged line exactly as one line of the summed quantity", async () => {
+    const assembly = await readyAssembly();
+    const merged = await newBid("merged");
+    const single = await newBid("single");
+
+    await caller().bids.addAssembly({ bidId: merged.id, assemblyId: assembly.id, qty: 6, merge: true });
+    await caller().bids.addAssembly({ bidId: merged.id, assemblyId: assembly.id, qty: 4, merge: true });
+    await caller().bids.addAssembly({ bidId: single.id, assemblyId: assembly.id, qty: 10 });
+
+    const a = await caller().bids.get({ id: merged.id });
+    const b = await caller().bids.get({ id: single.id });
+    expect(a.totals.directCost).toBeCloseTo(b.totals.directCost, 6);
+  });
+
+  it("keeps the ORIGINAL snapshot when merging, not a fresh one", async () => {
+    // Counting more of something already on the bid must not re-price it, or
+    // the same assembly would cost two different amounts within one bid.
+    const assembly = await readyAssembly();
+    const bid = await newBid();
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 2, merge: true });
+
+    await caller().assemblies.update({ id: assembly.id, baseLaborHours: 5 });
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 3, merge: true });
+
+    const detail = await caller().bids.get({ id: bid.id });
+    expect(detail.lines).toHaveLength(1);
+    expect(Number(detail.lines[0].snapshotLaborHours)).toBeCloseTo(0.75, 4);
+    expect(Number(detail.lines[0].qty)).toBeCloseTo(5, 4);
+  });
+
+  it("still takes a fresh snapshot on a NON-merging add", async () => {
+    // The Bids screen relies on this; merge must not become the global default.
+    const assembly = await readyAssembly();
+    const bid = await newBid();
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+    await caller().assemblies.update({ id: assembly.id, baseLaborHours: 5 });
+    const second = await caller().bids.addAssembly({
+      bidId: bid.id, assemblyId: assembly.id, qty: 1,
+    });
+
+    expect(second.merged).toBe(false);
+    expect(Number(second.line!.snapshotLaborHours)).toBeCloseTo(5, 4);
+    expect((await caller().bids.get({ id: bid.id })).lines).toHaveLength(2);
+  });
+
+  it("keeps different units on separate lines", async () => {
+    // "Room 101" and "Room 102" are different places; merging them would lose
+    // the per-room breakdown that mass-duplicate depends on.
+    const assembly = await readyAssembly();
+    const bid = await newBid();
+    await caller().bids.addAssembly({
+      bidId: bid.id, assemblyId: assembly.id, qty: 2, unitLabel: "Room 101", merge: true,
+    });
+    const other = await caller().bids.addAssembly({
+      bidId: bid.id, assemblyId: assembly.id, qty: 2, unitLabel: "Room 102", merge: true,
+    });
+
+    expect(other.merged).toBe(false);
+    const detail = await caller().bids.get({ id: bid.id });
+    expect(detail.lines).toHaveLength(2);
+    expect(detail.units.map(u => u.label).sort()).toEqual(["Room 101", "Room 102"]);
+  });
+
+  it("merges within a unit but not across unlabelled lines", async () => {
+    const assembly = await readyAssembly();
+    const bid = await newBid();
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1, merge: true });
+    await caller().bids.addAssembly({
+      bidId: bid.id, assemblyId: assembly.id, qty: 1, unitLabel: "Room 101", merge: true,
+    });
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1, merge: true });
+
+    const detail = await caller().bids.get({ id: bid.id });
+    expect(detail.lines).toHaveLength(2);
+    const loose = detail.lines.find(l => l.unitLabel === null)!;
+    expect(Number(loose.qty)).toBeCloseTo(2, 4);
+  });
+
+  it("merges different assemblies onto their own lines", async () => {
+    const receptacle = await readyAssembly();
+    const switchAsm = await readyAssembly("Single-pole switch");
+    const bid = await newBid();
+
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: receptacle.id, qty: 6, merge: true });
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: switchAsm.id, qty: 3, merge: true });
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: receptacle.id, qty: 2, merge: true });
+
+    const detail = await caller().bids.get({ id: bid.id });
+    expect(detail.lines).toHaveLength(2);
+    expect(Number(detail.lines.find(l => l.assemblyId === receptacle.id)!.qty)).toBeCloseTo(8, 4);
+    expect(Number(detail.lines.find(l => l.assemblyId === switchAsm.id)!.qty)).toBeCloseTo(3, 4);
+  });
+
+  it("accepts a fractional count, for footage-style assemblies", async () => {
+    const assembly = await readyAssembly();
+    const bid = await newBid();
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 2.5, merge: true });
+    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 0.25, merge: true });
+
+    const detail = await caller().bids.get({ id: bid.id });
+    expect(Number(detail.lines[0].qty)).toBeCloseTo(2.75, 4);
+  });
+
+  it("refuses a negative quantity rather than subtracting from a line", async () => {
+    const assembly = await readyAssembly();
+    const bid = await newBid();
+    await expect(caller().bids.addAssembly({
+      bidId: bid.id, assemblyId: assembly.id, qty: -3, merge: true,
+    })).rejects.toThrow();
+  });
+
+  it("rolls a counting session straight into the bid total", async () => {
+    const receptacle = await readyAssembly();
+    const switchAsm = await readyAssembly("Single-pole switch");
+    const bid = await newBid();
+
+    // A small job, counted the way the screen does it.
+    for (const [assemblyId, qty] of [[receptacle.id, 6], [switchAsm.id, 3], [receptacle.id, 4]] as const) {
+      await caller().bids.addAssembly({ bidId: bid.id, assemblyId, qty, merge: true });
+    }
+
+    const detail = await caller().bids.get({ id: bid.id });
+    // 10 receptacles at 55.24 + 3 switches at (their own snapshot)
+    const receptacleLine = detail.lines.find(l => l.assemblyId === receptacle.id)!;
+    expect(Number(receptacleLine.qty)).toBeCloseTo(10, 4);
+    expect(detail.totals.directCost).toBeCloseTo(
+      detail.lines.reduce((sum, l) => sum + l.breakdown.directCost, 0), 2
+    );
+    expect(detail.totals.finalPrice).toBeGreaterThan(0);
   });
 });
 

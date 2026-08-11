@@ -195,13 +195,21 @@ export const bidsRouter = router({
       assemblyId: z.number().int().positive(),
       qty: qtySchema.default(1),
       unitLabel: labelSchema.nullable().default(null),
+      /**
+       * Quick-bid sets this so repeat counts of one assembly stack onto a
+       * single line, keeping that line's original snapshot. Off by default:
+       * the Bids screen wants a new line, freshly snapshotted, every time.
+       */
+      merge: z.boolean().default(false),
     }))
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
-      const id = await db.addAssemblyToBid(
-        input.bidId, ctx.user.id, input.assemblyId, input.qty, input.unitLabel
+      const { id, merged } = await db.addAssemblyToBid(
+        input.bidId, ctx.user.id, input.assemblyId, input.qty, input.unitLabel,
+        { merge: input.merge }
       );
-      return db.getBidLineItem(id, input.bidId);
+      const line = await db.getBidLineItem(id, input.bidId);
+      return { line, merged };
     }),
 
   updateLine: protectedProcedure

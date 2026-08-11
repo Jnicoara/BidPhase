@@ -1038,13 +1038,13 @@ async function backfillMaterialMetadata(): Promise<void> {
   }
 }
 
-// â”€â”€â”€ Labor Rates (Foundation library) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Labor Rates (Foundation library) ─────────────────────────────────────────
 //
 // Same ownership model as Materials: userId NULL is a shipped starter row, a
 // user editing one gets a fork, revert restores the starter content.
 //
 // A salaried role stores annualSalary and annualHours and NEVER a computed
-// rate â€” see effectiveHourlyRate in shared/pricing.ts for why.
+// rate — see effectiveHourlyRate in shared/pricing.ts for why.
 
 /** Starter rows plus the user's own, forked starters collapsed away. */
 export async function getLibraryLaborRates(userId: number): Promise<LaborRate[]> {
@@ -1059,7 +1059,7 @@ export async function getLibraryLaborRates(userId: number): Promise<LaborRate[]>
   return mergeLibraryRows(rows, userId);
 }
 
-/** A single labor rate the user may see â€” their own, or a starter. */
+/** A single labor rate the user may see — their own, or a starter. */
 export async function getLaborRateById(id: number, userId: number): Promise<LaborRate | undefined> {
   const db = await getDb();
   if (!db) return undefined;
@@ -1089,7 +1089,7 @@ export async function updateLaborRate(id: number, userId: number, data: Partial<
     .where(and(eq(laborRates.id, id), eq(laborRates.userId, userId)));
 }
 
-/** Soft-delete â€” assemblies may already price against this role. */
+/** Soft-delete — assemblies may already price against this role. */
 export async function deactivateLaborRate(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -1131,7 +1131,7 @@ export async function revertLaborRateToBaseline(id: number, userId: number) {
     .limit(1);
   if (!fork) throw new Error("Labor rate not found");
   if (fork.baselineId == null) {
-    throw new Error("Labor rate was created from scratch â€” there is no original to revert to");
+    throw new Error("Labor rate was created from scratch — there is no original to revert to");
   }
 
   const [baseline] = await db.select().from(laborRates)
@@ -1168,13 +1168,13 @@ export async function seedBaselineLaborRates(): Promise<void> {
   });
 }
 
-// â”€â”€â”€ Modifiers (Foundation library) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Modifiers (Foundation library) ───────────────────────────────────────────
 //
 // Ownership works exactly as it does for materials and labor rates. What is
 // different is the lifecycle: modifiers are never hard-deleted out of the
 // working list, they are archived and can be restored. See MODIFIER_STATUSES.
 //
-// `isActive` on this table is vestigial â€” `status` is authoritative. It is left
+// `isActive` on this table is vestigial — `status` is authoritative. It is left
 // at its default so the column shape still matches the other library tables.
 
 /**
@@ -1258,7 +1258,7 @@ export async function revertModifierToBaseline(id: number, userId: number) {
     .limit(1);
   if (!fork) throw new Error("Modifier not found");
   if (fork.baselineId == null) {
-    throw new Error("Modifier was created from scratch â€” there is no original to revert to");
+    throw new Error("Modifier was created from scratch — there is no original to revert to");
   }
 
   const [baseline] = await db.select().from(modifiers)
@@ -1277,7 +1277,7 @@ export async function revertModifierToBaseline(id: number, userId: number) {
 
 /**
  * Move a modifier out of the working list. Returns the row that holds the
- * archived state â€” for a starter that is a NEW fork id, not the id passed in.
+ * archived state — for a starter that is a NEW fork id, not the id passed in.
  */
 export async function archiveModifier(id: number, userId: number): Promise<number> {
   const db = await getDb();
@@ -1352,10 +1352,10 @@ export async function seedBaselineModifiers(): Promise<void> {
   });
 }
 
-// â”€â”€â”€ Assemblies (Foundation library) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Assemblies (Foundation library) ──────────────────────────────────────────
 //
 // Same ownership model as the other library tables, with one difference that
-// drives most of the code below: an assembly has CHILDREN â€” its material lines
+// drives most of the code below: an assembly has CHILDREN — its material lines
 // and its applicable modifiers. Fork and revert therefore have to deep-copy,
 // and an edit that changes the recipe has to replace the child rows.
 //
@@ -1465,7 +1465,7 @@ export async function updateAssembly(id: number, userId: number, data: Partial<I
     .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
 }
 
-/** Soft-delete â€” projects may already reference this assembly. */
+/** Soft-delete — projects may already reference this assembly. */
 export async function deactivateAssembly(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -1505,7 +1505,7 @@ export async function setAssemblyModifiers(assemblyId: number, modifierIds: numb
 
 /**
  * Give the user their own editable copy of a starter assembly, children and all.
- * Idempotent â€” forking twice returns the existing copy.
+ * Idempotent — forking twice returns the existing copy.
  */
 export async function forkAssembly(baselineId: number, userId: number): Promise<number> {
   const db = await getDb();
@@ -1529,7 +1529,7 @@ export async function forkAssembly(baselineId: number, userId: number): Promise<
   } as InsertAssembly);
   const forkId = result.insertId;
 
-  // The recipe is the assembly â€” a fork without its lines is an empty shell.
+  // The recipe is the assembly — a fork without its lines is an empty shell.
   await copyAssemblyChildren(baseline.id, forkId);
   return forkId;
 }
@@ -1548,7 +1548,7 @@ async function copyAssemblyChildren(fromAssemblyId: number, toAssemblyId: number
 }
 
 /**
- * Discard the user's edits and restore the starter recipe â€” fields AND children.
+ * Discard the user's edits and restore the starter recipe — fields AND children.
  * Keeps the row id so anything already pointing at this assembly keeps working.
  */
 export async function revertAssemblyToBaseline(id: number, userId: number) {
@@ -1560,7 +1560,7 @@ export async function revertAssemblyToBaseline(id: number, userId: number) {
     .limit(1);
   if (!fork) throw new Error("Assembly not found");
   if (fork.baselineId == null) {
-    throw new Error("Assembly was created from scratch â€” there is no original to revert to");
+    throw new Error("Assembly was created from scratch — there is no original to revert to");
   }
 
   const [baseline] = await db.select().from(assemblies)
@@ -1577,7 +1577,7 @@ export async function revertAssemblyToBaseline(id: number, userId: number) {
     .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
 
   // Reverting the header without the lines would leave the user's edited recipe
-  // priced against the starter's hours â€” worse than either state alone.
+  // priced against the starter's hours — worse than either state alone.
   await copyAssemblyChildren(baseline.id, id);
 }
 
@@ -1586,7 +1586,7 @@ export async function revertAssemblyToBaseline(id: number, userId: number) {
  *
  * Runs AFTER materials, labor rates and modifiers, because every line is
  * resolved by name against those catalogs. An assembly whose materials are not
- * all present is skipped rather than half-built â€” a recipe missing lines prices
+ * all present is skipped rather than half-built — a recipe missing lines prices
  * the job too low, which is worse than the recipe being absent.
  */
 export async function seedBaselineAssemblies(): Promise<void> {
@@ -1621,7 +1621,7 @@ export async function seedBaselineAssemblies(): Promise<void> {
           .filter(line => !materialIdByName.has(line.material))
           .map(line => line.material);
         console.warn(
-          `[BaselineAssemblies] Skipping "${spec.name}" â€” missing materials: ${missing.join(", ")}`
+          `[BaselineAssemblies] Skipping "${spec.name}" — missing materials: ${missing.join(", ")}`
         );
         continue;
       }
@@ -1648,7 +1648,7 @@ export async function seedBaselineAssemblies(): Promise<void> {
   });
 }
 
-// â”€â”€â”€ Pricing Defaults (company level) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Pricing Defaults (company level) ─────────────────────────────────────────
 
 /** The shipped defaults for a user who has never opened the settings. */
 const FALLBACK_PRICING_DEFAULTS = {
@@ -1688,7 +1688,7 @@ export async function updatePricingDefaults(
     .where(eq(pricingDefaults.userId, userId));
 }
 
-// â”€â”€â”€ Bids â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Bids ─────────────────────────────────────────────────────────────────────
 
 export async function getBidsByUser(userId: number): Promise<Bid[]> {
   const db = await getDb();
@@ -1730,7 +1730,7 @@ export async function archiveBid(id: number, userId: number) {
     .where(and(eq(bids.id, id), eq(bids.userId, userId)));
 }
 
-// â”€â”€â”€ Bid line items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Bid line items ───────────────────────────────────────────────────────────
 
 export async function getBidLineItems(bidId: number): Promise<BidLineItem[]> {
   const db = await getDb();
@@ -1758,23 +1758,55 @@ async function nextBidSortOrder(bidId: number): Promise<number> {
  * Take a live assembly and freeze its cost inputs onto a bid.
  *
  * This is the snapshot boundary. Everything the assembly currently resolves to
- * â€” its materials at today's prices, its hours, its role's rate, its modifier
- * total â€” is copied onto the line and never consulted again. Editing the
+ * — its materials at today's prices, its hours, its role's rate, its modifier
+ * total — is copied onto the line and never consulted again. Editing the
  * library assembly afterwards has no effect on this bid, which is the whole
- * point (ASSEMBLIES_PLAN.md Â§ PROJECT ESTIMATES).
+ * point (ASSEMBLIES_PLAN.md § PROJECT ESTIMATES).
  */
 export async function addAssemblyToBid(
   bidId: number,
   userId: number,
   assemblyId: number,
   qty: number,
-  unitLabel: string | null = null
-): Promise<number> {
+  unitLabel: string | null = null,
+  options: { merge?: boolean } = {}
+): Promise<{ id: number; merged: boolean }> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
   const detail = await getAssemblyDetail(assemblyId, userId);
   if (!detail) throw new Error("Assembly not found");
+
+  /**
+   * Quick-bid counts the same assembly over and over ("another six
+   * receptacles"), and one row per keystroke-batch would bury the bid in
+   * duplicates. With `merge` it finds the existing line for this assembly and
+   * unit and adds to its quantity instead.
+   *
+   * The existing line KEEPS its original snapshot. That is the correct reading:
+   * the estimator is counting more of a thing already priced on this bid, not
+   * re-pricing it at today's rates. Taking a fresh snapshot here would make the
+   * same assembly cost two different amounts within one bid depending on when
+   * each was counted. Callers wanting a fresh snapshot omit `merge` — the
+   * default — and get a new line, which is what the Bids screen does.
+   */
+  if (options.merge) {
+    const existing = await db.select().from(bidLineItems)
+      .where(and(
+        eq(bidLineItems.bidId, bidId),
+        eq(bidLineItems.assemblyId, detail.id),
+        unitLabel === null ? isNull(bidLineItems.unitLabel) : eq(bidLineItems.unitLabel, unitLabel)
+      ))
+      .limit(1);
+
+    if (existing[0]) {
+      const merged = Number(existing[0].qty) + qty;
+      await db.update(bidLineItems)
+        .set({ qty: merged.toFixed(4), updatedAt: new Date() })
+        .where(eq(bidLineItems.id, existing[0].id));
+      return { id: existing[0].id, merged: true };
+    }
+  }
 
   const [activeModifiers, rates] = await Promise.all([
     getLibraryModifiers(userId, "active"),
@@ -1811,7 +1843,7 @@ export async function addAssemblyToBid(
     snapshotModifierNames: applied.map(m => m.name),
     sortOrder: await nextBidSortOrder(bidId),
   });
-  return result.insertId;
+  return { id: result.insertId, merged: false };
 }
 
 export async function updateBidLineItem(
@@ -1848,7 +1880,7 @@ export async function getBidUnitLabels(bidId: number): Promise<string[]> {
 /**
  * Copy a repeating unit N times, auto-numbering the copies.
  *
- * The source is every line carrying `sourceUnitLabel` â€” a hotel room type, a
+ * The source is every line carrying `sourceUnitLabel` — a hotel room type, a
  * floor-plan spec. Copies are plain rows from the moment they exist: nothing
  * links them back to the source, so editing "Room 104" later touches only that
  * room, which is what the product asks for.
