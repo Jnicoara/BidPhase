@@ -24,6 +24,11 @@ import {
   Modifier,
   ModifierStatus,
   modifiers,
+  InsertAssembly,
+  Assembly,
+  assemblies,
+  assemblyMaterials,
+  assemblyModifiers,
   projects,
   userMaterialsDb,
   users,
@@ -41,6 +46,7 @@ import { ENV } from "./_core/env";
 import { BASELINE_MATERIALS } from "./seed/baselineMaterials";
 import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
 import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
+import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -753,7 +759,9 @@ async function withSeedLock(name: string, run: () => Promise<void>): Promise<voi
  * schema change, and any database that ran the old seeder concurrently has them.
  * Runs inside the seed lock, before inserting, so it never fights a live writer.
  */
-async function dedupeBaselineRows(table: "materials" | "labor_rates" | "modifiers"): Promise<void> {
+async function dedupeBaselineRows(
+  table: "materials" | "labor_rates" | "modifiers" | "assemblies"
+): Promise<void> {
   const db = await getDb();
   if (!db) return;
   // Table name is a compile-time constant from the union above, never user input.
@@ -1332,5 +1340,301 @@ export async function seedBaselineModifiers(): Promise<void> {
       .map(m => ({ ...m, userId: null }));
 
     if (missing.length > 0) await db.insert(modifiers).values(missing);
+  });
+}
+
+// â”€â”€â”€ Assemblies (Foundation library) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//
+// Same ownership model as the other library tables, with one difference that
+// drives most of the code below: an assembly has CHILDREN â€” its material lines
+// and its applicable modifiers. Fork and revert therefore have to deep-copy,
+// and an edit that changes the recipe has to replace the child rows.
+//
+// Child rows are replaced wholesale (delete-then-insert) rather than diffed.
+// A recipe is a handful of lines, the write is inside one request, and diffing
+// would buy nothing but a chance to leave orphans behind.
+
+/** One material line with the material's own data joined in. */
+export type AssemblyMaterialLine = {
+  id: number;
+  materialId: number;
+  qty: string;
+  sortOrder: number;
+  name: string;
+  unitOfSale: Material["unitOfSale"];
+  costPerUnit: string;
+  category: Material["category"];
+};
+
+export type AssemblyDetail = Assembly & {
+  materials: AssemblyMaterialLine[];
+  /** Ids of the modifiers switched on for this assembly. */
+  modifierIds: number[];
+};
+
+/** Starter assemblies plus the user's own, forked starters collapsed away. */
+export async function getLibraryAssemblies(userId: number): Promise<Assembly[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(assemblies)
+    .where(and(
+      or(isNull(assemblies.userId), eq(assemblies.userId, userId)),
+      eq(assemblies.isActive, true)
+    ))
+    .orderBy(asc(assemblies.name));
+  return mergeLibraryRows(rows, userId);
+}
+
+export async function getAssemblyById(id: number, userId: number): Promise<Assembly | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(assemblies)
+    .where(and(
+      eq(assemblies.id, id),
+      or(isNull(assemblies.userId), eq(assemblies.userId, userId))
+    ))
+    .limit(1);
+  return result[0];
+}
+
+/** Material lines for an assembly, with each material's current cost joined in. */
+export async function getAssemblyMaterialLines(assemblyId: number): Promise<AssemblyMaterialLine[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      id: assemblyMaterials.id,
+      materialId: assemblyMaterials.materialId,
+      qty: assemblyMaterials.qty,
+      sortOrder: assemblyMaterials.sortOrder,
+      name: materials.name,
+      unitOfSale: materials.unitOfSale,
+      costPerUnit: materials.costPerUnit,
+      category: materials.category,
+    })
+    .from(assemblyMaterials)
+    .innerJoin(materials, eq(assemblyMaterials.materialId, materials.id))
+    .where(eq(assemblyMaterials.assemblyId, assemblyId))
+    .orderBy(asc(assemblyMaterials.sortOrder), asc(assemblyMaterials.id));
+  return rows;
+}
+
+export async function getAssemblyModifierIds(assemblyId: number): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ modifierId: assemblyModifiers.modifierId })
+    .from(assemblyModifiers)
+    .where(eq(assemblyModifiers.assemblyId, assemblyId))
+    .orderBy(asc(assemblyModifiers.sortOrder), asc(assemblyModifiers.id));
+  return rows.map(r => r.modifierId);
+}
+
+/** An assembly and everything it is made of. */
+export async function getAssemblyDetail(id: number, userId: number): Promise<AssemblyDetail | undefined> {
+  const assembly = await getAssemblyById(id, userId);
+  if (!assembly) return undefined;
+  const [materialLines, modifierIds] = await Promise.all([
+    getAssemblyMaterialLines(id),
+    getAssemblyModifierIds(id),
+  ]);
+  return { ...assembly, materials: materialLines, modifierIds };
+}
+
+export async function createAssembly(data: InsertAssembly): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(assemblies).values(data);
+  return result.insertId;
+}
+
+export async function updateAssembly(id: number, userId: number, data: Partial<InsertAssembly>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
+  await db.update(assemblies).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
+}
+
+/** Soft-delete â€” projects may already reference this assembly. */
+export async function deactivateAssembly(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(assemblies).set({ isActive: false, updatedAt: new Date() })
+    .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
+}
+
+/** Replace an assembly's material lines wholesale. */
+export async function setAssemblyMaterials(
+  assemblyId: number,
+  lines: Array<{ materialId: number; qty: string }>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(assemblyMaterials).where(eq(assemblyMaterials.assemblyId, assemblyId));
+  if (lines.length === 0) return;
+  await db.insert(assemblyMaterials).values(
+    lines.map((line, index) => ({
+      assemblyId,
+      materialId: line.materialId,
+      qty: line.qty,
+      sortOrder: index,
+    }))
+  );
+}
+
+/** Replace which modifiers apply to an assembly. */
+export async function setAssemblyModifiers(assemblyId: number, modifierIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(assemblyModifiers).where(eq(assemblyModifiers.assemblyId, assemblyId));
+  if (modifierIds.length === 0) return;
+  await db.insert(assemblyModifiers).values(
+    modifierIds.map((modifierId, index) => ({ assemblyId, modifierId, sortOrder: index }))
+  );
+}
+
+/**
+ * Give the user their own editable copy of a starter assembly, children and all.
+ * Idempotent â€” forking twice returns the existing copy.
+ */
+export async function forkAssembly(baselineId: number, userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [existing] = await db.select().from(assemblies)
+    .where(and(eq(assemblies.userId, userId), eq(assemblies.baselineId, baselineId)))
+    .limit(1);
+  if (existing) return existing.id;
+
+  const [baseline] = await db.select().from(assemblies)
+    .where(and(eq(assemblies.id, baselineId), isNull(assemblies.userId)))
+    .limit(1);
+  if (!baseline) throw new Error("Baseline assembly not found");
+
+  const [result] = await db.insert(assemblies).values({
+    ...contentFields<Assembly, InsertAssembly>(baseline),
+    userId,
+    baselineId: baseline.id,
+    baselineVersion: baseline.version,
+  } as InsertAssembly);
+  const forkId = result.insertId;
+
+  // The recipe is the assembly â€” a fork without its lines is an empty shell.
+  await copyAssemblyChildren(baseline.id, forkId);
+  return forkId;
+}
+
+/** Copy material lines and modifier links from one assembly onto another. */
+async function copyAssemblyChildren(fromAssemblyId: number, toAssemblyId: number) {
+  const [lines, modifierIds] = await Promise.all([
+    getAssemblyMaterialLines(fromAssemblyId),
+    getAssemblyModifierIds(fromAssemblyId),
+  ]);
+  await setAssemblyMaterials(
+    toAssemblyId,
+    lines.map(line => ({ materialId: line.materialId, qty: line.qty }))
+  );
+  await setAssemblyModifiers(toAssemblyId, modifierIds);
+}
+
+/**
+ * Discard the user's edits and restore the starter recipe â€” fields AND children.
+ * Keeps the row id so anything already pointing at this assembly keeps working.
+ */
+export async function revertAssemblyToBaseline(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [fork] = await db.select().from(assemblies)
+    .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)))
+    .limit(1);
+  if (!fork) throw new Error("Assembly not found");
+  if (fork.baselineId == null) {
+    throw new Error("Assembly was created from scratch â€” there is no original to revert to");
+  }
+
+  const [baseline] = await db.select().from(assemblies)
+    .where(and(eq(assemblies.id, fork.baselineId), isNull(assemblies.userId)))
+    .limit(1);
+  if (!baseline) throw new Error("Baseline assembly no longer exists");
+
+  await db.update(assemblies)
+    .set({
+      ...contentFields<Assembly, InsertAssembly>(baseline),
+      baselineVersion: baseline.version,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
+
+  // Reverting the header without the lines would leave the user's edited recipe
+  // priced against the starter's hours â€” worse than either state alone.
+  await copyAssemblyChildren(baseline.id, id);
+}
+
+/**
+ * Seed the shipped starter assemblies.
+ *
+ * Runs AFTER materials, labor rates and modifiers, because every line is
+ * resolved by name against those catalogs. An assembly whose materials are not
+ * all present is skipped rather than half-built â€” a recipe missing lines prices
+ * the job too low, which is worse than the recipe being absent.
+ */
+export async function seedBaselineAssemblies(): Promise<void> {
+  await withSeedLock("helixbid:seed:assemblies", async () => {
+    const db = await getDb();
+    if (!db) return;
+
+    await dedupeBaselineRows("assemblies");
+
+    const existingRows = await db.select({ name: assemblies.name }).from(assemblies)
+      .where(isNull(assemblies.userId));
+    const alreadySeeded = new Set(existingRows.map(row => row.name));
+
+    const pending = BASELINE_ASSEMBLIES.filter(a => !alreadySeeded.has(a.name));
+    if (pending.length === 0) return;
+
+    const baselineMaterialRows = await db.select({ id: materials.id, name: materials.name })
+      .from(materials).where(isNull(materials.userId));
+    const materialIdByName = new Map(baselineMaterialRows.map(row => [row.name, row.id]));
+
+    const baselineModifierRows = await db.select({ id: modifiers.id, name: modifiers.name })
+      .from(modifiers).where(isNull(modifiers.userId));
+    const modifierIdByName = new Map(baselineModifierRows.map(row => [row.name, row.id]));
+
+    for (const spec of pending) {
+      const lines = spec.materials.map(line => ({
+        materialId: materialIdByName.get(line.material),
+        qty: line.qty.toFixed(4),
+      }));
+      if (lines.some(line => line.materialId === undefined)) {
+        const missing = spec.materials
+          .filter(line => !materialIdByName.has(line.material))
+          .map(line => line.material);
+        console.warn(
+          `[BaselineAssemblies] Skipping "${spec.name}" â€” missing materials: ${missing.join(", ")}`
+        );
+        continue;
+      }
+
+      const [result] = await db.insert(assemblies).values({
+        userId: null,
+        name: spec.name,
+        category: spec.category,
+        projectType: spec.projectType,
+        baseLaborHours: spec.baseLaborHours.toFixed(4),
+      });
+      const assemblyId = result.insertId;
+
+      await setAssemblyMaterials(
+        assemblyId,
+        lines as Array<{ materialId: number; qty: string }>
+      );
+
+      const modifierIds = (spec.modifiers ?? [])
+        .map(name => modifierIdByName.get(name))
+        .filter((id): id is number => id !== undefined);
+      await setAssemblyModifiers(assemblyId, modifierIds);
+    }
   });
 }

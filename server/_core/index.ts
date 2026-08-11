@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import {
+  seedBaselineAssemblies,
   seedBaselineLaborRates,
   seedBaselineMaterials,
   seedBaselineModifiers,
@@ -68,11 +69,16 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     // Seed default feature flags (no-op if already seeded)
     seedDefaultFeatureFlags().catch(err => console.warn("[FeatureFlags] Seed failed:", err));
-    // Seed the baseline material library (no-op if already seeded)
-    seedBaselineMaterials().catch(err => console.warn("[BaselineMaterials] Seed failed:", err));
-    // Seed the baseline labor roles and job-condition modifiers (no-ops if seeded)
-    seedBaselineLaborRates().catch(err => console.warn("[BaselineLaborRates] Seed failed:", err));
-    seedBaselineModifiers().catch(err => console.warn("[BaselineModifiers] Seed failed:", err));
+    // Library seeds. Assemblies MUST run last: their recipes are resolved by
+    // name against the material and modifier catalogs, and an assembly whose
+    // materials have not landed yet is skipped rather than half-built.
+    Promise.all([
+      seedBaselineMaterials().catch(err => console.warn("[BaselineMaterials] Seed failed:", err)),
+      seedBaselineLaborRates().catch(err => console.warn("[BaselineLaborRates] Seed failed:", err)),
+      seedBaselineModifiers().catch(err => console.warn("[BaselineModifiers] Seed failed:", err)),
+    ])
+      .then(() => seedBaselineAssemblies())
+      .catch(err => console.warn("[BaselineAssemblies] Seed failed:", err));
   });
 }
 

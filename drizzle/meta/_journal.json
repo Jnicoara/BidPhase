@@ -85,6 +85,13 @@
       "when": 1786483526117,
       "tag": "0011_bent_tyrannus",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1786486477564,
+      "tag": "0012_romantic_scalphunter",
+      "breakpoints": true
     }
   ]
 }

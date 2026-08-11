@@ -13,6 +13,7 @@ import { featureFlagsRouter } from "./routers/featureFlagsRouter";
 import { materialsRouter } from "./routers/materialsRouter";
 import { laborRatesRouter } from "./routers/laborRatesRouter";
 import { modifiersRouter } from "./routers/modifiersRouter";
+import { assembliesRouter } from "./routers/assembliesRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -29,6 +30,7 @@ export const appRouter = router({
   materials: materialsRouter,
   laborRates: laborRatesRouter,
   modifiers: modifiersRouter,
+  assemblies: assembliesRouter,
 });
 
 export type AppRouter = typeof appRouter;

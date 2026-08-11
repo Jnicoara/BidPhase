@@ -141,7 +141,9 @@ Each entry carries a **Project Type** tag: Residential / Commercial / Both.
 
 > **Note on Project Type:** this is the same optional tag defined in ASSEMBLIES_PLAN.md § DATA MODEL. It is a **filter**, not a structural split — Materials, Labor Rates, and Modifiers stay fully shared across both. It is also **not** the schema's `trade` field, which distinguishes electrical from plumbing/HVAC for multi-trade unlocking. Two independent axes — don't wire them together.
 
-> **Labor hours are deliberately absent.** See [Important Notes](#important-notes) — they must not be invented.
+> **Labor hours are deliberately absent *from this document*.** See [Important Notes](#important-notes) — they must not be invented here.
+>
+> **What the app ships instead.** The Assembly Builder needs a non-zero number to price against, because a zero prices the work at nothing — a far more dangerous default than a visible guess. So `shared/laborHourDefaults.ts` holds placeholder hours keyed by task type, and the seeded starter assemblies carry them. They are placeholders in exactly the sense this document means: a starting figure the user replaces, labelled as a guess everywhere it appears, and never presented as a labor unit. This document stays the hours-free reference; that file is the app's editable default.
 
 ### CORE — build first
 

@@ -343,6 +343,18 @@ export const MODIFIER_STATUSES = ["active", "archived", "deleted"] as const;
 export type ModifierStatus = (typeof MODIFIER_STATUSES)[number];
 
 /**
+ * Residential / Commercial / Both — a FILTER on the assembly library, never a
+ * structural split (ASSEMBLIES_PLAN.md § DATA MODEL). Materials, labor rates
+ * and modifiers stay shared across both; where labor genuinely differs, the
+ * user forks the one assembly rather than the catalog being duplicated.
+ *
+ * Not the same axis as `trade`, which separates electrical from plumbing/HVAC
+ * for unlock gating. Do not wire the two together.
+ */
+export const PROJECT_TYPES = ["residential", "commercial", "both"] as const;
+export type ProjectType = (typeof PROJECT_TYPES)[number];
+
+/**
  * How the material catalog is shelved. Curated, NOT user-extendable.
  *
  * Declaration order is the display order on the Materials screen — keep them in
@@ -515,7 +527,16 @@ export const assemblies = mysqlTable(
     category: mysqlEnum("category", ASSEMBLY_CATEGORIES).notNull(),
     /** Unlock-gated at the app layer, not the schema, so new trades need no migration. */
     trade: varchar("trade", { length: 64 }).default("electrical").notNull(),
+    /** Optional library filter. See PROJECT_TYPES. */
+    projectType: mysqlEnum("projectType", PROJECT_TYPES),
     baseLaborHours: decimal("baseLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
+
+    /**
+     * Which role does this work. Nullable, and "set null" on delete rather than
+     * cascade: losing a labor rate must not silently delete the recipe that
+     * referenced it. The UI shows such an assembly as needing a role picked.
+     */
+    laborRateId: int("laborRateId").references(() => laborRates.id, { onDelete: "set null" }),
 
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
