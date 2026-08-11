@@ -160,6 +160,17 @@ Chat panel on the takeoff page. Helps interpret dense/confusing plan sheets:
 2. **Library screens** — immediately after Foundation, so the data becomes visible/usable right away.
 3. **Bid/Project structure** — status flow, cost-snapshot behavior.
 4. **Quick-bid (no plans) flow** — fast quantity-based bidding on top of Foundation + Library. Useful for smaller/residential jobs.
+
+> ### ⛔ VALIDATION GATE — after step 4, before step 5
+>
+> **Stop and validate before building anything further.**
+>
+> An **outside electrician — not the app's builder** — must be able to run a **complete real bid end-to-end** using only the Quick-bid flow, **with no assistance**.
+>
+> This is the first point in the build order where that's possible: Foundation + Library + Bid structure + Quick-bid together make a usable product without plans or takeoff. Everything from step 5 on is expansion on top of a foundation that has *not* yet been proven with a real user.
+>
+> Enforces the [STRATEGY_NOTES.md](STRATEGY_NOTES.md) verdict: *validate with real outside users before expanding scope.*
+
 5. **Dashboard**
 6. **Takeoff page redesign**
 7. **Proposal generator**
