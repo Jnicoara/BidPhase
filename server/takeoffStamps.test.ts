@@ -495,3 +495,127 @@ describe.skipIf(!hasDb)("linking a legend symbol to an assembly", () => {
     ).rejects.toThrow(/not found/i);
   });
 });
+
+// ── Layers (phase 2d) ────────────────────────────────────────────────────────
+
+describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
+  it("snapshots the assembly's Category so the System layer survives deletion", async () => {
+    // The layer a mark belongs to must not depend on the library assembly still
+    // existing — an archived assembly would otherwise make old marks
+    // unfilterable, and unfilterable means invisible on a filtered sheet.
+    const { bidId, sheetId } = await scenario();
+    const assembly = (await caller().assemblies.list())[0];
+
+    await caller().takeoffStamps.drop({
+      bidId, sheetId, assemblyId: assembly.id, assemblyName: assembly.name,
+      at: [{ x: 10, y: 10 }],
+    });
+
+    const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
+    expect(placed.assemblyCategory).toBe(assembly.category);
+  });
+
+  it("starts untagged, which is a real state rather than a default", async () => {
+    const { bidId, sheetId } = await scenario();
+    await caller().takeoffStamps.drop({
+      bidId, sheetId, assemblyId: null, assemblyName: "Recep", at: [{ x: 1, y: 1 }],
+    });
+    const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
+    expect(placed.location).toBeNull();
+  });
+
+  it("accepts a Location at drop time", async () => {
+    const { bidId, sheetId } = await scenario();
+    await caller().takeoffStamps.drop({
+      bidId, sheetId, assemblyId: null, assemblyName: "Recep",
+      location: "Wall", at: [{ x: 1, y: 1 }],
+    });
+    const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
+    expect(placed.location).toBe("Wall");
+  });
+
+  it("tags one stamp after the fact", async () => {
+    const { bidId, sheetId } = await scenario();
+    await caller().takeoffStamps.drop({
+      bidId, sheetId, assemblyId: null, assemblyName: "Recep", at: [{ x: 1, y: 1 }],
+    });
+    const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
+    await caller().takeoffStamps.setLocation({ id: placed.id, location: "Ceiling/Overhead" });
+
+    const [after] = await caller().takeoffStamps.listForSheet({ sheetId });
+    expect(after.location).toBe("Ceiling/Overhead");
+  });
+
+  it("tags a whole assembly's stamps at once", async () => {
+    // The realistic path: stamp twenty ceiling lights, then say they are all in
+    // the ceiling — rather than tagging twenty marks one at a time.
+    const { bidId, sheetId } = await scenario();
+    await caller().takeoffStamps.drop({
+      bidId, sheetId, assemblyId: null, assemblyName: "Ceiling light",
+      at: [{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }],
+    });
+    await caller().takeoffStamps.drop({
+      bidId, sheetId, assemblyId: null, assemblyName: "Wall recep", at: [{ x: 9, y: 9 }],
+    });
+
+    await caller().takeoffStamps.setLocationForAssembly({
+      sheetId, assemblyName: "Ceiling light", location: "Ceiling/Overhead",
+    });
+
+    const all = await caller().takeoffStamps.listForSheet({ sheetId });
+    expect(all.filter(s => s.location === "Ceiling/Overhead")).toHaveLength(3);
+    // The other assembly is untouched — bulk tagging is scoped, not global.
+    expect(all.find(s => s.assemblyName === "Wall recep")!.location).toBeNull();
+  });
+
+  it("can clear a Location back to untagged", async () => {
+    const { bidId, sheetId } = await scenario();
+    await caller().takeoffStamps.drop({
+      bidId, sheetId, assemblyId: null, assemblyName: "Recep",
+      location: "Wall", at: [{ x: 1, y: 1 }],
+    });
+    const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
+    await caller().takeoffStamps.setLocation({ id: placed.id, location: null });
+
+    const [after] = await caller().takeoffStamps.listForSheet({ sheetId });
+    expect(after.location).toBeNull();
+  });
+
+  it("refuses a Location that is not in the vocabulary", async () => {
+    const { bidId, sheetId } = await scenario();
+    await expect(
+      caller().takeoffStamps.drop({
+        bidId, sheetId, assemblyId: null, assemblyName: "Recep",
+        location: "Attic" as never, at: [{ x: 1, y: 1 }],
+      })
+    ).rejects.toThrow();
+  });
+
+  it("tags a traced run's Location without touching its geometry", async () => {
+    const { bidId, sheetId } = await scenario();
+    const run = await caller().takeoffRuns.save({
+      bidId, sheetId, name: "Feeder", pathType: "conduit",
+      points: [{ x: 0, y: 0 }, { x: 25 * 72, y: 0 }],
+    });
+    await caller().takeoffRuns.commit({ id: run.id });
+    await caller().takeoffRuns.setLocation({ id: run.id, location: "Underground" });
+
+    const [saved] = await caller().takeoffRuns.listForSheet({ sheetId });
+    expect(saved.location).toBe("Underground");
+    // The measurement is unchanged — tagging is metadata, not geometry.
+    expect(saved.quantities!.runFeet).toBe(100);
+  });
+
+  it("refuses another user's stamp", async () => {
+    const { bidId, sheetId } = await scenario();
+    await caller().takeoffStamps.drop({
+      bidId, sheetId, assemblyId: null, assemblyName: "Recep", at: [{ x: 1, y: 1 }],
+    });
+    const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
+    await callerFor(OTHER_USER).takeoffStamps.setLocation({ id: placed.id, location: "Wall" });
+
+    // Scoped by userId in the query, so nothing changed.
+    const [after] = await caller().takeoffStamps.listForSheet({ sheetId });
+    expect(after.location).toBeNull();
+  });
+});

@@ -49,6 +49,7 @@ import {
   InsertTakeoffStamp,
   TakeoffStamp,
   takeoffStamps,
+  TakeoffLocation,
   InsertSymbolLink,
   SymbolLink,
   symbolLinks,
@@ -2808,6 +2809,35 @@ export async function createStamps(rows: InsertTakeoffStamp[]): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   await db.insert(takeoffStamps).values(rows);
+}
+
+/** Tag where a placed stamp sits — the Location layer. */
+export async function setStampLocation(
+  id: number,
+  userId: number,
+  location: TakeoffLocation | null
+) {
+  const database = await getDb();
+  if (!database) throw new Error("DB unavailable");
+  await database.update(takeoffStamps).set({ location, updatedAt: new Date() })
+    .where(and(eq(takeoffStamps.id, id), eq(takeoffStamps.userId, userId)));
+}
+
+/** Tag a whole assembly's stamps at once — the common case after stamping. */
+export async function setStampLocationForAssembly(
+  sheetId: number,
+  userId: number,
+  assemblyName: string,
+  location: TakeoffLocation | null
+) {
+  const database = await getDb();
+  if (!database) throw new Error("DB unavailable");
+  await database.update(takeoffStamps).set({ location, updatedAt: new Date() })
+    .where(and(
+      eq(takeoffStamps.sheetId, sheetId),
+      eq(takeoffStamps.userId, userId),
+      eq(takeoffStamps.assemblyName, assemblyName)
+    ));
 }
 
 export async function deleteStamp(id: number, userId: number) {

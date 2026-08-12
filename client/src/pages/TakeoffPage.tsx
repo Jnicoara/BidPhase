@@ -61,6 +61,14 @@ import {
 } from "@/lib/traceDraft";
 import { LegendPanel } from "@/components/takeoff/LegendPanel";
 import { groupStamps } from "@shared/takeoffCounts";
+import { LayersPanel } from "@/components/takeoff/LayersPanel";
+import {
+  SymbolCaptureForm, SymbolCaptureLayer, cropToThumbnail, type CaptureRegion,
+} from "@/components/takeoff/SymbolCapture";
+import {
+  allLayersOn, filterByLayers, layersPresent, locationKeyOf, systemKeyForRun,
+  systemKeyForStamp, type LayerState,
+} from "@shared/takeoffLayers";
 import type { PagePoint } from "@shared/takeoffGeometry";
 import type { RunPathType } from "@shared/takeoffQuantities";
 
@@ -201,7 +209,10 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
    * dimensions so its coordinate space matches the rasterised page exactly —
    * a mismatch here would put every measurement out by a constant factor.
    */
-  overlay?: (size: { width: number; height: number; renderScale: number }) => React.ReactNode;
+  overlay?: (size: {
+    width: number; height: number; renderScale: number;
+    canvas: HTMLCanvasElement | null;
+  }) => React.ReactNode;
 }) {
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const { load, render, outline, pageText } = usePdfWorker();
@@ -368,7 +379,9 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
               ref={canvasRef}
               className="max-w-full h-auto rounded-lg shadow-lg bg-white block"
             />
-            {canvasSize.width > 0 && overlay?.({ ...canvasSize, renderScale: RENDER_SCALE })}
+            {canvasSize.width > 0 && overlay?.({
+              ...canvasSize, renderScale: RENDER_SCALE, canvas: canvasRef.current,
+            })}
           </div>
         )}
       </div>
@@ -421,8 +434,14 @@ export default function TakeoffPage({ bidId, onBack }: {
   /** Where a click in the counted-items list sent the viewer. */
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
   const [capturingSymbol, setCapturingSymbol] = useState(false);
+  /** The crop taken from the page, awaiting a name. */
+  const [pendingCapture, setPendingCapture] = useState<{ thumbnail: string | null } | null>(null);
   /** Clicks not yet confirmed by the server. Mirrored locally; see traceDraft. */
   const pendingStamps = useRef<QueuedStamp[]>([]);
+  /** Which layers are showing. Null until a sheet's contents are known. */
+  const [layerState, setLayerState] = useState<LayerState | null>(null);
+  const hadSystem = useRef<Set<string>>(new Set());
+  const hadLocation = useRef<Set<string>>(new Set());
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   const doc = docs.find(d => d.id === selectedDocId) ?? docs[0] ?? null;
@@ -629,12 +648,95 @@ export default function TakeoffPage({ bidId, onBack }: {
     return () => window.removeEventListener("keydown", onKey);
   }, [stampAssembly]);
 
+  /**
+   * Everything on the sheet, expressed on the two layer axes.
+   *
+   * Stamps carry their assembly's Category (snapshotted at drop time); runs
+   * have no assembly and so get their own System keys. One checklist covers
+   * the sheet — see shared/takeoffLayers.ts.
+   */
+  const layeredStamps = useMemo(
+    () => stamps.map(st => ({
+      ...st,
+      systemKey: systemKeyForStamp(st.assemblyCategory),
+      location: st.location ?? null,
+    })),
+    [stamps]
+  );
+  const layeredRuns = useMemo(
+    () => runs.map(run => ({
+      ...run,
+      systemKey: systemKeyForRun(run.pathType as "conduit" | "cable"),
+      location: run.location ?? null,
+    })),
+    [runs]
+  );
+
+  const present = useMemo(
+    () => layersPresent([...layeredStamps, ...layeredRuns]),
+    [layeredStamps, layeredRuns]
+  );
+
+  /**
+   * Default every layer on when a sheet's contents change shape.
+   *
+   * Keyed on the set of layer keys rather than the items: adding a stamp to a
+   * system already showing must not reset a filter the user set, but a system
+   * appearing for the first time should arrive visible rather than silently
+   * hidden.
+   */
+  const presentKey = useMemo(
+    () => [...present.systems.map(s => s.key), "|", ...present.locations.map(l => l.key)].join(","),
+    [present]
+  );
+  useEffect(() => {
+    // Snapshot what was present BEFORE updating the refs. The state updater
+    // below runs later, and reading a ref that has already been reassigned
+    // makes every key look like one we had seen — so nothing gets switched on
+    // and a sheet opens with everything hidden.
+    const seenSystems = hadSystem.current;
+    const seenLocations = hadLocation.current;
+    hadSystem.current = new Set(present.systems.map(entry => entry.key));
+    hadLocation.current = new Set(present.locations.map(entry => entry.key));
+
+    setLayerState(current => {
+      // First sight of this sheet's contents: everything on, per the plan's
+      // "Default: all layers on when a sheet is first opened".
+      if (!current) return allLayersOn([...layeredStamps, ...layeredRuns]);
+
+      // Otherwise keep the user's choices and switch on anything that has
+      // appeared since — a new system arriving hidden would be invisible work.
+      const systems = new Set(current.systems);
+      const locations = new Set(current.locations);
+      for (const entry of present.systems) {
+        if (!seenSystems.has(entry.key)) systems.add(entry.key);
+      }
+      for (const entry of present.locations) {
+        if (!seenLocations.has(entry.key)) locations.add(entry.key);
+      }
+      return { systems, locations };
+    });
+  }, [presentKey]);
+
+  const effectiveLayers = layerState ?? allLayersOn([...layeredStamps, ...layeredRuns]);
+
+  const visibleStamps = useMemo(
+    () => filterByLayers(layeredStamps, effectiveLayers),
+    [layeredStamps, effectiveLayers]
+  );
+  const visibleRuns = useMemo(
+    () => filterByLayers(layeredRuns, effectiveLayers),
+    [layeredRuns, effectiveLayers]
+  );
+  const hiddenCount =
+    (layeredStamps.length - visibleStamps.length) + (layeredRuns.length - visibleRuns.length);
+
   const stampGroups = useMemo(
-    () => groupStamps(stamps.map(st => ({
+    () => groupStamps(visibleStamps.map(st => ({
       id: st.id, sheetId: st.sheetId, assemblyId: st.assemblyId,
       assemblyName: st.assemblyName, x: st.x, y: st.y,
     }))),
-    [stamps]
+    [visibleStamps]
   );
 
   const saveRun = trpc.takeoffRuns.save.useMutation({ onError: e => toast.error(e.message) });
@@ -1035,6 +1137,40 @@ export default function TakeoffPage({ bidId, onBack }: {
                     onDocumentReady={handleDocumentReady}
                     onSheetVisible={handleSheetVisible}
                     overlay={size => measurability ? (
+                      <>
+                      {capturingSymbol && (
+                        <SymbolCaptureLayer
+                          width={size.width}
+                          height={size.height}
+                          renderScale={size.renderScale}
+                          onCancel={() => setCapturingSymbol(false)}
+                          onRegion={(region: CaptureRegion) => {
+                            const thumbnail = size.canvas
+                              ? cropToThumbnail(size.canvas, region, size.renderScale)
+                              : null;
+                            setCapturingSymbol(false);
+                            setPendingCapture({ thumbnail });
+                          }}
+                        />
+                      )}
+                      {pendingCapture && (
+                        <SymbolCaptureForm
+                          thumbnail={pendingCapture.thumbnail}
+                          onCancel={() => setPendingCapture(null)}
+                          onSave={label => {
+                            captureSymbol.mutate({
+                              label,
+                              thumbnail: pendingCapture.thumbnail,
+                              capturedFromSheetId: activeSheet?.id,
+                            }, {
+                              onSuccess: r => toast.success(r.alreadyKnown
+                                ? "Already in your legend."
+                                : "Captured — click it to choose an assembly."),
+                            });
+                            setPendingCapture(null);
+                          }}
+                        />
+                      )}
                       <TraceLayer
                         width={size.width}
                         height={size.height}
@@ -1044,14 +1180,14 @@ export default function TakeoffPage({ bidId, onBack }: {
                         pathType={tracePathType}
                         points={tracePoints}
                         onPointsChange={setTracePoints}
-                        existingRuns={runs}
+                        existingRuns={visibleRuns}
                         onFinish={finishTrace}
                         onCancel={cancelTrace}
                         selectedRunId={selectedRunId}
                         onSelectRun={setSelectedRunId}
                         stamping={Boolean(stampAssembly) && !tracing}
                         stampAssemblyName={stampAssembly?.name ?? null}
-                        stamps={stamps.map(st => ({
+                        stamps={visibleStamps.map(st => ({
                           id: st.id, assemblyName: st.assemblyName, x: st.x, y: st.y,
                         }))}
                         onDropStamp={queueStamp}
@@ -1059,6 +1195,7 @@ export default function TakeoffPage({ bidId, onBack }: {
                         onSelectStamp={setSelectedStampId}
                         focusPoint={focusPoint}
                       />
+                      </>
                     ) : null}
                   />
                   {/* Rendered under the pager rather than inside PlanPane so
@@ -1116,7 +1253,7 @@ export default function TakeoffPage({ bidId, onBack }: {
 
             <ResizablePanel defaultSize={32} minSize={18} className="min-w-0">
               <RunsPanel
-                runs={runs.map(r => ({ ...r, firstPoint: r.points[0] ?? null }))}
+                runs={visibleRuns.map(r => ({ ...r, firstPoint: r.points[0] ?? null }))}
                 stampGroups={stampGroups}
                 onJumpTo={at => {
                   setFocusPoint(at);
@@ -1126,6 +1263,16 @@ export default function TakeoffPage({ bidId, onBack }: {
                 }}
                 onRemoveStamp={id => removeStamp.mutate({ id })}
                 legend={
+                  <>
+                  <LayersPanel
+                    present={present}
+                    state={effectiveLayers}
+                    onChange={update => setLayerState(previous =>
+                      update(previous ?? allLayersOn([...layeredStamps, ...layeredRuns]))
+                    )}
+                    filtered={hiddenCount > 0}
+                    hiddenCount={hiddenCount}
+                  />
                   <LegendPanel
                     symbols={symbols}
                     assemblies={allAssemblies.map(a => ({
@@ -1133,20 +1280,7 @@ export default function TakeoffPage({ bidId, onBack }: {
                     }))}
                     activeAssemblyId={stampAssembly?.id ?? null}
                     capturing={capturingSymbol}
-                    onStartCapture={() => {
-                      setCapturingSymbol(true);
-                      const label = window.prompt("Name this symbol (e.g. Duplex recep)");
-                      setCapturingSymbol(false);
-                      if (!label?.trim()) return;
-                      captureSymbol.mutate({
-                        label: label.trim(),
-                        capturedFromSheetId: activeSheet?.id,
-                      }, {
-                        onSuccess: r => toast.success(r.alreadyKnown
-                          ? "Already in your legend."
-                          : "Captured — click it to choose an assembly."),
-                      });
-                    }}
+                    onStartCapture={() => setCapturingSymbol(true)}
                     onCancelCapture={() => setCapturingSymbol(false)}
                     onLink={(symbolId, assemblyId) => linkSymbol.mutate({ id: symbolId, assemblyId })}
                     onUnlink={id => unlinkSymbol.mutate({ id })}
@@ -1158,6 +1292,7 @@ export default function TakeoffPage({ bidId, onBack }: {
                       toast.success(`Stamping ${assembly.name} — click to place.`);
                     }}
                   />
+                  </>
                 }
                 totals={totals}
                 selectedRunId={selectedRunId}

@@ -18,6 +18,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { buildCountedItems, symbolLookupKey } from "../../shared/takeoffCounts";
 import { measurabilityOf } from "../../shared/takeoffQuantities";
+import { TAKEOFF_LOCATIONS } from "../../drizzle/schema";
 import { pathRealInches, toBillableFeet } from "../../shared/takeoffGeometry";
 import * as db from "../db";
 
@@ -69,6 +70,8 @@ export const takeoffStampsRouter = router({
       sheetId: z.number().int().positive(),
       assemblyId: z.number().int().positive().nullable(),
       assemblyName: nameSchema,
+      /** Where these ones sit. Optional — tagging can happen after placing. */
+      location: z.enum(TAKEOFF_LOCATIONS).nullable().default(null),
       /** One entry per click. Bounded so a runaway loop cannot flood a sheet. */
       at: z.array(z.object({ x: coordSchema, y: coordSchema })).min(1).max(500),
     }))
@@ -76,12 +79,22 @@ export const takeoffStampsRouter = router({
       await requireBid(input.bidId, ctx.user.id);
       await requireSheet(input.sheetId, ctx.user.id);
 
+      // The assembly's Category is snapshotted at drop time so the System
+      // layer keeps working after the library assembly is archived or renamed.
+      let assemblyCategory: string | null = null;
+      if (input.assemblyId !== null) {
+        const assembly = await db.getAssemblyById(input.assemblyId, ctx.user.id);
+        assemblyCategory = assembly?.category ?? null;
+      }
+
       await db.createStamps(input.at.map(point => ({
         bidId: input.bidId,
         sheetId: input.sheetId,
         userId: ctx.user.id,
         assemblyId: input.assemblyId,
         assemblyName: input.assemblyName,
+        assemblyCategory,
+        location: input.location,
         x: point.x.toFixed(4),
         y: point.y.toFixed(4),
       })));
@@ -108,9 +121,42 @@ export const takeoffStampsRouter = router({
         sheetId: row.sheetId,
         assemblyId: row.assemblyId,
         assemblyName: row.assemblyName,
+        assemblyCategory: row.assemblyCategory,
+        location: row.location,
         x: Number(row.x),
         y: Number(row.y),
       }));
+    }),
+
+  /** Tag one stamp's Location. */
+  setLocation: protectedProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      location: z.enum(TAKEOFF_LOCATIONS).nullable(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await db.setStampLocation(input.id, ctx.user.id, input.location);
+      return { success: true };
+    }),
+
+  /**
+   * Tag every stamp of one assembly on a sheet at once.
+   *
+   * The realistic path: you stamp twenty ceiling lights and then say they are
+   * all in the ceiling, rather than tagging each of twenty marks.
+   */
+  setLocationForAssembly: protectedProcedure
+    .input(z.object({
+      sheetId: z.number().int().positive(),
+      assemblyName: nameSchema,
+      location: z.enum(TAKEOFF_LOCATIONS).nullable(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requireSheet(input.sheetId, ctx.user.id);
+      await db.setStampLocationForAssembly(
+        input.sheetId, ctx.user.id, input.assemblyName, input.location
+      );
+      return { success: true };
     }),
 
   /**

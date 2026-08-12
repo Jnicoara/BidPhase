@@ -312,6 +312,29 @@ export const ASSEMBLY_CATEGORIES = [
   "Low Voltage/EMS",
 ] as const;
 
+/**
+ * WHERE a placed item sits on a job — the second layer axis (phase 2d).
+ *
+ * Deliberately not a property of the assembly. A duplex receptacle is always
+ * "Devices" (its Category, which travels with the library item), but the same
+ * receptacle can be in a wall on one job and in a ceiling on another — so this
+ * is tagged on the PLACED item at the moment it is counted.
+ * See ASSEMBLIES_PLAN.md § LAYERS.
+ *
+ * Trade-agnostic on purpose: "Underground" means the same thing for electrical
+ * conduit and plumbing pipe, and that shared vocabulary is what makes
+ * cross-trade conflict visibility possible later.
+ */
+export const TAKEOFF_LOCATIONS = [
+  "Underground",
+  "Slab/Floor",
+  "Wall",
+  "Ceiling/Overhead",
+  "Exposed",
+  "Roof",
+] as const;
+export type TakeoffLocation = (typeof TAKEOFF_LOCATIONS)[number];
+
 export const MATERIAL_UNITS_OF_SALE = ["each", "foot", "box"] as const;
 
 /**
@@ -936,6 +959,9 @@ export const takeoffRuns = mysqlTable(
 
     status: mysqlEnum("status", RUN_STATUSES).default("draft").notNull(),
 
+    /** WHERE the raceway sits. Same axis as a stamp's; see TAKEOFF_LOCATIONS. */
+    location: mysqlEnum("location", TAKEOFF_LOCATIONS),
+
     /**
      * This path was proposed by AI rather than traced by hand.
      *
@@ -1023,6 +1049,17 @@ export const takeoffStamps = mysqlTable(
     assemblyId: int("assemblyId").references(() => assemblies.id, { onDelete: "set null" }),
     /** What it was called when it was dropped. Never re-read from the library. */
     assemblyName: varchar("assemblyName", { length: 255 }).notNull(),
+    /**
+     * The assembly's Category at drop time — the System layer this mark belongs
+     * to. Snapshotted for the same reason the name is: an archived or deleted
+     * assembly must not make an existing takeoff unfilterable.
+     */
+    assemblyCategory: varchar("assemblyCategory", { length: 64 }),
+    /**
+     * WHERE this one sits. Null means the user has not said yet, which the
+     * Location filter shows as its own "Unassigned" band rather than hiding.
+     */
+    location: mysqlEnum("location", TAKEOFF_LOCATIONS),
 
     /** Where it sits, in PDF PAGE POINTS — never screen pixels, which zoom. */
     x: decimal("x", { precision: 12, scale: 4 }).notNull(),

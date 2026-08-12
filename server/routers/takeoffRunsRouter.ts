@@ -21,7 +21,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { RUN_PATH_TYPES, RUN_STATUSES } from "../../drizzle/schema";
+import { RUN_PATH_TYPES, RUN_STATUSES, TAKEOFF_LOCATIONS } from "../../drizzle/schema";
 import { pathRealInches, toBillableFeet } from "../../shared/takeoffGeometry";
 import {
   measurabilityOf,
@@ -124,6 +124,7 @@ export const takeoffRunsRouter = router({
           points: run.points ?? [],
           status: run.status,
           isSuggestion: run.isSuggestion,
+          location: run.location,
           circuits: runCircuits,
           /** Null whenever the sheet cannot be measured — never a fallback 0. */
           quantities: quantitiesForRun(traced, runCircuits, ratio),
@@ -158,6 +159,8 @@ export const takeoffRunsRouter = router({
       points: pointsSchema,
       status: z.enum(RUN_STATUSES).default("draft"),
       isSuggestion: z.boolean().default(false),
+      /** Where the raceway sits — the Location layer. Taggable later too. */
+      location: z.enum(TAKEOFF_LOCATIONS).nullable().default(null),
     }))
     .mutation(async ({ input, ctx }) => {
       const sheet = await requireSheet(input.sheetId, ctx.user.id);
@@ -181,6 +184,7 @@ export const takeoffRunsRouter = router({
         scaleRatioUsed: ratio === null ? null : String(ratio),
         status: input.status,
         isSuggestion: input.isSuggestion,
+        location: input.location,
       };
 
       if (input.id) {
@@ -246,6 +250,18 @@ export const takeoffRunsRouter = router({
       }
       await requireMeasurableSheet(run.sheetId, ctx.user.id);
       await db.updateRun(input.id, ctx.user.id, { isSuggestion: false, status: "draft" });
+      return { success: true };
+    }),
+
+  /** Tag a run's Location without disturbing its geometry. */
+  setLocation: protectedProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      location: z.enum(TAKEOFF_LOCATIONS).nullable(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requireRun(input.id, ctx.user.id);
+      await db.updateRun(input.id, ctx.user.id, { location: input.location });
       return { success: true };
     }),
 

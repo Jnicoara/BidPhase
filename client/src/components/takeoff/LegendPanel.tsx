@@ -84,7 +84,7 @@ export function LegendPanel({
 
       {capturing && (
         <p className="px-3 pb-2 text-[0.7rem] text-[#F5C518]">
-          Drag a box around a symbol on the legend, then give it a name.
+          Drag a box around a symbol on the drawing's legend — the crop becomes its picture here.
         </p>
       )}
 
