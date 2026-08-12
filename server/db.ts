@@ -46,6 +46,12 @@ import {
   InsertTakeoffRun,
   TakeoffRun,
   takeoffRuns,
+  InsertTakeoffStamp,
+  TakeoffStamp,
+  takeoffStamps,
+  InsertSymbolLink,
+  SymbolLink,
+  symbolLinks,
   InsertTakeoffRunCircuit,
   TakeoffRunCircuit,
   takeoffRunCircuits,
@@ -2776,4 +2782,97 @@ export async function deleteRunCircuit(id: number, userId: number) {
   if (!db) throw new Error("DB unavailable");
   await db.delete(takeoffRunCircuits)
     .where(and(eq(takeoffRunCircuits.id, id), eq(takeoffRunCircuits.userId, userId)));
+}
+
+// ─── Stamps and symbol links (takeoff phase 2c) ───────────────────────────────
+
+export async function getStampsForSheet(sheetId: number, userId: number): Promise<TakeoffStamp[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(takeoffStamps)
+    .where(and(eq(takeoffStamps.sheetId, sheetId), eq(takeoffStamps.userId, userId)))
+    .orderBy(asc(takeoffStamps.id));
+}
+
+export async function getStampsForBid(bidId: number, userId: number): Promise<TakeoffStamp[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(takeoffStamps)
+    .where(and(eq(takeoffStamps.bidId, bidId), eq(takeoffStamps.userId, userId)))
+    .orderBy(asc(takeoffStamps.id));
+}
+
+/** Insert many at once — the stamp tool flushes a batch of clicks. */
+export async function createStamps(rows: InsertTakeoffStamp[]): Promise<void> {
+  if (rows.length === 0) return;
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(takeoffStamps).values(rows);
+}
+
+export async function deleteStamp(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(takeoffStamps)
+    .where(and(eq(takeoffStamps.id, id), eq(takeoffStamps.userId, userId)));
+}
+
+/** Every symbol the user has captured, linked or not. */
+export async function getSymbolLinks(userId: number): Promise<SymbolLink[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(symbolLinks)
+    .where(eq(symbolLinks.userId, userId))
+    .orderBy(asc(symbolLinks.label));
+}
+
+export async function getSymbolLinkByKey(
+  userId: number,
+  lookupKey: string
+): Promise<SymbolLink | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(symbolLinks)
+    .where(and(eq(symbolLinks.userId, userId), eq(symbolLinks.lookupKey, lookupKey)))
+    .limit(1);
+  return row;
+}
+
+export async function getSymbolLinkById(
+  id: number,
+  userId: number
+): Promise<SymbolLink | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(symbolLinks)
+    .where(and(eq(symbolLinks.id, id), eq(symbolLinks.userId, userId))).limit(1);
+  return row;
+}
+
+export async function createSymbolLink(data: InsertSymbolLink): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(symbolLinks).values(data);
+  return result.insertId;
+}
+
+export async function updateSymbolLink(
+  id: number,
+  userId: number,
+  data: Partial<InsertSymbolLink>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db.update(symbolLinks).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(symbolLinks.id, id), eq(symbolLinks.userId, userId)));
+}
+
+export async function deleteSymbolLink(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(symbolLinks)
+    .where(and(eq(symbolLinks.id, id), eq(symbolLinks.userId, userId)));
 }

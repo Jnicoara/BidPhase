@@ -1,0 +1,271 @@
+/**
+ * The stamp tool and the legend's symbol links. Takeoff redesign, phase 2c.
+ *
+ * ── Manual only, by design ───────────────────────────────────────────────────
+ * Nothing here interprets a drawing. A symbol's identity comes from the user
+ * boxing it and naming it; a link is created because they chose an assembly.
+ * The AI phase later reads this same table to interpret plans and drives the
+ * same stamp procedures to place its findings — which is why the link table is
+ * the lookup and not a side effect of one.
+ *
+ * ── Counts are derived ───────────────────────────────────────────────────────
+ * One row per drop, and the quantity is how many rows there are. No count is
+ * stored, so a count and the marks on the plan cannot disagree. Grouping lives
+ * in shared/takeoffCounts.ts, which is pure and tested.
+ */
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+import { protectedProcedure, router } from "../_core/trpc";
+import { buildCountedItems, symbolLookupKey } from "../../shared/takeoffCounts";
+import { measurabilityOf } from "../../shared/takeoffQuantities";
+import { pathRealInches, toBillableFeet } from "../../shared/takeoffGeometry";
+import * as db from "../db";
+
+const nameSchema = z.string().trim().min(1).max(255);
+
+/** Page-point coordinates, bounded the same way traced vertices are. */
+const coordSchema = z.number().finite().min(-100000).max(100000);
+
+/**
+ * A data-URL thumbnail of a boxed legend symbol.
+ *
+ * Capped hard: this is a small crop for recognition, not an image store. A
+ * generous ceiling here would let a full-page screenshot into a text column
+ * and quietly bloat every list query that reads it.
+ */
+const thumbnailSchema = z.string()
+  .max(200_000)
+  .refine(v => v.startsWith("data:image/"), "Thumbnail must be an image data URL")
+  .nullable();
+
+async function requireSheet(sheetId: number, userId: number) {
+  const sheet = await db.getBidPdfSheet(sheetId, userId);
+  if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
+  return sheet;
+}
+
+async function requireBid(bidId: number, userId: number) {
+  const bid = await db.getBidById(bidId, userId);
+  if (!bid) throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
+  return bid;
+}
+
+export const takeoffStampsRouter = router({
+  /**
+   * Drop one or more stamps.
+   *
+   * Takes a BATCH because the tool queues clicks and flushes them together —
+   * a user drops stamps far faster than a round trip, and a request per click
+   * would put the drawing behind the network. Sending several at once is also
+   * what makes the local draft mirror recoverable as a unit.
+   *
+   * Unlike a traced run, a stamp needs no scale: it is a count, not a
+   * measurement, and blocking counting on a missing scale would stop work that
+   * does not depend on one.
+   */
+  drop: protectedProcedure
+    .input(z.object({
+      bidId: z.number().int().positive(),
+      sheetId: z.number().int().positive(),
+      assemblyId: z.number().int().positive().nullable(),
+      assemblyName: nameSchema,
+      /** One entry per click. Bounded so a runaway loop cannot flood a sheet. */
+      at: z.array(z.object({ x: coordSchema, y: coordSchema })).min(1).max(500),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requireBid(input.bidId, ctx.user.id);
+      await requireSheet(input.sheetId, ctx.user.id);
+
+      await db.createStamps(input.at.map(point => ({
+        bidId: input.bidId,
+        sheetId: input.sheetId,
+        userId: ctx.user.id,
+        assemblyId: input.assemblyId,
+        assemblyName: input.assemblyName,
+        x: point.x.toFixed(4),
+        y: point.y.toFixed(4),
+      })));
+
+      return { dropped: input.at.length };
+    }),
+
+  /** Remove one stamp — the misclick path. */
+  remove: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      await db.deleteStamp(input.id, ctx.user.id);
+      return { success: true };
+    }),
+
+  /** Every stamp on a sheet, for drawing the marks. */
+  listForSheet: protectedProcedure
+    .input(z.object({ sheetId: z.number().int().positive() }))
+    .query(async ({ input, ctx }) => {
+      await requireSheet(input.sheetId, ctx.user.id);
+      const rows = await db.getStampsForSheet(input.sheetId, ctx.user.id);
+      return rows.map(row => ({
+        id: row.id,
+        sheetId: row.sheetId,
+        assemblyId: row.assemblyId,
+        assemblyName: row.assemblyName,
+        x: Number(row.x),
+        y: Number(row.y),
+      }));
+    }),
+
+  /**
+   * The live counted-items list for one sheet: stamped assemblies grouped with
+   * their quantities, plus every traced run with its footage.
+   *
+   * One call rather than two so the list cannot render half-updated — a
+   * quantity climbing while a run's footage lags behind reads as a bug.
+   */
+  countedItems: protectedProcedure
+    .input(z.object({ sheetId: z.number().int().positive() }))
+    .query(async ({ input, ctx }) => {
+      const sheet = await requireSheet(input.sheetId, ctx.user.id);
+      const measurability = measurabilityOf({
+        scaleRatio: sheet.scaleRatio === null ? null : Number(sheet.scaleRatio),
+        scaleSource: sheet.scaleSource,
+        notToScale: sheet.notToScale,
+      });
+      const ratio = measurability.ok ? measurability.ratio : null;
+
+      const [stamps, runs] = await Promise.all([
+        db.getStampsForSheet(input.sheetId, ctx.user.id),
+        db.getRunsForSheet(input.sheetId, ctx.user.id),
+      ]);
+
+      return buildCountedItems(
+        stamps.map(s => ({
+          id: s.id,
+          sheetId: s.sheetId,
+          assemblyId: s.assemblyId,
+          assemblyName: s.assemblyName,
+          x: Number(s.x),
+          y: Number(s.y),
+        })),
+        runs
+          // A suggestion is not counted work; it stays out of the list that
+          // says what the job contains until the user accepts it.
+          .filter(run => !run.isSuggestion)
+          .map(run => {
+            const points = run.points ?? [];
+            const inches = ratio === null ? null : pathRealInches(points, ratio);
+            return {
+              id: run.id,
+              sheetId: run.sheetId,
+              name: run.name,
+              pathType: run.pathType as "conduit" | "cable",
+              points,
+              runFeet: inches === null ? null : toBillableFeet(inches),
+            };
+          })
+      );
+    }),
+
+  // ── Legend: symbol → assembly links ────────────────────────────────────────
+
+  /** Every symbol this user has captured, across all their jobs. */
+  symbols: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await db.getSymbolLinks(ctx.user.id);
+    return rows.map(row => ({
+      id: row.id,
+      label: row.label,
+      assemblyId: row.assemblyId,
+      thumbnail: row.thumbnail,
+      /** The whole point of the panel: is this one click away from stamping? */
+      isLinked: row.assemblyId !== null,
+    }));
+  }),
+
+  /**
+   * Capture a symbol boxed on a legend.
+   *
+   * Idempotent on the label: boxing the same symbol twice returns the existing
+   * link rather than creating a duplicate, so the second capture on a later
+   * sheet immediately carries the assembly the first one was linked to. That
+   * reuse across sheets and jobs is the feature.
+   */
+  captureSymbol: protectedProcedure
+    .input(z.object({
+      label: nameSchema,
+      thumbnail: thumbnailSchema.default(null),
+      capturedFromSheetId: z.number().int().positive().optional(),
+      /** Supplied when the user links at capture time rather than later. */
+      assemblyId: z.number().int().positive().nullable().default(null),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const lookupKey = symbolLookupKey(input.label);
+      const existing = await db.getSymbolLinkByKey(ctx.user.id, lookupKey);
+
+      if (existing) {
+        // Fill in a thumbnail or a link if this capture supplies one the
+        // stored row lacks, but never overwrite a link the user already made.
+        const patch: Record<string, unknown> = {};
+        if (!existing.thumbnail && input.thumbnail) patch.thumbnail = input.thumbnail;
+        if (existing.assemblyId === null && input.assemblyId !== null) {
+          patch.assemblyId = input.assemblyId;
+        }
+        if (Object.keys(patch).length > 0) {
+          await db.updateSymbolLink(existing.id, ctx.user.id, patch);
+        }
+        const updated = await db.getSymbolLinkById(existing.id, ctx.user.id);
+        return {
+          id: existing.id,
+          alreadyKnown: true,
+          assemblyId: updated?.assemblyId ?? null,
+          isLinked: (updated?.assemblyId ?? null) !== null,
+        };
+      }
+
+      const id = await db.createSymbolLink({
+        userId: ctx.user.id,
+        label: input.label,
+        lookupKey,
+        assemblyId: input.assemblyId,
+        thumbnail: input.thumbnail,
+        capturedFromSheetId: input.capturedFromSheetId ?? null,
+      });
+      return {
+        id,
+        alreadyKnown: false,
+        assemblyId: input.assemblyId,
+        isLinked: input.assemblyId !== null,
+      };
+    }),
+
+  /** Answer the one-time "which assembly does this match?" prompt. */
+  linkSymbol: protectedProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      assemblyId: z.number().int().positive(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const link = await db.getSymbolLinkById(input.id, ctx.user.id);
+      if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Symbol not found." });
+
+      const assembly = await db.getAssemblyById(input.assemblyId, ctx.user.id);
+      if (!assembly) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+
+      await db.updateSymbolLink(input.id, ctx.user.id, { assemblyId: input.assemblyId });
+      return { id: input.id, assemblyId: input.assemblyId, assemblyName: assembly.name };
+    }),
+
+  /** Break a link, leaving the captured symbol in place to be re-linked. */
+  unlinkSymbol: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const link = await db.getSymbolLinkById(input.id, ctx.user.id);
+      if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Symbol not found." });
+      await db.updateSymbolLink(input.id, ctx.user.id, { assemblyId: null });
+      return { success: true };
+    }),
+
+  removeSymbol: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      await db.deleteSymbolLink(input.id, ctx.user.id);
+      return { success: true };
+    }),
+});

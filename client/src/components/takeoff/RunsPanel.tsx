@@ -29,17 +29,35 @@ export type PanelRun = {
   circuits: { id: number; name: string; conductorCount: number }[];
   quantities: RunQuantities | null;
   scaleChangedSinceTraced: boolean;
+  /** Where the run starts, so a click can jump the viewer to it. */
+  firstPoint: { x: number; y: number } | null;
 };
 
 const feet = (value: number) => `${value.toLocaleString("en-US", {
   minimumFractionDigits: 0, maximumFractionDigits: 2,
 })} ft`;
 
+/** Stamped assemblies, grouped, as the list shows them. */
+export type PanelStampGroup = {
+  assemblyId: number | null;
+  name: string;
+  count: number;
+  stamps: { id: number; x: number; y: number }[];
+};
+
 export function RunsPanel({
   runs, totals, selectedRunId, onSelectRun, onRemoveRun, onCommitRun,
   onAcceptSuggestion, onAddCircuit, onUpdateCircuit, onRemoveCircuit,
+  stampGroups, onJumpTo, onRemoveStamp, legend,
 }: {
   runs: PanelRun[];
+  /** Counted stamps, grouped by assembly. Quantities are derived, not typed. */
+  stampGroups: PanelStampGroup[];
+  /** Move the viewer to a mark on the drawing and highlight it. */
+  onJumpTo: (at: { x: number; y: number }) => void;
+  onRemoveStamp: (id: number) => void;
+  /** The legend panel, rendered beneath the list. */
+  legend?: React.ReactNode;
   totals: { conduitFeet: number; cableFeet: number; wireFeet: number; unmeasurableCount: number } | undefined;
   selectedRunId: number | null;
   onSelectRun: (id: number | null) => void;
@@ -57,19 +75,55 @@ export function RunsPanel({
     <div className="h-full flex flex-col bg-card border-l border-border min-h-0">
       <div className="px-3 py-2 border-b border-border shrink-0">
         <div className="flex items-center gap-1.5 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
-          <Zap className="w-3 h-3" /> Traced runs
-          <span className="ml-auto normal-case tracking-normal">{runs.length}</span>
+          <Zap className="w-3 h-3" /> Counted items
+          <span className="ml-auto normal-case tracking-normal">
+            {stampGroups.reduce((n, g) => n + g.count, 0) + runs.length}
+          </span>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
-        {runs.length === 0 ? (
+        {/* Stamped assemblies first: an estimator drops dozens per sheet and
+            traces a handful of runs, so the thing they are actively adding to
+            stays where they can watch it climb. */}
+        {stampGroups.map(group => (
+          <div
+            key={group.assemblyId ?? group.name}
+            className="border-b border-border px-3 py-2 hover:bg-muted/40 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full border-2 border-[#F5C518] bg-[#F5C518]/20 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm truncate">{group.name}</p>
+                <p className="text-[0.7rem] text-muted-foreground">
+                  {group.count} placed
+                </p>
+              </div>
+              <span className="font-mono text-sm tabular-nums">{group.count}</span>
+            </div>
+            {/* Walk the instances: each chip jumps the viewer to that mark. */}
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {group.stamps.map((placed, index) => (
+                <button
+                  key={placed.id}
+                  onClick={() => onJumpTo({ x: placed.x, y: placed.y })}
+                  className="px-1.5 py-0.5 rounded text-[0.65rem] font-mono bg-muted hover:bg-[#F5C518]/20 hover:text-[#F5C518] transition-colors"
+                  title="Show this one on the drawing"
+                >
+                  {index + 1}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {runs.length === 0 && stampGroups.length === 0 ? (
           <div className="p-6 text-center">
             <Zap className="w-7 h-7 mx-auto mb-3 text-muted-foreground/50" />
-            <p className="text-sm font-medium text-muted-foreground">Nothing traced yet</p>
+            <p className="text-sm font-medium text-muted-foreground">Nothing counted yet</p>
             <p className="text-xs text-muted-foreground/70 mt-1.5">
-              Start a conduit or cable run and click along its route on the drawing. Each run's
-              footage appears here as you go.
+              Stamp an assembly onto the plan, or trace a conduit or cable run. Everything you
+              place appears here as you go.
             </p>
           </div>
         ) : runs.map(run => {
@@ -81,7 +135,11 @@ export function RunsPanel({
                 "border-b border-border px-3 py-2.5 cursor-pointer transition-colors",
                 isSelected ? "bg-[#F5C518]/5" : "hover:bg-muted/40"
               )}
-              onClick={() => onSelectRun(isSelected ? null : run.id)}
+              onClick={() => {
+                onSelectRun(isSelected ? null : run.id);
+                const first = run.firstPoint;
+                if (first) onJumpTo(first);
+              }}
             >
               <div className="flex items-start gap-2">
                 {run.pathType === "conduit"
@@ -250,6 +308,8 @@ export function RunsPanel({
           );
         })}
       </div>
+
+      {legend}
 
       {/* Bid totals. Conduit, cable and wire never merge into one number. */}
       {totals && (

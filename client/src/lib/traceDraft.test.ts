@@ -15,6 +15,9 @@ import {
   hasUnsavedWork,
   loadDraft,
   saveDraft,
+  saveStampQueue,
+  loadStampQueue,
+  clearStampQueue,
 } from "./traceDraft";
 
 /** localStorage does not exist in the node test environment. */
@@ -162,5 +165,64 @@ describe("warning before leaving", () => {
     // matters, which costs them the run they actually cared about.
     expect(hasUnsavedWork([{ x: 1, y: 1 }], 0)).toBe(false);
     expect(hasUnsavedWork([], 0)).toBe(false);
+  });
+});
+
+describe("the stamp queue", () => {
+  const queued = [
+    { assemblyId: 10, assemblyName: "Duplex receptacle", x: 100, y: 200 },
+    { assemblyId: 10, assemblyName: "Duplex receptacle", x: 300, y: 200 },
+  ];
+
+  it("recovers clicks that never reached the server", () => {
+    saveStampQueue(1, 9, queued);
+    const recovered = loadStampQueue(1);
+    expect(recovered!.stamps).toHaveLength(2);
+    expect(recovered!.bidId).toBe(9);
+  });
+
+  it("clears itself once the batch is flushed", () => {
+    saveStampQueue(1, 9, queued);
+    saveStampQueue(1, 9, []);
+    expect(loadStampQueue(1)).toBeNull();
+  });
+
+  it("keeps queues on different sheets apart", () => {
+    saveStampQueue(1, 9, queued);
+    saveStampQueue(2, 9, [queued[0]]);
+    expect(loadStampQueue(1)!.stamps).toHaveLength(2);
+    expect(loadStampQueue(2)!.stamps).toHaveLength(1);
+  });
+
+  it("refuses a queue with a corrupt coordinate", () => {
+    // Half a batch restored silently is a quantity that is wrong with nothing
+    // on screen to say so.
+    store.set("helixbid:stamp-queue:1", JSON.stringify({
+      sheetId: 1, bidId: 9, savedAt: Date.now(),
+      stamps: [{ assemblyId: 1, assemblyName: "A", x: 1, y: null }],
+    }));
+    expect(loadStampQueue(1)).toBeNull();
+  });
+
+  it("refuses a queue with a nameless stamp", () => {
+    store.set("helixbid:stamp-queue:1", JSON.stringify({
+      sheetId: 1, bidId: 9, savedAt: Date.now(),
+      stamps: [{ assemblyId: 1, assemblyName: "", x: 1, y: 2 }],
+    }));
+    expect(loadStampQueue(1)).toBeNull();
+  });
+
+  it("refuses a stale queue", () => {
+    const now = Date.now();
+    store.set("helixbid:stamp-queue:1", JSON.stringify({
+      sheetId: 1, bidId: 9, stamps: queued, savedAt: now - DRAFT_TTL_MS - 1,
+    }));
+    expect(loadStampQueue(1, now)).toBeNull();
+  });
+
+  it("can be cleared explicitly", () => {
+    saveStampQueue(1, 9, queued);
+    clearStampQueue(1);
+    expect(loadStampQueue(1)).toBeNull();
   });
 });

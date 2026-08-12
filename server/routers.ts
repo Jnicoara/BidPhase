@@ -17,6 +17,7 @@ import { assembliesRouter } from "./routers/assembliesRouter";
 import { bidsRouter } from "./routers/bidsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
+import { takeoffStampsRouter } from "./routers/takeoffStampsRouter";
 import { kitsRouter } from "./routers/kitsRouter";
 
 export const appRouter = router({
@@ -38,6 +39,7 @@ export const appRouter = router({
   bids: bidsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,
+  takeoffStamps: takeoffStampsRouter,
   kits: kitsRouter,
 });
 

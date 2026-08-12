@@ -995,6 +995,115 @@ export const takeoffRunCircuits = mysqlTable(
 export type TakeoffRunCircuit = typeof takeoffRunCircuits.$inferSelect;
 export type InsertTakeoffRunCircuit = typeof takeoffRunCircuits.$inferInsert;
 
+// ─── Stamps (takeoff phase 2c) ────────────────────────────────────────────────
+/**
+ * One placed instance of an assembly on a sheet — a single click of the stamp
+ * tool.
+ *
+ * ── One row per drop, not a quantity field ───────────────────────────────────
+ * The alternative would be one row per assembly carrying a count. A row per
+ * drop is what makes each instance individually selectable and removable, which
+ * a misclick requires, and it is what lets the drawing show WHERE each one is.
+ * The quantity an estimator wants is then just how many rows there are, derived
+ * rather than stored — so a count can never drift from the marks on the plan.
+ *
+ * `assemblyName` is a snapshot taken at drop time, for the same reason bid
+ * lines snapshot theirs: archiving or renaming the assembly later must not
+ * make an existing takeoff unreadable.
+ */
+export const takeoffStamps = mysqlTable(
+  "takeoff_stamps",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId").notNull().references(() => bids.id, { onDelete: "cascade" }),
+    sheetId: int("sheetId").notNull().references(() => bidPdfSheets.id, { onDelete: "cascade" }),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+    /** Provenance. Null once the library assembly is gone; the name remains. */
+    assemblyId: int("assemblyId").references(() => assemblies.id, { onDelete: "set null" }),
+    /** What it was called when it was dropped. Never re-read from the library. */
+    assemblyName: varchar("assemblyName", { length: 255 }).notNull(),
+
+    /** Where it sits, in PDF PAGE POINTS — never screen pixels, which zoom. */
+    x: decimal("x", { precision: 12, scale: 4 }).notNull(),
+    y: decimal("y", { precision: 12, scale: 4 }).notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("takeoff_stamps_bidId_idx").on(t.bidId),
+    index("takeoff_stamps_sheetId_idx").on(t.sheetId),
+    index("takeoff_stamps_userId_idx").on(t.userId),
+  ]
+);
+
+export type TakeoffStamp = typeof takeoffStamps.$inferSelect;
+export type InsertTakeoffStamp = typeof takeoffStamps.$inferInsert;
+
+// ─── Symbol → assembly links (takeoff phase 2c) ───────────────────────────────
+/**
+ * "This symbol on the legend means that assembly."
+ *
+ * ── Scope: the user's own library, not one bid ───────────────────────────────
+ * Deliberately keyed to the USER and not to a bid or a sheet. An electrician
+ * meets the same legend symbols on job after job, and the point of linking one
+ * is that the next set of plans costs nothing to interpret. Scoping this per
+ * bid would mean re-linking every symbol on every job, which is most of the
+ * work the feature exists to remove.
+ *
+ * ASSEMBLIES_PLAN.md § TAKEOFF PAGE REDESIGN anticipates going further —
+ * "legend memory per architect", so links learned on one firm's drawings carry
+ * to the next set from the same firm. That needs a notion of who drew the plans,
+ * which nothing captures yet. Per user is the widest scope available today and
+ * is a strict subset of that, so nothing here has to be undone to get there.
+ *
+ * ── Identity comes from the user, not from image recognition ─────────────────
+ * Reading a symbol off a drawing is the AI phase's job. Here the user boxes a
+ * symbol on the legend and names it, and that name is the key. The stored crop
+ * is only so they recognise it again.
+ */
+export const symbolLinks = mysqlTable(
+  "symbol_links",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+    /** What the user calls the symbol. Matched case-insensitively via `key`. */
+    label: varchar("label", { length: 255 }).notNull(),
+    /** Lower-cased, collapsed label — the thing uniqueness is judged on. */
+    lookupKey: varchar("lookupKey", { length: 255 }).notNull(),
+
+    /**
+     * The assembly it means. Nullable on purpose: a symbol can be captured from
+     * a legend and left unlinked, which is exactly the "which assembly does
+     * this match?" state the first click resolves.
+     */
+    assemblyId: int("assemblyId").references(() => assemblies.id, { onDelete: "set null" }),
+
+    /**
+     * A small PNG data URL of the boxed region, so the legend panel shows the
+     * symbol rather than only its name. Nullable — a link is still useful
+     * without a picture, and the picture must never be what makes it work.
+     */
+    thumbnail: text("thumbnail"),
+
+    /** Where it was first captured, for reference. Not a scoping key. */
+    capturedFromSheetId: int("capturedFromSheetId")
+      .references(() => bidPdfSheets.id, { onDelete: "set null" }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("symbol_links_userId_idx").on(t.userId),
+    index("symbol_links_lookupKey_idx").on(t.lookupKey),
+  ]
+);
+
+export type SymbolLink = typeof symbolLinks.$inferSelect;
+export type InsertSymbolLink = typeof symbolLinks.$inferInsert;
+
 // ─── Bid Line Items ───────────────────────────────────────────────────────────
 /**
  * One assembly placed into a bid, at a quantity, with its cost SNAPSHOT.

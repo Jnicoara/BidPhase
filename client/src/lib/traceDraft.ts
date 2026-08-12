@@ -130,3 +130,98 @@ export function hasUnsavedWork(points: PagePoint[], savedPointCount: number): bo
   if (points.length < 2) return false;
   return points.length !== savedPointCount;
 }
+
+// ─── Stamp queue (phase 2c) ───────────────────────────────────────────────────
+/**
+ * Stamps clicked but not yet confirmed by the server.
+ *
+ * Dropping fifty markers across a floor plan is the same kind of investment as
+ * tracing a run, and deserves the same protection. Clicks are queued locally
+ * and flushed in batches — a request per click would put the drawing behind the
+ * network — so there is always a window where work exists only in the browser.
+ * This mirrors that window to storage, on the same principle as the trace
+ * draft: the server copy is durable, this is the crash mat under it.
+ */
+const STAMP_KEY_PREFIX = "helixbid:stamp-queue:";
+
+export type QueuedStamp = {
+  assemblyId: number | null;
+  assemblyName: string;
+  x: number;
+  y: number;
+};
+
+export type StampQueue = {
+  sheetId: number;
+  bidId: number;
+  stamps: QueuedStamp[];
+  savedAt: number;
+};
+
+const stampKeyFor = (sheetId: number) => `${STAMP_KEY_PREFIX}${sheetId}`;
+
+export function saveStampQueue(sheetId: number, bidId: number, stamps: QueuedStamp[]): void {
+  try {
+    if (stamps.length === 0) {
+      window.localStorage.removeItem(stampKeyFor(sheetId));
+      return;
+    }
+    const payload: StampQueue = { sheetId, bidId, stamps, savedAt: Date.now() };
+    window.localStorage.setItem(stampKeyFor(sheetId), JSON.stringify(payload));
+  } catch {
+    /* storage unavailable — the flush still runs */
+  }
+}
+
+/**
+ * Recover stamps that were clicked but never reached the server.
+ *
+ * Refuses anything malformed or stale for the same reason a trace draft does:
+ * a user accepts whatever is offered, and half a batch of markers restored
+ * silently is a quantity that is wrong with nothing to say so.
+ */
+export function loadStampQueue(sheetId: number, now: number = Date.now()): StampQueue | null {
+  try {
+    const raw = window.localStorage.getItem(stampKeyFor(sheetId));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<StampQueue>;
+    if (
+      parsed?.sheetId !== sheetId ||
+      typeof parsed.bidId !== "number" ||
+      typeof parsed.savedAt !== "number" ||
+      !Array.isArray(parsed.stamps) ||
+      parsed.stamps.length === 0
+    ) {
+      return null;
+    }
+    if (now - parsed.savedAt > DRAFT_TTL_MS) return null;
+
+    for (const stamp of parsed.stamps as QueuedStamp[]) {
+      if (
+        typeof stamp?.x !== "number" || typeof stamp?.y !== "number" ||
+        !Number.isFinite(stamp.x) || !Number.isFinite(stamp.y) ||
+        typeof stamp.assemblyName !== "string" || !stamp.assemblyName
+      ) {
+        return null;
+      }
+    }
+
+    return {
+      sheetId,
+      bidId: parsed.bidId,
+      stamps: parsed.stamps as QueuedStamp[],
+      savedAt: parsed.savedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearStampQueue(sheetId: number): void {
+  try {
+    window.localStorage.removeItem(stampKeyFor(sheetId));
+  } catch {
+    /* nothing to do */
+  }
+}

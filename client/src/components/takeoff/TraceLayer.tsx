@@ -40,9 +40,18 @@ const RUN_COLOR: Record<RunPathType, string> = {
   cable: "#4ADE80",
 };
 
+export type PlacedStamp = {
+  id: number;
+  assemblyName: string;
+  x: number;
+  y: number;
+};
+
 export function TraceLayer({
   width, height, renderScale, measurability, tracing, pathType,
   points, onPointsChange, existingRuns, onFinish, onCancel, selectedRunId, onSelectRun,
+  stamping, stampAssemblyName, stamps, onDropStamp, selectedStampId, onSelectStamp,
+  focusPoint,
 }: {
   /** Canvas size in device pixels — the overlay matches it exactly. */
   width: number;
@@ -59,6 +68,15 @@ export function TraceLayer({
   onCancel: () => void;
   selectedRunId: number | null;
   onSelectRun: (id: number | null) => void;
+  /** The stamp tool is armed: clicks drop instances of the chosen assembly. */
+  stamping: boolean;
+  stampAssemblyName: string | null;
+  stamps: PlacedStamp[];
+  onDropStamp: (at: { x: number; y: number }) => void;
+  selectedStampId: number | null;
+  onSelectStamp: (id: number | null) => void;
+  /** Highlighted after a jump from the counted-items list. */
+  focusPoint: { x: number; y: number } | null;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   /** Where the pointer is, for the rubber-band segment from the last vertex. */
@@ -154,14 +172,18 @@ export function TraceLayer({
         viewBox={`0 0 ${width} ${height}`}
         className={cn(
           "absolute inset-0 w-full h-full",
-          tracing ? "cursor-crosshair" : "pointer-events-none"
+          tracing || stamping ? "cursor-crosshair" : "pointer-events-none"
         )}
         onPointerMove={e => { if (tracing) setHover(pointerToPage(e)); }}
         onPointerLeave={() => setHover(null)}
         onPointerDown={e => {
-          if (!tracing || e.button !== 0) return;
+          if (e.button !== 0) return;
           const page = pointerToPage(e);
-          if (page) onPointsChange([...points, page]);
+          if (!page) return;
+          if (tracing) { onPointsChange([...points, page]); return; }
+          // The stamp mechanic: one selection, then a drop per click with
+          // nothing to re-choose in between.
+          if (stamping) onDropStamp(page);
         }}
         onDoubleClick={e => {
           // Double-click finishes, which is what every drawing tool does. The
@@ -199,6 +221,39 @@ export function TraceLayer({
             </g>
           );
         })}
+
+        {/* Stamps already placed. Uniform high-contrast markers rather than
+            symbols imitating the drawing: the job here is to see at a glance
+            what HAS been counted against the plan underneath, and a marker
+            that blends into the drawing defeats exactly that. */}
+        {stamps.map(placed => {
+          const at = toScreen({ x: placed.x, y: placed.y });
+          const isSelected = placed.id === selectedStampId;
+          return (
+            <g
+              key={placed.id}
+              className={tracing ? "" : "pointer-events-auto cursor-pointer"}
+              onClick={() => !tracing && onSelectStamp(isSelected ? null : placed.id)}
+            >
+              <circle
+                cx={at.x} cy={at.y} r={isSelected ? 13 : 10}
+                fill="#F5C518" fillOpacity={0.22}
+                stroke="#F5C518" strokeWidth={isSelected ? 3.5 : 2.5}
+              />
+              <circle cx={at.x} cy={at.y} r={3} fill="#F5C518" />
+              <title>{placed.assemblyName}</title>
+            </g>
+          );
+        })}
+
+        {/* Where a click from the counted-items list landed. */}
+        {focusPoint && (
+          <circle
+            cx={toScreen(focusPoint).x} cy={toScreen(focusPoint).y} r={26}
+            fill="none" stroke="#F5C518" strokeWidth={3} strokeDasharray="7 5"
+            className="animate-pulse"
+          />
+        )}
 
         {/* The trace in progress */}
         {tracing && points.length > 0 && (
@@ -240,6 +295,16 @@ export function TraceLayer({
           </>
         )}
       </svg>
+
+      {stamping && stampAssemblyName && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full border border-[#F5C518]/50 bg-card/95 px-3 py-1.5 shadow-lg">
+          <span className="text-xs text-muted-foreground">Stamping</span>
+          <span className="text-sm font-medium">{stampAssemblyName}</span>
+          <span className="text-[0.7rem] text-muted-foreground">
+            click to place · Esc to stop
+          </span>
+        </div>
+      )}
 
       {/* Live readout. Sits over the drawing because the number IS the task —
           making the user look elsewhere to see what they are measuring is how

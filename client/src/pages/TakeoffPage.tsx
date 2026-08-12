@@ -39,7 +39,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Cable, ChevronLeft, ChevronRight, FileText, Loader2, Plus,
-  Trash2, Upload, Zap,
+  MapPin, Trash2, Upload, X, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,7 +55,12 @@ import { UploadProgress } from "@/components/takeoff/UploadProgress";
 import { MAX_PDF_BYTES, checkPdfUpload, formatBytes, looksLikePdf } from "@shared/uploadLimits";
 import { TraceLayer } from "@/components/takeoff/TraceLayer";
 import { RunsPanel } from "@/components/takeoff/RunsPanel";
-import { clearDraft, hasUnsavedWork, loadDraft, saveDraft } from "@/lib/traceDraft";
+import {
+  clearDraft, clearStampQueue, hasUnsavedWork, loadDraft, loadStampQueue, saveDraft,
+  saveStampQueue, type QueuedStamp,
+} from "@/lib/traceDraft";
+import { LegendPanel } from "@/components/takeoff/LegendPanel";
+import { groupStamps } from "@shared/takeoffCounts";
 import type { PagePoint } from "@shared/takeoffGeometry";
 import type { RunPathType } from "@shared/takeoffQuantities";
 
@@ -408,6 +413,16 @@ export default function TakeoffPage({ bidId, onBack }: {
   /** How many points the server has. Drives the unsaved-work warning. */
   const savedPointCount = useRef(0);
   const [recoverable, setRecoverable] = useState<ReturnType<typeof loadDraft>>(null);
+
+  // ── Stamping (phase 2c) ───────────────────────────────────────────────────
+  /** The assembly the stamp tool holds. Chosen once, then click, click, click. */
+  const [stampAssembly, setStampAssembly] = useState<{ id: number | null; name: string } | null>(null);
+  const [selectedStampId, setSelectedStampId] = useState<number | null>(null);
+  /** Where a click in the counted-items list sent the viewer. */
+  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
+  const [capturingSymbol, setCapturingSymbol] = useState(false);
+  /** Clicks not yet confirmed by the server. Mirrored locally; see traceDraft. */
+  const pendingStamps = useRef<QueuedStamp[]>([]);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   const doc = docs.find(d => d.id === selectedDocId) ?? docs[0] ?? null;
@@ -506,6 +521,121 @@ export default function TakeoffPage({ bidId, onBack }: {
     if (activeSheet) void utils.takeoffRuns.listForSheet.invalidate({ sheetId: activeSheet.id });
     void utils.takeoffRuns.totals.invalidate({ bidId });
   }, [utils, activeSheet?.id, bidId]);
+
+  const { data: stamps = [] } = trpc.takeoffStamps.listForSheet.useQuery(
+    { sheetId: activeSheet?.id ?? 0 },
+    { enabled: Boolean(activeSheet) }
+  );
+  const { data: symbols = [] } = trpc.takeoffStamps.symbols.useQuery();
+  const { data: allAssemblies = [] } = trpc.assemblies.list.useQuery();
+
+  const refreshStamps = useCallback(() => {
+    if (activeSheet) {
+      void utils.takeoffStamps.listForSheet.invalidate({ sheetId: activeSheet.id });
+      void utils.takeoffStamps.countedItems.invalidate({ sheetId: activeSheet.id });
+    }
+  }, [utils, activeSheet?.id]);
+
+  const dropStamps = trpc.takeoffStamps.drop.useMutation({
+    onError: e => toast.error(e.message),
+    onSettled: refreshStamps,
+  });
+  const removeStamp = trpc.takeoffStamps.remove.useMutation({
+    onError: e => toast.error(e.message), onSettled: refreshStamps,
+  });
+  const captureSymbol = trpc.takeoffStamps.captureSymbol.useMutation({
+    onError: e => toast.error(e.message),
+    onSettled: () => void utils.takeoffStamps.symbols.invalidate(),
+  });
+  const linkSymbol = trpc.takeoffStamps.linkSymbol.useMutation({
+    onError: e => toast.error(e.message),
+    onSuccess: r => toast.success(`Linked to ${r.assemblyName} — one click from now on.`),
+    onSettled: () => void utils.takeoffStamps.symbols.invalidate(),
+  });
+  const unlinkSymbol = trpc.takeoffStamps.unlinkSymbol.useMutation({
+    onError: e => toast.error(e.message),
+    onSettled: () => void utils.takeoffStamps.symbols.invalidate(),
+  });
+  const removeSymbol = trpc.takeoffStamps.removeSymbol.useMutation({
+    onError: e => toast.error(e.message),
+    onSettled: () => void utils.takeoffStamps.symbols.invalidate(),
+  });
+
+  /**
+   * Queue a click and flush shortly after.
+   *
+   * Queued rather than sent per click: an estimator drops markers faster than a
+   * round trip, and a request per click would put the drawing behind the
+   * network. The local mirror covers the window where the clicks exist only
+   * here.
+   */
+  const flushTimer = useRef<number | null>(null);
+  const queueStamp = useCallback((at: { x: number; y: number }) => {
+    if (!activeSheet || !stampAssembly) return;
+    pendingStamps.current = [...pendingStamps.current, {
+      assemblyId: stampAssembly.id, assemblyName: stampAssembly.name, x: at.x, y: at.y,
+    }];
+    saveStampQueue(activeSheet.id, bidId, pendingStamps.current);
+
+    if (flushTimer.current !== null) window.clearTimeout(flushTimer.current);
+    flushTimer.current = window.setTimeout(() => {
+      const batch = pendingStamps.current;
+      if (batch.length === 0 || !activeSheet) return;
+      pendingStamps.current = [];
+      dropStamps.mutate({
+        bidId,
+        sheetId: activeSheet.id,
+        assemblyId: batch[0].assemblyId,
+        assemblyName: batch[0].assemblyName,
+        at: batch.map(b => ({ x: b.x, y: b.y })),
+      }, {
+        onSuccess: () => clearStampQueue(activeSheet.id),
+        // Put the batch back so it is retried and stays mirrored, rather than
+        // vanishing because one request failed.
+        onError: () => {
+          pendingStamps.current = [...batch, ...pendingStamps.current];
+          saveStampQueue(activeSheet.id, bidId, pendingStamps.current);
+        },
+      });
+    }, 700);
+  }, [activeSheet?.id, stampAssembly, bidId, dropStamps]);
+
+  /** Recover stamps clicked but never sent, after a crash or reload. */
+  useEffect(() => {
+    if (!activeSheet) return;
+    const queued = loadStampQueue(activeSheet.id);
+    if (!queued || queued.stamps.length === 0) return;
+    dropStamps.mutate({
+      bidId: queued.bidId,
+      sheetId: activeSheet.id,
+      assemblyId: queued.stamps[0].assemblyId,
+      assemblyName: queued.stamps[0].assemblyName,
+      at: queued.stamps.map(st => ({ x: st.x, y: st.y })),
+    }, {
+      onSuccess: () => {
+        clearStampQueue(activeSheet.id);
+        toast.success(`Recovered ${queued.stamps.length} stamp${queued.stamps.length === 1 ? "" : "s"} from your last session.`);
+      },
+    });
+  }, [activeSheet?.id]);
+
+  /** Escape puts the stamp tool down. */
+  useEffect(() => {
+    if (!stampAssembly) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); setStampAssembly(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [stampAssembly]);
+
+  const stampGroups = useMemo(
+    () => groupStamps(stamps.map(st => ({
+      id: st.id, sheetId: st.sheetId, assemblyId: st.assemblyId,
+      assemblyName: st.assemblyName, x: st.x, y: st.y,
+    }))),
+    [stamps]
+  );
 
   const saveRun = trpc.takeoffRuns.save.useMutation({ onError: e => toast.error(e.message) });
   const commitRun = trpc.takeoffRuns.commit.useMutation({
@@ -919,6 +1049,15 @@ export default function TakeoffPage({ bidId, onBack }: {
                         onCancel={cancelTrace}
                         selectedRunId={selectedRunId}
                         onSelectRun={setSelectedRunId}
+                        stamping={Boolean(stampAssembly) && !tracing}
+                        stampAssemblyName={stampAssembly?.name ?? null}
+                        stamps={stamps.map(st => ({
+                          id: st.id, assemblyName: st.assemblyName, x: st.x, y: st.y,
+                        }))}
+                        onDropStamp={queueStamp}
+                        selectedStampId={selectedStampId}
+                        onSelectStamp={setSelectedStampId}
+                        focusPoint={focusPoint}
                       />
                     ) : null}
                   />
@@ -947,6 +1086,16 @@ export default function TakeoffPage({ bidId, onBack }: {
                           >
                             <Cable className="w-3.5 h-3.5 text-emerald-400" /> Trace cable
                           </Button>
+                          {stampAssembly ? (
+                            <Button
+                              size="sm" className="h-7 gap-1.5 text-xs"
+                              onClick={() => setStampAssembly(null)}
+                            >
+                              <MapPin className="w-3.5 h-3.5" />
+                              Stamping {stampAssembly.name}
+                              <X className="w-3 h-3" />
+                            </Button>
+                          ) : null}
                           <div className="w-px h-4 bg-border" />
                         </>
                       )}
@@ -967,7 +1116,49 @@ export default function TakeoffPage({ bidId, onBack }: {
 
             <ResizablePanel defaultSize={32} minSize={18} className="min-w-0">
               <RunsPanel
-                runs={runs}
+                runs={runs.map(r => ({ ...r, firstPoint: r.points[0] ?? null }))}
+                stampGroups={stampGroups}
+                onJumpTo={at => {
+                  setFocusPoint(at);
+                  // Clear the highlight after a moment — a marker that stays
+                  // ringed forever stops meaning "this is the one".
+                  window.setTimeout(() => setFocusPoint(null), 2200);
+                }}
+                onRemoveStamp={id => removeStamp.mutate({ id })}
+                legend={
+                  <LegendPanel
+                    symbols={symbols}
+                    assemblies={allAssemblies.map(a => ({
+                      id: a.id, name: a.name, category: a.category,
+                    }))}
+                    activeAssemblyId={stampAssembly?.id ?? null}
+                    capturing={capturingSymbol}
+                    onStartCapture={() => {
+                      setCapturingSymbol(true);
+                      const label = window.prompt("Name this symbol (e.g. Duplex recep)");
+                      setCapturingSymbol(false);
+                      if (!label?.trim()) return;
+                      captureSymbol.mutate({
+                        label: label.trim(),
+                        capturedFromSheetId: activeSheet?.id,
+                      }, {
+                        onSuccess: r => toast.success(r.alreadyKnown
+                          ? "Already in your legend."
+                          : "Captured — click it to choose an assembly."),
+                      });
+                    }}
+                    onCancelCapture={() => setCapturingSymbol(false)}
+                    onLink={(symbolId, assemblyId) => linkSymbol.mutate({ id: symbolId, assemblyId })}
+                    onUnlink={id => unlinkSymbol.mutate({ id })}
+                    onRemove={id => removeSymbol.mutate({ id })}
+                    onUseSymbol={symbol => {
+                      const assembly = allAssemblies.find(a => a.id === symbol.assemblyId);
+                      if (!assembly) return;
+                      setStampAssembly({ id: assembly.id, name: assembly.name });
+                      toast.success(`Stamping ${assembly.name} — click to place.`);
+                    }}
+                  />
+                }
                 totals={totals}
                 selectedRunId={selectedRunId}
                 onSelectRun={setSelectedRunId}
