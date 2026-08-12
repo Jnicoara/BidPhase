@@ -41,6 +41,9 @@ import {
   InsertBidPdf,
   BidPdf,
   bidPdfs,
+  InsertBidPdfSheet,
+  BidPdfSheet,
+  bidPdfSheets,
   InsertKit,
   Kit,
   kits,
@@ -1872,6 +1875,51 @@ export async function deleteBidPdf(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   await db.delete(bidPdfs).where(and(eq(bidPdfs.id, id), eq(bidPdfs.userId, userId)));
+}
+
+// ─── Plan sheets ──────────────────────────────────────────────────────────────
+
+/** Re-exported so routers can type a sheet without importing the schema. */
+export type BidPdfSheetRow = BidPdfSheet;
+
+/** Every sheet of one document, in page order. */
+export async function getBidPdfSheets(bidPdfId: number, userId: number): Promise<BidPdfSheet[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(bidPdfSheets)
+    .where(and(eq(bidPdfSheets.bidPdfId, bidPdfId), eq(bidPdfSheets.userId, userId)))
+    .orderBy(asc(bidPdfSheets.pageNumber));
+}
+
+export async function getBidPdfSheet(id: number, userId: number): Promise<BidPdfSheet | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(bidPdfSheets)
+    .where(and(eq(bidPdfSheets.id, id), eq(bidPdfSheets.userId, userId))).limit(1);
+  return row;
+}
+
+export async function insertBidPdfSheets(rows: InsertBidPdfSheet[]) {
+  if (rows.length === 0) return;
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(bidPdfSheets).values(rows);
+}
+
+export async function updateBidPdfSheet(
+  id: number,
+  userId: number,
+  data: Partial<InsertBidPdfSheet>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  delete safe.bidPdfId;
+  delete safe.pageNumber;
+  await db.update(bidPdfSheets).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(bidPdfSheets.id, id), eq(bidPdfSheets.userId, userId)));
 }
 
 // ─── Bid line items ───────────────────────────────────────────────────────────

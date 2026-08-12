@@ -766,6 +766,80 @@ export const bidPdfs = mysqlTable(
 export type BidPdf = typeof bidPdfs.$inferSelect;
 export type InsertBidPdf = typeof bidPdfs.$inferInsert;
 
+// ─── Plan sheets (one row per page) ───────────────────────────────────────────
+/**
+ * One page of an attached PDF, with the two things that make it workable: what
+ * it is CALLED, and what it is drawn AT. Takeoff redesign, phase 2a.
+ *
+ * ── Why a row per page rather than deriving on the fly ───────────────────────
+ * Both facts are per-page and both are editable. A 40-sheet set has 40 names
+ * the user may correct and up to 40 different scales — a detail sheet at
+ * 3/4"=1'-0" sits in the same document as a site plan at 1"=40'. Nothing about
+ * either can be recomputed from the PDF once a human has touched it, so it is
+ * stored.
+ *
+ * Rows are created when a document is first opened, from the PDF's outline
+ * where it has one. Idempotent: reopening never duplicates or overwrites.
+ */
+export const SHEET_NAME_SOURCES = ["bookmark", "default", "user"] as const;
+export type SheetNameSource = (typeof SHEET_NAME_SOURCES)[number];
+
+export const SCALE_SOURCES = ["detected", "manual", "none"] as const;
+export type ScaleSourceValue = (typeof SCALE_SOURCES)[number];
+
+export const bidPdfSheets = mysqlTable(
+  "bid_pdf_sheets",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidPdfId: int("bidPdfId").notNull().references(() => bidPdfs.id, { onDelete: "cascade" }),
+    /** Denormalised for one-query ownership checks, as on bid_pdfs. */
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+    /** 1-based, matching how pdfjs and every human count pages. */
+    pageNumber: int("pageNumber").notNull(),
+
+    /**
+     * What the sheet is called. Never null and never blank — an unnamed sheet
+     * makes the index a list of numbers to hunt through, which is the thing the
+     * index exists to replace. Falls back to "Sheet N" at creation.
+     */
+    name: varchar("name", { length: 255 }).notNull(),
+    /**
+     * Where the name came from. `user` is sticky: a re-scan of the document
+     * must never overwrite a name someone typed.
+     */
+    nameSource: mysqlEnum("nameSource", SHEET_NAME_SOURCES).default("default").notNull(),
+
+    /**
+     * Real-world distance per unit of paper — `1/4" = 1'-0"` is 48. NULL means
+     * no scale is set, which is honest: it makes every later measuring feature
+     * refuse rather than quietly measure against a guess.
+     */
+    scaleRatio: decimal("scaleRatio", { precision: 14, scale: 6 }),
+    /** How the scale reads, e.g. `1/4" = 1'-0"`. Display only; ratio governs. */
+    scaleText: varchar("scaleText", { length: 64 }),
+    scaleSource: mysqlEnum("scaleSource", SCALE_SOURCES).default("none").notNull(),
+    /**
+     * What auto-detection found, kept even when it was NOT applied.
+     *
+     * A low-confidence reading is still useful to a person — "the sheet says
+     * 3/4\" = 1'-0\" somewhere" is a head start on typing it — so it is offered
+     * as a suggestion rather than thrown away or silently trusted.
+     */
+    detectedScaleText: varchar("detectedScaleText", { length: 255 }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("bid_pdf_sheets_bidPdfId_idx").on(t.bidPdfId),
+    index("bid_pdf_sheets_userId_idx").on(t.userId),
+  ]
+);
+
+export type BidPdfSheet = typeof bidPdfSheets.$inferSelect;
+export type InsertBidPdfSheet = typeof bidPdfSheets.$inferInsert;
+
 // ─── Bid Line Items ───────────────────────────────────────────────────────────
 /**
  * One assembly placed into a bid, at a quantity, with its cost SNAPSHOT.

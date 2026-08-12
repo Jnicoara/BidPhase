@@ -8,8 +8,17 @@
  * Protocol:
  *   Main → Worker:  { type: 'load', pdfData: ArrayBuffer, hash: string }
  *   Main → Worker:  { type: 'render', pageNum: number, scale: number, hash: string, reqId: string }
+ *   Main → Worker:  { type: 'outline', hash: string, reqId: string }
+ *   Main → Worker:  { type: 'text', pageNum: number, hash: string, reqId: string }
  *   Worker → Main:  { type: 'rendered', reqId: string, bitmap: ImageBitmap, pageNum: number, hash: string }
+ *   Worker → Main:  { type: 'outline', reqId: string, entries: {pageNumber,title}[] }
+ *   Worker → Main:  { type: 'text', reqId: string, pageNum: number, text: string }
  *   Worker → Main:  { type: 'error', reqId: string, message: string }
+ *
+ * Callers must IGNORE messages they do not recognise. pdfjs runs its own
+ * worker entry inside this one and posts a `{sourceName,targetName,action}`
+ * handshake that reaches the parent — harmless, but it arrives before the
+ * first real reply.
  */
 
 import * as pdfjs from "pdfjs-dist";
@@ -78,6 +87,83 @@ self.onmessage = async (e: MessageEvent) => {
         { type: "rendered", reqId, pageNum, hash, bitmap, elapsed },
         { transfer: [bitmap] }
       );
+    } catch (err) {
+      self.postMessage({ type: "error", reqId, message: String(err) });
+    }
+    return;
+  }
+
+  /**
+   * The document's bookmark tree, flattened to one title per page.
+   *
+   * Architectural sets very often carry this, and it holds the sheet's REAL
+   * name ("E1 - Power Plan") rather than a page number. Resolving an outline
+   * destination to a page index is async per entry and needs the parsed
+   * document, so it belongs in here beside pdfjs rather than on the main
+   * thread.
+   *
+   * Best-effort throughout: a set with no outline, or with destinations that
+   * do not resolve, returns an empty list rather than failing the open. The
+   * sheet index falls back to "Sheet N" and the user renames from there.
+   */
+  if (msg.type === "outline") {
+    const { hash, reqId } = msg;
+    if (!pdfDoc || loadedHash !== hash) {
+      self.postMessage({ type: "outline", reqId, entries: [] });
+      return;
+    }
+    try {
+      const outline = await pdfDoc.getOutline();
+      const entries: { pageNumber: number; title: string }[] = [];
+
+      const walk = async (items: any[] | null) => {
+        if (!items) return;
+        for (const item of items) {
+          try {
+            const dest = typeof item.dest === "string"
+              ? await pdfDoc!.getDestination(item.dest)
+              : item.dest;
+            if (Array.isArray(dest) && dest[0]) {
+              const pageIndex = await pdfDoc!.getPageIndex(dest[0]);
+              const title = String(item.title ?? "").trim();
+              if (title) entries.push({ pageNumber: pageIndex + 1, title });
+            }
+          } catch {
+            // One unresolvable bookmark must not cost the whole outline.
+          }
+          await walk(item.items ?? null);
+        }
+      };
+
+      await walk(outline);
+      self.postMessage({ type: "outline", reqId, entries });
+    } catch {
+      self.postMessage({ type: "outline", reqId, entries: [] });
+    }
+    return;
+  }
+
+  /**
+   * The text on one page, for scale detection.
+   *
+   * Joined with spaces in the order pdfjs returns items, which is the order
+   * they were drawn rather than reading order — good enough for finding a
+   * scale note, and the reason detection treats what it finds with suspicion
+   * (see shared/planScale.ts).
+   */
+  if (msg.type === "text") {
+    const { pageNum, hash, reqId } = msg;
+    if (!pdfDoc || loadedHash !== hash) {
+      self.postMessage({ type: "error", reqId, message: "PDF not loaded for this hash" });
+      return;
+    }
+    try {
+      const page = await pdfDoc.getPage(pageNum);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map(item => ("str" in item ? item.str : ""))
+        .join(" ");
+      self.postMessage({ type: "text", reqId, pageNum, text });
     } catch (err) {
       self.postMessage({ type: "error", reqId, message: String(err) });
     }
