@@ -15,6 +15,7 @@ import { laborRatesRouter } from "./routers/laborRatesRouter";
 import { modifiersRouter } from "./routers/modifiersRouter";
 import { assembliesRouter } from "./routers/assembliesRouter";
 import { bidsRouter } from "./routers/bidsRouter";
+import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { kitsRouter } from "./routers/kitsRouter";
 
 export const appRouter = router({
@@ -34,6 +35,7 @@ export const appRouter = router({
   modifiers: modifiersRouter,
   assemblies: assembliesRouter,
   bids: bidsRouter,
+  bidPdfs: bidPdfsRouter,
   kits: kitsRouter,
 });
 

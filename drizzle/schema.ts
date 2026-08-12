@@ -680,18 +680,91 @@ export const bids = mysqlTable(
     profitMethod: mysqlEnum("profitMethod", ["markup", "margin"]),
     profitValue: decimal("profitValue", { precision: 6, scale: 4 }),
 
-    isArchived: boolean("isArchived").default(false).notNull(),
+    /**
+     * When the bid was archived, or NULL if it is live. This single column is
+     * the whole archive state — there is deliberately no companion boolean.
+     *
+     * A flag plus a timestamp can disagree (archived with no date, dated but
+     * not archived), and the retention window is computed FROM this value, so a
+     * drifted pair would either delete something early or keep it forever. One
+     * column cannot drift. `archivedAt IS NULL` is the live test everywhere.
+     *
+     * Independent of `status`: a bid may be archived while Draft, Active, Won
+     * or Lost. Archiving is "get it off my dashboard", not an outcome.
+     *
+     * Retention is RETENTION_DAYS from this instant — see shared/retention.ts.
+     *
+     * MySQL TIMESTAMP carries no fractional seconds, so this truncates DOWN to
+     * the whole second: the deadline is second-accurate, and a purge can fire
+     * up to 999ms early. Irrelevant against a 30-day window swept once a day,
+     * and not worth an fsp(3) column to chase.
+     */
+    archivedAt: timestamp("archivedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   t => [
     index("bids_userId_idx").on(t.userId),
     index("bids_status_idx").on(t.status),
+    // The purge sweep scans this across every user, so it cannot be a table
+    // scan that grows with the whole bid history.
+    index("bids_archivedAt_idx").on(t.archivedAt),
   ]
 );
 
 export type Bid = typeof bids.$inferSelect;
 export type InsertBid = typeof bids.$inferInsert;
+
+// ─── Bid PDFs (plan sheets) ───────────────────────────────────────────────────
+/**
+ * Plan PDFs attached to a bid. Takeoff redesign, phase 1.
+ *
+ * A bid holds MANY of these, unlike the legacy `projects` row which carried a
+ * single `pdfUrl`/`pdfKey`/`pdfFilename` triple inline. Real jobs arrive as a
+ * set — electrical sheets, a spec book, an addendum issued a week later — and
+ * the one-PDF-per-job shape forced the user to pick which one mattered.
+ *
+ * The file itself lives in S3 under `storageKey`; nothing here holds bytes.
+ * `onDelete: "cascade"` from `bids` is what makes the retention purge a single
+ * DELETE on the bid — see server/scheduled/purgeArchivedBids.ts.
+ */
+export const bidPdfs = mysqlTable(
+  "bid_pdfs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId").notNull().references(() => bids.id, { onDelete: "cascade" }),
+    /**
+     * Denormalised from the bid so an ownership check is one query, not two.
+     * Every read still filters on it — a storage key is guessable enough that
+     * "you had the id" must never be the only thing standing in the way.
+     */
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+    /** What the user called it. Shown in the sheet list; never used as a path. */
+    filename: varchar("filename", { length: 512 }).notNull(),
+    /** S3 object key from storagePut(). Resolved through /manus-storage/<key>. */
+    storageKey: varchar("storageKey", { length: 1024 }).notNull(),
+    byteSize: int("byteSize").default(0).notNull(),
+    /**
+     * Filled in by the client after the document first opens, because counting
+     * pages means parsing the PDF and only the viewer has a parser. NULL means
+     * "not opened yet", which the list shows as a blank rather than "0 pages" —
+     * a real zero-page PDF and an unread one must not look alike.
+     */
+    pageCount: int("pageCount"),
+
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("bid_pdfs_bidId_idx").on(t.bidId),
+    index("bid_pdfs_userId_idx").on(t.userId),
+  ]
+);
+
+export type BidPdf = typeof bidPdfs.$inferSelect;
+export type InsertBidPdf = typeof bidPdfs.$inferInsert;
 
 // ─── Bid Line Items ───────────────────────────────────────────────────────────
 /**

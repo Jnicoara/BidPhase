@@ -113,6 +113,20 @@
       "when": 1786492831498,
       "tag": "0015_known_wild_child",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1786553868229,
+      "tag": "0016_square_thaddeus_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1786553882477,
+      "tag": "0017_graceful_the_hand",
+      "breakpoints": true
     }
   ]
 }

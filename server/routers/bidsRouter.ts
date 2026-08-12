@@ -23,6 +23,7 @@ import {
   sumDirectCost,
   type CompanyPricingDefaults,
 } from "../../shared/pricing";
+import { daysRemaining, purgeDueAt, retentionUrgency } from "../../shared/retention";
 import * as db from "../db";
 
 const nameSchema = z.string().trim().min(1).max(255);
@@ -184,11 +185,93 @@ export const bidsRouter = router({
       return db.getBidById(id, ctx.user.id);
     }),
 
+  /**
+   * Move a bid off the dashboard without destroying it.
+   *
+   * Independent of `status` on purpose: a Won job and an abandoned Draft both
+   * stop being things you want to look at every morning, and forcing the user
+   * to mislabel a bid's outcome just to hide it would corrupt the one field
+   * their reporting depends on.
+   *
+   * Reversible for RETENTION_DAYS, then not. `restore` is the way back.
+   */
   archive: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.id, ctx.user.id);
-      await db.archiveBid(input.id, ctx.user.id);
+      const bid = await requireBid(input.id, ctx.user.id);
+      if (bid.archivedAt) {
+        // Already counting down. Returning the ORIGINAL date rather than
+        // re-archiving is the point: a double-click must not buy another 30
+        // days and strand the bid in the archive indefinitely.
+        return { success: true, archivedAt: bid.archivedAt, alreadyArchived: true };
+      }
+      const now = new Date();
+      await db.archiveBid(input.id, ctx.user.id, now);
+      return { success: true, archivedAt: now, alreadyArchived: false };
+    }),
+
+  /** Put an archived bid back on the dashboard, stopping the countdown. */
+  restore: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const bid = await requireBid(input.id, ctx.user.id);
+      if (!bid.archivedAt) return { success: true, alreadyLive: true };
+      await db.restoreBid(input.id, ctx.user.id);
+      return { success: true, alreadyLive: false };
+    }),
+
+  /**
+   * The archive, with each bid's countdown resolved server-side.
+   *
+   * `daysRemaining` is computed here rather than in the browser because a
+   * machine with a wrong clock would otherwise show a wrong deadline for a real
+   * deletion — and the deletion itself runs on server time. One clock decides.
+   */
+  archived: protectedProcedure.query(async ({ ctx }) => {
+    const now = new Date();
+    const [rows, company] = await Promise.all([
+      db.getArchivedBids(ctx.user.id),
+      companyDefaultsFor(ctx.user.id),
+    ]);
+
+    return Promise.all(rows.map(async bid => {
+      // Priced through the same rollUpBid as the dashboard, so a bid's value
+      // reads the same whether it is archived or not — someone deciding what to
+      // rescue is looking at exactly the number they saw before archiving it.
+      const lines = await db.getBidLineItems(bid.id);
+      const { bidPrice } = rollUpBid(bid, lines, company);
+      // Non-null by construction: getArchivedBids filters on archivedAt.
+      const archivedAt = bid.archivedAt as Date;
+      return {
+        ...bid,
+        archivedAt,
+        lineCount: lines.length,
+        finalPrice: bidPrice.finalPrice,
+        purgeDueAt: purgeDueAt(archivedAt),
+        daysRemaining: daysRemaining(archivedAt, now),
+        urgency: retentionUrgency(archivedAt, now),
+      };
+    }));
+  }),
+
+  /**
+   * Destroy a bid now, without waiting out the window.
+   *
+   * Refuses anything not already archived, mirroring the modifiers pattern:
+   * there is no path from the working list straight to destruction. The user
+   * archives first, then confirms again from the archive.
+   */
+  deleteForever: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const bid = await requireBid(input.id, ctx.user.id);
+      if (!bid.archivedAt) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only archived bids can be deleted permanently. Archive it first.",
+        });
+      }
+      await db.deleteBidForever(input.id, ctx.user.id);
       return { success: true };
     }),
 

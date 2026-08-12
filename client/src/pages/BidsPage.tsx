@@ -145,6 +145,8 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
   const detailQuery = trpc.bids.get.useQuery({ id: bidId });
   const { data: assemblies = [] } = trpc.assemblies.list.useQuery();
   const { data: units = [] } = trpc.bids.units.useQuery({ bidId });
+  const { data: sheets = [] } = trpc.bidPdfs.list.useQuery({ bidId });
+  const sheetCount = sheets.length;
 
   const refresh = useCallback(() => {
     void utils.bids.get.invalidate({ id: bidId });
@@ -241,6 +243,18 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               {bid.trades?.length ? ` · ${bid.trades.join(", ")}` : ""}
             </p>
           </div>
+          {/* Plans live on their own screen (the takeoff surface). The count
+              sits on the button so an estimator can see whether this job has
+              drawings attached without opening anything. */}
+          <Button
+            size="sm" variant="outline" className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => { window.location.hash = `/bids/${bid.id}/plans`; }}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Plans
+            {sheetCount > 0 && <span className="text-muted-foreground">{sheetCount}</span>}
+          </Button>
+
           <DueDateField
             value={bid.dueDate}
             onSave={dueDate => updateBid.mutate({ id: bid.id, dueDate })}

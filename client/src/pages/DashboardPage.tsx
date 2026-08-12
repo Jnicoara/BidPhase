@@ -22,10 +22,15 @@ import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { CalendarDays, LayoutDashboard, Plus, Check, X } from "lucide-react";
+import { Archive, CalendarDays, LayoutDashboard, Plus, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { RETENTION_DAYS } from "@shared/retention";
 import {
   BID_STATUS_ORDER, calendarDate, dueUrgency, groupBidsByStatus, type DueUrgency,
 } from "@/lib/bidDashboard";
@@ -66,17 +71,67 @@ const URGENCY_LABEL: Partial<Record<DueUrgency, string>> = {
   today: "due today",
 };
 
-export default function DashboardPage({ onOpenBid }: { onOpenBid: (id: number) => void }) {
+type DashboardBid = { id: number; name: string };
+
+export default function DashboardPage({ onOpenBid, onOpenArchive }: {
+  onOpenBid: (id: number) => void;
+  onOpenArchive: () => void;
+}) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
+  const [confirmArchive, setConfirmArchive] = useState<DashboardBid | null>(null);
 
   const utils = trpc.useUtils();
   const { data: bids = [], isLoading } = trpc.bids.dashboard.useQuery();
+  const { data: archived = [] } = trpc.bids.archived.useQuery();
 
   const createBid = trpc.bids.create.useMutation({
     onError: error => toast.error(error.message),
     onSuccess: bid => { if (bid) onOpenBid(bid.id); },
     onSettled: () => { void utils.bids.dashboard.invalidate(); void utils.bids.list.invalidate(); },
+  });
+
+  /**
+   * Optimistic: the card leaves the board the moment it is archived, per the
+   * responsiveness rules. The undo in the toast is the safety net — archiving
+   * the wrong bid is a slip, and the fix should not require finding the
+   * Archive screen.
+   */
+  const archiveBid = trpc.bids.archive.useMutation({
+    onMutate: async ({ id }) => {
+      await utils.bids.dashboard.cancel();
+      const snapshot = utils.bids.dashboard.getData();
+      // Captured BEFORE the optimistic removal — by the time onSuccess runs the
+      // row is out of the cache, and looking it up there names every bid "Bid".
+      const name = snapshot?.find(b => b.id === id)?.name;
+      utils.bids.dashboard.setData(undefined, old => old?.filter(b => b.id !== id));
+      return { snapshot, name };
+    },
+    onError: (error, _vars, context) => {
+      if (context?.snapshot) utils.bids.dashboard.setData(undefined, context.snapshot);
+      toast.error(error.message);
+    },
+    onSuccess: (_result, { id }, context) => {
+      toast.success(
+        `${context?.name ?? "Bid"} archived — ${RETENTION_DAYS} days to change your mind.`,
+        { action: { label: "Undo", onClick: () => restoreBid.mutate({ id }) } }
+      );
+    },
+    onSettled: () => {
+      void utils.bids.dashboard.invalidate();
+      void utils.bids.archived.invalidate();
+      void utils.bids.list.invalidate();
+    },
+  });
+
+  const restoreBid = trpc.bids.restore.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: () => toast.success("Back on your dashboard."),
+    onSettled: () => {
+      void utils.bids.dashboard.invalidate();
+      void utils.bids.archived.invalidate();
+      void utils.bids.list.invalidate();
+    },
   });
 
   const groups = useMemo(() => groupBidsByStatus(bids), [bids]);
@@ -120,6 +175,17 @@ export default function DashboardPage({ onOpenBid }: { onOpenBid: (id: number) =
             </div>
             <div className="font-mono text-base text-[#F5C518]">{money(summary.openValue)}</div>
           </div>
+          {/* Only offered once there is something in it — an always-visible
+              empty Archive is a door to a blank room. */}
+          {archived.length > 0 && (
+            <Button
+              size="sm" variant="ghost" className="h-8 gap-1.5 text-xs shrink-0"
+              onClick={onOpenArchive}
+            >
+              <Archive className="w-3.5 h-3.5" /> Archive
+              <span className="text-muted-foreground">{archived.length}</span>
+            </Button>
+          )}
           <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setAdding(v => !v)}>
             <Plus className="w-3.5 h-3.5" /> New bid
           </Button>
@@ -187,10 +253,21 @@ export default function DashboardPage({ onOpenBid }: { onOpenBid: (id: number) =
                         const urgency = dueUrgency(bid.dueDate);
                         const due = formatDue(bid.dueDate);
                         return (
-                          <button
+                          // A div rather than a button: the card carries its
+                          // own Archive control, and a button inside a button
+                          // is invalid and swallows the inner click.
+                          <div
                             key={bid.id}
+                            role="button"
+                            tabIndex={0}
                             onClick={() => onOpenBid(bid.id)}
-                            className="w-full text-left rounded-xl border border-border bg-card px-3 py-3 hover:bg-muted/20 hover:border-border/80 transition-colors"
+                            onKeyDown={e => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                onOpenBid(bid.id);
+                              }
+                            }}
+                            className="group w-full text-left rounded-xl border border-border bg-card px-3 py-3 cursor-pointer hover:bg-muted/20 hover:border-border/80 transition-colors focus-visible:outline-none focus-visible:border-[#F5C518]"
                           >
                             <div className="flex items-start gap-2">
                               <span className="flex-1 min-w-0 text-sm font-medium truncate">
@@ -199,6 +276,17 @@ export default function DashboardPage({ onOpenBid }: { onOpenBid: (id: number) =
                               <span className="font-mono text-sm shrink-0">
                                 {money(bid.finalPrice)}
                               </span>
+                              {/* Quiet until the card is hovered or focused —
+                                  the dashboard is for reading, and a delete-ish
+                                  control on every card competes with that. */}
+                              <button
+                                onClick={e => { e.stopPropagation(); setConfirmArchive(bid); }}
+                                className="shrink-0 -mr-1 -mt-0.5 p-1 rounded text-muted-foreground/60 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-foreground hover:bg-muted transition-all"
+                                aria-label={`Archive ${bid.name}`}
+                                title="Archive — hides it here, recoverable for 30 days"
+                              >
+                                <Archive className="w-3.5 h-3.5" />
+                              </button>
                             </div>
 
                             <div className="flex items-center gap-2 mt-1.5">
@@ -226,7 +314,7 @@ export default function DashboardPage({ onOpenBid }: { onOpenBid: (id: number) =
                                 ))}
                               </div>
                             ) : null}
-                          </button>
+                          </div>
                         );
                       })
                     )}
@@ -242,6 +330,30 @@ export default function DashboardPage({ onOpenBid }: { onOpenBid: (id: number) =
           Set one from the bid itself.
         </p>
       </div>
+
+      <AlertDialog open={confirmArchive !== null} onOpenChange={open => !open && setConfirmArchive(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive “{confirmArchive?.name}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It comes off the dashboard but is not deleted — its lines, pricing and plans stay
+              exactly as they are, and its status is unchanged. You can restore it from the
+              Archive for {RETENTION_DAYS} days, after which it is deleted permanently.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmArchive) archiveBid.mutate({ id: confirmArchive.id });
+                setConfirmArchive(null);
+              }}
+            >
+              Archive bid
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -115,6 +115,43 @@ what Enter and Escape mean on each surface. For a numeric input inside an
 explicit Save/Cancel form, rules 2–4 belong to the form's buttons, but rule 1
 still applies — attach `selectOnFocus`.
 
+## Scheduled work — how the archive purge runs
+
+The app has one background job, and it is the template for any future one.
+Read this before adding a second.
+
+**Never use `setInterval` or `node-cron`.** The app runs on Cloud Run, which
+terminates idle instances, so an in-process timer dies with the instance and
+takes the guarantee with it. `references/periodic-updates.md` is the full
+reference; the short version follows.
+
+A scheduled job is **two pieces that ship separately**:
+
+1. **A handler in the app**, at a path starting `/api/scheduled/`, mounted
+   explicitly in `server/_core/index.ts` *before* the Vite/static fallthrough
+   (`/api/scheduled/*` is not auto-registered, and without the explicit mount
+   the platform's POST lands on the SPA index). It authenticates with
+   `sdk.authenticateRequest` and refuses anything without `user.isCron`. It must
+   be idempotent — the platform retries 5xx/429 three times.
+2. **The cron itself, created on the Manus platform**, once, from a sandbox
+   terminal *after the site is deployed* — a dev machine is unreachable from the
+   platform, so this cannot be done from a local checkout. The exact command is
+   in the handler's header comment.
+
+The working example is `server/scheduled/purgeArchivedBids.ts`
+(`0 30 3 * * *`, six fields with seconds first, UTC). Note the shape it uses,
+because it is the shape that makes this testable and safe:
+
+- **The work function is exported separately from the HTTP handler.**
+  `purgeExpiredBids(now)` takes the clock as a parameter; the handler passes
+  `systemClock()`. A 30-day rule cannot be tested by waiting 30 days, so nothing
+  on a deletion path may call `Date.now()` internally — see `shared/retention.ts`
+  and `server/bidArchive.test.ts`.
+- **Failure points at "keeps too much", never "deletes too early."** If the cron
+  is never registered, expired bids simply accumulate and one later sweep clears
+  them; the countdown stays accurate throughout. Pick that direction for
+  anything destructive.
+
 ## Responsiveness — standing rules for new screens
 
 The app is used on a laptop in a truck, one-handed, against a supply-house

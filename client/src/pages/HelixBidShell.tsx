@@ -47,6 +47,8 @@ import ModifiersPage from "@/pages/ModifiersPage";
 import AssembliesLibraryPage from "@/pages/AssembliesLibraryPage";
 import BidsPage from "@/pages/BidsPage";
 import QuickBidPage from "@/pages/QuickBidPage";
+import TakeoffPage from "@/pages/TakeoffPage";
+import BidArchivePage from "@/pages/BidArchivePage";
 import KitsPage from "@/pages/KitsPage";
 import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText, Zap, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -73,6 +75,8 @@ type Route =
   | "library-kits"
   | "bids"
   | "quickbid"
+  | "takeoff"
+  | "bid-archive"
   | "admin";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
@@ -101,10 +105,16 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   if (p === "assemblies") return { route: "assemblies" };
   // Foundation bid layer. Distinct from /projects, which is the legacy
   // master_* system with its PDF/takeoff state.
+  // The archive of soft-deleted BIDS. Distinct from /trash, which belongs to
+  // the legacy projects system and is client-state only.
+  if (p === "archive") return { route: "bid-archive" };
   if (p === "bids") {
     // /bids/:id opens straight into one bid, which is what the Dashboard links to.
     const id = parts[1] ? parseInt(parts[1]) : NaN;
-    return isNaN(id) ? { route: "bids" } : { route: "bids", projectId: id };
+    if (isNaN(id)) return { route: "bids" };
+    // /bids/:id/plans is the takeoff surface for that bid.
+    if (parts[2] === "plans") return { route: "takeoff", projectId: id };
+    return { route: "bids", projectId: id };
   }
   if (p === "quickbid") return { route: "quickbid" };
   // Library § …. Bare /library lands on Materials; Assemblies is still to come.
@@ -152,6 +162,10 @@ export default function HelixBidShell() {
       window.location.hash = "/dashboard";
     } else if (r === "bids" && id) {
       window.location.hash = `/bids/${id}`;
+    } else if (r === "takeoff" && id) {
+      window.location.hash = `/bids/${id}/plans`;
+    } else if (r === "bid-archive") {
+      window.location.hash = "/archive";
     } else if (r === "project-detail" && id) {
       window.location.hash = `/project/${id}`;
     } else if (r === "library-materials") {
@@ -222,6 +236,8 @@ export default function HelixBidShell() {
   const isInLibraryAsms   = route === "library-assemblies";
   const isInLibraryKits   = route === "library-kits";
   const isInBids          = route === "bids";
+  const isInTakeoff       = route === "takeoff";
+  const isInBidArchive    = route === "bid-archive";
   const isInQuickBid      = route === "quickbid";
   const isInAdmin         = route === "admin";
 
@@ -240,7 +256,12 @@ export default function HelixBidShell() {
     if (isInMaterial)       return <MaterialListPage onBack={closeMaterialList} />;
     if (isInMatDb)          return <MaterialDatabasePage onBack={goBack} />;
     if (isOnHome)           return <HelixBidHomePage onGoToProjects={() => navigate("dashboard")} />;
-    if (isOnDashboard)      return <DashboardPage onOpenBid={id => navigate("bids", id)} />;
+    if (isOnDashboard)      return (
+      <DashboardPage
+        onOpenBid={id => navigate("bids", id)}
+        onOpenArchive={() => navigate("bid-archive")}
+      />
+    );
     if (isOnProjectDetail && activeProjectId) return (
       <ProjectDetailPage
         projectId={activeProjectId}
@@ -259,6 +280,21 @@ export default function HelixBidShell() {
     if (isInLibraryKits) return <KitsPage />;
     // Keyed on the id so a fresh /bids/:id remounts into that bid.
     if (isInBids)        return <BidsPage key={activeProjectId ?? "list"} initialBidId={activeProjectId} />;
+    if (isInTakeoff && activeProjectId) {
+      return (
+        <TakeoffPage
+          key={`takeoff-${activeProjectId}`}
+          bidId={activeProjectId}
+          onBack={() => navigate("bids", activeProjectId)}
+        />
+      );
+    }
+    if (isInBidArchive)  return (
+      <BidArchivePage
+        onBack={() => navigate("dashboard")}
+        onOpenBid={id => navigate("bids", id)}
+      />
+    );
     if (isInQuickBid)    return <QuickBidPage />;
     if (isInAdmin)       return <AdminSettingsPage />;
     // Legacy category workspace

@@ -1,4 +1,4 @@
-import { and, desc, eq, asc, isNull, isNotNull, or, like, sql } from "drizzle-orm";
+import { and, desc, eq, asc, isNull, isNotNull, lte, or, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -38,6 +38,9 @@ import {
   InsertBidLineItem,
   BidLineItem,
   bidLineItems,
+  InsertBidPdf,
+  BidPdf,
+  bidPdfs,
   InsertKit,
   Kit,
   kits,
@@ -1713,11 +1716,12 @@ export async function updatePricingDefaults(
 
 // ─── Bids ─────────────────────────────────────────────────────────────────────
 
+/** The live bids — everything not sitting in the archive. */
 export async function getBidsByUser(userId: number): Promise<Bid[]> {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(bids)
-    .where(and(eq(bids.userId, userId), eq(bids.isArchived, false)))
+    .where(and(eq(bids.userId, userId), isNull(bids.archivedAt)))
     .orderBy(desc(bids.updatedAt));
 }
 
@@ -1746,11 +1750,128 @@ export async function updateBid(id: number, userId: number, data: Partial<Insert
     .where(and(eq(bids.id, id), eq(bids.userId, userId)));
 }
 
-export async function archiveBid(id: number, userId: number) {
+/**
+ * Move a bid to the archive, starting its retention clock.
+ *
+ * `now` is a parameter rather than `new Date()` because this instant is what
+ * the countdown and the eventual deletion are both measured from — a test that
+ * cannot set it cannot check either. See shared/retention.ts.
+ *
+ * Re-archiving an already-archived bid does NOT restart the clock: the guard on
+ * `archivedAt IS NULL` means a stray second call cannot quietly buy another 30
+ * days, which would let something sit in the archive forever.
+ */
+export async function archiveBid(id: number, userId: number, now: Date = new Date()) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(bids).set({ isArchived: true, updatedAt: new Date() })
-    .where(and(eq(bids.id, id), eq(bids.userId, userId)));
+  await db.update(bids).set({ archivedAt: now, updatedAt: now })
+    .where(and(eq(bids.id, id), eq(bids.userId, userId), isNull(bids.archivedAt)));
+}
+
+/**
+ * Take a bid back out of the archive, in full.
+ *
+ * Clearing `archivedAt` is the entire operation: it stops the countdown, puts
+ * the bid back on the dashboard, and — because the PDFs were never detached,
+ * only carried along by the bid — restores its plans with it. Nothing about the
+ * bid's status, pricing or line items was touched on the way in, so there is
+ * nothing to put back.
+ */
+export async function restoreBid(id: number, userId: number, now: Date = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(bids).set({ archivedAt: null, updatedAt: now })
+    .where(and(eq(bids.id, id), eq(bids.userId, userId), isNotNull(bids.archivedAt)));
+}
+
+/** The archive, soonest-to-expire first — the order the user needs to act in. */
+export async function getArchivedBids(userId: number): Promise<Bid[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(bids)
+    .where(and(eq(bids.userId, userId), isNotNull(bids.archivedAt)))
+    .orderBy(asc(bids.archivedAt));
+}
+
+/**
+ * Destroy a bid and everything hanging off it. There is no undo past here.
+ *
+ * Line items and PDF rows go by `onDelete: "cascade"`, so this is one DELETE.
+ * The S3 objects behind those PDF rows are NOT removed — see
+ * server/scheduled/purgeArchivedBids.ts for why, and what it costs.
+ */
+export async function deleteBidForever(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(bids).where(and(eq(bids.id, id), eq(bids.userId, userId)));
+}
+
+/**
+ * Every bid whose retention window has closed, across ALL users.
+ *
+ * Deliberately not user-scoped: the purge is a system sweep, not something a
+ * user runs. The cutoff is computed once from the injected `now` and compared
+ * against stored instants, so the boundary is exact rather than rounded to a
+ * day — see shared/retention.ts on why the display rounds and this does not.
+ */
+export async function getExpiredArchivedBids(now: Date, retentionDays: number): Promise<Bid[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+  return db.select().from(bids)
+    .where(and(isNotNull(bids.archivedAt), lte(bids.archivedAt, cutoff)))
+    .orderBy(asc(bids.archivedAt));
+}
+
+// ─── Bid PDFs (plan sheets) ───────────────────────────────────────────────────
+
+/** Sheets attached to a bid, in the order the user put them. */
+export async function getBidPdfs(bidId: number, userId: number): Promise<BidPdf[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(bidPdfs)
+    .where(and(eq(bidPdfs.bidId, bidId), eq(bidPdfs.userId, userId)))
+    .orderBy(asc(bidPdfs.sortOrder), asc(bidPdfs.id));
+}
+
+export async function getBidPdf(id: number, userId: number): Promise<BidPdf | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(bidPdfs)
+    .where(and(eq(bidPdfs.id, id), eq(bidPdfs.userId, userId))).limit(1);
+  return row;
+}
+
+export async function createBidPdf(data: InsertBidPdf): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(bidPdfs).values(data);
+  return result.insertId;
+}
+
+/** Next free slot, so a newly attached sheet lands at the bottom of the list. */
+export async function nextBidPdfSortOrder(bidId: number, userId: number): Promise<number> {
+  const rows = await getBidPdfs(bidId, userId);
+  return rows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+}
+
+/**
+ * Record how many pages a document turned out to have.
+ *
+ * Written by the viewer after the document opens, because parsing a PDF to
+ * count pages needs a PDF parser and the server has none.
+ */
+export async function setBidPdfPageCount(id: number, userId: number, pageCount: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(bidPdfs).set({ pageCount, updatedAt: new Date() })
+    .where(and(eq(bidPdfs.id, id), eq(bidPdfs.userId, userId)));
+}
+
+export async function deleteBidPdf(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(bidPdfs).where(and(eq(bidPdfs.id, id), eq(bidPdfs.userId, userId)));
 }
 
 // ─── Bid line items ───────────────────────────────────────────────────────────

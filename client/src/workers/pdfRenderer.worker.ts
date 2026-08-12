@@ -14,8 +14,20 @@
 
 import * as pdfjs from "pdfjs-dist";
 
-// pdfjs worker runs inside this worker — disable its sub-worker
-pdfjs.GlobalWorkerOptions.workerSrc = "";
+// pdfjs needs a real worker entry, even from inside a worker.
+//
+// This was `= ""`, which older pdfjs read as "do the work in this thread".
+// pdfjs 5 rejects an empty value outright — `getDocument` throws
+// `No "GlobalWorkerOptions.workerSrc" specified` — so every load through here
+// failed and callers fell back to rendering on the main thread, which is the
+// one thing this worker exists to prevent.
+//
+// Pointing at the real module spawns a nested worker, which Chrome supports,
+// and matches what PlanPanel and PlanViewer already set on the main thread.
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
 
 let pdfDoc: import("pdfjs-dist").PDFDocumentProxy | null = null;
 let loadedHash: string | null = null;

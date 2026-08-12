@@ -8,6 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { purgeArchivedBidsHandler } from "../scheduled/purgeArchivedBids";
 import {
   seedBaselineAssemblies,
   seedBaselineKits,
@@ -44,6 +45,10 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  // Scheduled (cron) callbacks. `/api/scheduled/*` is NOT auto-registered, and
+  // must be mounted before the Vite/static fallthrough or the platform's POST
+  // lands on the SPA index instead of the handler.
+  app.post("/api/scheduled/purgeArchivedBids", purgeArchivedBidsHandler);
   // tRPC API
   app.use(
     "/api/trpc",
