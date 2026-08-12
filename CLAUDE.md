@@ -44,10 +44,29 @@ is not optional polish: a material nobody can find is a material nobody uses. An
 estimator searches "1900", "romex", "gem box", "plug" — never "4\" square box",
 "12-2 NM-B", "Single-gang box", "Duplex receptacle".
 
-Applies to `BASELINE_MATERIALS` (`server/seed/baselineMaterials.ts`) and to any
-other catalog seeded into `materials`. When adding one, ask what it is called on
-a job site, at the counter, and by the size or colour people call out — then
-write those down. Guidance and worked examples are in that file's header.
+Applies to `BASELINE_MATERIALS` and to any other catalog seeded into
+`materials`. When adding one, ask what it is called on a job site, at the
+counter, and by the size or colour people call out — then write those down.
+
+The catalog itself lives in `server/seed/materials/*.ts`, one module per family,
+with `baselineMaterials.ts` re-exporting it for existing importers. Most of it
+is generated — five conduit types × nine trade sizes × five fittings is 225 rows
+that differ in two words — so per-family slang is written once in a generator
+rather than 225 times by hand. Guidance and worked examples are in
+`server/seed/materials/types.ts`.
+
+**Every shipped material costs $0.** A stale estimate is indistinguishable on
+screen from a price the user checked, so it can be bid and won on numbers nobody
+verified; zero cannot be mistaken for a quote. The Materials screen flags every
+unpriced row and filters down to exactly those (`shared/materialPricing.ts`).
+Tests must not borrow a shipped price for their arithmetic — price a fixture
+material instead, or the test is really asserting the seed data has not changed.
+
+**Renaming a shipped material is not a text edit.** Baseline rows are matched by
+name, so changing one inserts a second row and orphans the first, and every
+assembly, kit and takeoff stamp points at the original's id. Add an entry to
+`RENAMED_BASELINE_MATERIALS` instead, which renames in place. `pnpm tsx
+scripts/dropOrphanBaselines.mts` reports rows that fell out of the catalog.
 
 Rules that keep the aliases useful rather than noisy:
 
@@ -57,9 +76,22 @@ Rules that keep the aliases useful rather than noisy:
 - **Never alias one material to a different material.** A wall plate is not an
   alias for a receptacle. Cross-aliasing devices is exactly what made searching
   "recep" rank "Wall plate" first (fixed in `3ad4db9`); aliases must surface a
-  material, never outrank one the query genuinely names.
+  material, never outrank one the query genuinely names. The same rule covers
+  accessories: "Cable staple" may be findable by "romex staple", but a bare
+  "romex" must return the cable.
+- **Do not put a term in both places.** `ALIAS_MAP` expands the item's text as
+  well as the query, so a word that a material already carries in
+  `searchAliases` gets counted twice if the shared table repeats it — which is
+  enough to lift an accessory above the product it serves.
 
-The global `ALIAS_MAP` in `client/src/lib/smartSearch.ts` is a *query-side*
+`server/materialsCatalog.test.ts` enforces all of this across the whole catalog:
+no restated name words, no aliasing to another material's name, and the ranking
+of the searches that must never regress. `pnpm tsx scripts/searchSpotCheck.mts`
+prints top hits for a sweep of realistic queries — run it after changing catalog
+content, because the common failure is not a missing row but a right row ranked
+fourth.
+
+The global `ALIAS_MAP` in `client/src/lib/smartSearch.ts` is a _query-side_
 synonym table shared by every search box, and is the wrong place for facts about
 one material. Put per-material vocabulary on the material.
 
@@ -75,11 +107,11 @@ first keystroke replaces it. Nobody should have to clear a field by hand before
 typing. Use `onFocus={selectOnFocus}` from `@/lib/selectOnFocus`.
 
 **2. A self-saving field commits on Enter and on blur.** Both, not one, and
-both must reach the *same end state* — see rule 5, which is the half of this
+both must reach the _same end state_ — see rule 5, which is the half of this
 that is easy to miss. In a row or form that stays put, Enter keeps focus and
 re-selects, so a column of figures can be typed straight down.
 
-**3. Escape abandons the edit.** The field snaps back to the last *saved* value
+**3. Escape abandons the edit.** The field snaps back to the last _saved_ value
 and writes nothing. Escape reverts to what is stored now — not to the text the
 edit started from, which goes stale the moment anything saves.
 
@@ -128,13 +160,13 @@ reference; the short version follows.
 A scheduled job is **two pieces that ship separately**:
 
 1. **A handler in the app**, at a path starting `/api/scheduled/`, mounted
-   explicitly in `server/_core/index.ts` *before* the Vite/static fallthrough
+   explicitly in `server/_core/index.ts` _before_ the Vite/static fallthrough
    (`/api/scheduled/*` is not auto-registered, and without the explicit mount
    the platform's POST lands on the SPA index). It authenticates with
    `sdk.authenticateRequest` and refuses anything without `user.isCron`. It must
    be idempotent — the platform retries 5xx/429 three times.
 2. **The cron itself, created on the Manus platform**, once, from a sandbox
-   terminal *after the site is deployed* — a dev machine is unreachable from the
+   terminal _after the site is deployed_ — a dev machine is unreachable from the
    platform, so this cannot be done from a local checkout. The exact command is
    in the handler's header comment.
 
@@ -195,9 +227,10 @@ its own commit.
 **Auth:** OAuth-only (no local password flow is wired up despite `passwordHash` existing on the `users` schema). `sdk.authenticateRequest` (`server/_core/sdk.ts`) resolves the session cookie (or `Authorization: Bearer` fallback) to a `User` row, auto-provisioning on first login. tRPC procedures come in three tiers (`server/_core/trpc.ts`): `publicProcedure`, `protectedProcedure` (any logged-in user), `adminProcedure` (`user.role === "admin"`). Client-side gate is `AuthGuard` in `App.tsx`.
 
 **Data model** (`drizzle/schema.ts`) — everything is scoped by `userId` with cascade deletes:
+
 - `masterItems` / `masterAssemblies` / `masterAssemblyItems` / `masterLaborRates` — the user's reusable catalog (a "master assembly" is a named group of master items with quantities).
 - `projects` — one bid. Carries its own PDF plan reference (`pdfUrl`/`pdfKey`/`pdfFilename`, uploaded to S3) alongside bid metadata (customer, address, status).
-- `projectAssemblies` / `projectAssemblyItems` — master assemblies *copied* into a project as a snapshot (`masterMaterialCost`/`masterLaborHours` frozen at add-time) plus separate `override*` fields the user edits per-bid. Never mutate the snapshot fields after creation; write to the override fields instead.
+- `projectAssemblies` / `projectAssemblyItems` — master assemblies _copied_ into a project as a snapshot (`masterMaterialCost`/`masterLaborHours` frozen at add-time) plus separate `override*` fields the user edits per-bid. Never mutate the snapshot fields after creation; write to the override fields instead.
 - `projectItems` — standalone items added directly to a project outside any assembly, same override pattern.
 - `bidSummary` — one row per project holding global labor/markup multipliers (`percentageLaborFactor`, `lumpSumHours`, `markupPct`) and the default labor rate to price against.
 - `featureFlags` — admin-toggleable flags gating features for the `contractor` role (`useFeatureFlag` hook client-side).
@@ -207,6 +240,7 @@ tRPC routers live in `server/routers/*Router.ts` and are composed in `server/rou
 **Client structure:** `client/src/pages/HelixBidShell.tsx` is the app shell — a hand-rolled hash router (`pathToRoute`/`getCurrentRouteState`) rather than using Wouter's route matching directly, because navigation state also drives sidebar/tab UI. Global app state (active tab/category, UI scale, etc.) lives in `contexts/AppContext.tsx`; theme in `contexts/ThemeContext.tsx`. `components/tabs/` holds per-workspace views (Residential/Commercial/Civil/Industrial estimating, PlanViewer). tRPC client setup is in `lib/trpc.ts`.
 
 **PDF plan viewer pipeline** (the most performance-sensitive part of the client):
+
 - Rendering happens in `client/src/workers/pdfRenderer.worker.ts` — a dedicated Web Worker that owns the pdfjs instance, so `page.render()` (0.5–13s on dense drawings) never blocks the main thread. ImageBitmaps transfer back zero-copy.
 - Large PDF binaries are cached client-side in IndexedDB (`hooks/useIndexedDB.ts`, bypasses the 5MB localStorage cap) and mirrored to S3 (`projects.pdfUrl`) so a project's plan follows the user across devices — IndexedDB is just the fast local cache, S3 is the source of truth.
 - Page thumbnails/overview render progressively in the background as bitmaps arrive; don't reintroduce synchronous/ref-callback thumbnail generation.

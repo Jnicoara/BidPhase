@@ -346,7 +346,16 @@ const ALIAS_MAP: Record<string, string[]> = {
   "bare copper":      ["ground wire", "bare ground", "solid bare copper"],
 
   // ── Rough-In Hardware ──────────────────────────────────────────────────────
-  "staple":           ["cable staple", "wire staple", "NM staple", "romex staple"],
+  // "romex staple" is deliberately absent, and the reason generalises.
+  //
+  // This table expands the ITEM's text as well as the query, so a phrase here
+  // stacks on top of whatever the material already carries. The Cable staple
+  // row names "romex" in its own searchAliases — correctly, that is what it
+  // holds — and adding it a second time from here made a bare "romex" rank the
+  // staple ABOVE the NM-B cable, the accessory beating the product. One signal
+  // ranks it right; two double-counted it. When a per-material alias already
+  // covers a term, this table should stay out of it.
+  "staple":           ["cable staple", "wire staple", "NM staple"],
   "nail plate":       ["nail guard", "protection plate", "stud plate"],
   "protection plate": ["nail plate", "nail guard", "stud protector"],
   "wire nut":         ["wire connector", "twist-on connector", "marrette"],

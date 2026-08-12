@@ -43,21 +43,37 @@ const otherCaller = () => appRouter.createCaller(ctxFor(OTHER_USER));
 
 /** A baseline material guaranteed to exist, used across the fork/revert tests. */
 const BASELINE_NAME = "GFCI receptacle";
-const BASELINE_COST = 16;
 
 /**
- * Read the baseline id straight from the table rather than through
+ * Read the baseline row straight from the table rather than through
  * materials.list — the list deliberately hides a baseline once the user has
  * forked it, which is the very state most of these tests are setting up.
  */
-async function baselineId(): Promise<number> {
+async function baselineRow() {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const [row] = await db.select().from(materials)
     .where(and(isNull(materials.userId), eq(materials.name, BASELINE_NAME)))
     .limit(1);
   if (!row) throw new Error(`baseline "${BASELINE_NAME}" missing — seeding failed`);
-  return row.id;
+  return row;
+}
+
+async function baselineId(): Promise<number> {
+  return (await baselineRow()).id;
+}
+
+/**
+ * What the shipped row currently costs, read rather than hardcoded.
+ *
+ * These tests are about fork and revert copying content faithfully, not about
+ * what a GFCI costs — and the catalog now ships every row unpriced on purpose,
+ * so a hardcoded figure here would only ever be asserting that the seed data
+ * has not changed. Reading it keeps "the fork matches the original" true
+ * whatever the original happens to say.
+ */
+async function baselineCost(): Promise<number> {
+  return Number((await baselineRow()).costPerUnit);
 }
 
 /** Forks and edits persist, so every test starts from a clean user library. */
@@ -163,7 +179,7 @@ describe.skipIf(!hasDb)("materials.update forks baseline rows transparently", ()
 
     // The shipped row is untouched for everyone else.
     const otherView = await otherCaller().materials.get({ id });
-    expect(Number(otherView.costPerUnit)).toBeCloseTo(BASELINE_COST, 4);
+    expect(Number(otherView.costPerUnit)).toBeCloseTo(await baselineCost(), 4);
   });
 
   it("the fork replaces the baseline in the user's list", async () => {
@@ -204,7 +220,7 @@ describe.skipIf(!hasDb)("materials.fork / revert", () => {
 
     expect(forked?.userId).toBe(USER);
     expect(forked?.baselineId).toBe(id);
-    expect(Number(forked?.costPerUnit)).toBeCloseTo(BASELINE_COST, 4);
+    expect(Number(forked?.costPerUnit)).toBeCloseTo(await baselineCost(), 4);
   });
 
   it("forking something already owned returns it unchanged", async () => {
@@ -225,7 +241,7 @@ describe.skipIf(!hasDb)("materials.fork / revert", () => {
     const reverted = await caller().materials.revert({ id: forkId });
     expect(reverted?.id).toBe(forkId);
     expect(reverted?.name).toBe(BASELINE_NAME);
-    expect(Number(reverted?.costPerUnit)).toBeCloseTo(BASELINE_COST, 4);
+    expect(Number(reverted?.costPerUnit)).toBeCloseTo(await baselineCost(), 4);
   });
 
   it("refuses to revert a material created from scratch", async () => {

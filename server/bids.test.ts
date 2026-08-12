@@ -38,15 +38,43 @@ const callerFor = (userId: number) =>
 
 const caller = () => callerFor(USER);
 
+/**
+ * A material this suite prices itself, so the arithmetic below has real numbers
+ * to work with.
+ *
+ * The shipped catalog ships unpriced on purpose — every starter material is $0
+ * until the contractor enters their own price — so an assembly built purely
+ * from starter materials now has a material cost of exactly nothing. That is
+ * correct behaviour and useless as a pricing fixture, so the assemblies here
+ * get one material with a known cost bolted on.
+ */
+let probeMaterialId: number | undefined;
+
+async function pricedMaterial(): Promise<number> {
+  if (probeMaterialId) return probeMaterialId;
+  const created = await caller().materials.create({
+    name: `Bid probe material ${Date.now()}${Math.random()}`,
+    unitOfSale: "each",
+    costPerUnit: 26.74, // the figure the assertions below are written around
+    category: "Receptacles",
+  });
+  probeMaterialId = created!.id;
+  return probeMaterialId;
+}
+
 /** A starter assembly with a labor role attached, so lines price non-zero. */
 async function readyAssembly(name = "Duplex receptacle standard") {
   const list = await caller().assemblies.list();
   const starter = list.find(a => a.name === name)!;
   const rates = await caller().laborRates.list();
   const journeyman = rates.find(r => r.name === "Journeyman")!;
-  // Setting the role forks the starter; the fork is what we add to bids.
+  // Setting the role forks the starter; the fork is what we add to bids. The
+  // recipe is replaced with the one priced material so the line has a material
+  // cost that does not depend on the shipped catalog's prices.
   const result = await caller().assemblies.update({
-    id: starter.id, laborRateId: journeyman.id,
+    id: starter.id,
+    laborRateId: journeyman.id,
+    materials: [{ materialId: await pricedMaterial(), qty: 1 }],
   });
   return result.assembly!;
 }
@@ -124,7 +152,7 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
       bidId: bid.id, assemblyId: assembly.id, qty: 1,
     });
 
-    // Duplex receptacle standard: 1.25 + 1.50 + 1.25 + (25 × 0.90) + (3 × 0.08)
+    // One probe material at 26.74 × 1 — see pricedMaterial().
     expect(Number(line!.snapshotMaterialCost)).toBeCloseTo(26.74, 2);
     expect(Number(line!.snapshotLaborHours)).toBeCloseTo(0.75, 4);
     expect(Number(line!.snapshotLaborRate)).toBeCloseTo(38, 2);

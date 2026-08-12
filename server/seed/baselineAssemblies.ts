@@ -3,14 +3,25 @@
  *
  * ── Why this is a subset of the 27 CORE assemblies ───────────────────────────
  * STARTER_LIBRARY.md lists 27 CORE assemblies and marks with † every material
- * they need that the 28-material starter catalog does not have — 36 of them
- * (old-work boxes, 14-3 NM-B, 50A receptacles, recessed cans, and so on).
+ * they need that the original 29-material starter catalog did not have — 36 of
+ * them (old-work boxes, 14-3 NM-B, 50A receptacles, recessed cans, and so on).
  *
  * Seeding an assembly whose bill of materials is half missing would ship a
  * recipe that silently under-prices the job, which is worse than not shipping
  * it. So only the assemblies buildable ENTIRELY from existing materials are
- * here. The rest arrive when their materials do — adding them is then purely
- * additive, and this file is where they go.
+ * here.
+ *
+ * That constraint has largely lifted: the catalog is now ~600 materials and
+ * carries almost everything those 36 gaps named. The remaining assemblies are
+ * a straightforward addition to this file whenever someone wants to write the
+ * bills of material out — the blocker is now the recipes, not the parts.
+ *
+ * ── One consequence of the unpriced catalog, stated plainly ──────────────────
+ * Shipped materials all cost $0 until the contractor prices them, so a starter
+ * assembly's material cost is $0 out of the box and its labor hours carry the
+ * whole figure. That is intended: a plausible-looking total built from prices
+ * nobody verified is the failure this trades away. The Materials screen flags
+ * and filters what still needs a price.
  *
  * ── Labor hours ──────────────────────────────────────────────────────────────
  * STARTER_LIBRARY.md ships assemblies with NO hours, deliberately. The hours

@@ -115,13 +115,39 @@ describe.skipIf(!hasDb)("starter assemblies", () => {
 });
 
 describe.skipIf(!hasDb)("recipe cost", () => {
+  /**
+   * Materials this suite owns and prices itself.
+   *
+   * These used to be baseline rows borrowed for their shipped prices, which
+   * quietly made every arithmetic assertion below a test of the catalog's
+   * price list as much as of the pricing math. The shipped catalog now ships
+   * unpriced on purpose, so the fixture states its own numbers — which is what
+   * it wanted all along: "1.50 × 2 + 1.25 × 2 = 5.50" should fail when the
+   * multiplication breaks, not when someone re-prices a receptacle.
+   */
+  let pricedDeviceId: number;
+  let pricedBoxId: number;
+
+  beforeAll(async () => {
+    const device = await caller().materials.create({
+      name: `Cost fixture device ${Date.now()}${Math.random()}`,
+      unitOfSale: "each", costPerUnit: 1.5, category: "Receptacles",
+    });
+    const box = await caller().materials.create({
+      name: `Cost fixture box ${Date.now()}${Math.random()}`,
+      unitOfSale: "each", costPerUnit: 1.25, category: "Boxes",
+    });
+    pricedDeviceId = device!.id;
+    pricedBoxId = box!.id;
+  });
+
   /** Build a small assembly with known numbers so the math is checkable by hand. */
   async function buildFixture(overrides: Partial<{
     hours: number; modifierIds: number[]; laborRateId: number | null;
   }> = {}) {
     const journeymanId = await baselineId("labor_rates", "Journeyman");
-    const duplexId = await baselineId("materials", "Duplex receptacle");   // $1.50 each
-    const boxId = await baselineId("materials", "Single-gang box");        // $1.25 each
+    const duplexId = pricedDeviceId;   // $1.50 each
+    const boxId = pricedBoxId;         // $1.25 each
 
     const created = await caller().assemblies.create({
       name: `Cost fixture ${Date.now()}${Math.random()}`,
@@ -187,10 +213,13 @@ describe.skipIf(!hasDb)("recipe cost", () => {
 
   it("moves when materials are added or removed", async () => {
     const assembly = await buildFixture();
-    const wireNutsId = await baselineId("materials", "Wire nuts"); // $0.08
+    const cheap = await caller().materials.create({
+      name: `Cost fixture consumable ${Date.now()}${Math.random()}`,
+      unitOfSale: "each", costPerUnit: 0.08, category: "Connectors & Terminations",
+    });
     await caller().assemblies.update({
       id: assembly.id,
-      materials: [{ materialId: wireNutsId, qty: 10 }],
+      materials: [{ materialId: cheap!.id, qty: 10 }],
     });
     const priced = await caller().assemblies.price({ id: assembly.id });
     expect(priced.line.materialCost).toBeCloseTo(0.8, 10);

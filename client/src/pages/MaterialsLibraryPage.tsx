@@ -16,21 +16,46 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import {
-  Archive as ArchiveIcon, Boxes, Check, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, X,
+  Archive as ArchiveIcon,
+  Boxes,
+  Check,
+  CircleDollarSign,
+  Loader2,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { smartSearch } from "@/lib/smartSearch";
-import { ScopeFilter, ViewTabs, type LibraryView } from "@/components/library/LibraryControls";
 import {
-  ArchiveItemDialog, DeleteForeverDialog, type PendingItem,
+  ScopeFilter,
+  ViewTabs,
+  type LibraryView,
+} from "@/components/library/LibraryControls";
+import {
+  ArchiveItemDialog,
+  DeleteForeverDialog,
+  type PendingItem,
 } from "@/components/library/LibraryRemovalDialogs";
-import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
+import {
+  filterByScope,
+  scopeCounts,
+  type LibraryScope,
+} from "@/lib/libraryScope";
 import { AliasSuggestions } from "@/components/AliasSuggestions";
+import { countNeedingPricing, needsPricing } from "@shared/materialPricing";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
@@ -49,6 +74,15 @@ const CATEGORIES = [
   "Wall Plates & Misc",
   "Panels & Breakers",
   "Lighting Hardware",
+  "Grounding & Bonding",
+  "Life Safety",
+  "Low Voltage",
+  "Connectors & Terminations",
+  "Strut & Supports",
+  "Fasteners & Anchors",
+  "Equipment & Appliances",
+  "Distribution Equipment",
+  "Consumables",
 ] as const;
 
 type Category = (typeof CATEGORIES)[number];
@@ -63,6 +97,10 @@ type Material = {
   category: Category | null;
   /** Space-separated trade slang, fed to smartSearch. Editable inline. */
   searchAliases: string | null;
+  /** Shown under the name where two rows could genuinely be confused. */
+  description: string | null;
+  /** The user's own note of the brand or part number they buy. */
+  brandNote: string | null;
 };
 
 /**
@@ -114,17 +152,31 @@ type Draft = {
    * specific ones every seeded material supports.
    */
   searchAliases: string;
+  /**
+   * The brand or part number this user actually buys.
+   *
+   * The shipped catalog is generic on purpose — "Wire nuts", never a specific
+   * manufacturer's part — so this is where a user pins theirs down without the
+   * shipped names having to pick a brand on everyone's behalf.
+   */
+  brandNote: string;
 };
 
 const emptyDraft: Draft = {
-  name: "", unitOfSale: "each", costPerUnit: "", category: null, searchAliases: "",
+  name: "",
+  unitOfSale: "each",
+  costPerUnit: "",
+  category: null,
+  searchAliases: "",
+  brandNote: "",
 };
 
 /** Shared validation for both the add form and inline edits. */
 function validateDraft(draft: Draft): string | null {
   if (!draft.name.trim()) return "Give the material a name.";
   const cost = Number(draft.costPerUnit);
-  if (draft.costPerUnit.trim() === "" || Number.isNaN(cost)) return "Enter a cost.";
+  if (draft.costPerUnit.trim() === "" || Number.isNaN(cost))
+    return "Enter a cost.";
   if (cost < 0) return "Cost cannot be negative.";
   if (cost > MAX_COST) return "That cost is too large.";
   return null;
@@ -145,9 +197,14 @@ function CategorySelect({
   return (
     <Select
       value={value ?? NO_CATEGORY}
-      onValueChange={next => onChange(next === NO_CATEGORY ? null : (next as Category))}
+      onValueChange={next =>
+        onChange(next === NO_CATEGORY ? null : (next as Category))
+      }
     >
-      <SelectTrigger className={cn("h-8 w-44 text-sm", className)} aria-label="Category">
+      <SelectTrigger
+        className={cn("h-8 w-44 text-sm", className)}
+        aria-label="Category"
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -155,7 +212,9 @@ function CategorySelect({
           <span className="text-muted-foreground">No category</span>
         </SelectItem>
         {CATEGORIES.map(category => (
-          <SelectItem key={category} value={category}>{category}</SelectItem>
+          <SelectItem key={category} value={category}>
+            {category}
+          </SelectItem>
         ))}
       </SelectContent>
     </Select>
@@ -166,19 +225,30 @@ function CategorySelect({
 
 function OriginBadge({ material }: { material: Material }) {
   if (material.userId === null) {
-    return <Badge variant="outline" className="text-xs text-muted-foreground">Starter</Badge>;
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        Starter
+      </Badge>
+    );
   }
   if (material.baselineId != null) {
     // "Your copy" rather than "Edited" on purpose: after a revert the row is
     // still the user's own fork, just holding starter content again. Labelling
     // by ownership is always true; labelling by edited-ness would go stale.
     return (
-      <Badge variant="outline" className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30">
+      <Badge
+        variant="outline"
+        className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30"
+      >
         Your copy
       </Badge>
     );
   }
-  return <Badge variant="outline" className="text-xs">Yours</Badge>;
+  return (
+    <Badge variant="outline" className="text-xs">
+      Yours
+    </Badge>
+  );
 }
 
 // ─── Editable row ─────────────────────────────────────────────────────────────
@@ -217,6 +287,7 @@ function MaterialRow({
       unitOfSale: material.unitOfSale,
       costPerUnit: String(Number(material.costPerUnit)),
       category: material.category,
+      brandNote: material.brandNote ?? "",
       // Seeded from the row, so the field opens showing the slang the material
       // already carries. That is what makes it safe for the save to send this
       // key at all: an untouched editor sends back exactly what was there, so
@@ -238,6 +309,8 @@ function MaterialRow({
     setEditing(false);
   };
 
+  const unpriced = needsPricing(material.costPerUnit);
+
   if (editing) {
     return (
       <div className="px-4 py-3 border-b border-border last:border-0 bg-muted/20">
@@ -255,11 +328,22 @@ function MaterialRow({
           />
           <Select
             value={draft.unitOfSale}
-            onValueChange={value => setDraft({ ...draft, unitOfSale: value as Material["unitOfSale"] })}
+            onValueChange={value =>
+              setDraft({
+                ...draft,
+                unitOfSale: value as Material["unitOfSale"],
+              })
+            }
           >
-            <SelectTrigger className="h-8 w-28 text-sm"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-28 text-sm">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
-              {UNITS.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+              {UNITS.map(unit => (
+                <SelectItem key={unit} value={unit}>
+                  {unit}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Input
@@ -271,8 +355,18 @@ function MaterialRow({
             placeholder="0.00"
           />
           <div className="flex items-center gap-1">
-            <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={save} disabled={isBusy}>
-              {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
+            <Button
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              onClick={save}
+              disabled={isBusy}
+            >
+              {isBusy ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Check className="w-3 h-3" />
+              )}{" "}
+              Save
             </Button>
             <Button
               size="sm"
@@ -284,6 +378,18 @@ function MaterialRow({
               <X className="w-3 h-3" /> Cancel
             </Button>
           </div>
+        </div>
+
+        <div className="mt-2">
+          <Input
+            value={draft.brandNote}
+            onChange={e => setDraft({ ...draft, brandNote: e.target.value })}
+            onFocus={selectOnFocus}
+            className="h-8 w-full text-sm"
+            placeholder="Brand or part number you buy (optional)"
+            aria-label="Brand or part number"
+            disabled={isBusy}
+          />
         </div>
 
         {/* Aliases are editable here for the same reason they are collected on
@@ -299,12 +405,16 @@ function MaterialRow({
             onChange={searchAliases => setDraft({ ...draft, searchAliases })}
             disabled={isBusy}
             onRequest={() =>
-              onSuggestAliases(draft.name, draft.category, draft.searchAliases || null)
+              onSuggestAliases(
+                draft.name,
+                draft.category,
+                draft.searchAliases || null
+              )
             }
           />
           <p className="text-[0.7rem] text-muted-foreground mt-1">
-            What people type instead of the catalog name. Clearing this makes the material
-            findable only by the words in its name.
+            What people type instead of the catalog name. Clearing this makes
+            the material findable only by the words in its name.
           </p>
         </div>
       </div>
@@ -323,10 +433,34 @@ function MaterialRow({
             </span>
           )}
         </div>
+        {(material.description || material.brandNote) && (
+          <div className="text-xs text-muted-foreground truncate mt-0.5">
+            {material.description}
+            {material.description && material.brandNote && " · "}
+            {material.brandNote}
+          </div>
+        )}
       </div>
 
-      <span className="text-xs text-muted-foreground w-16 shrink-0">{UNIT_LABEL[material.unitOfSale]}</span>
-      <span className="text-sm font-mono w-24 text-right shrink-0">{formatCost(material.costPerUnit)}</span>
+      <span className="text-xs text-muted-foreground w-16 shrink-0">
+        {UNIT_LABEL[material.unitOfSale]}
+      </span>
+      {/* The price column doubles as the prompt. A shipped row is $0 until the
+          user prices it, and showing "$0.00" plainly would read as a real
+          price of nothing — which is exactly the number that loses a job
+          quietly. So an unpriced row says so instead of showing the zero. */}
+      {unpriced ? (
+        <span
+          className="text-xs w-24 text-right shrink-0 font-medium text-[#F5C518]"
+          title="No price yet — this material prices the job at nothing until you set one."
+        >
+          Needs price
+        </span>
+      ) : (
+        <span className="text-sm font-mono w-24 text-right shrink-0">
+          {formatCost(material.costPerUnit)}
+        </span>
+      )}
 
       <div className="flex items-center gap-0.5 w-28 justify-end shrink-0">
         <Button
@@ -335,7 +469,9 @@ function MaterialRow({
           className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
           onClick={startEditing}
           disabled={isBusy}
-          title={material.userId === null ? "Edit — creates your own copy" : "Edit"}
+          title={
+            material.userId === null ? "Edit — creates your own copy" : "Edit"
+          }
           aria-label={`Edit ${material.name}`}
         >
           <Pencil className="w-3.5 h-3.5" />
@@ -361,14 +497,17 @@ function MaterialRow({
         {isArchived ? (
           <>
             <Button
-              size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs"
               onClick={() => onRestore?.(material)}
               aria-label={`Restore ${material.name}`}
             >
               <RotateCcw className="w-3 h-3" /> Restore
             </Button>
             <Button
-              size="sm" variant="ghost"
+              size="sm"
+              variant="ghost"
               className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
               onClick={() => onDeleteForever?.(material)}
               title="Delete permanently — cannot be undone"
@@ -377,18 +516,20 @@ function MaterialRow({
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
           </>
-        ) : material.userId !== null && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-            onClick={() => onRemove(material)}
-            disabled={isBusy}
-            title="Archive — out of the working list, restorable any time"
-            aria-label={`Archive ${material.name}`}
-          >
-            <ArchiveIcon className="w-3.5 h-3.5" />
-          </Button>
+        ) : (
+          material.userId !== null && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+              onClick={() => onRemove(material)}
+              disabled={isBusy}
+              title="Archive — out of the working list, restorable any time"
+              aria-label={`Archive ${material.name}`}
+            >
+              <ArchiveIcon className="w-3.5 h-3.5" />
+            </Button>
+          )
         )}
       </div>
     </div>
@@ -405,15 +546,35 @@ export default function MaterialsLibraryPage() {
 
   const [view, setView] = useState<LibraryView>("active");
   const [scope, setScope] = useState<LibraryScope>("all");
-  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(null);
+  /**
+   * Show only the rows still waiting for a real price.
+   *
+   * The shipped catalog is ~600 items at $0, which is a number nobody prices in
+   * one sitting. This turns "my catalog is unpriced" from a vague state into a
+   * worklist that visibly shrinks: switch it on, price what is in front of you,
+   * and rows leave the list as you go.
+   */
+  const [onlyUnpriced, setOnlyUnpriced] = useState(false);
+  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(
+    null
+  );
   const [pendingDelete, setPendingDelete] = useState<PendingItem | null>(null);
 
-  const { data: materials = [], isLoading, refetch } = trpc.materials.list.useQuery({ status: view });
-  const { data: archivedRows = [] } = trpc.materials.list.useQuery({ status: "archived" });
+  const {
+    data: materials = [],
+    isLoading,
+    refetch,
+  } = trpc.materials.list.useQuery({ status: view });
+  const { data: archivedRows = [] } = trpc.materials.list.useQuery({
+    status: "archived",
+  });
 
   const onError = (e: { message: string }) => toast.error(e.message);
   const utils = trpc.useUtils();
-  const refreshAll = () => { void utils.materials.list.invalidate(); void refetch(); };
+  const refreshAll = () => {
+    void utils.materials.list.invalidate();
+    void refetch();
+  };
 
   const createMaterial = trpc.materials.create.useMutation({ onError });
   const suggestAliases = trpc.materials.suggestAliases.useMutation();
@@ -422,20 +583,31 @@ export default function MaterialsLibraryPage() {
 
   const archiveMaterial = trpc.materials.archive.useMutation({
     onError,
-    onSuccess: () => { toast.success("Archived — restore it any time."); refreshAll(); },
+    onSuccess: () => {
+      toast.success("Archived — restore it any time.");
+      refreshAll();
+    },
   });
   const restoreMaterial = trpc.materials.restore.useMutation({
     onError,
-    onSuccess: () => { toast.success("Back in the working list."); refreshAll(); },
+    onSuccess: () => {
+      toast.success("Back in the working list.");
+      refreshAll();
+    },
   });
   const deleteForever = trpc.materials.deleteForever.useMutation({
     onError,
-    onSuccess: () => { toast.success("Deleted permanently."); refreshAll(); },
+    onSuccess: () => {
+      toast.success("Deleted permanently.");
+      refreshAll();
+    },
   });
 
   const isBusy =
-    createMaterial.isPending || updateMaterial.isPending ||
-    revertMaterial.isPending || archiveMaterial.isPending;
+    createMaterial.isPending ||
+    updateMaterial.isPending ||
+    revertMaterial.isPending ||
+    archiveMaterial.isPending;
 
   // smartSearch caches its index by array identity, so this must stay memoised.
   //
@@ -449,12 +621,13 @@ export default function MaterialsLibraryPage() {
   // nuts (category "Wall Plates & Misc"). The sections are already visible on
   // screen; the search box should match materials, not shelves.
   const searchable = useMemo(
-    () => materials.map(m => ({
-      id: String(m.id),
-      description: m.name,
-      unit: m.unitOfSale,
-      searchAliases: m.searchAliases,
-    })),
+    () =>
+      materials.map(m => ({
+        id: String(m.id),
+        description: m.name,
+        unit: m.unitOfSale,
+        searchAliases: m.searchAliases,
+      })),
     [materials]
   );
 
@@ -462,15 +635,24 @@ export default function MaterialsLibraryPage() {
 
   const visible = useMemo(() => {
     // Scope first: "Mine" is about what you own, and applying it before the
-    // search means the result count matches what the filter promised.
-    const inScope = filterByScope(materials, scope);
+    // search means the result count matches what the filter promised. The
+    // pricing filter joins it for the same reason — both are "which rows am I
+    // looking at", and search ranks whatever survives them.
+    let inScope = filterByScope(materials, scope);
+    if (onlyUnpriced)
+      inScope = inScope.filter(m => needsPricing(m.costPerUnit));
     if (!searching) return inScope;
     const hits = smartSearch(searchable, query, 500);
     const order = new Map(hits.map((hit, index) => [Number(hit.id), index]));
     return inScope
       .filter(m => order.has(m.id))
       .sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  }, [materials, searchable, query, searching, scope]);
+  }, [materials, searchable, query, searching, scope, onlyUnpriced]);
+
+  const unpricedCount = useMemo(
+    () => countNeedingPricing(materials),
+    [materials]
+  );
 
   /**
    * Browsing shelves the catalog by category, in the declared order, with
@@ -495,43 +677,49 @@ export default function MaterialsLibraryPage() {
       .filter(group => group.items.length > 0);
   }, [visible, searching]);
 
-  const handleSave = useCallback(async (id: number, draft: Draft) => {
-    setBusyId(id);
-    try {
-      const result = await updateMaterial.mutateAsync({
-        id,
-        name: draft.name.trim(),
-        unitOfSale: draft.unitOfSale,
-        costPerUnit: Number(draft.costPerUnit),
-        category: draft.category,
-        // Sent unconditionally now the editor shows it: blank means the user
-        // cleared the field, which is a real edit, where omitting the key
-        // would quietly keep the old terms and make the clear look like it
-        // failed.
-        //
-        // Cleared stores "" and NOT null, which matters more than it looks.
-        // `backfillMaterialMetadata` (server/db.ts) refills any fork whose
-        // aliases are NULL from its baseline on every startup — NULL there
-        // means "predates the column, inherit it". Saving a deliberate clear
-        // as NULL would put the starter's slang back the next time the server
-        // booted, and search failures of that kind are invisible until someone
-        // notices their results are wrong. Empty text says "the user says this
-        // has none", and reads identically to NULL everywhere else: smartSearch
-        // coalesces both to "".
-        searchAliases: draft.searchAliases.trim(),
-      });
-      if (result.forked) {
-        toast.success(`Saved as your own copy — the starter "${result.material?.name}" is unchanged.`);
-      } else {
-        toast.success("Material updated");
+  const handleSave = useCallback(
+    async (id: number, draft: Draft) => {
+      setBusyId(id);
+      try {
+        const result = await updateMaterial.mutateAsync({
+          id,
+          name: draft.name.trim(),
+          unitOfSale: draft.unitOfSale,
+          costPerUnit: Number(draft.costPerUnit),
+          category: draft.category,
+          // Sent unconditionally now the editor shows it: blank means the user
+          // cleared the field, which is a real edit, where omitting the key
+          // would quietly keep the old terms and make the clear look like it
+          // failed.
+          //
+          // Cleared stores "" and NOT null, which matters more than it looks.
+          // `backfillMaterialMetadata` (server/db.ts) refills any fork whose
+          // aliases are NULL from its baseline on every startup — NULL there
+          // means "predates the column, inherit it". Saving a deliberate clear
+          // as NULL would put the starter's slang back the next time the server
+          // booted, and search failures of that kind are invisible until someone
+          // notices their results are wrong. Empty text says "the user says this
+          // has none", and reads identically to NULL everywhere else: smartSearch
+          // coalesces both to "".
+          searchAliases: draft.searchAliases.trim(),
+          brandNote: draft.brandNote.trim() || null,
+        });
+        if (result.forked) {
+          toast.success(
+            `Saved as your own copy — the starter "${result.material?.name}" is unchanged.`
+          );
+        } else {
+          toast.success("Material updated");
+        }
+        await refetch();
+      } catch {
+        // onError already surfaced it
+      } finally {
+        setBusyId(null);
       }
-      await refetch();
-    } catch {
-      // onError already surfaced it
-    } finally {
-      setBusyId(null);
-    }
-  }, [updateMaterial, refetch]);
+    },
+    [updateMaterial, refetch]
+  );
 
   /**
    * Suggestions for whichever draft is asking — the add form or a row editor.
@@ -543,7 +731,9 @@ export default function MaterialsLibraryPage() {
   const requestAliasSuggestions = useCallback<SuggestAliases>(
     async (name, category, existing) => {
       if (!name.trim()) {
-        toast.error("Give the material a name first — suggestions come from it.");
+        toast.error(
+          "Give the material a name first — suggestions come from it."
+        );
         return [];
       }
       try {
@@ -554,25 +744,30 @@ export default function MaterialsLibraryPage() {
         });
         return result.suggestions;
       } catch {
-        toast.error("Couldn't fetch suggestions — type the terms people use for it yourself.");
+        toast.error(
+          "Couldn't fetch suggestions — type the terms people use for it yourself."
+        );
         return [];
       }
     },
     [suggestAliases]
   );
 
-  const handleRevert = useCallback(async (material: Material) => {
-    setBusyId(material.id);
-    try {
-      await revertMaterial.mutateAsync({ id: material.id });
-      toast.success("Restored the starter version");
-      await refetch();
-    } catch {
-      /* handled by onError */
-    } finally {
-      setBusyId(null);
-    }
-  }, [revertMaterial, refetch]);
+  const handleRevert = useCallback(
+    async (material: Material) => {
+      setBusyId(material.id);
+      try {
+        await revertMaterial.mutateAsync({ id: material.id });
+        toast.success("Restored the starter version");
+        await refetch();
+      } catch {
+        /* handled by onError */
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [revertMaterial, refetch]
+  );
 
   /** Asks first. The archive itself happens from the dialog's confirm. */
   const handleRemove = useCallback((material: Material) => {
@@ -592,6 +787,7 @@ export default function MaterialsLibraryPage() {
         costPerUnit: Number(newDraft.costPerUnit),
         category: newDraft.category,
         searchAliases: newDraft.searchAliases.trim() || null,
+        brandNote: newDraft.brandNote.trim() || null,
       });
       toast.success(`Added "${newDraft.name.trim()}"`);
       setNewDraft(emptyDraft);
@@ -611,10 +807,15 @@ export default function MaterialsLibraryPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold">Materials</h1>
             <p className="text-xs text-muted-foreground">
-              The catalog your assemblies are built from. Starter prices are estimates — replace them with your own.
+              The catalog your assemblies are built from. Starter materials ship
+              with no price — put your own supplier pricing on the ones you use.
             </p>
           </div>
-          <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setAdding(v => !v)}>
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setAdding(v => !v)}
+          >
             <Plus className="w-3.5 h-3.5" /> Add material
           </Button>
         </div>
@@ -643,9 +844,43 @@ export default function MaterialsLibraryPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <ViewTabs view={view} onChange={setView} archivedCount={archivedRows.length} />
-          <ScopeFilter scope={scope} onChange={setScope} counts={scopeCounts(materials)} />
+          <ViewTabs
+            view={view}
+            onChange={setView}
+            archivedCount={archivedRows.length}
+          />
+          <ScopeFilter
+            scope={scope}
+            onChange={setScope}
+            counts={scopeCounts(materials)}
+          />
+          <Button
+            size="sm"
+            variant={onlyUnpriced ? "default" : "outline"}
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setOnlyUnpriced(v => !v)}
+            aria-pressed={onlyUnpriced}
+            title="Show only the materials still carrying the shipped $0"
+          >
+            <CircleDollarSign className="w-3.5 h-3.5" />
+            Needs pricing
+            <span
+              className={cn(
+                "tabular-nums",
+                onlyUnpriced ? "opacity-80" : "text-muted-foreground"
+              )}
+            >
+              {unpricedCount}
+            </span>
+          </Button>
         </div>
+
+        {onlyUnpriced && unpricedCount === 0 && (
+          <p className="text-xs text-muted-foreground mb-3">
+            Every material in your library has a price. Switch the filter off to
+            see them all.
+          </p>
+        )}
 
         {/* Add form */}
         {adding && (
@@ -653,7 +888,9 @@ export default function MaterialsLibraryPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Input
                 value={newDraft.name}
-                onChange={e => setNewDraft({ ...newDraft, name: e.target.value })}
+                onChange={e =>
+                  setNewDraft({ ...newDraft, name: e.target.value })
+                }
                 className="h-8 flex-1 min-w-[12rem] text-sm"
                 placeholder="Material name"
                 autoFocus
@@ -664,29 +901,55 @@ export default function MaterialsLibraryPage() {
               />
               <Select
                 value={newDraft.unitOfSale}
-                onValueChange={value => setNewDraft({ ...newDraft, unitOfSale: value as Material["unitOfSale"] })}
+                onValueChange={value =>
+                  setNewDraft({
+                    ...newDraft,
+                    unitOfSale: value as Material["unitOfSale"],
+                  })
+                }
               >
-                <SelectTrigger className="h-8 w-28 text-sm"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 w-28 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  {UNITS.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+                  {UNITS.map(unit => (
+                    <SelectItem key={unit} value={unit}>
+                      {unit}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Input
                 value={newDraft.costPerUnit}
-                onChange={e => setNewDraft({ ...newDraft, costPerUnit: e.target.value })}
+                onChange={e =>
+                  setNewDraft({ ...newDraft, costPerUnit: e.target.value })
+                }
                 className="h-8 w-28 text-sm text-right"
                 inputMode="decimal"
                 onFocus={selectOnFocus}
                 placeholder="0.00"
               />
-              <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={handleCreate} disabled={createMaterial.isPending}>
-                {createMaterial.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Add
+              <Button
+                size="sm"
+                className="h-8 gap-1.5 text-xs"
+                onClick={handleCreate}
+                disabled={createMaterial.isPending}
+              >
+                {createMaterial.isPending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Check className="w-3 h-3" />
+                )}{" "}
+                Add
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-8 gap-1.5 text-xs"
-                onClick={() => { setAdding(false); setNewDraft(emptyDraft); }}
+                onClick={() => {
+                  setAdding(false);
+                  setNewDraft(emptyDraft);
+                }}
               >
                 <X className="w-3 h-3" /> Cancel
               </Button>
@@ -699,7 +962,9 @@ export default function MaterialsLibraryPage() {
             <div className="mt-2">
               <AliasSuggestions
                 value={newDraft.searchAliases}
-                onChange={searchAliases => setNewDraft({ ...newDraft, searchAliases })}
+                onChange={searchAliases =>
+                  setNewDraft({ ...newDraft, searchAliases })
+                }
                 disabled={createMaterial.isPending}
                 onRequest={() =>
                   requestAliasSuggestions(
@@ -710,8 +975,9 @@ export default function MaterialsLibraryPage() {
                 }
               />
               <p className="text-[0.7rem] text-muted-foreground mt-1">
-                What people type instead of the catalog name — “spring nut”, “1900”, “gem box”.
-                Optional, but it is what makes a material findable the way it is asked for.
+                What people type instead of the catalog name — “spring nut”,
+                “1900”, “gem box”. Optional, but it is what makes a material
+                findable the way it is asked for.
               </p>
             </div>
           </div>
@@ -728,12 +994,16 @@ export default function MaterialsLibraryPage() {
           </div>
 
           {isLoading ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading materials…</div>
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              Loading materials…
+            </div>
           ) : visible.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              {query
-                ? <>No materials match “{query}”.</>
-                : <>No materials yet. Add your first one to get started.</>}
+              {query ? (
+                <>No materials match “{query}”.</>
+              ) : (
+                <>No materials yet. Add your first one to get started.</>
+              )}
             </div>
           ) : searching ? (
             visible.map(material => (
@@ -748,7 +1018,9 @@ export default function MaterialsLibraryPage() {
                 onRemove={handleRemove}
                 isArchived={view === "archived"}
                 onRestore={m => restoreMaterial.mutate({ id: m.id })}
-                onDeleteForever={m => setPendingDelete({ id: m.id, name: m.name })}
+                onDeleteForever={m =>
+                  setPendingDelete({ id: m.id, name: m.name })
+                }
               />
             ))
           ) : (
@@ -758,7 +1030,9 @@ export default function MaterialsLibraryPage() {
                   <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {group.label}
                   </span>
-                  <span className="text-xs text-muted-foreground/70">{group.items.length}</span>
+                  <span className="text-xs text-muted-foreground/70">
+                    {group.items.length}
+                  </span>
                 </div>
                 {group.items.map(material => (
                   <MaterialRow
@@ -772,7 +1046,9 @@ export default function MaterialsLibraryPage() {
                     onRemove={handleRemove}
                     isArchived={view === "archived"}
                     onRestore={m => restoreMaterial.mutate({ id: m.id })}
-                    onDeleteForever={m => setPendingDelete({ id: m.id, name: m.name })}
+                    onDeleteForever={m =>
+                      setPendingDelete({ id: m.id, name: m.name })
+                    }
                   />
                 ))}
               </div>

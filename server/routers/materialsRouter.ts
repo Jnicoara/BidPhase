@@ -33,6 +33,9 @@ const categorySchema = z.enum(MATERIAL_CATEGORIES).nullable();
 /** Space-separated trade slang. Loose text by design — no vocabulary to enforce. */
 const aliasSchema = z.string().trim().max(1024).nullable();
 
+/** The user's note of the brand or part number they buy. Free text. */
+const brandNoteSchema = z.string().trim().max(255).nullable();
+
 /** Money crosses the boundary as a number and is stored as an exact decimal string. */
 const toDecimal = (value: number) => value.toFixed(4);
 
@@ -139,6 +142,7 @@ export const materialsRouter = router({
       costPerUnit: costSchema.default(0),
       category: categorySchema.default(null),
       searchAliases: aliasSchema.default(null),
+      brandNote: brandNoteSchema.default(null),
     }))
     .mutation(async ({ input, ctx }) => {
       // Block exact-name duplicates against everything the user can already see.
@@ -159,6 +163,7 @@ export const materialsRouter = router({
         costPerUnit: toDecimal(input.costPerUnit),
         category: input.category,
         searchAliases: input.searchAliases,
+        brandNote: input.brandNote,
       });
       return db.getMaterialById(id, ctx.user.id);
     }),
@@ -178,6 +183,7 @@ export const materialsRouter = router({
       costPerUnit: costSchema.optional(),
       category: categorySchema.optional(),
       searchAliases: aliasSchema.optional(),
+      brandNote: brandNoteSchema.optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const { id, costPerUnit, ...rest } = input;

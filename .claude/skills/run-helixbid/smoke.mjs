@@ -1,6 +1,6 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 /**
- * smoke.mjs — drive a RUNNING HelixBid server over its real HTTP API.
+ * smoke.mjs â€” drive a RUNNING HelixBid server over its real HTTP API.
  *
  * This is the agent's primary handle on the app. It authenticates the way a
  * browser does, then exercises the Materials library end to end: list, create,
@@ -32,12 +32,12 @@ function check(label, condition, detail = "") {
     console.log(`  PASS  ${label}`);
   } else {
     failures.push(label);
-    console.log(`  FAIL  ${label}${detail ? ` — ${detail}` : ""}`);
+    console.log(`  FAIL  ${label}${detail ? ` â€” ${detail}` : ""}`);
   }
 }
 
 /**
- * The dev server takes the next free port, so 3000 is not a safe assumption —
+ * The dev server takes the next free port, so 3000 is not a safe assumption â€”
  * and a stale server left running from an earlier session WILL answer on 3000
  * with a different JWT_SECRET. So probing for "something responds" is not
  * enough: the port only counts if our token actually authenticates against it.
@@ -56,7 +56,7 @@ async function findBaseUrl(token) {
       if (body?.result?.data?.json?.openId) return base;
       if (body) rejected.push(port);
     } catch {
-      // port not listening — try the next
+      // port not listening â€” try the next
     }
   }
   if (rejected.length) {
@@ -71,7 +71,7 @@ async function findBaseUrl(token) {
 
 /**
  * tRPC v11 + superjson over plain HTTP.
- * Queries take ?input={"json":…}; mutations POST {"json":…}; both unwrap to
+ * Queries take ?input={"json":â€¦}; mutations POST {"json":â€¦}; both unwrap to
  * result.data.json. Errors come back as error.json.message with HTTP 200/4xx.
  */
 function makeClient(baseUrl, token) {
@@ -115,7 +115,7 @@ console.log(`Acting as: ${OPEN_ID}\n`);
 
 const api = makeClient(baseUrl, token);
 
-// ── Auth ────────────────────────────────────────────────────────────────────
+// â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 console.log("auth");
 const me = await api.query("auth.me");
 check("auth.me returns the signed-in user", me?.openId === OPEN_ID, `got ${me?.openId}`);
@@ -126,7 +126,7 @@ await expectReject(
   /login|unauthor/i
 );
 
-// ── Library listing ─────────────────────────────────────────────────────────
+// â”€â”€ Library listing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 console.log("\nmaterials.list");
 const initial = await api.query("materials.list");
 check("starter library is seeded", initial.length >= 28, `got ${initial.length} rows`);
@@ -135,7 +135,7 @@ check("baseline rows are owned by nobody", initial.some(m => m.userId === null))
 const names = initial.map(m => m.name);
 check("no duplicate names in the merged list", new Set(names).size === names.length);
 
-// ── Categories ──────────────────────────────────────────────────────────────
+// â”€â”€ Categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 console.log("\nmaterial categories");
 const uncategorisedStarters = initial.filter(m => m.userId === null && !m.category);
 check("every starter material is shelved", uncategorisedStarters.length === 0,
@@ -148,7 +148,7 @@ check("conduit and its fittings are on separate shelves",
 check("a dimmer counts as a switch",
   initial.find(m => m.name === "Dimmer")?.category === "Switches");
 
-// ── Create ──────────────────────────────────────────────────────────────────
+// â”€â”€ Create â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 console.log("\nmaterials.create");
 const uniqueName = `Smoke widget ${Date.now()}`;
 const created = await api.mutate("materials.create", {
@@ -168,7 +168,7 @@ const uncategorised = await api.mutate("materials.create", {
   name: `Smoke unshelved ${Date.now()}`, unitOfSale: "each", costPerUnit: 1,
 });
 check("category is optional on create", uncategorised?.category === null, `got ${uncategorised?.category}`);
-await api.mutate("materials.deactivate", { id: uncategorised.id });
+await api.mutate("materials.archive", { id: uncategorised.id });
 
 await expectReject(
   "refuses a duplicate name",
@@ -181,7 +181,7 @@ await expectReject(
   /./
 );
 
-// ── Fork on edit ────────────────────────────────────────────────────────────
+// â”€â”€ Fork on edit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Normalise first: a previous run may already have forked this row.
 console.log("\nmaterials.update (fork on edit)");
 const TARGET = "Wire nuts";
@@ -190,6 +190,9 @@ if (before?.baselineId != null) await api.mutate("materials.revert", { id: befor
 
 const target = (await api.query("materials.list")).find(m => m.name === TARGET);
 const wasBaseline = target.userId === null;
+// Snapshot the shipped values before editing, so the revert checks below can
+// compare against what this row actually ships as rather than a stale literal.
+const starterRow = { costPerUnit: target.costPerUnit, category: target.category };
 
 const edited = await api.mutate("materials.update", { id: target.id, costPerUnit: 0.99, category: "Boxes" });
 check("editing a starter material forks it", wasBaseline ? edited.forked === true : true);
@@ -200,7 +203,7 @@ check("the copy can be re-shelved", edited.material?.category === "Boxes", `got 
 
 const afterFork = await api.query("materials.list");
 check(
-  "the fork replaces the baseline — still exactly one row for it",
+  "the fork replaces the baseline â€” still exactly one row for it",
   afterFork.filter(m => m.name === TARGET).length === 1
 );
 check("total row count is unchanged by forking", afterFork.length === initial.length + 1,
@@ -210,12 +213,16 @@ check("total row count is unchanged by forking", afterFork.length === initial.le
 const second = await api.mutate("materials.update", { id: edited.material.id, costPerUnit: 0.77 });
 check("editing an existing copy does not fork again", second.forked === false);
 
-// ── Revert ──────────────────────────────────────────────────────────────────
+// â”€â”€ Revert â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 console.log("\nmaterials.revert");
 const reverted = await api.mutate("materials.revert", { id: edited.material.id });
 check("revert keeps the same row id", reverted?.id === edited.material.id);
-check("revert restores the starter cost", Number(reverted?.costPerUnit) === 0.08, `got ${reverted?.costPerUnit}`);
-check("revert restores the starter category", reverted?.category === "Wall Plates & Misc", `got ${reverted?.category}`);
+// Compared against the shipped row as it stands rather than against a literal.
+// Starter materials all cost $0 until the user prices them, and their shelves
+// move as the catalog is reorganised — what revert has to guarantee is that the
+// fork matches its original again, not what the original happens to say.
+check("revert restores the starter cost", Number(reverted?.costPerUnit) === Number(starterRow.costPerUnit), `got ${reverted?.costPerUnit}, starter is ${starterRow.costPerUnit}`);
+check("revert restores the starter category", reverted?.category === starterRow.category, `got ${reverted?.category}, starter is ${starterRow.category}`);
 check("the row is still the user's own copy after revert", reverted?.baselineId != null);
 
 await expectReject(
@@ -224,20 +231,20 @@ await expectReject(
   /no original/i
 );
 
-// ── Deactivate ──────────────────────────────────────────────────────────────
-console.log("\nmaterials.deactivate");
+// â”€â”€ Deactivate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+console.log("\nmaterials.archive");
 const baselineRow = (await api.query("materials.list")).find(m => m.userId === null);
 await expectReject(
   "refuses to remove a starter material",
-  api.mutate("materials.deactivate", { id: baselineRow.id }),
+  api.mutate("materials.archive", { id: baselineRow.id }),
   /cannot be removed/i
 );
 
-await api.mutate("materials.deactivate", { id: created.id });
+await api.mutate("materials.archive", { id: created.id });
 const afterRemove = await api.query("materials.list");
 check("removing a user material hides it", !afterRemove.some(m => m.id === created.id));
 
-// ── Result ──────────────────────────────────────────────────────────────────
+// â”€â”€ Result â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 console.log(`\n${pass} passed, ${failures.length} failed`);
 if (failures.length) {
   console.log(`\nFailed:\n${failures.map(f => `  - ${f}`).join("\n")}`);

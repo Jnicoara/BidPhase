@@ -108,9 +108,17 @@ describe.skipIf(!hasDb)("baseline material seeding", () => {
   });
 
   it("stores cost as an exact decimal, not a rounded float", async () => {
-    const rows = await getLibraryMaterials(USER);
-    const wireNuts = rows.find(r => r.name === "Wire nuts" && r.userId === null);
-    expect(Number(wireNuts?.costPerUnit)).toBeCloseTo(0.08, 10);
+    // Written against a material this test prices itself. It used to read a
+    // shipped row's $0.08, which stopped saying anything once the catalog
+    // began shipping every row unpriced — and an assertion that 0 is exactly 0
+    // would not have caught a rounding bug anyway. An awkward decimal does.
+    const id = await createMaterial({
+      userId: USER, name: `Decimal probe ${Date.now()}`,
+      unitOfSale: "each", costPerUnit: "0.0800",
+    });
+    const row = await getMaterialById(id, USER);
+    expect(row?.costPerUnit).toBe("0.0800");
+    expect(Number(row?.costPerUnit)).toBeCloseTo(0.08, 10);
   });
 });
 
@@ -307,6 +315,10 @@ describe.skipIf(!hasDb)("fork and revert", () => {
   });
 
   it("reverting restores baseline content and keeps the same row id", async () => {
+    // The shipped cost is read rather than hardcoded: what matters is that the
+    // fork ends up matching its original again, not what the original says.
+    const original = await getMaterialById(baselineId, USER);
+
     const forkId = await forkMaterial(baselineId, USER);
     await updateMaterial(forkId, USER, { costPerUnit: "99.0000", name: "My edited receptacle" });
 
@@ -317,7 +329,7 @@ describe.skipIf(!hasDb)("fork and revert", () => {
     const reverted = await getMaterialById(forkId, USER);
     expect(reverted?.id).toBe(forkId);
     expect(reverted?.name).toBe("Duplex receptacle");
-    expect(Number(reverted?.costPerUnit)).toBeCloseTo(1.5, 10);
+    expect(reverted?.costPerUnit).toBe(original?.costPerUnit);
   });
 
   it("refuses to revert a fully custom material", async () => {

@@ -397,6 +397,22 @@ export type ProjectType = (typeof PROJECT_TYPES)[number];
  * assemblies by what they accomplish ("Lighting"), this groups materials by
  * what they physically are ("Conduit Fittings"). Do not merge them.
  */
+/**
+ * The shelves the material catalog is filed on.
+ *
+ * Order matters — it is the order sections render in on the Materials screen,
+ * and it runs roughly in the order work happens: wire and raceway first, then
+ * what gets mounted in them, then equipment, then the small parts and
+ * consumables that go in every van.
+ *
+ * ── Adding one is an ALTER, so add deliberately ──────────────────────────────
+ * This is a mysqlEnum, unlike `assemblies.trade` which is a varchar precisely
+ * so new trades need no migration. The difference is intentional: a trade is an
+ * open set the app unlocks, whereas a category is a curated list the user picks
+ * from and never adds to, and keeping it an enum is what stops a typo becoming
+ * a nineteenth shelf. Append rather than reorder or rename — the value is
+ * stored, so a rename orphans every row already carrying the old text.
+ */
 export const MATERIAL_CATEGORIES = [
   "Wire & Cable",
   "Conduit",
@@ -407,6 +423,15 @@ export const MATERIAL_CATEGORIES = [
   "Wall Plates & Misc",
   "Panels & Breakers",
   "Lighting Hardware",
+  "Grounding & Bonding",
+  "Life Safety",
+  "Low Voltage",
+  "Connectors & Terminations",
+  "Strut & Supports",
+  "Fasteners & Anchors",
+  "Equipment & Appliances",
+  "Distribution Equipment",
+  "Consumables",
 ] as const;
 
 export type MaterialCategory = (typeof MATERIAL_CATEGORIES)[number];
@@ -435,6 +460,34 @@ export const materials = mysqlTable(
      * a filing decision. The UI shelves NULL under "Uncategorized", last.
      */
     category: mysqlEnum("category", MATERIAL_CATEGORIES),
+    /**
+     * Which trade's catalog this belongs to. Same varchar-not-enum treatment as
+     * `assemblies.trade`, for the same reason: unlocking is gated at the app
+     * layer so a new trade is content, not a migration.
+     *
+     * Low-voltage parts ship as "low-voltage" rather than "electrical" because
+     * structured cabling, coax and landscape lighting are a different trade's
+     * material list even when the same contractor pulls both — an electrical
+     * estimator scrolling for a receptacle should not wade through Cat6 jacks.
+     */
+    trade: varchar("trade", { length: 64 }).default("electrical").notNull(),
+    /**
+     * A short clarifier, shown under the name. Deliberately sparse: it exists
+     * only where two catalog entries could genuinely be mistaken for each other
+     * — "#10 THHN" solid against "#10 THHN stranded", plastic boxes against
+     * metal — and is left NULL on everything self-explanatory. A description on
+     * every row is a description nobody reads.
+     */
+    description: varchar("description", { length: 512 }),
+    /**
+     * Optional note for the brand or part number the user actually buys.
+     *
+     * The catalog itself is generic on purpose — "Wire nuts", not a Ideal
+     * 30-176 — because a shipped catalog naming one manufacturer is wrong for
+     * everyone who buys another. This is where a user records that their supply
+     * house stocks a particular part, without the shipped names pretending to.
+     */
+    brandNote: varchar("brandNote", { length: 255 }),
     /**
      * Trade slang the catalog name does not contain, space-separated, so an
      * electrician finds "Duplex receptacle" by typing "plug" and "4\" square
@@ -479,6 +532,8 @@ export const materials = mysqlTable(
     index("materials_baselineId_idx").on(t.baselineId),
     index("materials_status_idx").on(t.status),
     index("materials_status_idx").on(t.status),
+    index("materials_trade_idx").on(t.trade),
+    index("materials_category_idx").on(t.category),
   ]
 );
 

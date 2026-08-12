@@ -76,7 +76,7 @@ import {
   featureFlags,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-import { BASELINE_MATERIALS } from "./seed/baselineMaterials";
+import { BASELINE_MATERIALS, RENAMED_BASELINE_MATERIALS } from "./seed/baselineMaterials";
 import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
 import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
 import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
@@ -793,6 +793,15 @@ async function withSeedLock(name: string, run: () => Promise<void>): Promise<voi
  * Self-healing rather than a migration: the duplicates are data damage, not a
  * schema change, and any database that ran the old seeder concurrently has them.
  * Runs inside the seed lock, before inserting, so it never fights a live writer.
+ *
+ * ── Checked with a read before it writes ─────────────────────────────────────
+ * There are almost never any duplicates: this is a repair for a race that was
+ * fixed, and it runs on every startup only so a damaged database heals itself.
+ * The self-join DELETE takes locks across the whole table for the duration
+ * either way, which was unnoticeable when the material catalog was 29 rows and
+ * is not at 600 — an unconditional DELETE here deadlocked against ordinary
+ * inserts elsewhere. The SELECT costs nothing by comparison and, finding
+ * nothing, leaves the table untouched.
  */
 async function dedupeBaselineRows(
   table: "materials" | "labor_rates" | "modifiers" | "assemblies" | "kits"
@@ -800,6 +809,17 @@ async function dedupeBaselineRows(
   const db = await getDb();
   if (!db) return;
   // Table name is a compile-time constant from the union above, never user input.
+  const result = await db.execute(sql.raw(
+    `SELECT 1 FROM \`${table}\` dupe
+     JOIN \`${table}\` keeper
+       ON dupe.name = keeper.name AND dupe.id > keeper.id
+     WHERE dupe.userId IS NULL AND keeper.userId IS NULL
+     LIMIT 1`
+  ));
+  // execute() is typed for writes; a SELECT comes back as [rows, fields].
+  const [rows] = result as unknown as [unknown[], unknown];
+  if (rows.length === 0) return;
+
   await db.execute(sql.raw(
     `DELETE dupe FROM \`${table}\` dupe
      JOIN \`${table}\` keeper
@@ -1132,11 +1152,56 @@ export async function revertMaterialToBaseline(id: number, userId: number) {
 
 /**
  * Seed the shipped baseline materials. Called at server startup; a no-op once
- * they exist. Matched by name, so renaming a baseline row here would insert a
- * new one rather than rename the old — intentional, since users may have forked it.
+ * they exist. Matched by name — see renameBaselineMaterials for what that costs
+ * and how a rename is done safely.
  */
 export async function seedBaselineMaterials(): Promise<void> {
   await withSeedLock("helixbid:seed:materials", seedBaselineMaterialsUnlocked);
+}
+
+/**
+ * Rename baseline rows whose catalog name has changed, in place.
+ *
+ * Matching by name is what makes the seed re-runnable, and it is also why a
+ * rename cannot simply be typed into the seed file: the seeder would see an
+ * unfamiliar name, insert a second row, and strand the original as an orphan
+ * the user then sees twice with no way to tell them apart. Renaming here keeps
+ * the id, which is the part that actually matters — assemblies, kits, project
+ * items and takeoff stamps all point at material ids.
+ *
+ * Runs before matching, and only ever touches baseline rows: a user's fork
+ * carries their own name and is none of the seeder's business.
+ */
+async function renameBaselineMaterials(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const entries = Object.entries(RENAMED_BASELINE_MATERIALS);
+  if (entries.length === 0) return;
+
+  const baselineNames = new Set(
+    (await db.select({ name: materials.name }).from(materials).where(isNull(materials.userId)))
+      .map(row => row.name)
+  );
+
+  for (const [from, to] of entries) {
+    if (!baselineNames.has(from)) continue; // already renamed, or never existed
+    if (baselineNames.has(to)) {
+      // Both names present. That is a half-migrated database rather than
+      // anything this function can fix: merging them would have to pick which
+      // id survives, and every reference to the loser would break. Leaving the
+      // old row alone keeps a visible duplicate, which is recoverable; guessing
+      // is not.
+      console.warn(
+        `[seed] baseline material "${from}" cannot be renamed to "${to}" — both exist.`
+      );
+      continue;
+    }
+    await db.update(materials).set({ name: to })
+      .where(and(eq(materials.name, from), isNull(materials.userId)));
+    baselineNames.delete(from);
+    baselineNames.add(to);
+  }
 }
 
 async function seedBaselineMaterialsUnlocked(): Promise<void> {
@@ -1144,6 +1209,7 @@ async function seedBaselineMaterialsUnlocked(): Promise<void> {
   if (!db) return;
 
   await dedupeBaselineRows("materials");
+  await renameBaselineMaterials();
 
   const existing = await db.select({ name: materials.name }).from(materials)
     .where(isNull(materials.userId));
@@ -1157,11 +1223,18 @@ async function seedBaselineMaterialsUnlocked(): Promise<void> {
       costPerUnit: m.costPerUnit,
       category: m.category,
       searchAliases: m.searchAliases,
+      description: m.description ?? null,
+      trade: m.trade ?? "electrical",
       defaultQty: m.defaultQty != null ? m.defaultQty.toFixed(4) : null,
       userId: null,
     }));
 
-  if (missing.length > 0) await db.insert(materials).values(missing);
+  // Chunked: 600 rows of a dozen columns each overflows the default packet on
+  // a single INSERT, and the whole seed failing would leave a half-built
+  // catalog behind the seed lock.
+  for (let i = 0; i < missing.length; i += 100) {
+    await db.insert(materials).values(missing.slice(i, i + 100));
+  }
 
   await backfillMaterialMetadata();
 }
@@ -1185,8 +1258,22 @@ async function seedBaselineMaterialsUnlocked(): Promise<void> {
  * clear survives the next startup; do not widen these NULL checks to cover
  * blank text, or a user who deletes a term will find it back tomorrow.
  *
+ * NULL therefore means "never set, inherit it" — never "empty". Clearing the
+ * aliases in the Materials editor stores an empty string on purpose, so the
+ * clear survives the next startup; do not widen these NULL checks to cover
+ * blank text, or a user who deletes a term will find it back tomorrow.
+ *
  * Fully custom rows (no baselineId) are left alone — there is nothing to
  * inherit from, and guessing would be worse than leaving them blank.
+ *
+ * ── Price is re-stamped too, and only ever downward to zero ──────────────────
+ * Every shipped row is priced at zero (see UNPRICED), so this pass drags a
+ * baseline row that still carries one of the old estimate prices back to zero.
+ * That is the point rather than a side effect: a stale estimate is
+ * indistinguishable on screen from a price the user checked, so it can be bid
+ * on without anyone noticing, whereas zero is flagged as needing a price and
+ * can be filtered for. It cannot touch a user's own number — a user who edits
+ * a price is editing their FORK, and forks are not in this pass at all.
  */
 async function backfillMaterialMetadata(): Promise<void> {
   const db = await getDb();
@@ -1198,6 +1285,9 @@ async function backfillMaterialMetadata(): Promise<void> {
     category: materials.category,
     searchAliases: materials.searchAliases,
     defaultQty: materials.defaultQty,
+    description: materials.description,
+    trade: materials.trade,
+    costPerUnit: materials.costPerUnit,
   }).from(materials).where(isNull(materials.userId));
 
   const seedByName = new Map(BASELINE_MATERIALS.map(m => [m.name, m]));
@@ -1211,6 +1301,18 @@ async function backfillMaterialMetadata(): Promise<void> {
     const patch: Partial<InsertMaterial> = {};
     if (row.category !== intended.category) patch.category = intended.category;
     if (row.searchAliases !== intended.searchAliases) patch.searchAliases = intended.searchAliases;
+
+    const wantDescription = intended.description ?? null;
+    if (row.description !== wantDescription) patch.description = wantDescription;
+
+    const wantTrade = intended.trade ?? "electrical";
+    if (row.trade !== wantTrade) patch.trade = wantTrade;
+
+    // Compared numerically: the column hands back "0.4000" where the seed says
+    // "0.0000", and a string compare would rewrite every row every startup.
+    if (Number(row.costPerUnit) !== Number(intended.costPerUnit)) {
+      patch.costPerUnit = intended.costPerUnit;
+    }
 
     const wantQty = intended.defaultQty != null ? intended.defaultQty.toFixed(4) : null;
     if (row.defaultQty !== wantQty) patch.defaultQty = wantQty;
@@ -1238,6 +1340,11 @@ async function backfillMaterialMetadata(): Promise<void> {
       )
     ));
 
+  // Note what is absent here: price, description and trade. Price is the
+  // user's whole reason for forking and must never be reached into. The other
+  // two are NOT NULL with defaults, so there is no "never set" state to detect
+  // — a fork that wants the baseline's copy of either gets it through revert,
+  // which is the explicit action for that.
   for (const fork of staleForks) {
     const source = fork.baselineId != null ? seedById.get(fork.baselineId) : undefined;
     if (!source) continue;
