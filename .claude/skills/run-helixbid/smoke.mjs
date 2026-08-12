@@ -9,7 +9,7 @@
  * server/routers/*, so this covers the layer PRs actually touch.
  *
  * Start the server first (see SKILL.md), then:
- *   node .claude/skills/run-bidphase/smoke.mjs
+ *   node .claude/skills/run-helixbid/smoke.mjs
  *
  * Env:
  *   BASE_URL    skip port probing, e.g. http://localhost:3002

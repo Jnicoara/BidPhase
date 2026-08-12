@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 HelixBid — an electrical-contractor bid/estimating tool. Users build a personal catalog of materials and labor rates, assemble them into reusable assemblies, attach them to project bids, and upload plan PDFs to take off quantities against a live crosshair viewer.
 
-The project was called **BidPhase** until v5.75, and the GitHub repo was renamed to match on 2026-08-12. Two things still carry the old name and are expected to: the local checkout directory, and the `run-bidphase` skill. Anywhere else, "BidPhase" is either stale or a historical record — `todo.md` entries below v5.75 are the latter and stay as written.
+The project was called **BidPhase** until v5.75, and the GitHub repo was renamed to match on 2026-08-12. Only the local checkout directory still carries the old name. Anywhere else, "BidPhase" is either stale or a historical record — `todo.md` entries below v5.75 are the latter and stay as written.
 
 ## Commands
 

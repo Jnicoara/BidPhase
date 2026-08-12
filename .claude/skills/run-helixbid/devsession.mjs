@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * devsession.mjs — mint a local session token for HelixBid/BidPhase.
+ * devsession.mjs — mint a local session token for HelixBid.
  *
  * WHY THIS EXISTS
  * The app is OAuth-only and there is no local OAuth server in development.
@@ -19,8 +19,8 @@
  *      running, so auth fails with "Failed to sync user info".
  *
  * Usage:
- *   node .claude/skills/run-bidphase/devsession.mjs --list-users
- *   node .claude/skills/run-bidphase/devsession.mjs [openId]
+ *   node .claude/skills/run-helixbid/devsession.mjs --list-users
+ *   node .claude/skills/run-helixbid/devsession.mjs [openId]
  *
  * Env:
  *   JWT_SECRET    must match the running server. Default: local-dev-secret

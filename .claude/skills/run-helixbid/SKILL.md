@@ -1,9 +1,9 @@
 ---
-name: run-bidphase
-description: Build, run, drive, screenshot, or smoke-test the HelixBid/BidPhase electrical estimating app locally. Use when asked to run or start the app, verify a change works in the real app, take a screenshot of a screen, log in locally, or exercise the tRPC API end to end.
+name: run-helixbid
+description: Build, run, drive, screenshot, or smoke-test the HelixBid (formerly BidPhase) electrical estimating app locally. Use when asked to run or start the app, verify a change works in the real app, take a screenshot of a screen, log in locally, or exercise the tRPC API end to end.
 ---
 
-# Running HelixBid (BidPhase)
+# Running HelixBid
 
 Express + tRPC server with a React/Vite client, served by a **single dev
 process** (Vite runs as Express middleware). MySQL via Drizzle.
@@ -15,8 +15,8 @@ to solve it:
 
 | Tool | Use it for |
 |---|---|
-| `.claude/skills/run-bidphase/smoke.mjs` | **Primary agent path.** Drives the running server over its real HTTP API. |
-| `.claude/skills/run-bidphase/devsession.mjs` | Mints the session token. Needed for browser work. |
+| `.claude/skills/run-helixbid/smoke.mjs` | **Primary agent path.** Drives the running server over its real HTTP API. |
+| `.claude/skills/run-helixbid/devsession.mjs` | Mints the session token. Needed for browser work. |
 
 All paths below are relative to the repo root.
 
@@ -73,7 +73,7 @@ The baseline material library (28 rows) seeds itself on startup, idempotently.
 ## Drive the API — start here
 
 ```bash
-JWT_SECRET=local-dev-secret node .claude/skills/run-bidphase/smoke.mjs
+JWT_SECRET=local-dev-secret node .claude/skills/run-helixbid/smoke.mjs
 ```
 
 Finds the server (probing ports 3000–3005), authenticates, and exercises the
@@ -97,8 +97,8 @@ or Puppeteer in this repo — use the Chrome extension browser tools.
 1. Mint a token (`--list-users` first if unsure which openId is valid):
 
 ```bash
-node .claude/skills/run-bidphase/devsession.mjs --list-users
-JWT_SECRET=local-dev-secret node .claude/skills/run-bidphase/devsession.mjs test-open-id
+node .claude/skills/run-helixbid/devsession.mjs --list-users
+JWT_SECRET=local-dev-secret node .claude/skills/run-helixbid/devsession.mjs test-open-id
 ```
 
 2. Open `http://localhost:3000/`, then run the snippet the script printed in
