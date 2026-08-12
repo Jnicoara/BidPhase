@@ -89,6 +89,15 @@ export const BASELINE_MATERIALS: BaselineMaterial[] = [
   { name: "EMT strap", unitOfSale: "each", costPerUnit: "0.3500", category: "Conduit Fittings",
     searchAliases: "one hole 1 hole two hole 2 hole conduit pipe clamp minerallac hanger",
     defaultQty: 3 },
+  // Asked for at the counter as a "spring nut" far more often than a "channel
+  // nut". Only "spring" is aliased, not "spring nut": the name already carries
+  // "nut", so a search for "spring nut" matches "spring" here and "nut" there
+  // — and repeating a name word is the dead weight the alias rules forbid.
+  // Unistrut/Kindorf/Superstrut are brand names used generically, the way
+  // Marrette is for a wire nut.
+  { name: "Strut channel nut", unitOfSale: "each", costPerUnit: "0.7500", category: "Conduit Fittings",
+    searchAliases: "spring unistrut kindorf superstrut b-line square 1/4-20 3/8-16",
+    defaultQty: 4 },
 
   // ── Boxes ──
   // Trade names run deep here: a single-gang is a "gem box" or "switch box",

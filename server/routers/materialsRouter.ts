@@ -13,6 +13,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { LIBRARY_STATUSES, MATERIAL_CATEGORIES, MATERIAL_UNITS_OF_SALE } from "../../drizzle/schema";
+import { invokeLLM } from "../_core/llm";
+import {
+  aliasPromptFor, filterAliasSuggestions, parseAliasResponse,
+} from "../../shared/aliasSuggestions";
 import * as db from "../db";
 
 /** decimal(10,4) — four decimal places, and it must stay under 10 total digits. */
@@ -40,6 +44,71 @@ export const materialsRouter = router({
     }).optional())
     .query(async ({ input, ctx }) => {
       return db.getLibraryMaterials(ctx.user.id, input?.status ?? "active");
+    }),
+
+  /**
+   * Suggest trade slang for a material the user is adding.
+   *
+   * ── Suggested, never applied ─────────────────────────────────────────────
+   * Returns candidates for a human to accept or reject. Nothing is written
+   * here, and the caller stores only what the user ticked — an alias is a
+   * claim about what a thing is called, and a wrong one silently mis-ranks
+   * every future search for it.
+   *
+   * ── The safety rule is enforced in code, not asked for in prose ──────────
+   * Whatever comes back is put through `filterAliasSuggestions`, which drops
+   * anything naming a DIFFERENT material in this user's catalog. That is the
+   * failure that made searching "recep" return "Wall plate" first, and it is
+   * invisible until someone notices their results are wrong — so it is not
+   * left to the model's good behaviour.
+   *
+   * Degrades to an empty list rather than failing: no API key, a refusal, a
+   * timeout, unparseable output all mean "no suggestions", and the user types
+   * their own. Search must never depend on this being available.
+   */
+  suggestAliases: protectedProcedure
+    .input(z.object({
+      name: nameSchema,
+      category: categorySchema.default(null),
+      /** Aliases already on the row, so nothing is offered twice. */
+      existing: z.string().max(1024).nullable().default(null),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      // Every other material this user can see — the list a suggestion must
+      // not collide with.
+      const catalog = await db.getLibraryMaterials(ctx.user.id);
+      const otherMaterialNames = catalog
+        .filter(m => m.name.toLowerCase() !== input.name.toLowerCase())
+        .map(m => m.name);
+
+      let raw: string[] = [];
+      try {
+        const result = await invokeLLM({
+          messages: [{ role: "user", content: aliasPromptFor(input.name, input.category) }],
+          maxTokens: 400,
+        });
+        const content = result.choices?.[0]?.message?.content;
+        const text = typeof content === "string"
+          ? content
+          : Array.isArray(content)
+            ? content.map(part => ("text" in part ? part.text : "")).join(" ")
+            : "";
+        raw = parseAliasResponse(text);
+      } catch (error) {
+        // Not an error the user needs to see. The manual field is right there,
+        // and a failed suggestion is a missing convenience, not a broken save.
+        console.warn("[suggestAliases] unavailable:", error);
+        return { suggestions: [], available: false };
+      }
+
+      return {
+        suggestions: filterAliasSuggestions(raw, {
+          name: input.name,
+          otherMaterialNames,
+          existing: input.existing,
+        }),
+        available: true,
+      };
     }),
 
   /**

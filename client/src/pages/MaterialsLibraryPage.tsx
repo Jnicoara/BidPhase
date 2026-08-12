@@ -30,6 +30,7 @@ import {
   ArchiveItemDialog, DeleteForeverDialog, type PendingItem,
 } from "@/components/library/LibraryRemovalDialogs";
 import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
+import { AliasSuggestions } from "@/components/AliasSuggestions";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
@@ -94,9 +95,19 @@ type Draft = {
   unitOfSale: Material["unitOfSale"];
   costPerUnit: string;
   category: Category | null;
+  /**
+   * Per-item trade slang — the second alias layer.
+   *
+   * Collected here because a material added by hand previously got none at
+   * all, which made it findable by generic trade words and invisible to the
+   * specific ones every seeded material supports.
+   */
+  searchAliases: string;
 };
 
-const emptyDraft: Draft = { name: "", unitOfSale: "each", costPerUnit: "", category: null };
+const emptyDraft: Draft = {
+  name: "", unitOfSale: "each", costPerUnit: "", category: null, searchAliases: "",
+};
 
 /** Shared validation for both the add form and inline edits. */
 function validateDraft(draft: Draft): string | null {
@@ -193,6 +204,10 @@ function MaterialRow({
       unitOfSale: material.unitOfSale,
       costPerUnit: String(Number(material.costPerUnit)),
       category: material.category,
+      // Carried so the draft is complete. The inline save deliberately does
+      // NOT send it, and `update` only patches what it is given — so editing a
+      // price cannot wipe the aliases that make the row findable.
+      searchAliases: material.searchAliases ?? "",
     });
     setEditing(true);
   };
@@ -361,6 +376,7 @@ export default function MaterialsLibraryPage() {
   const refreshAll = () => { void utils.materials.list.invalidate(); void refetch(); };
 
   const createMaterial = trpc.materials.create.useMutation({ onError });
+  const suggestAliases = trpc.materials.suggestAliases.useMutation();
   const updateMaterial = trpc.materials.update.useMutation({ onError });
   const revertMaterial = trpc.materials.revert.useMutation({ onError });
 
@@ -492,6 +508,7 @@ export default function MaterialsLibraryPage() {
         unitOfSale: newDraft.unitOfSale,
         costPerUnit: Number(newDraft.costPerUnit),
         category: newDraft.category,
+        searchAliases: newDraft.searchAliases.trim() || null,
       });
       toast.success(`Added "${newDraft.name.trim()}"`);
       setNewDraft(emptyDraft);
@@ -590,6 +607,34 @@ export default function MaterialsLibraryPage() {
               >
                 <X className="w-3 h-3" /> Cancel
               </Button>
+            </div>
+
+            {/* The second alias layer. A material added here used to get none
+                at all, leaving it findable by generic trade words and
+                invisible to the specific ones — the exact thing every seeded
+                material carries. */}
+            <div className="mt-2">
+              <AliasSuggestions
+                value={newDraft.searchAliases}
+                onChange={searchAliases => setNewDraft({ ...newDraft, searchAliases })}
+                disabled={createMaterial.isPending}
+                onRequest={async () => {
+                  if (!newDraft.name.trim()) {
+                    toast.error("Give the material a name first — suggestions come from it.");
+                    return [];
+                  }
+                  const result = await suggestAliases.mutateAsync({
+                    name: newDraft.name.trim(),
+                    category: newDraft.category,
+                    existing: newDraft.searchAliases || null,
+                  });
+                  return result.suggestions;
+                }}
+              />
+              <p className="text-[0.7rem] text-muted-foreground mt-1">
+                What people type instead of the catalog name — “spring nut”, “1900”, “gem box”.
+                Optional, but it is what makes a material findable the way it is asked for.
+              </p>
             </div>
           </div>
         )}
