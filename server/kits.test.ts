@@ -42,9 +42,16 @@ const caller = () => callerFor(USER);
 async function readyAssembly(name: string) {
   const list = await caller().assemblies.list();
   const starter = list.find(a => a.name === name)!;
+  // Starter roles ship at $0, so the rate is set here — an assembly pointed at
+  // an unrated role prices its labor at nothing, which makes every rollup in
+  // this file zero and the assertions meaningless.
   const rates = await caller().laborRates.list();
-  const journeyman = rates.find(r => r.name === "Journeyman")!;
-  const result = await caller().assemblies.update({ id: starter.id, laborRateId: journeyman.id });
+  const journeyman = await caller().laborRates.update({
+    id: rates.find(r => r.name === "Journeyman")!.id, hourlyCost: 38,
+  });
+  const result = await caller().assemblies.update({
+    id: starter.id, laborRateId: journeyman.laborRate!.id,
+  });
   return result.assembly!;
 }
 

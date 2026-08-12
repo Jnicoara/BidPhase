@@ -19,6 +19,8 @@ import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
 import { takeoffStampsRouter } from "./routers/takeoffStampsRouter";
 import { kitsRouter } from "./routers/kitsRouter";
+import { onboardingRouter } from "./routers/onboardingRouter";
+import { navigationRouter } from "./routers/navigationRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -41,6 +43,8 @@ export const appRouter = router({
   takeoffRuns: takeoffRunsRouter,
   takeoffStamps: takeoffStampsRouter,
   kits: kitsRouter,
+  onboarding: onboardingRouter,
+  navigation: navigationRouter,
 });
 
 export type AppRouter = typeof appRouter;

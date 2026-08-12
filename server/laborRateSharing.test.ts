@@ -13,7 +13,7 @@
  * parallel and shared ids delete each other's rows mid-run.
  */
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { appRouter } from "./routers";
 import {
   getDb, seedBaselineAssemblies, seedBaselineLaborRates,
@@ -68,6 +68,29 @@ beforeAll(async () => {
   await seedBaselineAssemblies();
 });
 
+/**
+ * Give the STARTER roles a real rate, on the shipped rows themselves.
+ *
+ * This suite is specifically about an assembly that points at an unforked
+ * starter, and what happens when that starter is edited. Starter roles now ship
+ * at $0, so without this every "before" figure is zero and the test can no
+ * longer tell the regression it is named for — an assembly pricing at 0 because
+ * the lookup failed — from an assembly pricing at 0 because the rate is 0.
+ *
+ * Written straight to the baseline rows rather than through the router, because
+ * going through the router would FORK them and destroy the very setup under
+ * test. Safe to leave behind: every suite that seeds labor rates re-stamps them
+ * back to $0, so this cannot leak a rate into another file's expectations.
+ */
+async function rateTheStarters() {
+  const db = await getDb();
+  if (!db) return;
+  for (const [name, hourlyCost] of [["Journeyman", "38.0000"], ["Apprentice", "22.0000"]]) {
+    await db.update(laborRates).set({ hourlyCost })
+      .where(and(isNull(laborRates.userId), eq(laborRates.name, name)));
+  }
+}
+
 beforeEach(async () => {
   if (!hasDb) return;
   const db = await getDb();
@@ -75,6 +98,7 @@ beforeEach(async () => {
   await db.delete(bids).where(inArray(bids.userId, [USER, OTHER_USER]));
   await db.delete(assemblies).where(inArray(assemblies.userId, [USER, OTHER_USER]));
   await db.delete(laborRates).where(inArray(laborRates.userId, [USER, OTHER_USER]));
+  await rateTheStarters();
 });
 
 describe("resolveLaborRate", () => {

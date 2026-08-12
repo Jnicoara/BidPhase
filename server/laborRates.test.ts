@@ -16,6 +16,7 @@ import { appRouter } from "./routers";
 import { getDb, seedBaselineLaborRates } from "./db";
 import { laborRates, users } from "../drizzle/schema";
 import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
+import { needsRate } from "../shared/laborRatePricing";
 import type { TrpcContext } from "./_core/context";
 
 const USER = 5151;
@@ -64,10 +65,16 @@ describe.skipIf(!hasDb)("starter roles", () => {
     }
   });
 
-  it("exposes hourly roles at their stored rate", async () => {
+  it("ships every hourly role unrated, waiting for the contractor's number", async () => {
+    // These used to assert $38 and $22. Starter roles now ship at $0 on
+    // purpose: a plausible rate nobody chose is indistinguishable on screen
+    // from one they did, and the labor rate multiplies every line of a bid.
     const rows = await caller().laborRates.list();
-    expect(rows.find(r => r.name === "Journeyman")?.effectiveHourlyRate).toBeCloseTo(38, 10);
-    expect(rows.find(r => r.name === "Apprentice")?.effectiveHourlyRate).toBeCloseTo(22, 10);
+    for (const name of ["Journeyman", "Apprentice"]) {
+      const role = rows.find(r => r.name === name)!;
+      expect(needsRate(role), `${name} shipped with a rate`).toBe(true);
+      expect(role.effectiveHourlyRate).toBe(0);
+    }
   });
 
   it("derives the salaried starter rather than storing a rate", async () => {
@@ -75,11 +82,28 @@ describe.skipIf(!hasDb)("starter roles", () => {
     const pm = rows.find(r => r.name === "Project Manager")!;
 
     expect(pm.rateType).toBe("salary");
-    expect(Number(pm.annualSalary)).toBeCloseTo(60000, 2);
+    // The salary is what ships at zero; the HOURS stay real, because
+    // effectiveHourlyRate treats zero hours as a division by zero and refuses
+    // it rather than returning "free".
+    expect(Number(pm.annualSalary)).toBe(0);
     expect(Number(pm.annualHours)).toBeCloseTo(2080, 2);
     // Derived, not persisted — hourlyCost stays zero on a salary row.
     expect(Number(pm.hourlyCost)).toBe(0);
-    expect(pm.effectiveHourlyRate).toBeCloseTo(28.85, 10);
+    expect(pm.effectiveHourlyRate).toBe(0);
+    expect(needsRate(pm)).toBe(true);
+  });
+
+  it("derives a real rate once the salary is filled in", async () => {
+    // The derivation itself still has to work — proven against a salary this
+    // test sets rather than one the catalog happened to ship.
+    const rows = await caller().laborRates.list();
+    const pm = rows.find(r => r.name === "Project Manager")!;
+    const updated = await caller().laborRates.update({
+      id: pm.id, annualSalary: 60000, annualHours: 2080,
+    });
+
+    expect(updated.laborRate?.effectiveHourlyRate).toBeCloseTo(28.85, 2);
+    expect(needsRate(updated.laborRate!)).toBe(false);
   });
 });
 
@@ -88,8 +112,21 @@ describe.skipIf(!hasDb)("salary handling", () => {
     const rows = await caller().laborRates.list();
     const pm = rows.find(r => r.name === "Project Manager")!;
 
+    // The salary is set here rather than inherited from the catalog, which now
+    // ships it at $0 — the behaviour under test is that the rate follows the
+    // two inputs, not what the starter happened to contain.
+    //
+    // The second edit goes to the FORK's id, not the starter's. Updating by the
+    // starter id again would normalise the partial edit against the starter's
+    // values, not the fork's, and quietly discard the salary just set.
+    const forked = await caller().laborRates.update({
+      id: pm.id, annualSalary: 60000, annualHours: 2080,
+    });
+
     // A shop that only bills 1,850 productive hours must recover more per hour.
-    const edited = await caller().laborRates.update({ id: pm.id, annualHours: 1850 });
+    const edited = await caller().laborRates.update({
+      id: forked.laborRate!.id, annualHours: 1850,
+    });
     expect(Number(edited.laborRate?.annualSalary)).toBeCloseTo(60000, 2);
     expect(Number(edited.laborRate?.annualHours)).toBeCloseTo(1850, 2);
     expect(edited.laborRate?.effectiveHourlyRate).toBeCloseTo(32.43, 10);
@@ -165,9 +202,13 @@ describe.skipIf(!hasDb)("fork and revert", () => {
     expect(result.forked).toBe(true);
     expect(result.laborRate?.userId).toBe(USER);
 
+    // Compared against what the role actually ships as — starter roles are $0
+    // now, and what matters is that the shipped row is UNCHANGED, not what
+    // number it holds.
+    const shipped = BASELINE_LABOR_RATES.find(r => r.name === "Journeyman")!;
     const db = await getDb();
     const [shared] = await db!.select().from(laborRates).where(eq(laborRates.id, journeyman.id));
-    expect(Number(shared.hourlyCost)).toBeCloseTo(38, 2);
+    expect(Number(shared.hourlyCost)).toBeCloseTo(Number(shipped.hourlyCost), 2);
   });
 
   it("the fork replaces its starter in the merged list", async () => {
@@ -193,9 +234,10 @@ describe.skipIf(!hasDb)("fork and revert", () => {
     const journeyman = rows.find(r => r.name === "Journeyman")!;
     const forked = await caller().laborRates.update({ id: journeyman.id, hourlyCost: 44 });
 
+    const shipped = BASELINE_LABOR_RATES.find(r => r.name === "Journeyman")!;
     const reverted = await caller().laborRates.revert({ id: forked.laborRate!.id });
     expect(reverted?.id).toBe(forked.laborRate!.id);
-    expect(reverted?.effectiveHourlyRate).toBeCloseTo(38, 10);
+    expect(reverted?.effectiveHourlyRate).toBeCloseTo(Number(shipped.hourlyCost), 10);
   });
 
   it("reverting restores the whole salary shape, not just one field", async () => {
@@ -205,11 +247,13 @@ describe.skipIf(!hasDb)("fork and revert", () => {
       id: pm.id, rateType: "hourly", hourlyCost: 99,
     });
 
+    const shipped = BASELINE_LABOR_RATES.find(r => r.name === "Project Manager")!;
     const reverted = await caller().laborRates.revert({ id: forked.laborRate!.id });
+    // The shape is the point: a fork flipped to hourly comes back a salary
+    // role with both of its inputs, whatever those inputs currently are.
     expect(reverted?.rateType).toBe("salary");
-    expect(Number(reverted?.annualSalary)).toBeCloseTo(60000, 2);
-    expect(Number(reverted?.annualHours)).toBeCloseTo(2080, 2);
-    expect(reverted?.effectiveHourlyRate).toBeCloseTo(28.85, 10);
+    expect(Number(reverted?.annualSalary)).toBeCloseTo(Number(shipped.annualSalary), 2);
+    expect(Number(reverted?.annualHours)).toBeCloseTo(Number(shipped.annualHours), 2);
   });
 
   it("refuses to revert a role built from scratch", async () => {
@@ -224,8 +268,10 @@ describe.skipIf(!hasDb)("fork and revert", () => {
     const journeyman = rows.find(r => r.name === "Journeyman")!;
     await caller().laborRates.update({ id: journeyman.id, hourlyCost: 44 });
 
+    const shipped = BASELINE_LABOR_RATES.find(r => r.name === "Journeyman")!;
     const otherRows = await callerFor(OTHER_USER).laborRates.list();
-    expect(otherRows.find(r => r.name === "Journeyman")?.effectiveHourlyRate).toBeCloseTo(38, 10);
+    expect(otherRows.find(r => r.name === "Journeyman")?.effectiveHourlyRate)
+      .toBeCloseTo(Number(shipped.hourlyCost), 10);
   });
 });
 

@@ -161,6 +161,55 @@ export async function getUserById(id: number) {
   return result[0];
 }
 
+// ─── Onboarding state ─────────────────────────────────────────────────────────
+
+/**
+ * Mark the first-run flow finished. Idempotent, and never un-set: the first
+ * time is the only first time, and an account that has been through it does not
+ * become new again.
+ */
+export async function markOnboardingComplete(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users)
+    .set({ onboardingCompletedAt: new Date() })
+    .where(and(eq(users.id, userId), isNull(users.onboardingCompletedAt)));
+}
+
+/**
+ * Hide or restore the getting-started checklist.
+ *
+ * Takes the value rather than being two functions because it goes both ways —
+ * that is the difference between "dismissible" and "gone", and the reversal has
+ * to be as easy as the dismissal or the promise is not kept.
+ */
+export async function setChecklistDismissed(userId: number, at: Date | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ checklistDismissedAt: at }).where(eq(users.id, userId));
+}
+
+/**
+ * How many of this user's bids actually have work on them.
+ *
+ * Counts bids joined to at least one line item, which is the checklist's
+ * definition of a bid being "complete" — see OnboardingFacts. Counted in SQL
+ * rather than by loading bids and their lines, because this runs on every
+ * Dashboard load and the answer is almost always 0 or 1.
+ */
+export async function countBidsWithLineItems(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ n: sql<number>`count(distinct ${bids.id})` })
+    .from(bids)
+    .innerJoin(bidLineItems, eq(bidLineItems.bidId, bids.id))
+    // Archived bids still count. The user did the work; putting the job away
+    // afterwards does not un-complete their first bid.
+    .where(eq(bids.userId, userId));
+  return Number(row?.n ?? 0);
+}
+
 export async function updateUserPassword(userId: number, passwordHash: string) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -1453,6 +1502,30 @@ export async function deactivateLaborRate(id: number, userId: number) {
 }
 
 /** Give the user their own editable copy of a starter rate. Idempotent. */
+/**
+ * Set an hourly rate, forking a starter role first if that is what it is.
+ *
+ * Exists so the first-run screen can price a role without re-implementing the
+ * fork-on-edit dance the Labor Rates screen does — a starter edited during
+ * onboarding has to end up in exactly the state it would have if the user had
+ * edited it later, or their library quietly differs depending on which door
+ * they came through.
+ */
+export async function setLaborRateHourlyCost(
+  id: number,
+  userId: number,
+  hourlyCost: number
+): Promise<{ id: number; forked: boolean }> {
+  const target = await getLaborRateById(id, userId);
+  if (!target) throw new Error("Labor rate not found");
+
+  const isBaseline = target.userId === null;
+  const editableId = isBaseline ? await forkLaborRate(id, userId) : id;
+
+  await updateLaborRate(editableId, userId, { hourlyCost: hourlyCost.toFixed(4) });
+  return { id: editableId, forked: isBaseline };
+}
+
 export async function forkLaborRate(baselineId: number, userId: number): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
@@ -1520,7 +1593,59 @@ export async function seedBaselineLaborRates(): Promise<void> {
       .map(r => ({ ...r, userId: null }));
 
     if (missing.length > 0) await db.insert(laborRates).values(missing);
+
+    await backfillLaborRateAmounts();
   });
+}
+
+/**
+ * Drag shipped labor rates back to $0.
+ *
+ * The same pass materials get, for the same reason and with more at stake: the
+ * catalog used to ship plausible-looking rates, and a plausible rate that
+ * nobody chose is indistinguishable on screen from one they did. A material
+ * priced wrong costs one line; the labor rate multiplies every line in the bid.
+ *
+ * Only baseline rows. A user who has set a rate has set it on their own FORK,
+ * which this cannot see — same boundary as the material price pass.
+ */
+async function backfillLaborRateAmounts(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const rows = await db.select({
+    id: laborRates.id,
+    name: laborRates.name,
+    hourlyCost: laborRates.hourlyCost,
+    annualSalary: laborRates.annualSalary,
+    annualHours: laborRates.annualHours,
+  }).from(laborRates).where(isNull(laborRates.userId));
+
+  const intended = new Map(BASELINE_LABOR_RATES.map(r => [r.name, r]));
+
+  for (const row of rows) {
+    const want = intended.get(row.name);
+    if (!want) continue; // a starter role no longer shipped
+
+    const patch: Partial<InsertLaborRate> = {};
+    // Compared numerically: the column returns "22.0000" where the seed says
+    // "0.0000", and a string compare would rewrite every row every startup.
+    if (Number(row.hourlyCost) !== Number(want.hourlyCost)) {
+      patch.hourlyCost = want.hourlyCost;
+    }
+    if (Number(row.annualSalary ?? 0) !== Number(want.annualSalary ?? 0)) {
+      patch.annualSalary = want.annualSalary;
+    }
+    // Hours are NOT zeroed — see the note in baselineLaborRates.ts. They are
+    // still re-stamped so a row that lost them gets a usable divisor back.
+    if (Number(row.annualHours ?? 0) !== Number(want.annualHours ?? 0)) {
+      patch.annualHours = want.annualHours;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await db.update(laborRates).set(patch).where(eq(laborRates.id, row.id));
+    }
+  }
 }
 
 // ─── Modifiers (Foundation library) ───────────────────────────────────────────

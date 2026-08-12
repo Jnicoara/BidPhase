@@ -169,6 +169,13 @@
       "when": 1786568315059,
       "tag": "0023_brown_wild_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1786574517465,
+      "tag": "0024_lazy_sunfire",
+      "breakpoints": true
     }
   ]
 }

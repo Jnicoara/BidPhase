@@ -50,6 +50,8 @@ import QuickBidPage from "@/pages/QuickBidPage";
 import TakeoffPage from "@/pages/TakeoffPage";
 import BidArchivePage from "@/pages/BidArchivePage";
 import KitsPage from "@/pages/KitsPage";
+import FirstRunPage from "@/pages/FirstRunPage";
+import { trpc } from "@/lib/trpc";
 import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText, Zap, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +79,7 @@ type Route =
   | "quickbid"
   | "takeoff"
   | "bid-archive"
+  | "welcome"
   | "admin";
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
@@ -117,6 +120,7 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
     return { route: "bids", projectId: id };
   }
   if (p === "quickbid") return { route: "quickbid" };
+  if (p === "welcome") return { route: "welcome" };
   // Library § …. Bare /library lands on Materials; Assemblies is still to come.
   if (p === "library") {
     if (parts[1] === "labor-rates") return { route: "library-labor-rates" };
@@ -239,7 +243,25 @@ export default function HelixBidShell() {
   const isInTakeoff       = route === "takeoff";
   const isInBidArchive    = route === "bid-archive";
   const isInQuickBid      = route === "quickbid";
+  const isOnWelcome       = route === "welcome";
   const isInAdmin         = route === "admin";
+
+  /**
+   * Send a brand-new account to the welcome screen instead of the Dashboard.
+   *
+   * Only from the two landing routes. Redirecting from ANY route would trap a
+   * new user who deliberately clicked into, say, Materials — and would fight
+   * the welcome screen's own "start my first bid" hand-off to Quick bid.
+   *
+   * Existing accounts were stamped as onboarded by the migration that added the
+   * column, so nobody who already uses the app sees this.
+   */
+  const { data: onboarding } = trpc.onboarding.state.useQuery();
+  useEffect(() => {
+    if (!onboarding?.isFirstRun) return;
+    if (route !== "home" && route !== "dashboard") return;
+    window.location.hash = "#/welcome";
+  }, [onboarding?.isFirstRun, route]);
 
   const currentCategory = isInCategory
     ? (route as "civil" | "commercial" | "residential" | "industrial")
@@ -296,6 +318,7 @@ export default function HelixBidShell() {
       />
     );
     if (isInQuickBid)    return <QuickBidPage />;
+    if (isOnWelcome)     return <FirstRunPage />;
     if (isInAdmin)       return <AdminSettingsPage />;
     // Legacy category workspace
     return <UnifiedProjects category={currentCategory} />;

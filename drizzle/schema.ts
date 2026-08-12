@@ -27,6 +27,31 @@ export const users = mysqlTable("users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+
+  /**
+   * When this account finished the first-run flow. NULL = brand new.
+   *
+   * Drives one thing only: whether signing in lands on the welcome screen or
+   * the Dashboard. Stored as a timestamp rather than a boolean because "when"
+   * answers questions "whether" cannot — how long an account sat before its
+   * first bid, whether a user who reported being lost had actually seen it.
+   *
+   * The migration that added this column stamps every EXISTING account, so
+   * nobody who already uses the app is shown a welcome screen for a product
+   * they have been using for months.
+   */
+  onboardingCompletedAt: timestamp("onboardingCompletedAt"),
+
+  /**
+   * When the user dismissed the getting-started checklist. NULL = still shown.
+   *
+   * Separate from onboarding completion on purpose: finishing first-run means
+   * "I have a rate and I am going to build a bid", while dismissing the
+   * checklist means "stop showing me this". A user may well do the second
+   * without doing the rest of the first, and the checklist can be brought back
+   * at any time — which is why this clears rather than latching.
+   */
+  checklistDismissedAt: timestamp("checklistDismissedAt"),
 });
 
 export type User = typeof users.$inferSelect;

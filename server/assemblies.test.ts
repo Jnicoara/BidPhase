@@ -128,6 +128,22 @@ describe.skipIf(!hasDb)("recipe cost", () => {
   let pricedDeviceId: number;
   let pricedBoxId: number;
 
+  /**
+   * The starter roles now ship at $0 too, for the same reason the materials do
+   * — so the labor half of these sums has to be set by the test as well. The
+   * Journeyman fork below is what "$38/hr" means in every assertion here.
+   */
+  const JOURNEYMAN_RATE = 38;
+
+  async function pricedJourneymanId(): Promise<number> {
+    const rates = await caller().laborRates.list();
+    const journeyman = rates.find(r => r.name === "Journeyman")!;
+    const updated = await caller().laborRates.update({
+      id: journeyman.id, hourlyCost: JOURNEYMAN_RATE,
+    });
+    return updated.laborRate!.id;
+  }
+
   beforeAll(async () => {
     const device = await caller().materials.create({
       name: `Cost fixture device ${Date.now()}${Math.random()}`,
@@ -145,7 +161,7 @@ describe.skipIf(!hasDb)("recipe cost", () => {
   async function buildFixture(overrides: Partial<{
     hours: number; modifierIds: number[]; laborRateId: number | null;
   }> = {}) {
-    const journeymanId = await baselineId("labor_rates", "Journeyman");
+    const journeymanId = await pricedJourneymanId();
     const duplexId = pricedDeviceId;   // $1.50 each
     const boxId = pricedBoxId;         // $1.25 each
 
@@ -190,15 +206,26 @@ describe.skipIf(!hasDb)("recipe cost", () => {
 
   it("moves when the labor role changes", async () => {
     const assembly = await buildFixture({ hours: 1 });
-    const apprenticeId = await baselineId("labor_rates", "Apprentice");
-    await caller().assemblies.update({ id: assembly.id, laborRateId: apprenticeId });
+    // Priced by this test, like the Journeyman above — starter roles ship at $0.
+    const rates = await caller().laborRates.list();
+    const apprentice = await caller().laborRates.update({
+      id: rates.find(r => r.name === "Apprentice")!.id, hourlyCost: 22,
+    });
+    await caller().assemblies.update({
+      id: assembly.id, laborRateId: apprentice.laborRate!.id,
+    });
     const priced = await caller().assemblies.price({ id: assembly.id });
     expect(priced.line.laborCost).toBeCloseTo(22, 10);
   });
 
   it("prices a salaried role off its derived hourly rate", async () => {
-    const pmId = await baselineId("labor_rates", "Project Manager");
-    const assembly = await buildFixture({ hours: 1, laborRateId: pmId });
+    const rates = await caller().laborRates.list();
+    const pm = await caller().laborRates.update({
+      id: rates.find(r => r.name === "Project Manager")!.id,
+      annualSalary: 60000,
+      annualHours: 2080,
+    });
+    const assembly = await buildFixture({ hours: 1, laborRateId: pm.laborRate!.id });
     const priced = await caller().assemblies.price({ id: assembly.id });
     // $60,000 ÷ 2,080 ≈ $28.85
     expect(priced.line.laborCost).toBeCloseTo(28.85, 1);

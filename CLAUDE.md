@@ -110,6 +110,51 @@ The global `ALIAS_MAP` in `client/src/lib/smartSearch.ts` is a _query-side_
 synonym table shared by every search box, and is the wrong place for facts about
 one material. Put per-material vocabulary on the material.
 
+## Starter content ships unpriced — materials AND labor
+
+Everything shipped in the starter library costs $0 and is flagged for the user
+to replace: materials (`shared/materialPricing.ts`) and labor rates
+(`shared/laborRatePricing.ts`) follow the same rule, and any future starter
+content with a price should too. A plausible-looking number nobody chose is
+indistinguishable on screen from one the contractor set, so it can be bid and
+won on. Zero cannot be mistaken for a considered figure.
+
+Labor is the sharper case and gets extra treatment because of it: an unpriced
+material understates one line, while the rate multiplies **every** line at once.
+That is why the first-run flow asks for a rate before a new user reaches their
+first bid, and why `needsRate` reads whichever field actually drives the rate —
+a salaried role's `hourlyCost` is always 0 and checking it would call every
+salaried role unrated forever.
+
+Tests must not borrow shipped prices or rates for their arithmetic. Price a
+fixture, or the test is really asserting that the seed data has not changed.
+
+## Onboarding — tracked from data, never from page views
+
+The getting-started checklist (`shared/onboarding.ts`) decides every step from
+the user's real rows. Never tick a step because a screen was opened: a checklist
+that does that walks a new user to the end and leaves them believing they are
+set up when they are not, which is worse than showing them nothing.
+
+`users.onboardingCompletedAt` NULL means a brand-new account; the migration that
+added the column stamped every existing user so nobody who already uses the app
+sees a welcome screen. `checklistDismissedAt` is separate and clears both ways —
+"dismissible" is a promise that has to be keepable.
+
+## AI features — closed action sets, cheapest tier that works
+
+The navigation helper is the pattern to copy. The model never constructs a
+destination: it picks an id from `shared/navigationTargets.ts`, and the server
+resolves that id against the same list before anything reaches the client, so an
+invented target degrades to a text answer rather than a dead link. One list, so
+there is no prompt and validator that can disagree.
+
+Pick the model tier by the work: lookup-and-route runs on the fast tier
+(`NAVIGATION_MODEL`, env-overridable), not the tier reserved for plan reading.
+And every AI feature degrades to useful-without-it — no key, a refusal, a
+timeout and a malformed reply all return the same graceful fallback, because
+navigation and search must never depend on an LLM being reachable.
+
 ## Editing fields — standing rules for every input
 
 Accuracy is this app's whole value. A contractor who cannot tell whether a

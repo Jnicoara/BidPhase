@@ -33,6 +33,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_ANNUAL_HOURS, effectiveHourlyRate } from "@shared/pricing";
+import { countNeedingRate, needsRate } from "@shared/laborRatePricing";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
@@ -281,9 +282,21 @@ function LaborRateRow({
 
       <span className="text-xs text-muted-foreground w-14 shrink-0 capitalize">{rate.rateType}</span>
 
+      {/* The rate column doubles as the prompt, exactly as the Materials cost
+          column does — and with more riding on it. A starter role ships at $0
+          and "$0.00/hr" reads as a real rate of nothing, which prices the
+          labor on every line of every bid at zero while still looking like a
+          finished number. */}
       <span className="text-sm font-mono w-28 text-right shrink-0">
         {rate.rateError ? (
           <span className="text-destructive text-xs font-sans">Set hours</span>
+        ) : needsRate(rate) ? (
+          <span
+            className="text-xs font-sans font-medium text-[#F5C518]"
+            title="No rate yet — this prices every hour on every bid at nothing until you set one."
+          >
+            Needs rate
+          </span>
         ) : (
           <>{money(rate.effectiveHourlyRate)}<span className="text-muted-foreground">/hr</span></>
         )}

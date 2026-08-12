@@ -28,6 +28,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
 import { type PendingArchive } from "@/lib/archiveBid";
+import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
+import { NavigationHelper } from "@/components/NavigationHelper";
 import { RETENTION_DAYS } from "@shared/retention";
 import {
   BID_STATUS_ORDER, calendarDate, dueUrgency, groupBidsByStatus, type DueUrgency,
@@ -216,6 +218,15 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
+        {/* Above the bids, because a new account has no bids and this is the
+            only thing on the screen worth reading. Both disappear once they
+            have served their purpose — the checklist when every step is done,
+            and neither ever blocks what is underneath. */}
+        <div className="mb-5 space-y-3">
+          <GettingStartedChecklist />
+          <NavigationHelper className="max-w-xl" />
+        </div>
+
         {isLoading ? (
           <div className="py-16 text-center text-sm text-muted-foreground">Loading bids…</div>
         ) : bids.length === 0 ? (

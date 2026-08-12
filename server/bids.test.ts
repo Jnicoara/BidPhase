@@ -66,8 +66,13 @@ async function pricedMaterial(): Promise<number> {
 async function readyAssembly(name = "Duplex receptacle standard") {
   const list = await caller().assemblies.list();
   const starter = list.find(a => a.name === name)!;
-  const rates = await caller().laborRates.list();
-  const journeyman = rates.find(r => r.name === "Journeyman")!;
+  // Starter roles ship at $0, so the rate is set here too — otherwise every
+  // line below prices its labor at nothing and the arithmetic proves nothing.
+  const allRates = await caller().laborRates.list();
+  const priced = await caller().laborRates.update({
+    id: allRates.find(r => r.name === "Journeyman")!.id, hourlyCost: 38,
+  });
+  const journeyman = priced.laborRate!;
   // Setting the role forks the starter; the fork is what we add to bids. The
   // recipe is replaced with the one priced material so the line has a material
   // cost that does not depend on the shipped catalog's prices.
