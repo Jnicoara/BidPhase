@@ -1,4 +1,7 @@
-# BidPhase TODO
+# HelixBid TODO
+
+Entries below v5.75 say "BidPhase" — that was the name at the time, and they are
+left as written rather than rewritten to match the rename.
 
 ## SaaS Multi-User Upgrade (v4.0)
 

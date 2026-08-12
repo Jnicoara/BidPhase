@@ -1,4 +1,4 @@
-# BidPhase — Design Brainstorm
+# HelixBid — Design Brainstorm
 
 ## Three Approaches
 
@@ -64,17 +64,21 @@ Industrial SaaS — the intersection of construction-industry pragmatism and mod
 - Scale: 12/14/16/20/24/32px.
 
 ### Brand Essence
-**BidPhase** — the estimating tool built for electricians who work in the field, not the boardroom. Fast. Precise. No fluff.
+**HelixBid** — the estimating tool built for electricians who work in the field, not the boardroom. Fast. Precise. No fluff.
 Personality: **Precise. Rugged. Efficient.**
 
 ### Brand Voice
 Headlines sound like a seasoned foreman talking to his crew — direct, no filler.
 - "Measure it. Price it. Win the bid."
 - "Every foot of conduit. Every hour of labor. Calculated."
-Banned: "Welcome to BidPhase", "Get started today", "Streamline your workflow".
+Banned: "Welcome to HelixBid", "Get started today", "Streamline your workflow".
 
 ### Wordmark & Logo
-A bold stylized "B" formed from two conduit cross-sections (circles) stacked — suggesting both the letter and electrical conduit. Rendered in safety yellow on dark background.
+Superseded by the rename. The original idea was a bold stylized "B" formed from
+two conduit cross-sections (circles) stacked — suggesting both the letter and
+electrical conduit. What actually ships is the "HB" monogram in safety yellow on
+dark, in the sidebar. The conduit-cross-section idea was never redrawn for the
+new initials and is still there for the taking.
 
 ### Signature Brand Color
-`#F5C518` — Safety Yellow. Unmistakably BidPhase.
+`#F5C518` — Safety Yellow. Unmistakably HelixBid.
