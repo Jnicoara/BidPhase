@@ -33,6 +33,16 @@ const labelSchema = z.string().trim().min(1).max(128);
 const overheadModeSchema = z.enum(["percentage", "flat"]);
 const profitMethodSchema = z.enum(["markup", "margin"]);
 
+/**
+ * The productivity factor, as a signed fraction. −0.5 = crew beats book hours
+ * by half; 1.0 = takes twice as long.
+ *
+ * Bounded well inside what the column holds, and floored above −1: at exactly
+ * −100% every job takes no time and prices at no labor, which is never what
+ * anyone means and would be a very quiet way to send a bid out wrong.
+ */
+const productivitySchema = z.number().min(-0.9).max(2);
+
 const toDecimal4 = (value: number) => value.toFixed(4);
 
 /** Assert the bid belongs to the caller before anything touches its children. */
@@ -54,6 +64,7 @@ async function companyDefaultsFor(userId: number): Promise<CompanyPricingDefault
     overheadValue: Number(defaults?.overheadValue ?? 0),
     profitMethod: defaults?.profitMethod ?? "markup",
     profitValue: Number(defaults?.profitValue ?? 0),
+    productivityPct: Number(defaults?.productivityPct ?? 0),
   };
 }
 
@@ -69,9 +80,10 @@ function rollUpBid(
     overheadValue: bid.overheadValue === null ? null : Number(bid.overheadValue),
     profitMethod: bid.profitMethod,
     profitValue: bid.profitValue === null ? null : Number(bid.profitValue),
+    productivityPct: bid.productivityPct === null ? null : Number(bid.productivityPct),
   });
 
-  const breakdowns = lines.map(priceLine);
+  const breakdowns = lines.map(line => priceLine(line, settings.productivityPct));
   const directCost = sumDirectCost(breakdowns);
   const bidPrice = calculateBidPrice({
     directCost,
@@ -82,8 +94,23 @@ function rollUpBid(
   return { settings, breakdowns, directCost, bidPrice };
 }
 
-/** Price one snapshot line at its quantity, through the shared engine. */
-function priceLine(line: BidLineItem) {
+/**
+ * Price one snapshot line at its quantity, through the shared engine.
+ *
+ * ── What is frozen and what is not ───────────────────────────────────────────
+ * Everything that describes the WORK is read off the snapshot: material cost,
+ * labor hours, the labor rate and the summed modifier percentage, all captured
+ * when the line was added. Re-pricing a material or editing an assembly later
+ * cannot move an existing bid, which is the whole point of the snapshot.
+ *
+ * The productivity factor is not one of those. It is a company-level dial
+ * passed in at calculation time, so a bid that inherits it does follow a later
+ * change — exactly as it follows a later change to overhead or profit, and for
+ * the same reason: those three are settings the bid is priced UNDER, not facts
+ * about the work it contains. A bid that should stop following gets its own
+ * override, and then nothing at company level reaches it.
+ */
+function priceLine(line: BidLineItem, productivityPct: number) {
   return calculateLineItem({
     // The snapshot is already a single rolled-up material figure for one
     // assembly, so it enters as one material line at qty 1 and the bid
@@ -93,6 +120,7 @@ function priceLine(line: BidLineItem) {
     modifiers: [{ laborAdjustmentPct: Number(line.snapshotModifierPct) }],
     laborRate: Number(line.snapshotLaborRate),
     quantity: Number(line.qty),
+    productivityPct,
   });
 }
 
@@ -161,6 +189,7 @@ export const bidsRouter = router({
       overheadValue: z.number().min(0).nullable().optional(),
       profitMethod: profitMethodSchema.nullable().optional(),
       profitValue: z.number().min(0).max(0.99).nullable().optional(),
+      productivityPct: productivitySchema.nullable().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const { id, ...rest } = input;
@@ -179,6 +208,10 @@ export const bidsRouter = router({
       if (rest.profitMethod !== undefined) patch.profitMethod = rest.profitMethod;
       if (rest.profitValue !== undefined) {
         patch.profitValue = rest.profitValue === null ? null : toDecimal4(rest.profitValue);
+      }
+      if (rest.productivityPct !== undefined) {
+        patch.productivityPct =
+          rest.productivityPct === null ? null : toDecimal4(rest.productivityPct);
       }
 
       if (Object.keys(patch).length > 0) await db.updateBid(id, ctx.user.id, patch);
@@ -457,6 +490,7 @@ export const bidsRouter = router({
       overheadValue: z.number().min(0).optional(),
       profitMethod: profitMethodSchema.optional(),
       profitValue: z.number().min(0).max(0.99).optional(),
+      productivityPct: productivitySchema.optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const patch: Record<string, unknown> = {};
@@ -465,6 +499,9 @@ export const bidsRouter = router({
       if (input.overheadValue !== undefined) patch.overheadValue = toDecimal4(input.overheadValue);
       if (input.profitMethod !== undefined) patch.profitMethod = input.profitMethod;
       if (input.profitValue !== undefined) patch.profitValue = toDecimal4(input.profitValue);
+      if (input.productivityPct !== undefined) {
+        patch.productivityPct = toDecimal4(input.productivityPct);
+      }
 
       if (Object.keys(patch).length > 0) {
         await db.updatePricingDefaults(ctx.user.id, patch);

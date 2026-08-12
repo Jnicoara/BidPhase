@@ -129,6 +129,34 @@ salaried role unrated forever.
 Tests must not borrow shipped prices or rates for their arithmetic. Price a
 fixture, or the test is really asserting that the seed data has not changed.
 
+## Company defaults vs per-bid overrides — say which one you are changing
+
+Overhead, profit and the productivity factor exist at two levels, and the whole
+risk is that they look identical. The company-level controls (Settings § Bid
+pricing defaults) each carry `CompanyDefaultNotice` — the same yellow-triangle
+panel warning `LaborRateQuickEdit` uses — because changing one moves every new
+bid AND every existing bid still inheriting it. The per-bid overrides in
+`BidsPage` deliberately carry no such notice: overriding on one bid is an
+ordinary local edit, and repeating the warning there teaches people to read past
+it in the one place it matters.
+
+**Settings are inherited, not copied.** A bid stores NULL to mean "follow the
+company default", so a later change to that default does re-price it. What a
+change can never touch is a line's SNAPSHOT — the material cost, hours, rate and
+modifier total frozen when the line was added. That boundary is the point, and
+`server/companyDefaults.test.ts` asserts both halves of it; do not "fix" the
+inheritance into a copy, which would silently freeze every bid at whatever
+settings it happened to be created under.
+
+**The productivity factor is not a modifier.** Job-condition modifiers ADD to
+each other and describe one job; the productivity factor is applied afterwards
+as its own multiplication and describes the company's crews against book hours:
+`hours × (1 + summed modifiers) × (1 + productivity)`. Never fold it into the
+modifier sum — the breakdown returns `modifierPct`, `productivityPct` and
+`hoursAfterModifiers` separately so an estimator can see the two steps apart. It
+is applied at calculation time only and writes nothing back, so setting it to 0
+returns every number exactly where it was.
+
 ## Onboarding — tracked from data, never from page views
 
 The getting-started checklist (`shared/onboarding.ts`) decides every step from

@@ -9,6 +9,7 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { cn } from "@/lib/utils";
 import { Sun, Moon, Upload, Trash2, CheckCircle2, AlertCircle, LogOut, User } from "lucide-react";
 import DataConnectorsPanel from "@/components/DataConnectorsPanel";
+import { BidPricingDefaultsSection } from "@/components/BidPricingDefaultsSection";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -370,6 +371,11 @@ export default function SettingsTab({ onBack }: { onBack?: () => void }) {
           </p>
         </div>
       </section>
+
+      {/* ── Bid pricing defaults ─────────────────────────────────────
+          First of the real settings: these are the ones that reach every bid,
+          and the sidebar entry that lands here is called "Company Defaults". */}
+      <BidPricingDefaultsSection />
 
       {/* ── Material Database (CSV Importer) — legacy local storage ─── */}
       <MaterialDbSection />

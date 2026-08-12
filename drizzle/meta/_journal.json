@@ -176,6 +176,13 @@
       "when": 1786574517465,
       "tag": "0024_lazy_sunfire",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1786578310700,
+      "tag": "0025_flashy_daredevil",
+      "breakpoints": true
     }
   ]
 }

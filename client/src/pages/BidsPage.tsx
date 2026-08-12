@@ -558,6 +558,57 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   always an explicit choice.
                 </p>
               </div>
+
+              {/*
+                ── Productivity, for THIS bid ────────────────────────────────
+                Deliberately carries no company-wide warning. Overriding a
+                setting on one bid is an ordinary local edit and has to keep
+                feeling like one; the broad notice lives only on the company
+                control in Settings, and putting it here as well would train
+                people to read past it in the one place it matters.
+              */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">Productivity</span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {settings.productivitySource === "bid" ? "This bid" : "Company"}
+                  </Badge>
+                </div>
+                <Select
+                  value={bid.productivityPct === null ? INHERIT : "custom"}
+                  onValueChange={value => updateBid.mutate({
+                    id: bid.id,
+                    productivityPct: value === INHERIT ? null : company.productivityPct,
+                  })}
+                >
+                  <SelectTrigger className="h-8 text-sm" aria-label="Productivity setting">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={INHERIT}>
+                      Use company default ({asPercent(company.productivityPct)}%)
+                    </SelectItem>
+                    <SelectItem value="custom">Set for this bid</SelectItem>
+                  </SelectContent>
+                </Select>
+                {bid.productivityPct !== null && (
+                  <InlineNumberField
+                    value={asPercent(Number(bid.productivityPct ?? 0))}
+                    onSave={raw => updateBid.mutate({ id: bid.id, productivityPct: fromPercent(raw) })}
+                    // Signed: a crew that beats book hours is as real as one
+                    // that does not. Floored above −100%, where every job would
+                    // price at no labor at all.
+                    rules={{ min: -90, max: 200 }}
+                    className="h-7 w-20 text-xs"
+                    ariaLabel="Productivity factor for this bid"
+                    suffix="%"
+                  />
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Adjusts every labor hour on this bid, applied after job-condition
+                  modifiers rather than added to them.
+                </p>
+              </div>
             </div>
           </div>
         </div>

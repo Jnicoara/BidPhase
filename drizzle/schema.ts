@@ -759,6 +759,19 @@ export const pricingDefaults = mysqlTable(
     /** Fraction: 0.20 = 20% markup, or 20% target margin, per profitMethod. */
     profitValue: decimal("profitValue", { precision: 6, scale: 4 }).default("0").notNull(),
 
+    /**
+     * Company-wide productivity adjustment, as a fraction (0.10 = +10% hours).
+     *
+     * Applied at calculation time as a final multiplier AFTER job-condition
+     * modifiers have been summed — a separate step, never added into them. See
+     * applyProductivityToHours in shared/pricing.ts for why that separation
+     * matters. Ships at 0: no adjustment until the contractor has a reason.
+     *
+     * Signed, so scale(4) with a negative range — a crew that beats book hours
+     * is as real as one that does not.
+     */
+    productivityPct: decimal("productivityPct", { precision: 6, scale: 4 }).default("0").notNull(),
+
     defaultLaborRateId: int("defaultLaborRateId").references(() => laborRates.id, { onDelete: "set null" }),
 
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -814,6 +827,13 @@ export const bids = mysqlTable(
     overheadValue: decimal("overheadValue", { precision: 12, scale: 4 }),
     profitMethod: mysqlEnum("profitMethod", ["markup", "margin"]),
     profitValue: decimal("profitValue", { precision: 6, scale: 4 }),
+    /**
+     * Per-bid productivity override. NULL inherits the company default.
+     *
+     * A single column rather than a group, because unlike overhead and profit
+     * there is no second field it could be half-overridden against.
+     */
+    productivityPct: decimal("productivityPct", { precision: 6, scale: 4 }),
 
     /**
      * When the bid was archived, or NULL if it is live. This single column is

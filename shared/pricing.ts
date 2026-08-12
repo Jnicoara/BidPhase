@@ -76,21 +76,40 @@ export type LineItemInput = {
   laborRate: number;
   /** How many of this assembly. Defaults to 1. */
   quantity?: number;
+  /**
+   * Company-wide productivity adjustment, as a fraction (0.10 = +10%).
+   *
+   * Applied AFTER modifiers as its own step, never added to them — see
+   * applyProductivityToHours. Defaults to 0, meaning no adjustment.
+   */
+  productivityPct?: number;
 };
 
 export type LineItemBreakdown = {
   materialCost: number;
   /** Summed modifier percentage, e.g. 0.25 for +25%. */
   modifierPct: number;
-  /** Base hours after modifiers, before quantity. */
+  /** The productivity factor applied, as a fraction. 0 when unset. */
+  productivityPct: number;
+  /**
+   * Hours after modifiers but BEFORE productivity.
+   *
+   * Returned so a breakdown can show the two adjustments as two steps. Blending
+   * them into one number is exactly what keeping them separate is meant to
+   * prevent: an estimator has to be able to see that the job's conditions added
+   * 32% and the company's calibration added another 5%, not that "something"
+   * added 38.6%.
+   */
+  hoursAfterModifiers: number;
+  /** Base hours after modifiers AND productivity, before quantity. */
   adjustedLaborHours: number;
   /** Total hours including quantity. */
   totalLaborHours: number;
   laborCost: number;
   directCost: number;
   /**
-   * True when modifiers summed below −100% and hours were clamped to zero.
-   * Surface this — it almost always means the modifier set is misconfigured.
+   * True when the adjustments drove hours below zero and they were clamped.
+   * Surface this — it almost always means something is misconfigured.
    */
   laborHoursClamped: boolean;
 };
@@ -166,6 +185,8 @@ export type CompanyPricingDefaults = {
   overheadValue: number;
   profitMethod: ProfitSetting["method"];
   profitValue: number;
+  /** Company-wide labor adjustment as a fraction. 0 = no adjustment. */
+  productivityPct: number;
 };
 
 /**
@@ -180,14 +201,19 @@ export type BidPricingOverrides = {
   overheadValue?: number | null;
   profitMethod?: ProfitSetting["method"] | null;
   profitValue?: number | null;
+  /** NULL/undefined inherits the company productivity factor. */
+  productivityPct?: number | null;
 };
 
 export type ResolvedPricingSettings = {
   overhead: OverheadSetting;
   profit: ProfitSetting;
+  /** The productivity factor this bid actually prices with. */
+  productivityPct: number;
   /** Which level each group came from — the UI says "company default" or "this bid". */
   overheadSource: "company" | "bid";
   profitSource: "company" | "bid";
+  productivitySource: "company" | "bid";
 };
 
 /**
@@ -223,11 +249,21 @@ export function resolveBidPricingSettings(
     ? { method: overrides.profitMethod!, value: overrides.profitValue ?? 0 }
     : { method: company.profitMethod, value: company.profitValue };
 
+  // Productivity resolves on its own, not as part of a group: unlike overhead
+  // and profit there is no second field it could be half-overridden against.
+  const overridesProductivity = overrides.productivityPct !== null
+    && overrides.productivityPct !== undefined;
+  const productivityPct = overridesProductivity
+    ? overrides.productivityPct!
+    : company.productivityPct;
+
   return {
     overhead,
     profit,
+    productivityPct,
     overheadSource: overridesOverhead ? "bid" : "company",
     profitSource: overridesProfit ? "bid" : "company",
+    productivitySource: overridesProductivity ? "bid" : "company",
   };
 }
 
@@ -280,6 +316,46 @@ export function sumModifiers(modifiers: AppliedModifier[] = []): number {
 }
 
 /**
+ * The productivity factor: a company-wide adjustment to every labor hour.
+ *
+ * ── A separate step, deliberately not a modifier ─────────────────────────────
+ * Job-condition modifiers ADD to each other — working at height +12% and
+ * overtime +20% is +32%, not 1.12 × 1.20. The productivity factor does NOT join
+ * that sum. It is applied afterwards, to the already-adjusted hours, as its own
+ * multiplication:
+ *
+ *   hours × (1 + summed modifiers) × (1 + productivity)
+ *
+ * The distinction is real, not cosmetic. Modifiers describe THIS job — this
+ * height, this shift, this access. The productivity factor describes the crew
+ * and the company: how the shop's actual output compares to the book hours the
+ * assemblies were written against. Folding it into the modifier total would let
+ * a company-wide calibration be mistaken for a condition of one job, and would
+ * make it vanish into a single blended percentage nobody could take apart.
+ *
+ * ── Non-destructive ──────────────────────────────────────────────────────────
+ * Applied at calculation time only. It never writes back to an assembly, a line
+ * or a snapshot — the stored hours stay the hours somebody entered, and turning
+ * the factor off returns every number to exactly where it was.
+ *
+ * 0 means no adjustment, which is what it ships at. Positive means the work
+ * takes longer than book; negative means the crew beats it.
+ */
+export function applyProductivityToHours(
+  hours: number,
+  productivityPct = 0
+): { hours: number; clamped: boolean } {
+  assertFinite(hours, "hours");
+  assertFinite(productivityPct, "productivityPct");
+
+  const raw = hours * (1 + productivityPct);
+  // Same floor as modifiers: below −100% the arithmetic goes negative, and no
+  // adjustment makes a job take less than no time.
+  const clamped = raw < 0;
+  return { hours: clamped ? 0 : raw, clamped };
+}
+
+/**
  * Apply summed modifiers to base labor hours.
  * Clamps at zero — no amount of negative modifiers makes a job take less than
  * no time. The caller is told via `clamped` so it can warn.
@@ -327,21 +403,33 @@ export function calculateLineItem(input: LineItemInput): LineItemBreakdown {
   // sees on the recipe, then scales cleanly by quantity.
   const materialCents = materialCostCents(input.materials) * quantity;
 
-  const { hours, modifierPct, clamped } = applyModifiersToHours(
+  const { hours: afterModifiers, modifierPct, clamped } = applyModifiersToHours(
     input.baseLaborHours,
     input.modifiers
   );
+
+  // Second, separate step — see applyProductivityToHours. Never summed into
+  // modifierPct, and both figures are returned so a breakdown can show the two
+  // adjustments apart rather than as one blended number.
+  const productivityPct = input.productivityPct ?? 0;
+  const { hours, clamped: productivityClamped } = applyProductivityToHours(
+    afterModifiers,
+    productivityPct
+  );
+
   const totalLaborHours = hours * quantity;
   const laborCents = toCents(totalLaborHours * input.laborRate);
 
   return {
     materialCost: fromCents(materialCents),
     modifierPct,
+    productivityPct,
+    hoursAfterModifiers: afterModifiers,
     adjustedLaborHours: hours,
     totalLaborHours,
     laborCost: fromCents(laborCents),
     directCost: fromCents(materialCents + laborCents),
-    laborHoursClamped: clamped,
+    laborHoursClamped: clamped || productivityClamped,
   };
 }
 
