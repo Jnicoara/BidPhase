@@ -41,6 +41,46 @@ async function requireBid(id: number, userId: number) {
   return bid;
 }
 
+/**
+ * Resolve a user's company defaults into the shape the pricing engine wants.
+ * Shared by `get` and `dashboard` so one bid cannot price two ways.
+ */
+async function companyDefaultsFor(userId: number): Promise<CompanyPricingDefaults> {
+  const defaults = await db.getPricingDefaults(userId);
+  return {
+    overheadEnabled: defaults?.overheadEnabled ?? false,
+    overheadMode: defaults?.overheadMode ?? "percentage",
+    overheadValue: Number(defaults?.overheadValue ?? 0),
+    profitMethod: defaults?.profitMethod ?? "markup",
+    profitValue: Number(defaults?.profitValue ?? 0),
+  };
+}
+
+/** Roll one bid's lines up to a price, at whatever settings apply to it. */
+function rollUpBid(
+  bid: Awaited<ReturnType<typeof db.getBidById>> & object,
+  lines: BidLineItem[],
+  company: CompanyPricingDefaults
+) {
+  const settings = resolveBidPricingSettings(company, {
+    overheadEnabled: bid.overheadEnabled,
+    overheadMode: bid.overheadMode,
+    overheadValue: bid.overheadValue === null ? null : Number(bid.overheadValue),
+    profitMethod: bid.profitMethod,
+    profitValue: bid.profitValue === null ? null : Number(bid.profitValue),
+  });
+
+  const breakdowns = lines.map(priceLine);
+  const directCost = sumDirectCost(breakdowns);
+  const bidPrice = calculateBidPrice({
+    directCost,
+    overhead: settings.overhead,
+    profit: settings.profit,
+  });
+
+  return { settings, breakdowns, directCost, bidPrice };
+}
+
 /** Price one snapshot line at its quantity, through the shared engine. */
 function priceLine(line: BidLineItem) {
   return calculateLineItem({
@@ -60,11 +100,39 @@ export const bidsRouter = router({
     return db.getBidsByUser(ctx.user.id);
   }),
 
+  /**
+   * Every bid with enough to place it on the dashboard: its own fields plus a
+   * rolled-up value.
+   *
+   * Prices through the same rollUpBid the detail view uses, so a card and the
+   * bid it opens can never disagree. Grouping and ordering are deliberately NOT
+   * done here — those are presentation rules, they live in
+   * client/src/lib/bidDashboard.ts, and they are tested there.
+   */
+  dashboard: protectedProcedure.query(async ({ ctx }) => {
+    const [bids, company] = await Promise.all([
+      db.getBidsByUser(ctx.user.id),
+      companyDefaultsFor(ctx.user.id),
+    ]);
+
+    return Promise.all(bids.map(async bid => {
+      const lines = await db.getBidLineItems(bid.id);
+      const { directCost, bidPrice } = rollUpBid(bid, lines, company);
+      return {
+        ...bid,
+        lineCount: lines.length,
+        directCost,
+        finalPrice: bidPrice.finalPrice,
+      };
+    }));
+  }),
+
   create: protectedProcedure
     .input(z.object({
       name: nameSchema,
       status: z.enum(BID_STATUSES).default("Draft"),
       trades: z.array(z.string().trim().min(1).max(64)).max(20).default(["electrical"]),
+      dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
     }))
     .mutation(async ({ input, ctx }) => {
       const id = await db.createBid({
@@ -72,6 +140,7 @@ export const bidsRouter = router({
         name: input.name,
         status: input.status,
         trades: input.trades,
+        dueDate: input.dueDate,
       });
       return db.getBidById(id, ctx.user.id);
     }),
@@ -82,6 +151,8 @@ export const bidsRouter = router({
       name: nameSchema.optional(),
       status: z.enum(BID_STATUSES).optional(),
       trades: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
+      /** "YYYY-MM-DD", or null to clear the deadline. */
+      dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
       // Passing null clears an override and returns the group to the company
       // default; omitting the key leaves it as it is.
       overheadEnabled: z.boolean().nullable().optional(),
@@ -98,6 +169,7 @@ export const bidsRouter = router({
       if (rest.name !== undefined) patch.name = rest.name;
       if (rest.status !== undefined) patch.status = rest.status;
       if (rest.trades !== undefined) patch.trades = rest.trades;
+      if (rest.dueDate !== undefined) patch.dueDate = rest.dueDate;
       if (rest.overheadEnabled !== undefined) patch.overheadEnabled = rest.overheadEnabled;
       if (rest.overheadMode !== undefined) patch.overheadMode = rest.overheadMode;
       if (rest.overheadValue !== undefined) {
@@ -131,35 +203,13 @@ export const bidsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const bid = await requireBid(input.id, ctx.user.id);
-      const [lines, defaults] = await Promise.all([
+      const [lines, company] = await Promise.all([
         db.getBidLineItems(bid.id),
-        db.getPricingDefaults(ctx.user.id),
+        companyDefaultsFor(ctx.user.id),
       ]);
 
-      const company: CompanyPricingDefaults = {
-        overheadEnabled: defaults?.overheadEnabled ?? false,
-        overheadMode: defaults?.overheadMode ?? "percentage",
-        overheadValue: Number(defaults?.overheadValue ?? 0),
-        profitMethod: defaults?.profitMethod ?? "markup",
-        profitValue: Number(defaults?.profitValue ?? 0),
-      };
-
-      const settings = resolveBidPricingSettings(company, {
-        overheadEnabled: bid.overheadEnabled,
-        overheadMode: bid.overheadMode,
-        overheadValue: bid.overheadValue === null ? null : Number(bid.overheadValue),
-        profitMethod: bid.profitMethod,
-        profitValue: bid.profitValue === null ? null : Number(bid.profitValue),
-      });
-
-      const priced = lines.map(line => ({ line, breakdown: priceLine(line) }));
-      const directCost = sumDirectCost(priced.map(p => p.breakdown));
-
-      const bidPrice = calculateBidPrice({
-        directCost,
-        overhead: settings.overhead,
-        profit: settings.profit,
-      });
+      const { settings, breakdowns, directCost, bidPrice } = rollUpBid(bid, lines, company);
+      const priced = lines.map((line, index) => ({ line, breakdown: breakdowns[index] }));
 
       // Unit subtotals, so a hotel bid can answer "what does one room cost?"
       const unitTotals = new Map<string, { directCost: number; lines: number }>();

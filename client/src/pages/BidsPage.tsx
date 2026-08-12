@@ -20,12 +20,12 @@
  * a bid of a few hundred lines renders fine, and the Quick-bid step is where
  * windowing belongs if bids ever get big enough to need it.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  ArrowLeft, Check, Copy, FileText, Plus, Search, Trash2, X,
+  ArrowLeft, CalendarDays, Check, FileText, Plus, Search, Trash2, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +61,78 @@ const STATUS_STYLES: Record<Status, string> = {
   Lost: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
+
+// ─── Due date ─────────────────────────────────────────────────────────────────
+
+/**
+ * The bid's submission deadline, following CLAUDE.md § Editing fields: commits
+ * on Enter and on blur, Escape abandons back to the saved value, and a real
+ * save flashes green.
+ *
+ * Not InlineNumberField — that one parses numbers. A date input needs no
+ * select-on-focus either: the browser's picker already selects a segment when
+ * it takes focus.
+ */
+function DueDateField({
+  value, onSave,
+}: {
+  value: string | null;
+  onSave: (next: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(value ?? "");
+  const [flash, setFlash] = useState(false);
+  const editing = useRef(false);
+  const timer = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (editing.current) return;
+    setDraft(value ?? "");
+  }, [value]);
+
+  useEffect(() => () => {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+  }, []);
+
+  const commit = () => {
+    const saved = value ?? "";
+    if (draft === saved) return;          // nothing moved: no write, no flash
+    onSave(draft === "" ? null : draft);  // clearing the box clears the deadline
+    setFlash(true);
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setFlash(false), 1100);
+  };
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <CalendarDays className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+      <Input
+        type="date"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onFocus={() => { editing.current = true; }}
+        onBlur={() => { editing.current = false; commit(); }}
+        onKeyDown={e => {
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            setDraft(value ?? "");
+            editing.current = false;
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        aria-label="Bid due date"
+        className={cn(
+          "h-8 w-36 text-sm transition-colors duration-200",
+          flash && "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+        )}
+      />
+      <span className="sr-only" role="status" aria-live="polite">
+        {flash ? "Due date saved" : ""}
+      </span>
+    </span>
+  );
+}
 
 // ─── Bid detail ───────────────────────────────────────────────────────────────
 
@@ -169,6 +241,11 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               {bid.trades?.length ? ` · ${bid.trades.join(", ")}` : ""}
             </p>
           </div>
+          <DueDateField
+            value={bid.dueDate}
+            onSave={dueDate => updateBid.mutate({ id: bid.id, dueDate })}
+          />
+
           <Select
             value={bid.status}
             onValueChange={status => updateBid.mutate({ id: bid.id, status: status as Status })}
@@ -474,8 +551,11 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export default function BidsPage() {
-  const [openId, setOpenId] = useState<number | null>(null);
+export default function BidsPage({ initialBidId }: { initialBidId?: number } = {}) {
+  // Seeded from /bids/:id so the Dashboard can link straight into one bid.
+  // State, not derived: once open, closing must be able to return to the list
+  // without the route dragging it back in.
+  const [openId, setOpenId] = useState<number | null>(initialBidId ?? null);
   const [newName, setNewName] = useState("");
   const [adding, setAdding] = useState(false);
 

@@ -1,0 +1,1 @@
+ALTER TABLE `bids` ADD `dueDate` date;

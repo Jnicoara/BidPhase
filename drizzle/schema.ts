@@ -654,6 +654,16 @@ export const bids = mysqlTable(
     trades: json("trades").$type<string[]>(),
 
     /**
+     * When the bid is due to be submitted. Nullable on purpose — plenty of work
+     * is quoted without a firm deadline, and a fake date would sort ahead of
+     * real ones on the dashboard.
+     *
+     * A DATE, not a timestamp: a deadline is a day, and storing a time would
+     * invite timezone drift into something the user thinks of as "the 14th".
+     */
+    dueDate: date("dueDate", { mode: "string" }),
+
+    /**
      * Per-bid pricing overrides. NULL means "inherit the company default" from
      * `pricing_defaults`, and inheritance is per GROUP, not per field:
      *
