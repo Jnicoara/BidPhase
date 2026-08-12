@@ -1,4 +1,4 @@
-import { and, desc, eq, asc, isNull, isNotNull, lte, or, like, sql } from "drizzle-orm";
+import { and, desc, eq, asc, inArray, isNull, isNotNull, lte, or, like, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -43,6 +43,12 @@ import {
   BidPdf,
   bidPdfs,
   InsertBidPdfSheet,
+  InsertTakeoffRun,
+  TakeoffRun,
+  takeoffRuns,
+  InsertTakeoffRunCircuit,
+  TakeoffRunCircuit,
+  takeoffRunCircuits,
   BidPdfSheet,
   bidPdfSheets,
   InsertKit,
@@ -2667,4 +2673,107 @@ export async function seedBaselineKits(): Promise<void> {
       await setKitItems(result.insertId, items as Array<{ assemblyId: number; qty: string }>);
     }
   });
+}
+
+// ─── Traced runs (takeoff phase 2b) ───────────────────────────────────────────
+
+/** Every run on one sheet, oldest first — the order they were traced. */
+export async function getRunsForSheet(sheetId: number, userId: number): Promise<TakeoffRun[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(takeoffRuns)
+    .where(and(eq(takeoffRuns.sheetId, sheetId), eq(takeoffRuns.userId, userId)))
+    .orderBy(asc(takeoffRuns.id));
+}
+
+/** Every run on a whole bid, for the bill of materials rollup. */
+export async function getRunsForBid(bidId: number, userId: number): Promise<TakeoffRun[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(takeoffRuns)
+    .where(and(eq(takeoffRuns.bidId, bidId), eq(takeoffRuns.userId, userId)))
+    .orderBy(asc(takeoffRuns.id));
+}
+
+export async function getRunById(id: number, userId: number): Promise<TakeoffRun | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db.select().from(takeoffRuns)
+    .where(and(eq(takeoffRuns.id, id), eq(takeoffRuns.userId, userId))).limit(1);
+  return row;
+}
+
+export async function createRun(data: InsertTakeoffRun): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(takeoffRuns).values(data);
+  return result.insertId;
+}
+
+export async function updateRun(id: number, userId: number, data: Partial<InsertTakeoffRun>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  delete safe.bidId;
+  await db.update(takeoffRuns).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(takeoffRuns.id, id), eq(takeoffRuns.userId, userId)));
+}
+
+export async function deleteRun(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(takeoffRuns).where(and(eq(takeoffRuns.id, id), eq(takeoffRuns.userId, userId)));
+}
+
+/** Circuits pulled through one run. */
+export async function getRunCircuits(runId: number, userId: number): Promise<TakeoffRunCircuit[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(takeoffRunCircuits)
+    .where(and(eq(takeoffRunCircuits.runId, runId), eq(takeoffRunCircuits.userId, userId)))
+    .orderBy(asc(takeoffRunCircuits.id));
+}
+
+/** Circuits for many runs at once, so a rollup is not N+1 queries. */
+export async function getCircuitsForRuns(
+  runIds: number[],
+  userId: number
+): Promise<TakeoffRunCircuit[]> {
+  if (runIds.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(takeoffRunCircuits)
+    .where(and(inArray(takeoffRunCircuits.runId, runIds), eq(takeoffRunCircuits.userId, userId)))
+    .orderBy(asc(takeoffRunCircuits.id));
+}
+
+export async function createRunCircuit(data: InsertTakeoffRunCircuit): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(takeoffRunCircuits).values(data);
+  return result.insertId;
+}
+
+export async function updateRunCircuit(
+  id: number,
+  userId: number,
+  data: Partial<InsertTakeoffRunCircuit>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  delete safe.runId;
+  await db.update(takeoffRunCircuits).set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(takeoffRunCircuits.id, id), eq(takeoffRunCircuits.userId, userId)));
+}
+
+export async function deleteRunCircuit(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.delete(takeoffRunCircuits)
+    .where(and(eq(takeoffRunCircuits.id, id), eq(takeoffRunCircuits.userId, userId)));
 }

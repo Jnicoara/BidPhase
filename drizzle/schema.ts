@@ -860,6 +860,18 @@ export const bidPdfSheets = mysqlTable(
      */
     detectedScaleText: varchar("detectedScaleText", { length: 255 }),
 
+    /**
+     * The sheet states it is NOT TO SCALE.
+     *
+     * Phase 2a detected this but only held it in browser state, so it vanished
+     * on reload. It has to be stored, because phase 2b uses it as a hard gate:
+     * a sheet marked N.T.S. cannot be measured unless a human sets a scale by
+     * hand. See measurabilityOf() in shared/takeoffQuantities.ts — a drawing
+     * saying its own geometry is untrustworthy is not something to infer again
+     * each session.
+     */
+    notToScale: boolean("notToScale").default(false).notNull(),
+
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -871,6 +883,117 @@ export const bidPdfSheets = mysqlTable(
 
 export type BidPdfSheet = typeof bidPdfSheets.$inferSelect;
 export type InsertBidPdfSheet = typeof bidPdfSheets.$inferInsert;
+
+// ─── Traced runs (takeoff phase 2b) ───────────────────────────────────────────
+/**
+ * One physical raceway traced on a sheet: a conduit route, or a cable run.
+ *
+ * ── What is stored, and what is recomputed ───────────────────────────────────
+ * The POINTS are the measurement. Everything else — length, footage, wire — is
+ * derived from them through shared/takeoffGeometry.ts and never stored as the
+ * only copy, so a bill of materials can never disagree with the geometry it
+ * came from.
+ *
+ * `lengthInches` and `scaleRatioUsed` are cached alongside anyway, for one
+ * reason: if the sheet's scale is edited later, every run traced against the
+ * old scale silently changes length. Keeping what was used at trace time lets
+ * the app SAY that rather than quietly re-pricing a run the user already
+ * checked. It is evidence, not the source of truth.
+ */
+export const RUN_PATH_TYPES = ["conduit", "cable"] as const;
+export type RunPathType = (typeof RUN_PATH_TYPES)[number];
+
+/** Draft = still being traced or autosaved; committed = the user finished. */
+export const RUN_STATUSES = ["draft", "committed"] as const;
+export type RunStatus = (typeof RUN_STATUSES)[number];
+
+export const takeoffRuns = mysqlTable(
+  "takeoff_runs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId").notNull().references(() => bids.id, { onDelete: "cascade" }),
+    sheetId: int("sheetId").notNull().references(() => bidPdfSheets.id, { onDelete: "cascade" }),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+    name: varchar("name", { length: 255 }).notNull(),
+    /**
+     * conduit — a pipe with wire pulled through it. Conduit is counted once
+     *           for the run; wire is counted per circuit (see takeoff_run_circuits).
+     * cable   — Romex/MC. The cable IS the raceway; there is no conduit line.
+     */
+    pathType: mysqlEnum("pathType", RUN_PATH_TYPES).default("conduit").notNull(),
+
+    /**
+     * The traced vertices, in PDF PAGE POINTS — never screen pixels, which
+     * depend on zoom. `[{x,y}, …]`, in click order.
+     */
+    points: json("points").$type<{ x: number; y: number }[]>().notNull(),
+
+    /** Cached from the points at save time. Recomputed on read; see header. */
+    lengthInches: decimal("lengthInches", { precision: 14, scale: 4 }),
+    /** The sheet scale this was measured against, to detect a later change. */
+    scaleRatioUsed: decimal("scaleRatioUsed", { precision: 14, scale: 6 }),
+
+    status: mysqlEnum("status", RUN_STATUSES).default("draft").notNull(),
+
+    /**
+     * This path was proposed by AI rather than traced by hand.
+     *
+     * Never treated as final: a suggested run stays visibly a suggestion until
+     * the user accepts it, and accepting is what clears this. Nothing in the
+     * bill of materials counts a suggestion.
+     */
+    isSuggestion: boolean("isSuggestion").default(false).notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("takeoff_runs_bidId_idx").on(t.bidId),
+    index("takeoff_runs_sheetId_idx").on(t.sheetId),
+    index("takeoff_runs_userId_idx").on(t.userId),
+  ]
+);
+
+export type TakeoffRun = typeof takeoffRuns.$inferSelect;
+export type InsertTakeoffRun = typeof takeoffRuns.$inferInsert;
+
+/**
+ * A circuit pulled through a run. Many circuits may share one run.
+ *
+ * This is the shared-run mechanism: the RUN is traced once and carries the
+ * conduit footage; each circuit here carries its own wire footage, which is
+ * the full run length times its own conductor count.
+ */
+export const takeoffRunCircuits = mysqlTable(
+  "takeoff_run_circuits",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    runId: int("runId").notNull().references(() => takeoffRuns.id, { onDelete: "cascade" }),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+    /** "Ckt 12", "Panel A-3" — the estimator's own label. */
+    name: varchar("name", { length: 255 }).notNull(),
+    /**
+     * Conductors pulled for THIS circuit through the run.
+     *
+     * Entered, never derived. Whether a circuit is 2 wires and a ground or
+     * three phases and a neutral is something the estimator knows and the app
+     * does not, and guessing it would put a wrong wire quantity on a bid.
+     */
+    conductorCount: int("conductorCount").default(3).notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("takeoff_run_circuits_runId_idx").on(t.runId),
+    index("takeoff_run_circuits_userId_idx").on(t.userId),
+  ]
+);
+
+export type TakeoffRunCircuit = typeof takeoffRunCircuits.$inferSelect;
+export type InsertTakeoffRunCircuit = typeof takeoffRunCircuits.$inferInsert;
 
 // ─── Bid Line Items ───────────────────────────────────────────────────────────
 /**

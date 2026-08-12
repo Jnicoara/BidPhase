@@ -1,0 +1,132 @@
+/**
+ * Protecting trace work in progress.
+ *
+ * ── Why a local copy at all, when the server autosaves ───────────────────────
+ * Tracing a run is minutes of careful clicking, and there is a window the
+ * server cannot cover: between two autosaves, and before the first one lands.
+ * A crash, a closed tab or a dropped connection in that window loses work the
+ * user cannot reconstruct — they would have to re-trace from memory against a
+ * drawing that gives no clue where they had got to.
+ *
+ * So the points are mirrored into localStorage on every click, which costs
+ * nothing and survives a reload, a crash and an offline moment. The server copy
+ * is the durable one; this is the crash mat under it.
+ *
+ * ── Keyed per sheet, not globally ────────────────────────────────────────────
+ * Two sheets can each hold an unfinished trace. A single "current draft" slot
+ * would have one silently overwrite the other on switching sheets, which is
+ * exactly the kind of quiet loss this exists to prevent.
+ */
+import type { PagePoint } from "@shared/takeoffGeometry";
+import type { RunPathType } from "@shared/takeoffQuantities";
+
+const KEY_PREFIX = "helixbid:trace-draft:";
+
+/** How long a stranded draft stays offerable before it is assumed stale. */
+export const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type TraceDraft = {
+  sheetId: number;
+  bidId: number;
+  /** The server row this is mirroring, once one exists. */
+  runId: number | null;
+  name: string;
+  pathType: RunPathType;
+  points: PagePoint[];
+  /** When it was last touched, for the staleness check. */
+  savedAt: number;
+};
+
+const keyFor = (sheetId: number) => `${KEY_PREFIX}${sheetId}`;
+
+/**
+ * Mirror the in-progress trace locally.
+ *
+ * Deliberately swallows storage errors: a full or disabled localStorage must
+ * not interrupt tracing, because the server autosave is still running and the
+ * user losing their flow over a backup failing is a worse outcome than the
+ * backup being absent.
+ */
+export function saveDraft(draft: Omit<TraceDraft, "savedAt">): void {
+  try {
+    const payload: TraceDraft = { ...draft, savedAt: Date.now() };
+    window.localStorage.setItem(keyFor(draft.sheetId), JSON.stringify(payload));
+  } catch {
+    /* storage unavailable — the server copy stands */
+  }
+}
+
+/**
+ * Recover a draft for a sheet, if there is a usable one.
+ *
+ * Returns null rather than a partial object for anything malformed or expired.
+ * Offering the user a corrupt half-path to "restore" would be worse than
+ * offering nothing: they would accept it, and the missing vertices would go
+ * unnoticed into a measured length.
+ */
+export function loadDraft(sheetId: number, now: number = Date.now()): TraceDraft | null {
+  try {
+    const raw = window.localStorage.getItem(keyFor(sheetId));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<TraceDraft>;
+    if (
+      typeof parsed !== "object" || parsed === null ||
+      parsed.sheetId !== sheetId ||
+      typeof parsed.bidId !== "number" ||
+      typeof parsed.savedAt !== "number" ||
+      !Array.isArray(parsed.points)
+    ) {
+      return null;
+    }
+
+    if (now - parsed.savedAt > DRAFT_TTL_MS) return null;
+
+    // Every point must be usable. One bad vertex invalidates the whole draft,
+    // because a silently shortened path measures wrong and looks fine.
+    const points = parsed.points as PagePoint[];
+    for (const point of points) {
+      if (
+        typeof point?.x !== "number" || typeof point?.y !== "number" ||
+        !Number.isFinite(point.x) || !Number.isFinite(point.y)
+      ) {
+        return null;
+      }
+    }
+
+    // Nothing worth restoring — a draft of one click is not work.
+    if (points.length < 2) return null;
+
+    return {
+      sheetId,
+      bidId: parsed.bidId,
+      runId: typeof parsed.runId === "number" ? parsed.runId : null,
+      name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name : "Recovered run",
+      pathType: parsed.pathType === "cable" ? "cable" : "conduit",
+      points,
+      savedAt: parsed.savedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Drop the local mirror once the work is safely committed. */
+export function clearDraft(sheetId: number): void {
+  try {
+    window.localStorage.removeItem(keyFor(sheetId));
+  } catch {
+    /* nothing to do */
+  }
+}
+
+/**
+ * Whether there is unsaved work worth warning about on the way out.
+ *
+ * A path of fewer than two points is a stray click, not work — warning about
+ * it would train people to dismiss the warning that matters.
+ */
+export function hasUnsavedWork(points: PagePoint[], savedPointCount: number): boolean {
+  if (points.length < 2) return false;
+  return points.length !== savedPointCount;
+}

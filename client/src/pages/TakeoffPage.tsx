@@ -38,8 +38,8 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, FileText, ListChecks, Loader2, Plus,
-  Trash2, Upload,
+  ArrowLeft, Cable, ChevronLeft, ChevronRight, FileText, Loader2, Plus,
+  Trash2, Upload, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +53,11 @@ import { SheetIndex } from "@/components/takeoff/SheetIndex";
 import { ScaleControl } from "@/components/takeoff/ScaleControl";
 import { UploadProgress } from "@/components/takeoff/UploadProgress";
 import { MAX_PDF_BYTES, checkPdfUpload, formatBytes, looksLikePdf } from "@shared/uploadLimits";
+import { TraceLayer } from "@/components/takeoff/TraceLayer";
+import { RunsPanel } from "@/components/takeoff/RunsPanel";
+import { clearDraft, hasUnsavedWork, loadDraft, saveDraft } from "@/lib/traceDraft";
+import type { PagePoint } from "@shared/takeoffGeometry";
+import type { RunPathType } from "@shared/takeoffQuantities";
 
 /** One in-flight (or failed) upload, as the progress list shows it. */
 type UploadJob = {
@@ -175,7 +180,9 @@ function usePdfWorker() {
 
 // ── The drawing pane ─────────────────────────────────────────────────────────
 
-function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisible }: {
+const RENDER_SCALE = 1.5;
+
+function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisible, overlay }: {
   doc: Document;
   page: number;
   onPageCount: (pageCount: number) => void;
@@ -184,7 +191,14 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
   onDocumentReady: (info: { pageCount: number; outline: { pageNumber: number; title: string }[] }) => void;
   /** Fires when a page is shown, with its extracted text, for scale detection. */
   onSheetVisible: (pageNumber: number, text: string) => void;
+  /**
+   * The tracing layer, drawn over the page at the same size. Given the canvas
+   * dimensions so its coordinate space matches the rasterised page exactly —
+   * a mismatch here would put every measurement out by a constant factor.
+   */
+  overlay?: (size: { width: number; height: number; renderScale: number }) => React.ReactNode;
 }) {
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const { load, render, outline, pageText } = usePdfWorker();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pageCount, setPageCount] = useState(doc.pageCount ?? 0);
@@ -235,7 +249,7 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
     let cancelled = false;
     setRendering(true);
 
-    render(page, 1.5, hash)
+    render(page, RENDER_SCALE, hash)
       .then(bitmap => {
         if (cancelled) return bitmap.close();
         const canvas = canvasRef.current;
@@ -243,6 +257,7 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
         canvas.width = bitmap.width;
         canvas.height = bitmap.height;
         canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+        setCanvasSize({ width: bitmap.width, height: bitmap.height });
         bitmap.close();
         setRendering(false);
       })
@@ -343,10 +358,13 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
             <p className="text-xs">Large drawings can take a few seconds.</p>
           </div>
         ) : (
-          <canvas
-            ref={canvasRef}
-            className="mx-auto max-w-full h-auto rounded-lg shadow-lg bg-white"
-          />
+          <div className="relative mx-auto w-fit">
+            <canvas
+              ref={canvasRef}
+              className="max-w-full h-auto rounded-lg shadow-lg bg-white block"
+            />
+            {canvasSize.width > 0 && overlay?.({ ...canvasSize, renderScale: RENDER_SCALE })}
+          </div>
         )}
       </div>
     </div>
@@ -379,6 +397,17 @@ export default function TakeoffPage({ bidId, onBack }: {
    * N.T.S. makes the plan after it claim the same thing.
    */
   const [notToScaleBySheet, setNotToScaleBySheet] = useState<Record<number, boolean>>({});
+
+  // ── Tracing (phase 2b) ────────────────────────────────────────────────────
+  const [tracing, setTracing] = useState(false);
+  const [tracePathType, setTracePathType] = useState<RunPathType>("conduit");
+  const [tracePoints, setTracePoints] = useState<PagePoint[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  /** The server row this trace is autosaving into, once one exists. */
+  const draftRunId = useRef<number | null>(null);
+  /** How many points the server has. Drives the unsaved-work warning. */
+  const savedPointCount = useRef(0);
+  const [recoverable, setRecoverable] = useState<ReturnType<typeof loadDraft>>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   const doc = docs.find(d => d.id === selectedDocId) ?? docs[0] ?? null;
@@ -460,6 +489,154 @@ export default function TakeoffPage({ bidId, onBack }: {
     },
     [doc?.id]
   );
+
+  // ── Tracing: queries, autosave, recovery ──────────────────────────────────
+
+  const { data: measurability } = trpc.takeoffRuns.measurability.useQuery(
+    { sheetId: activeSheet?.id ?? 0 },
+    { enabled: Boolean(activeSheet) }
+  );
+  const { data: runs = [] } = trpc.takeoffRuns.listForSheet.useQuery(
+    { sheetId: activeSheet?.id ?? 0 },
+    { enabled: Boolean(activeSheet) }
+  );
+  const { data: totals } = trpc.takeoffRuns.totals.useQuery({ bidId });
+
+  const refreshRuns = useCallback(() => {
+    if (activeSheet) void utils.takeoffRuns.listForSheet.invalidate({ sheetId: activeSheet.id });
+    void utils.takeoffRuns.totals.invalidate({ bidId });
+  }, [utils, activeSheet?.id, bidId]);
+
+  const saveRun = trpc.takeoffRuns.save.useMutation({ onError: e => toast.error(e.message) });
+  const commitRun = trpc.takeoffRuns.commit.useMutation({
+    onError: e => toast.error(e.message),
+    onSuccess: result => toast.success(`Run finished — ${result.lengthFeet} ft.`),
+    onSettled: refreshRuns,
+  });
+  const removeRun = trpc.takeoffRuns.remove.useMutation({
+    onError: e => toast.error(e.message), onSettled: refreshRuns,
+  });
+  const acceptSuggestion = trpc.takeoffRuns.acceptSuggestion.useMutation({
+    onError: e => toast.error(e.message),
+    onSuccess: () => toast.success("Route accepted — finish it to count it."),
+    onSettled: refreshRuns,
+  });
+  const addCircuit = trpc.takeoffRuns.addCircuit.useMutation({
+    onError: e => toast.error(e.message), onSettled: refreshRuns,
+  });
+  const updateCircuit = trpc.takeoffRuns.updateCircuit.useMutation({
+    onError: e => toast.error(e.message), onSettled: refreshRuns,
+  });
+  const removeCircuit = trpc.takeoffRuns.removeCircuit.useMutation({
+    onError: e => toast.error(e.message), onSettled: refreshRuns,
+  });
+
+  /**
+   * Autosave, on a timer while tracing.
+   *
+   * Every 4 seconds rather than on every click: a click is cheap locally but a
+   * round trip per vertex would put a request behind every point of a
+   * forty-point run. The localStorage mirror below covers the gap between
+   * timer ticks, which is the window a crash would otherwise fall into.
+   */
+  useEffect(() => {
+    if (!tracing || !activeSheet || tracePoints.length < 2) return;
+    const timer = window.setInterval(() => {
+      if (tracePoints.length === savedPointCount.current) return;
+      saveRun.mutate({
+        bidId,
+        sheetId: activeSheet.id,
+        id: draftRunId.current ?? undefined,
+        name: draftRunId.current ? `Run ${draftRunId.current}` : `Run on ${activeSheet.name}`,
+        pathType: tracePathType,
+        points: tracePoints,
+        status: "draft",
+      }, {
+        onSuccess: result => {
+          draftRunId.current = result.id;
+          savedPointCount.current = tracePoints.length;
+          refreshRuns();
+        },
+      });
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [tracing, activeSheet?.id, tracePoints, tracePathType, bidId]);
+
+  /** The crash mat: mirrored locally on every change, which is nearly free. */
+  useEffect(() => {
+    if (!tracing || !activeSheet || tracePoints.length < 2) return;
+    saveDraft({
+      sheetId: activeSheet.id,
+      bidId,
+      runId: draftRunId.current,
+      name: `Run on ${activeSheet.name}`,
+      pathType: tracePathType,
+      points: tracePoints,
+    });
+  }, [tracing, activeSheet?.id, tracePoints, tracePathType, bidId]);
+
+  /** Offer to restore a stranded local draft when a sheet opens. */
+  useEffect(() => {
+    if (!activeSheet || tracing) return;
+    setRecoverable(loadDraft(activeSheet.id));
+  }, [activeSheet?.id, tracing]);
+
+  /**
+   * Warn on the way out with work in the gap between autosaves.
+   *
+   * The browser shows its own generic wording; what matters is that the prompt
+   * appears at all, and only when something would genuinely be lost.
+   */
+  useEffect(() => {
+    if (!tracing) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedWork(tracePoints, savedPointCount.current)) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [tracing, tracePoints]);
+
+  const startTracing = useCallback((pathType: RunPathType) => {
+    setTracePathType(pathType);
+    setTracePoints([]);
+    draftRunId.current = null;
+    savedPointCount.current = 0;
+    setTracing(true);
+    setSelectedRunId(null);
+  }, []);
+
+  const finishTrace = useCallback(() => {
+    if (!activeSheet || tracePoints.length < 2) return;
+    saveRun.mutate({
+      bidId,
+      sheetId: activeSheet.id,
+      id: draftRunId.current ?? undefined,
+      name: `Run on ${activeSheet.name}`,
+      pathType: tracePathType,
+      points: tracePoints,
+      status: "draft",
+    }, {
+      onSuccess: result => {
+        commitRun.mutate({ id: result.id });
+        clearDraft(activeSheet.id);
+        setTracing(false);
+        setTracePoints([]);
+        draftRunId.current = null;
+        savedPointCount.current = 0;
+        setRecoverable(null);
+      },
+    });
+  }, [activeSheet, tracePoints, tracePathType, bidId, saveRun, commitRun]);
+
+  const cancelTrace = useCallback(() => {
+    if (activeSheet) clearDraft(activeSheet.id);
+    setTracing(false);
+    setTracePoints([]);
+    draftRunId.current = null;
+    savedPointCount.current = 0;
+  }, [activeSheet?.id]);
 
   const handleSheetVisible = useCallback((pageNumber: number, text: string) => {
     const sheet = sheets.find(s => s.pageNumber === pageNumber);
@@ -727,6 +904,23 @@ export default function TakeoffPage({ bidId, onBack }: {
                     onPageCount={pageCount => setPageCount.mutate({ id: doc.id, pageCount })}
                     onDocumentReady={handleDocumentReady}
                     onSheetVisible={handleSheetVisible}
+                    overlay={size => measurability ? (
+                      <TraceLayer
+                        width={size.width}
+                        height={size.height}
+                        renderScale={size.renderScale}
+                        measurability={measurability}
+                        tracing={tracing}
+                        pathType={tracePathType}
+                        points={tracePoints}
+                        onPointsChange={setTracePoints}
+                        existingRuns={runs}
+                        onFinish={finishTrace}
+                        onCancel={cancelTrace}
+                        selectedRunId={selectedRunId}
+                        onSelectRun={setSelectedRunId}
+                      />
+                    ) : null}
                   />
                   {/* Rendered under the pager rather than inside PlanPane so
                       the sheet row (and its mutations) stay owned here. */}
@@ -736,6 +930,27 @@ export default function TakeoffPage({ bidId, onBack }: {
                         {activeSheet.name}
                       </span>
                       <div className="w-px h-4 bg-border" />
+                      {/* Tracing is offered only when the sheet can actually
+                          be measured — an enabled tool that produces no number
+                          teaches people the app is broken. */}
+                      {measurability?.ok && !tracing && (
+                        <>
+                          <Button
+                            size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+                            onClick={() => startTracing("conduit")}
+                          >
+                            <Zap className="w-3.5 h-3.5 text-[#F5C518]" /> Trace conduit
+                          </Button>
+                          <Button
+                            size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+                            onClick={() => startTracing("cable")}
+                          >
+                            <Cable className="w-3.5 h-3.5 text-emerald-400" /> Trace cable
+                          </Button>
+                          <div className="w-px h-4 bg-border" />
+                        </>
+                      )}
+
                       <ScaleControl
                         sheet={activeSheet}
                         notToScale={notToScaleBySheet[activeSheet.id] ?? false}
@@ -751,25 +966,20 @@ export default function TakeoffPage({ bidId, onBack }: {
             <ResizableHandle withHandle />
 
             <ResizablePanel defaultSize={32} minSize={18} className="min-w-0">
-              <div className="h-full flex flex-col bg-card border-l border-border">
-                <div className="px-3 py-2 border-b border-border shrink-0">
-                  <div className="flex items-center gap-1.5 text-[0.7rem] uppercase tracking-wide text-muted-foreground">
-                    <ListChecks className="w-3 h-3" /> Counted items
-                  </div>
-                </div>
-                {/* Says what is coming, so an empty half-screen reads as
-                    reserved rather than as something failing to render. */}
-                <div className="flex-1 flex items-center justify-center p-6">
-                  <div className="text-center max-w-[15rem]">
-                    <ListChecks className="w-7 h-7 mx-auto mb-3 text-muted-foreground/50" />
-                    <p className="text-sm font-medium text-muted-foreground">Nothing counted yet</p>
-                    <p className="text-xs text-muted-foreground/70 mt-1.5">
-                      Items you stamp on the plan will appear here as you go, with a running
-                      total. Set each sheet's scale first — measuring depends on it.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <RunsPanel
+                runs={runs}
+                totals={totals}
+                selectedRunId={selectedRunId}
+                onSelectRun={setSelectedRunId}
+                onRemoveRun={id => removeRun.mutate({ id })}
+                onCommitRun={id => commitRun.mutate({ id })}
+                onAcceptSuggestion={id => acceptSuggestion.mutate({ id })}
+                onAddCircuit={(runId, name, conductorCount) =>
+                  addCircuit.mutate({ runId, name, conductorCount })}
+                onUpdateCircuit={(id, conductorCount) =>
+                  updateCircuit.mutate({ id, conductorCount })}
+                onRemoveCircuit={id => removeCircuit.mutate({ id })}
+              />
             </ResizablePanel>
           </ResizablePanelGroup>
         </div>
