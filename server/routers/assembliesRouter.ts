@@ -16,6 +16,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { ASSEMBLY_CATEGORIES, PROJECT_TYPES } from "../../drizzle/schema";
 import { calculateLineItem, calculateBidPrice } from "../../shared/pricing";
+import { hourlyCostOf, resolveLaborRate } from "../../shared/laborRateLookup";
 import * as db from "../db";
 
 const nameSchema = z.string().trim().min(1).max(255);
@@ -264,16 +265,10 @@ export const assembliesRouter = router({
         .filter(m => detail.modifierIds.includes(m.id))
         .map(m => ({ name: m.name, laborAdjustmentPct: Number(m.laborAdjustmentPct) }));
 
-      const role = laborRates.find(r => r.id === detail.laborRateId);
-      const laborRate = role
-        ? (role.rateType === "hourly"
-            ? Number(role.hourlyCost)
-            // Mirrors laborRatesRouter's toView(); a missing/zero-hours salary
-            // prices at 0 rather than throwing, and the UI flags the role.
-            : (Number(role.annualHours) > 0
-                ? Number(role.annualSalary ?? 0) / Number(role.annualHours)
-                : 0))
-        : 0;
+      // Follows a fork: editing a starter role gives it a new id, and the
+      // assembly is still pointing at the old one. See shared/laborRateLookup.
+      const role = resolveLaborRate(laborRates, detail.laborRateId);
+      const laborRate = hourlyCostOf(role);
 
       const line = calculateLineItem({
         materials: detail.materials.map(m => ({

@@ -32,6 +32,8 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { selectOnFocus } from "@/lib/selectOnFocus";
+import { LaborRateQuickEdit } from "@/components/LaborRateQuickEdit";
+import { resolveLaborRate } from "@shared/laborRateLookup";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -386,8 +388,19 @@ function AssemblyBuilder({
 
   const showingRecent = !materialQuery.trim() && materialResults.length > 0;
 
-  const selectedRate = laborRates.find(r => r.id === draft.laborRateId);
+  // resolveLaborRate, not a bare find: an assembly that referenced a starter
+  // role keeps that id after the role is forked, and the fork is what it means.
+  const selectedRate = resolveLaborRate(laborRates, draft.laborRateId);
   const laborRate = selectedRate?.effectiveHourlyRate ?? 0;
+
+  // Re-point the draft at the fork once one exists. Without this the role
+  // dropdown blanks out after a quick edit — its value is an id the list no
+  // longer contains — and saving would persist the superseded reference.
+  useEffect(() => {
+    if (!selectedRate) return;
+    if (selectedRate.id === draft.laborRateId) return;
+    setDraft(d => ({ ...d, laborRateId: selectedRate.id }));
+  }, [selectedRate, draft.laborRateId]);
 
   const appliedModifiers = useMemo(
     () => modifiers
@@ -705,6 +718,13 @@ function AssemblyBuilder({
                     ))}
                   </SelectContent>
                 </Select>
+
+                {selectedRate && (
+                  <LaborRateQuickEdit
+                    rate={selectedRate as never}
+                    onSaved={() => { /* the query invalidation inside re-reads the rate */ }}
+                  />
+                )}
 
                 <div className="flex items-center gap-1.5">
                   <Input

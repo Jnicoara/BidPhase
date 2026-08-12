@@ -14,6 +14,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { calculateLineItem, sumDirectCost } from "../../shared/pricing";
+import { hourlyCostFor } from "../../shared/laborRateLookup";
 import * as db from "../db";
 
 const nameSchema = z.string().trim().min(1).max(255);
@@ -51,14 +52,7 @@ async function priceAssemblyAt(
     .filter(m => detail.modifierIds.includes(m.id))
     .map(m => ({ name: m.name, laborAdjustmentPct: Number(m.laborAdjustmentPct) }));
 
-  const role = cache.rates.find(r => r.id === detail.laborRateId);
-  const laborRate = !role
-    ? 0
-    : role.rateType === "hourly"
-      ? Number(role.hourlyCost)
-      : (Number(role.annualHours) > 0
-          ? Number(role.annualSalary ?? 0) / Number(role.annualHours)
-          : 0);
+  const laborRate = hourlyCostFor(cache.rates, detail.laborRateId);
 
   return calculateLineItem({
     materials: detail.materials.map(m => ({

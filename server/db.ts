@@ -61,6 +61,7 @@ import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
 import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
 import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
 import { BASELINE_KITS } from "./seed/baselineKits";
+import { hourlyCostFor } from "../shared/laborRateLookup";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1838,14 +1839,9 @@ export async function addAssemblyToBid(
   const applied = activeModifiers.filter(m => detail.modifierIds.includes(m.id));
   const modifierPct = applied.reduce((sum, m) => sum + Number(m.laborAdjustmentPct), 0);
 
-  const role = rates.find(r => r.id === detail.laborRateId);
-  const laborRate = !role
-    ? 0
-    : role.rateType === "hourly"
-      ? Number(role.hourlyCost)
-      : (Number(role.annualHours) > 0
-          ? Number(role.annualSalary ?? 0) / Number(role.annualHours)
-          : 0);
+  // Resolved through the shared lookup so a forked role still prices — the
+  // snapshot must freeze the rate the assembly ACTUALLY means, not zero.
+  const laborRate = hourlyCostFor(rates, detail.laborRateId);
 
   const materialCost = detail.materials.reduce(
     (sum, line) => sum + Number(line.costPerUnit) * Number(line.qty),
