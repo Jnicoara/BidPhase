@@ -18,7 +18,9 @@
  * snapshotting, and is covered by its own tests.
  *
  * Follows CLAUDE.md § Editing fields via InlineNumberField: select-on-focus,
- * Enter/blur save, Escape revert, save flash.
+ * Enter/blur save, Escape revert, save flash — and, because this is a panel
+ * rather than a row, rule 5: Enter saves AND closes, so finishing the edit
+ * takes one key rather than a key plus a click somewhere else.
  */
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -110,6 +112,8 @@ export function LaborRateQuickEdit({
           <div className="space-y-2">
             <div className="flex items-center gap-1.5">
               <span className="text-xs text-muted-foreground w-20 shrink-0">Salary</span>
+              {/* No onDismiss: closing here would strand the user outside a
+                  panel they had not finished — hours is still below. */}
               <InlineNumberField
                 value={Number(rate.annualSalary ?? 0)}
                 onSave={annualSalary => update.mutate({ id: rate.id, annualSalary })}
@@ -128,6 +132,7 @@ export function LaborRateQuickEdit({
                 className="h-8 w-32 text-sm"
                 ariaLabel={`${rate.name} working hours per year`}
                 suffix="h"
+                onDismiss={() => setOpen(false)}
               />
             </div>
             <div className="text-xs text-muted-foreground">
@@ -148,6 +153,7 @@ export function LaborRateQuickEdit({
               className="h-8 w-32 text-sm"
               ariaLabel={`${rate.name} hourly rate`}
               suffix="/hr"
+              onDismiss={() => setOpen(false)}
             />
           </div>
         )}

@@ -12,6 +12,7 @@ import {
   commitNumericEdit,
   formatForEdit,
   fromPercent,
+  planFieldKey,
   revertToSaved,
 } from "./inlineEdit";
 
@@ -127,5 +128,84 @@ describe("formatForEdit", () => {
 
   it("keeps zero visible", () => {
     expect(formatForEdit(0)).toBe("0");
+  });
+});
+
+describe("Enter in a panel saves AND closes it (rule 5)", () => {
+  // The bug this pins: the labor-rate quick edit saved on Enter but left the
+  // popover sitting open, so finishing an edit took a keystroke plus a click
+  // somewhere else. Enter has to reach the same end state as clicking away,
+  // and clicking away from a panel closes it.
+
+  it("does both halves — a save and a dismiss — from one keystroke", () => {
+    // The real case: the Journeyman rate reads 38, the user types 44, Enter.
+    const plan = planFieldKey("Enter", "panel");
+    expect(plan).toEqual({ action: "commit", keepFocus: false, dismiss: true });
+
+    // ...and the commit half writes the new rate rather than swallowing it.
+    if (plan.action !== "commit") throw new Error("Enter must commit");
+    expect(commitNumericEdit("44", 38, { min: 0 })).toEqual({ action: "save", value: 44 });
+  });
+
+  it("does not close on an Enter that wrote nothing — but still does not hang around", () => {
+    // Re-pressing Enter on an unchanged 44 saves nothing (no flash, no write),
+    // and closing is still right: the user is done either way.
+    expect(commitNumericEdit("44", 44, { min: 0 })).toEqual({ action: "none" });
+    expect(planFieldKey("Enter", "panel").action).toBe("commit");
+    expect(planFieldKey("Enter", "panel")).toHaveProperty("dismiss", true);
+  });
+
+  it("closes on a reverted Enter too, rather than trapping the user behind a bad draft", () => {
+    // A negative rate reverts and writes nothing. The panel must not stay open
+    // as if something were still owed.
+    expect(commitNumericEdit("-5", 38, { min: 0 })).toEqual({ action: "revert", reason: "below 0" });
+    expect(planFieldKey("Enter", "panel")).toHaveProperty("dismiss", true);
+  });
+
+  it("keeps focus and stays put on a row, so a column of figures still types straight down", () => {
+    // Rule 2's original case must not regress: bid line quantities, kit
+    // quantities and the rest are inline and commit without going anywhere.
+    expect(planFieldKey("Enter", "inline")).toEqual({
+      action: "commit", keepFocus: true, dismiss: false,
+    });
+  });
+
+  it("never both keeps focus and dismisses — that would focus a field that is gone", () => {
+    for (const surface of ["inline", "panel"] as const) {
+      const plan = planFieldKey("Enter", surface);
+      if (plan.action !== "commit") throw new Error("Enter must commit");
+      expect(plan.keepFocus && plan.dismiss).toBe(false);
+    }
+  });
+});
+
+describe("Escape settles the field, and on a panel leaves as well", () => {
+  it("abandons and closes on a panel", () => {
+    expect(planFieldKey("Escape", "panel")).toEqual({ action: "abandon", dismiss: true });
+  });
+
+  it("abandons without closing anything on a row", () => {
+    expect(planFieldKey("Escape", "inline")).toEqual({ action: "abandon", dismiss: false });
+  });
+
+  it("abandons rather than commits, on either surface — Escape never writes", () => {
+    for (const surface of ["inline", "panel"] as const) {
+      expect(planFieldKey("Escape", surface).action).toBe("abandon");
+    }
+  });
+});
+
+describe("keys the field does not claim", () => {
+  it("passes ordinary typing and navigation through untouched", () => {
+    for (const key of ["a", "5", "Tab", "ArrowDown", "Backspace", "."]) {
+      expect(planFieldKey(key, "panel")).toEqual({ action: "pass" });
+      expect(planFieldKey(key, "inline")).toEqual({ action: "pass" });
+    }
+  });
+
+  it("is case-sensitive on the key name, matching KeyboardEvent.key", () => {
+    // "enter" is not a key name; treating it as one would mean a stray handler
+    // silently never firing.
+    expect(planFieldKey("enter", "panel")).toEqual({ action: "pass" });
   });
 });

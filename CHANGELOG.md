@@ -4,6 +4,10 @@ Plain-English record of what changed and when. Newest first.
 
 This is the human-readable companion to the git history — read this to see what happened, read the commits for the technical detail.
 
+## [2026-08-12]
+
+- Pressing Enter in the labor-rate pencil now saves the rate **and** closes the little panel, instead of saving it and leaving the panel sitting open for you to click away from. Escape does the same — throws the edit away and closes. Editing a rate is one keystroke to finish now, not a keystroke and then a click somewhere else. Typing a column of quantities on a bid is unchanged: Enter there still saves and stays put, ready for the next figure.
+
 ## [2026-08-11]
 
 - You can now change a labor rate straight from the Assembly Builder — a small pencil next to the role opens the rate right there, no trip to the Labor Rates screen. It says plainly that you are editing the one shared rate used across your whole library, not a rate for that assembly alone, and tells you how many assemblies will reprice. Bids you have already built keep the rates they were priced at.

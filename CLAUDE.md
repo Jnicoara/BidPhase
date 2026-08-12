@@ -61,15 +61,17 @@ one material. Put per-material vocabulary on the material.
 
 Accuracy is this app's whole value. A contractor who cannot tell whether a
 number saved will stop trusting the total, and a wrong total loses a job. So
-every field follows the same four rules, without being asked:
+every field follows the same five rules, without being asked:
 
 **1. A numeric field selects its value on focus.** Click or tab into a rate,
 percentage, quantity or hour count and the existing text is selected, so the
 first keystroke replaces it. Nobody should have to clear a field by hand before
 typing. Use `onFocus={selectOnFocus}` from `@/lib/selectOnFocus`.
 
-**2. A self-saving field commits on Enter and on blur.** Both, not one. Enter
-keeps focus and re-selects, so a column of figures can be typed straight down.
+**2. A self-saving field commits on Enter and on blur.** Both, not one, and
+both must reach the *same end state* — see rule 5, which is the half of this
+that is easy to miss. In a row or form that stays put, Enter keeps focus and
+re-selects, so a column of figures can be typed straight down.
 
 **3. Escape abandons the edit.** The field snaps back to the last *saved* value
 and writes nothing. Escape reverts to what is stored now — not to the text the
@@ -83,16 +85,29 @@ shifts. Only on a real write: an unchanged value or a reverted one must NOT
 flash, because a confirmation for a save that did not happen is worse than no
 confirmation at all.
 
+**5. A field inside a panel closes it on Enter.** Rules 2 and 3 were written
+with a field sitting in a row, where committing and leaving are the same thing.
+They are not the same thing in a popover, dropdown or flyout, which has an
+explicit dismiss step — and there, an Enter that saves but leaves the panel open
+has done only half of what clicking away does, so the user still has to dismiss
+it by hand. That is the exact friction rule 2 exists to remove. So on a panel,
+Enter commits **and** closes, and Escape reverts **and** closes. Pass
+`onDismiss` to `InlineNumberField` and it does both; the surface it is on is the
+only thing that changes. On a panel with several fields, pass `onDismiss` to the
+**last** one only — closing after the first of two strands the user outside a
+panel they had not finished filling in.
+
 Invalid input reverts rather than erroring — an inline field has nowhere to put
 a message, and leaving a bad draft on screen is how someone comes to believe
 they saved something they did not. Blank never silently becomes zero unless the
 field opts in with `allowEmpty`: a zero quantity prices work at nothing.
 
 **Do not hand-roll this.** `InlineNumberField` (`@/components/InlineNumberField`)
-implements all four for self-saving numbers; the decisions live in
-`@/lib/inlineEdit` and are tested there. For a numeric input inside an explicit
-Save/Cancel form, rules 2–4 belong to the form's buttons, but rule 1 still
-applies — attach `selectOnFocus`.
+implements all five for self-saving numbers; the decisions live in
+`@/lib/inlineEdit` and are tested there — `planFieldKey` is the one that knows
+what Enter and Escape mean on each surface. For a numeric input inside an
+explicit Save/Cancel form, rules 2–4 belong to the form's buttons, but rule 1
+still applies — attach `selectOnFocus`.
 
 ## Responsiveness — standing rules for new screens
 
