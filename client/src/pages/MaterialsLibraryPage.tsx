@@ -61,9 +61,20 @@ type Material = {
   unitOfSale: "each" | "foot" | "box";
   costPerUnit: string;
   category: Category | null;
-  /** Space-separated trade slang, fed to smartSearch. Not shown in the UI. */
+  /** Space-separated trade slang, fed to smartSearch. Editable inline. */
   searchAliases: string | null;
 };
+
+/**
+ * Ask for alias suggestions for a draft. Shared by the add form and the inline
+ * editor so both offer the same help, and so neither can throw at the component
+ * — `AliasSuggestions` promises its button resolves to a list either way.
+ */
+type SuggestAliases = (
+  name: string,
+  category: Category | null,
+  existing: string | null
+) => Promise<string[]>;
 
 const UNITS: Material["unitOfSale"][] = ["each", "foot", "box"];
 
@@ -178,6 +189,7 @@ function MaterialRow({
   showCategory,
   isArchived,
   onSave,
+  onSuggestAliases,
   onRevert,
   onRemove,
   onRestore,
@@ -190,6 +202,7 @@ function MaterialRow({
   /** Rendering the Archived view — different actions, no inline editing. */
   isArchived?: boolean;
   onSave: (id: number, draft: Draft) => Promise<void>;
+  onSuggestAliases: SuggestAliases;
   onRevert: (material: Material) => void;
   onRemove: (material: Material) => void;
   onRestore?: (material: Material) => void;
@@ -204,9 +217,12 @@ function MaterialRow({
       unitOfSale: material.unitOfSale,
       costPerUnit: String(Number(material.costPerUnit)),
       category: material.category,
-      // Carried so the draft is complete. The inline save deliberately does
-      // NOT send it, and `update` only patches what it is given — so editing a
-      // price cannot wipe the aliases that make the row findable.
+      // Seeded from the row, so the field opens showing the slang the material
+      // already carries. That is what makes it safe for the save to send this
+      // key at all: an untouched editor sends back exactly what was there, so
+      // editing a price still cannot wipe the aliases that make the row
+      // findable — the protection moved from "never send it" to "always start
+      // from the truth", and editing the terms is now possible either way.
       searchAliases: material.searchAliases ?? "",
     });
     setEditing(true);
@@ -224,48 +240,72 @@ function MaterialRow({
 
   if (editing) {
     return (
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border last:border-0 bg-muted/20">
-        <Input
-          value={draft.name}
-          onChange={e => setDraft({ ...draft, name: e.target.value })}
-          className="h-8 flex-1 min-w-[12rem] text-sm"
-          placeholder="Material name"
-          autoFocus
-        />
-        <CategorySelect
-          value={draft.category}
-          onChange={category => setDraft({ ...draft, category })}
-        />
-        <Select
-          value={draft.unitOfSale}
-          onValueChange={value => setDraft({ ...draft, unitOfSale: value as Material["unitOfSale"] })}
-        >
-          <SelectTrigger className="h-8 w-28 text-sm"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {UNITS.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Input
-          value={draft.costPerUnit}
-          onChange={e => setDraft({ ...draft, costPerUnit: e.target.value })}
-          className="h-8 w-28 text-sm text-right"
-          inputMode="decimal"
-          onFocus={selectOnFocus}
-          placeholder="0.00"
-        />
-        <div className="flex items-center gap-1">
-          <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={save} disabled={isBusy}>
-            {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 gap-1.5 text-xs"
-            onClick={() => setEditing(false)}
-            disabled={isBusy}
+      <div className="px-4 py-3 border-b border-border last:border-0 bg-muted/20">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={draft.name}
+            onChange={e => setDraft({ ...draft, name: e.target.value })}
+            className="h-8 flex-1 min-w-[12rem] text-sm"
+            placeholder="Material name"
+            autoFocus
+          />
+          <CategorySelect
+            value={draft.category}
+            onChange={category => setDraft({ ...draft, category })}
+          />
+          <Select
+            value={draft.unitOfSale}
+            onValueChange={value => setDraft({ ...draft, unitOfSale: value as Material["unitOfSale"] })}
           >
-            <X className="w-3 h-3" /> Cancel
-          </Button>
+            <SelectTrigger className="h-8 w-28 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {UNITS.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Input
+            value={draft.costPerUnit}
+            onChange={e => setDraft({ ...draft, costPerUnit: e.target.value })}
+            className="h-8 w-28 text-sm text-right"
+            inputMode="decimal"
+            onFocus={selectOnFocus}
+            placeholder="0.00"
+          />
+          <div className="flex items-center gap-1">
+            <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={save} disabled={isBusy}>
+              {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setEditing(false)}
+              disabled={isBusy}
+            >
+              <X className="w-3 h-3" /> Cancel
+            </Button>
+          </div>
+        </div>
+
+        {/* Aliases are editable here for the same reason they are collected on
+            the add form: they are the only thing that makes a material findable
+            by what it is actually called. Until now they could be set once at
+            creation and never corrected, which left a typo'd or missing term
+            permanently wrong on a row the user could otherwise edit freely.
+            Starter rows included — editing one forks it, so the fork carries
+            the slang the user chose rather than the shipped list. */}
+        <div className="mt-2">
+          <AliasSuggestions
+            value={draft.searchAliases}
+            onChange={searchAliases => setDraft({ ...draft, searchAliases })}
+            disabled={isBusy}
+            onRequest={() =>
+              onSuggestAliases(draft.name, draft.category, draft.searchAliases || null)
+            }
+          />
+          <p className="text-[0.7rem] text-muted-foreground mt-1">
+            What people type instead of the catalog name. Clearing this makes the material
+            findable only by the words in its name.
+          </p>
         </div>
       </div>
     );
@@ -464,6 +504,21 @@ export default function MaterialsLibraryPage() {
         unitOfSale: draft.unitOfSale,
         costPerUnit: Number(draft.costPerUnit),
         category: draft.category,
+        // Sent unconditionally now the editor shows it: blank means the user
+        // cleared the field, which is a real edit, where omitting the key
+        // would quietly keep the old terms and make the clear look like it
+        // failed.
+        //
+        // Cleared stores "" and NOT null, which matters more than it looks.
+        // `backfillMaterialMetadata` (server/db.ts) refills any fork whose
+        // aliases are NULL from its baseline on every startup — NULL there
+        // means "predates the column, inherit it". Saving a deliberate clear
+        // as NULL would put the starter's slang back the next time the server
+        // booted, and search failures of that kind are invisible until someone
+        // notices their results are wrong. Empty text says "the user says this
+        // has none", and reads identically to NULL everywhere else: smartSearch
+        // coalesces both to "".
+        searchAliases: draft.searchAliases.trim(),
       });
       if (result.forked) {
         toast.success(`Saved as your own copy — the starter "${result.material?.name}" is unchanged.`);
@@ -477,6 +532,34 @@ export default function MaterialsLibraryPage() {
       setBusyId(null);
     }
   }, [updateMaterial, refetch]);
+
+  /**
+   * Suggestions for whichever draft is asking — the add form or a row editor.
+   *
+   * Never rejects. `AliasSuggestions` documents its request as resolving to a
+   * list whatever happens, and a failed suggestion is a missing convenience,
+   * not a broken save: the free-text field beside it still works.
+   */
+  const requestAliasSuggestions = useCallback<SuggestAliases>(
+    async (name, category, existing) => {
+      if (!name.trim()) {
+        toast.error("Give the material a name first — suggestions come from it.");
+        return [];
+      }
+      try {
+        const result = await suggestAliases.mutateAsync({
+          name: name.trim(),
+          category,
+          existing,
+        });
+        return result.suggestions;
+      } catch {
+        toast.error("Couldn't fetch suggestions — type the terms people use for it yourself.");
+        return [];
+      }
+    },
+    [suggestAliases]
+  );
 
   const handleRevert = useCallback(async (material: Material) => {
     setBusyId(material.id);
@@ -618,18 +701,13 @@ export default function MaterialsLibraryPage() {
                 value={newDraft.searchAliases}
                 onChange={searchAliases => setNewDraft({ ...newDraft, searchAliases })}
                 disabled={createMaterial.isPending}
-                onRequest={async () => {
-                  if (!newDraft.name.trim()) {
-                    toast.error("Give the material a name first — suggestions come from it.");
-                    return [];
-                  }
-                  const result = await suggestAliases.mutateAsync({
-                    name: newDraft.name.trim(),
-                    category: newDraft.category,
-                    existing: newDraft.searchAliases || null,
-                  });
-                  return result.suggestions;
-                }}
+                onRequest={() =>
+                  requestAliasSuggestions(
+                    newDraft.name,
+                    newDraft.category,
+                    newDraft.searchAliases || null
+                  )
+                }
               />
               <p className="text-[0.7rem] text-muted-foreground mt-1">
                 What people type instead of the catalog name — “spring nut”, “1900”, “gem box”.
@@ -665,6 +743,7 @@ export default function MaterialsLibraryPage() {
                 isBusy={isBusy && busyId === material.id}
                 showCategory
                 onSave={handleSave}
+                onSuggestAliases={requestAliasSuggestions}
                 onRevert={handleRevert}
                 onRemove={handleRemove}
                 isArchived={view === "archived"}
@@ -688,6 +767,7 @@ export default function MaterialsLibraryPage() {
                     isBusy={isBusy && busyId === material.id}
                     showCategory={false}
                     onSave={handleSave}
+                    onSuggestAliases={requestAliasSuggestions}
                     onRevert={handleRevert}
                     onRemove={handleRemove}
                     isArchived={view === "archived"}

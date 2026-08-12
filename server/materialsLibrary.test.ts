@@ -258,6 +258,21 @@ describe.skipIf(!hasDb)("material search aliases", () => {
     const fork = await getMaterialById(forkId, USER);
     expect(fork?.searchAliases).toBe("my own words");
   });
+
+  it("keeps aliases the user deliberately cleared cleared", async () => {
+    // The Materials editor stores a cleared field as "" rather than NULL for
+    // exactly this reason: NULL is the backfill's signal to inherit from the
+    // baseline, so saving a clear as NULL would put the starter's slang back
+    // the next time the server booted — a silent undo of a real edit.
+    const rows = await getLibraryMaterials(USER);
+    const baseline = rows.find(r => r.userId === null && r.name === "Dimmer")!;
+    const forkId = await forkMaterial(baseline.id, USER);
+
+    await updateMaterial(forkId, USER, { searchAliases: "" });
+    await seedBaselineMaterials();
+
+    expect((await getMaterialById(forkId, USER))?.searchAliases).toBe("");
+  });
 });
 
 describe.skipIf(!hasDb)("fork and revert", () => {

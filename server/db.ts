@@ -1180,6 +1180,11 @@ async function seedBaselineMaterialsUnlocked(): Promise<void> {
  *    Only NULL is touched: a value the user chose is theirs to keep, and a fork
  *    is allowed to sit on a different shelf than its original.
  *
+ * NULL therefore means "never set, inherit it" — never "empty". Clearing the
+ * aliases in the Materials editor stores an empty string on purpose, so the
+ * clear survives the next startup; do not widen these NULL checks to cover
+ * blank text, or a user who deletes a term will find it back tomorrow.
+ *
  * Fully custom rows (no baselineId) are left alone — there is nothing to
  * inherit from, and guessing would be worse than leaving them blank.
  */
