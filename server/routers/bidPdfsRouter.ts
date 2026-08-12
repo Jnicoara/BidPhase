@@ -6,12 +6,26 @@
  * a set — power sheets, lighting sheets, a spec book, an addendum that lands a
  * week later — so this is its own table and a bid holds as many as it needs.
  *
- * ── Bytes go to S3, never through the database ───────────────────────────────
- * Upload is the same shape as the legacy projects.uploadPdf: the client posts a
- * data URL, the server decodes it and hands the bytes to storagePut(), and only
- * the resulting key is stored. The 50MB express body limit in _core/index.ts is
- * the real ceiling; MAX_PDF_BYTES below refuses anything larger with a sentence
- * a person can act on rather than letting the body parser cut the connection.
+ * ── Bytes never touch this server ────────────────────────────────────────────
+ * Uploading is two steps: `createUploadTicket` validates the file and returns a
+ * presigned S3 URL, the browser PUTs the bytes straight there, then
+ * `confirmAttach` records the row.
+ *
+ * It used to be one step — the client posted the file as a base64 data URL and
+ * this server decoded it. That shape cannot carry a large plan set at all. The
+ * app runs on Cloud Run, whose request body limit is 32 MiB, and base64 inflates
+ * a file by about a third, so the ceiling was roughly a 24MB PDF no matter what
+ * the app's own limit said. Raising `MAX_PDF_BYTES` alone would have moved a
+ * number on screen and changed nothing about what actually uploads.
+ *
+ * Taking this server out of the data path removes that ceiling, stops a large
+ * upload being buffered in memory here, and lets the browser report real
+ * progress because it owns the transfer.
+ *
+ * The cost, stated plainly: the server can no longer check the file's magic
+ * bytes, because it never sees them. That check now runs in the browser before
+ * the upload starts (`looksLikePdf`), which still catches the case it existed
+ * for — a file renamed to .pdf — but is a courtesy rather than a control.
  *
  * ── Ownership on every path ──────────────────────────────────────────────────
  * Every procedure resolves the bid through requireBid first. A storage key is
@@ -21,17 +35,10 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { storagePut } from "../storage";
+import { storagePresignPut } from "../storage";
 import { detectScaleFromText, isAutoApplicable, parseScaleText } from "../../shared/planScale";
+import { checkPdfUpload } from "../../shared/uploadLimits";
 import * as db from "../db";
-
-/**
- * Refused above this size. Set below the 50MB express body limit because a data
- * URL is base64 — about 4/3 the size of the file — so a 30MB PDF arrives as
- * roughly 40MB of JSON, and anything larger dies in the body parser where the
- * user gets a dead connection instead of an explanation.
- */
-const MAX_PDF_BYTES = 30 * 1024 * 1024;
 
 /** Filenames are shown, never used as a path. Kept sane rather than sanitised. */
 const filenameSchema = z.string().trim().min(1).max(512);
@@ -90,57 +97,77 @@ export const bidPdfsRouter = router({
     }),
 
   /**
-   * Attach one PDF to a bid.
+   * Step 1 of attaching a plan: check it, and hand back somewhere to put it.
    *
-   * Rejects a non-PDF by checking the actual bytes rather than trusting the
-   * filename: `%PDF-` is the file's magic number, and a renamed .docx would
-   * otherwise attach cleanly and then fail to open with nothing explaining why.
+   * Nothing is recorded yet. A ticket is permission to upload, not a promise
+   * that anything did — `confirmAttach` is what creates the row, so a transfer
+   * the user cancels or that fails halfway leaves no half-attached sheet in the
+   * list.
+   *
+   * Validation runs here as well as in the browser because a client check is a
+   * courtesy, not a control: the size is declared by the caller and must be
+   * bounded before a signed URL is issued for it.
    */
-  attach: protectedProcedure
+  createUploadTicket: protectedProcedure
     .input(z.object({
       bidId: z.number().int().positive(),
-      dataUrl: z.string().min(1),
       filename: filenameSchema,
+      byteSize: z.number().int().min(1),
     }))
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
 
-      const base64 = input.dataUrl.split(",")[1];
-      if (!base64) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "That file could not be read." });
-      }
-      const buffer = Buffer.from(base64, "base64");
-
-      if (buffer.byteLength === 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "That file is empty." });
-      }
-      if (buffer.byteLength > MAX_PDF_BYTES) {
-        const mb = (buffer.byteLength / (1024 * 1024)).toFixed(1);
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `That PDF is ${mb}MB. The limit is ${MAX_PDF_BYTES / (1024 * 1024)}MB — split the sheet set and attach it in parts.`,
-        });
-      }
-      if (buffer.subarray(0, 5).toString("latin1") !== "%PDF-") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "That file is not a PDF. Plans must be PDFs — export from your viewer and try again.",
-        });
+      const check = checkPdfUpload({ filename: input.filename, byteSize: input.byteSize });
+      if (!check.ok) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: check.message });
       }
 
-      const { key } = await storagePut(
+      const { key, uploadUrl } = await storagePresignPut(
         `bid-plans/${ctx.user.id}/${input.bidId}/${input.filename}`,
-        buffer,
         "application/pdf"
       );
+
+      return { uploadUrl, storageKey: key };
+    }),
+
+  /**
+   * Step 2: the bytes are in storage — record the sheet.
+   *
+   * The storage key has to be one this server just issued for this user, which
+   * the path prefix carries. Without that check a caller could point a row at
+   * any object in the bucket, including another contractor's plans, simply by
+   * naming its key.
+   */
+  confirmAttach: protectedProcedure
+    .input(z.object({
+      bidId: z.number().int().positive(),
+      filename: filenameSchema,
+      storageKey: z.string().min(1).max(1024),
+      byteSize: z.number().int().min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      await requireBid(input.bidId, ctx.user.id);
+
+      const check = checkPdfUpload({ filename: input.filename, byteSize: input.byteSize });
+      if (!check.ok) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: check.message });
+      }
+
+      const expectedPrefix = `bid-plans/${ctx.user.id}/${input.bidId}/`;
+      if (!input.storageKey.startsWith(expectedPrefix)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "That upload does not belong to this bid.",
+        });
+      }
 
       const sortOrder = await db.nextBidPdfSortOrder(input.bidId, ctx.user.id);
       const id = await db.createBidPdf({
         bidId: input.bidId,
         userId: ctx.user.id,
         filename: input.filename,
-        storageKey: key,
-        byteSize: buffer.byteLength,
+        storageKey: input.storageKey,
+        byteSize: input.byteSize,
         sortOrder,
       });
 

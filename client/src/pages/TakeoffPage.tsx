@@ -51,14 +51,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SheetIndex } from "@/components/takeoff/SheetIndex";
 import { ScaleControl } from "@/components/takeoff/ScaleControl";
+import { UploadProgress } from "@/components/takeoff/UploadProgress";
+import { MAX_PDF_BYTES, checkPdfUpload, formatBytes, looksLikePdf } from "@shared/uploadLimits";
 
-/** Mirrors MAX_PDF_BYTES in bidPdfsRouter — refuse locally before uploading. */
-const MAX_PDF_BYTES = 30 * 1024 * 1024;
-
-const formatBytes = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+/** One in-flight (or failed) upload, as the progress list shows it. */
+type UploadJob = {
+  filename: string;
+  byteSize: number;
+  /** Bytes the browser has confirmed sent. */
+  sent: number;
+  state: "waiting" | "uploading" | "finishing" | "done" | "failed";
+  error?: string;
 };
 
 type Document = {
@@ -363,7 +366,10 @@ export default function TakeoffPage({ bidId, onBack }: {
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploads, setUploads] = useState<UploadJob[]>([]);
+  /** The transfer in flight, so it can be cancelled. */
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const uploading = uploads.some(u => u.state === "uploading" || u.state === "finishing" || u.state === "waiting");
   const [confirmRemove, setConfirmRemove] = useState<Document | null>(null);
   /**
    * Which sheets state NOT TO SCALE, by sheet id.
@@ -387,15 +393,8 @@ export default function TakeoffPage({ bidId, onBack }: {
     if (doc) void utils.bidPdfs.sheets.invalidate({ bidPdfId: doc.id });
   };
 
-  const attach = trpc.bidPdfs.attach.useMutation({
-    onSuccess: attached => {
-      toast.success(`${attached.filename} attached.`);
-      setSelectedDocId(attached.id);
-      setPage(1);
-      void utils.bidPdfs.list.invalidate({ bidId });
-    },
-    onError: error => toast.error(error.message),
-  });
+  const createTicket = trpc.bidPdfs.createUploadTicket.useMutation();
+  const confirmAttach = trpc.bidPdfs.confirmAttach.useMutation();
 
   const setPageCount = trpc.bidPdfs.setPageCount.useMutation({
     onSuccess: () => void utils.bidPdfs.list.invalidate({ bidId }),
@@ -471,36 +470,98 @@ export default function TakeoffPage({ bidId, onBack }: {
     detectScale.mutate({ id: sheet.id, sheetText: text });
   }, [sheets]);
 
+  /**
+   * Attach files: check, ticket, upload straight to storage, confirm.
+   *
+   * One at a time rather than in parallel. A 150MB set uploading alongside two
+   * others gives three progress bars all crawling and a saturated connection;
+   * sequential means the first sheet is usable while the rest arrive.
+   */
   const acceptFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setUploading(true);
-    try {
-      for (const file of Array.from(files)) {
-        if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
-          toast.error(`${file.name} is not a PDF. Plans must be PDFs.`);
-          continue;
-        }
-        if (file.size > MAX_PDF_BYTES) {
-          toast.error(
-            `${file.name} is ${formatBytes(file.size)} — the limit is ${formatBytes(MAX_PDF_BYTES)}.`
-          );
-          continue;
-        }
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
-          reader.readAsDataURL(file);
-        });
-        await attach.mutateAsync({ bidId, dataUrl, filename: file.name });
+    const queue = Array.from(files);
+    setUploads(queue.map(f => ({ filename: f.name, byteSize: f.size, sent: 0, state: "waiting" })));
+
+    for (let i = 0; i < queue.length; i++) {
+      const file = queue[i];
+      const setState = (patch: Partial<UploadJob>) =>
+        setUploads(prev => prev.map((u, n) => (n === i ? { ...u, ...patch } : u)));
+
+      // Cheap checks first, so an obviously wrong file fails instantly rather
+      // than after a long upload.
+      const check = checkPdfUpload({ filename: file.name, byteSize: file.size });
+      if (!check.ok) {
+        setState({ state: "failed", error: check.message });
+        toast.error(check.message);
+        continue;
       }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "That file could not be attached.");
-    } finally {
-      setUploading(false);
-      if (fileInput.current) fileInput.current.value = "";
+
+      // The magic bytes, read from the first few bytes of the file rather than
+      // the whole thing. Catches a document renamed to .pdf, which otherwise
+      // uploads perfectly and then fails to open with nothing explaining why.
+      const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+      if (!looksLikePdf(head)) {
+        const message = `${file.name} is not a PDF inside, whatever it is named. Export a real PDF and try again.`;
+        setState({ state: "failed", error: message });
+        toast.error(message);
+        continue;
+      }
+
+      try {
+        setState({ state: "uploading" });
+        const ticket = await createTicket.mutateAsync({
+          bidId, filename: file.name, byteSize: file.size,
+        });
+
+        // XHR rather than fetch: fetch cannot report upload progress, and a
+        // 150MB transfer with no feedback is indistinguishable from a hang.
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhrRef.current = xhr;
+          xhr.open("PUT", ticket.uploadUrl, true);
+          xhr.setRequestHeader("Content-Type", "application/pdf");
+          xhr.upload.onprogress = e => {
+            if (e.lengthComputable) setState({ sent: e.loaded });
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else reject(new Error(`Storage refused the upload (${xhr.status}).`));
+          };
+          xhr.onerror = () => reject(new Error("The connection dropped during upload."));
+          xhr.onabort = () => reject(new Error("Upload cancelled."));
+          xhr.send(file);
+        });
+        xhrRef.current = null;
+
+        setState({ state: "finishing", sent: file.size });
+        const attached = await confirmAttach.mutateAsync({
+          bidId,
+          filename: file.name,
+          storageKey: ticket.storageKey,
+          byteSize: file.size,
+        });
+
+        setState({ state: "done" });
+        setSelectedDocId(attached.id);
+        setPage(1);
+        void utils.bidPdfs.list.invalidate({ bidId });
+        toast.success(`${attached.filename} attached.`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "That file could not be attached.";
+        setState({ state: "failed", error: message });
+        toast.error(message);
+      }
     }
-  }, [attach, bidId]);
+
+    // Clear only what succeeded; a failure stays on screen with its reason.
+    setUploads(prev => prev.filter(u => u.state === "failed"));
+    if (fileInput.current) fileInput.current.value = "";
+  }, [bidId, createTicket, confirmAttach, utils]);
+
+  const cancelUpload = useCallback(() => {
+    xhrRef.current?.abort();
+    xhrRef.current = null;
+  }, []);
 
   return (
     <div
@@ -548,6 +609,14 @@ export default function TakeoffPage({ bidId, onBack }: {
           )}
         </div>
       </div>
+
+      {/* Above the workspace rather than inside the empty state, so it is in
+          the same place whether this is the first plan or the tenth. */}
+      <UploadProgress
+        jobs={uploads}
+        onCancel={cancelUpload}
+        onDismiss={index => setUploads(prev => prev.filter((_, n) => n !== index))}
+      />
 
       {isLoading ? (
         <div className="flex-1 p-6">
