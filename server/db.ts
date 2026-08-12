@@ -23,6 +23,7 @@ import {
   InsertModifier,
   Modifier,
   ModifierStatus,
+  LibraryStatus,
   modifiers,
   InsertAssembly,
   Assembly,
@@ -827,8 +828,166 @@ export function mergeLibraryRows<T extends { id: number; userId: number | null; 
   return rows.filter(row => !(row.userId === null && supersededBaselineIds.has(row.id)));
 }
 
+// ─── Library lifecycle (archive / restore / delete forever) ───────────────────
+/**
+ * The remove-is-recoverable rules, shared by every library table.
+ *
+ * Modifiers has worked this way since Foundation; materials, assemblies and
+ * kits used to set `isActive = false` instead, which hid a row with no way back
+ * — a delete wearing a softer name. These functions are that Modifiers
+ * behaviour lifted out so all four tables genuinely share it rather than
+ * growing four versions that drift.
+ *
+ * Two rules carry the whole design, and both are here rather than in a router:
+ *
+ *   1. **A starter is forked before it is archived.** Starter rows are shared
+ *      with every other user, so one cannot be archived in place. Forking first
+ *      gives this user their own row to archive, and the fork is what hides the
+ *      starter from their list.
+ *
+ *   2. **Deleting forever tombstones a fork rather than dropping it.** The fork
+ *      is the only thing suppressing the shared starter, so actually deleting
+ *      the row would resurrect the very item the user just said to remove for
+ *      good. A from-scratch row has nothing to suppress and is really deleted.
+ *
+ * No expiry, deliberately. An archived BID holds uploaded plans and is purged
+ * after 30 days; these are small records, so keeping one costs nothing and a
+ * countdown would only invent a deadline for the user to miss.
+ */
+const LIFECYCLE_TABLES = { materials, assemblies, kits, modifiers } as const;
+export type LibraryTableName = keyof typeof LIFECYCLE_TABLES;
+
+/** One row's lifecycle columns, whichever table it came from. */
+type LifecycleRow = { id: number; userId: number | null; baselineId: number | null };
+
+async function readLifecycleRow(
+  table: LibraryTableName,
+  id: number,
+  userId: number
+): Promise<LifecycleRow | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const t = LIFECYCLE_TABLES[table];
+  const [row] = await db.select({ id: t.id, userId: t.userId, baselineId: t.baselineId })
+    .from(t as never)
+    .where(and(eq(t.id, id), eq(t.userId, userId)))
+    .limit(1);
+  return row as LifecycleRow | undefined;
+}
+
+/**
+ * Write the lifecycle columns on one of the user's own rows.
+ *
+ * The switch is dispatch, not logic — drizzle needs the concrete table to type
+ * an update. Every rule lives in the callers below, once.
+ */
+async function setLifecycle(
+  table: LibraryTableName,
+  id: number,
+  userId: number,
+  patch: { status: LibraryStatus; archivedAt: Date | null }
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const now = new Date();
+  const values = { ...patch, updatedAt: now };
+
+  switch (table) {
+    case "materials":
+      await db.update(materials).set(values)
+        .where(and(eq(materials.id, id), eq(materials.userId, userId)));
+      return;
+    case "assemblies":
+      await db.update(assemblies).set(values)
+        .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
+      return;
+    case "kits":
+      await db.update(kits).set(values)
+        .where(and(eq(kits.id, id), eq(kits.userId, userId)));
+      return;
+    case "modifiers":
+      await db.update(modifiers).set(values)
+        .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
+      return;
+  }
+}
+
+async function hardDeleteRow(table: LibraryTableName, id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  switch (table) {
+    case "materials":
+      await db.delete(materials).where(and(eq(materials.id, id), eq(materials.userId, userId)));
+      return;
+    case "assemblies":
+      await db.delete(assemblies).where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
+      return;
+    case "kits":
+      await db.delete(kits).where(and(eq(kits.id, id), eq(kits.userId, userId)));
+      return;
+    case "modifiers":
+      await db.delete(modifiers).where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
+      return;
+  }
+}
+
+/**
+ * Archive a library row, forking a starter first (rule 1).
+ *
+ * Returns the id that ended up archived — the caller's id for an own row, or
+ * the new fork's id for a starter, which the UI needs so it can point at the
+ * row that actually moved.
+ */
+export async function archiveLibraryRow(
+  table: LibraryTableName,
+  id: number,
+  userId: number,
+  fork: (baselineId: number, userId: number) => Promise<number>,
+  read: (id: number, userId: number) => Promise<{ userId: number | null } | undefined>
+): Promise<number> {
+  const target = await read(id, userId);
+  if (!target) throw new Error("Not found");
+
+  const ownId = target.userId === null ? await fork(id, userId) : id;
+  await setLifecycle(table, ownId, userId, { status: "archived", archivedAt: new Date() });
+  return ownId;
+}
+
+/** Put an archived row back on the working list. */
+export async function restoreLibraryRow(
+  table: LibraryTableName,
+  id: number,
+  userId: number
+): Promise<void> {
+  await setLifecycle(table, id, userId, { status: "active", archivedAt: null });
+}
+
+/**
+ * Permanent, unrecoverable removal — only ever reached from the archive view.
+ *
+ * Tombstones a fork rather than dropping it (rule 2). Either way the row is
+ * gone from every view for good.
+ */
+export async function deleteLibraryRowForever(
+  table: LibraryTableName,
+  id: number,
+  userId: number
+): Promise<void> {
+  const row = await readLifecycleRow(table, id, userId);
+  if (!row) throw new Error("Not found");
+
+  if (row.baselineId == null) {
+    await hardDeleteRow(table, id, userId);
+    return;
+  }
+  await setLifecycle(table, id, userId, { status: "deleted", archivedAt: null });
+}
+
 /** Baseline rows plus the user's own, forked baselines collapsed away. */
-export async function getLibraryMaterials(userId: number): Promise<Material[]> {
+export async function getLibraryMaterials(
+  userId: number,
+  status: LibraryStatus = "active"
+): Promise<Material[]> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(materials)
@@ -837,7 +996,10 @@ export async function getLibraryMaterials(userId: number): Promise<Material[]> {
       eq(materials.isActive, true)
     ))
     .orderBy(asc(materials.name));
-  return mergeLibraryRows(rows, userId);
+  // Merge first, then filter by status: an archived FORK must still suppress
+  // its starter, or archiving your edited copy would bring the shipped one
+  // back in its place — which reads as the delete having failed.
+  return mergeLibraryRows(rows, userId).filter(row => row.status === status);
 }
 
 /** A single material the user is allowed to see — their own, or a baseline. */
@@ -878,11 +1040,21 @@ export async function updateMaterial(id: number, userId: number, data: Partial<I
 }
 
 /** Soft-delete one of the user's own materials — assemblies may still point at it. */
-export async function deactivateMaterial(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("DB unavailable");
-  await db.update(materials).set({ isActive: false, updatedAt: new Date() })
-    .where(and(eq(materials.id, id), eq(materials.userId, userId)));
+/**
+ * Archive a material — recoverable, unlike the `isActive = false` this replaces.
+ *
+ * Forks a starter first; see archiveLibraryRow for why.
+ */
+export async function archiveMaterial(id: number, userId: number): Promise<number> {
+  return archiveLibraryRow("materials", id, userId, forkMaterial, getMaterialById);
+}
+
+export async function restoreMaterial(id: number, userId: number) {
+  return restoreLibraryRow("materials", id, userId);
+}
+
+export async function deleteMaterialForever(id: number, userId: number) {
+  return deleteLibraryRowForever("materials", id, userId);
 }
 
 /**
@@ -1411,7 +1583,10 @@ export type AssemblyDetail = Assembly & {
 };
 
 /** Starter assemblies plus the user's own, forked starters collapsed away. */
-export async function getLibraryAssemblies(userId: number): Promise<Assembly[]> {
+export async function getLibraryAssemblies(
+  userId: number,
+  status: LibraryStatus = "active"
+): Promise<Assembly[]> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(assemblies)
@@ -1420,7 +1595,8 @@ export async function getLibraryAssemblies(userId: number): Promise<Assembly[]> 
       eq(assemblies.isActive, true)
     ))
     .orderBy(asc(assemblies.name));
-  return mergeLibraryRows(rows, userId);
+  // See getLibraryMaterials on why the merge happens before the filter.
+  return mergeLibraryRows(rows, userId).filter(row => row.status === status);
 }
 
 export async function getAssemblyById(id: number, userId: number): Promise<Assembly | undefined> {
@@ -1495,11 +1671,17 @@ export async function updateAssembly(id: number, userId: number, data: Partial<I
 }
 
 /** Soft-delete — projects may already reference this assembly. */
-export async function deactivateAssembly(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("DB unavailable");
-  await db.update(assemblies).set({ isActive: false, updatedAt: new Date() })
-    .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
+/** Archive an assembly — recoverable. See archiveLibraryRow. */
+export async function archiveAssembly(id: number, userId: number): Promise<number> {
+  return archiveLibraryRow("assemblies", id, userId, forkAssembly, getAssemblyById);
+}
+
+export async function restoreAssembly(id: number, userId: number) {
+  return restoreLibraryRow("assemblies", id, userId);
+}
+
+export async function deleteAssemblyForever(id: number, userId: number) {
+  return deleteLibraryRowForever("assemblies", id, userId);
 }
 
 /** Replace an assembly's material lines wholesale. */
@@ -2218,7 +2400,10 @@ export type KitItemLine = {
 export type KitDetail = Kit & { items: KitItemLine[] };
 
 /** Starter kits plus the user's own, forked starters collapsed away. */
-export async function getLibraryKits(userId: number): Promise<Kit[]> {
+export async function getLibraryKits(
+  userId: number,
+  status: LibraryStatus = "active"
+): Promise<Kit[]> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db.select().from(kits)
@@ -2227,7 +2412,8 @@ export async function getLibraryKits(userId: number): Promise<Kit[]> {
       eq(kits.isActive, true)
     ))
     .orderBy(asc(kits.name));
-  return mergeLibraryRows(rows, userId);
+  // See getLibraryMaterials on why the merge happens before the filter.
+  return mergeLibraryRows(rows, userId).filter(row => row.status === status);
 }
 
 export async function getKitById(id: number, userId: number): Promise<Kit | undefined> {
@@ -2281,11 +2467,17 @@ export async function updateKit(id: number, userId: number, data: Partial<Insert
     .where(and(eq(kits.id, id), eq(kits.userId, userId)));
 }
 
-export async function deactivateKit(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("DB unavailable");
-  await db.update(kits).set({ isActive: false, updatedAt: new Date() })
-    .where(and(eq(kits.id, id), eq(kits.userId, userId)));
+/** Archive a kit — recoverable. See archiveLibraryRow. */
+export async function archiveKit(id: number, userId: number): Promise<number> {
+  return archiveLibraryRow("kits", id, userId, forkKit, getKitById);
+}
+
+export async function restoreKit(id: number, userId: number) {
+  return restoreLibraryRow("kits", id, userId);
+}
+
+export async function deleteKitForever(id: number, userId: number) {
+  return deleteLibraryRowForever("kits", id, userId);
 }
 
 /** Replace a kit's contents wholesale — same rule as assembly children. */

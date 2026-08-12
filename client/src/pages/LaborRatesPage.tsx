@@ -23,6 +23,8 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { selectOnFocus } from "@/lib/selectOnFocus";
+import { ScopeFilter } from "@/components/library/LibraryControls";
+import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
 import { Check, HardHat, Pencil, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -348,6 +350,9 @@ export default function LaborRatesPage() {
 
   const utils = trpc.useUtils();
   const { data: rates = [], isLoading } = trpc.laborRates.list.useQuery();
+  const [scope, setScope] = useState<LibraryScope>("all");
+  /** Scope is a view filter only — labor rates have no archive of their own. */
+  // (scope is applied in `visible` below, alongside the search filter)
 
   /**
    * Optimistic write helper. Snapshots the list, applies `apply` to the cache
@@ -426,9 +431,11 @@ export default function LaborRatesPage() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rates as LaborRate[];
-    return (rates as LaborRate[]).filter(r => r.name.toLowerCase().includes(q));
-  }, [rates, query]);
+    // Scope before search, so the count on the filter matches what shows.
+    const inScope = filterByScope(rates as LaborRate[], scope);
+    if (!q) return inScope;
+    return inScope.filter(r => r.name.toLowerCase().includes(q));
+  }, [rates, query, scope]);
 
   const handleSave = useCallback((id: number, draft: Draft) => {
     updateRate.mutate({

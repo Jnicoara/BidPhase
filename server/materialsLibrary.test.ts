@@ -11,7 +11,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { eq, inArray, isNull } from "drizzle-orm";
 import {
   createMaterial,
-  deactivateMaterial,
+  archiveMaterial,
   forkMaterial,
   getDb,
   getLibraryMaterials,
@@ -327,10 +327,23 @@ describe.skipIf(!hasDb)("ownership", () => {
     expect(after?.name).toBe(before?.name);
   });
 
-  it("baseline rows cannot be deactivated by a user", async () => {
-    await deactivateMaterial(baselineId, USER);
-    const rows = await getLibraryMaterials(USER);
-    expect(rows.some(r => r.id === baselineId)).toBe(true);
+  it("archiving a baseline row forks it first, leaving the shared row alone", async () => {
+    // The db helper is shared with Modifiers, where hiding a starter IS
+    // allowed, so it forks and archives the fork rather than touching the row
+    // every user sees. The baseline itself survives untouched — what changes is
+    // that this user's merged view no longer surfaces it.
+    //
+    // Materials never reach this path in practice: materialsRouter.archive
+    // refuses a starter outright, which is where that policy lives and where
+    // server/libraryArchive.test.ts asserts it.
+    await archiveMaterial(baselineId, USER);
+
+    const baseline = await getMaterialById(baselineId, OTHER_USER);
+    expect(baseline).toBeDefined();
+    expect(baseline!.status).toBe("active");
+
+    const archived = await getLibraryMaterials(USER, "archived");
+    expect(archived.some(r => r.baselineId === baselineId)).toBe(true);
   });
 
   it("one user cannot read another user's material", async () => {
@@ -354,9 +367,9 @@ describe.skipIf(!hasDb)("ownership", () => {
     expect(row?.userId).toBe(USER);
   });
 
-  it("deactivating a user's own material removes it from the list", async () => {
+  it("archiving a user's own material removes it from the list", async () => {
     const id = await createMaterial({ userId: USER, name: "Temporary", unitOfSale: "each", costPerUnit: "1.0000" });
-    await deactivateMaterial(id, USER);
+    await archiveMaterial(id, USER);
     const rows = await getLibraryMaterials(USER);
     expect(rows.some(r => r.id === id)).toBe(false);
   });

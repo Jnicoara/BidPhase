@@ -39,8 +39,14 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  ArrowLeft, Check, Copy as CopyIcon, Layers, Pencil, Plus, RotateCcw, Search, Trash2, X,
+  Archive as ArchiveIcon, ArrowLeft, Check, Copy as CopyIcon, Layers, Pencil, Plus,
+  RotateCcw, Search, Trash2, X,
 } from "lucide-react";
+import { ScopeFilter, ViewTabs, type LibraryView } from "@/components/library/LibraryControls";
+import {
+  ArchiveItemDialog, DeleteForeverDialog, type PendingItem,
+} from "@/components/library/LibraryRemovalDialogs";
+import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -816,8 +822,14 @@ export default function AssembliesLibraryPage() {
   /** The assembly being duplicated, and the name proposed for the copy. */
   const [duplicating, setDuplicating] = useState<{ id: number; name: string } | null>(null);
 
+  const [view, setView] = useState<LibraryView>("active");
+  const [scope, setScope] = useState<LibraryScope>("all");
+  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingItem | null>(null);
+
   const utils = trpc.useUtils();
-  const { data: assemblies = [], isLoading } = trpc.assemblies.list.useQuery();
+  const { data: assemblies = [], isLoading } = trpc.assemblies.list.useQuery({ status: view });
+  const { data: archivedRows = [] } = trpc.assemblies.list.useQuery({ status: "archived" });
   const detailQuery = trpc.assemblies.get.useQuery(
     { id: editingId ?? 0 },
     { enabled: editingId !== null }
@@ -861,30 +873,31 @@ export default function AssembliesLibraryPage() {
     onSettled: refresh,
   });
 
-  const removeAssembly = trpc.assemblies.remove.useMutation({
-    onMutate: async vars => {
-      await utils.assemblies.list.cancel();
-      const previous = utils.assemblies.list.getData();
-      utils.assemblies.list.setData(undefined, old =>
-        (old ?? []).filter(a => a.id !== vars.id) as typeof old
-      );
-      return { previous };
-    },
-    onError: (error, _vars, context) => {
-      if (context?.previous !== undefined) {
-        utils.assemblies.list.setData(undefined, context.previous as never);
-      }
-      toast.error(error.message);
-    },
+  const archiveAssembly = trpc.assemblies.archive.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: () => toast.success("Archived — restore it any time from the Archived tab."),
+    onSettled: refresh,
+  });
+
+  const restoreAssembly = trpc.assemblies.restore.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: () => toast.success("Back in the working list."),
+    onSettled: refresh,
+  });
+
+  const deleteAssemblyForever = trpc.assemblies.deleteForever.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: () => toast.success("Deleted permanently."),
     onSettled: refresh,
   });
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const rows = assemblies as Assembly[];
+    // Scope before search, so the count on the filter matches what shows.
+    const rows = filterByScope(assemblies as Assembly[], scope);
     if (!q) return rows;
     return rows.filter(a => a.name.toLowerCase().includes(q) || a.category.toLowerCase().includes(q));
-  }, [assemblies, query]);
+  }, [assemblies, query, scope]);
 
   const grouped = useMemo(() => {
     const byCategory = new Map<string, Assembly[]>();
@@ -1013,6 +1026,11 @@ export default function AssembliesLibraryPage() {
           />
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <ViewTabs view={view} onChange={setView} archivedCount={archivedRows.length} />
+          <ScopeFilter scope={scope} onChange={setScope} counts={scopeCounts(assemblies as Assembly[])} />
+        </div>
+
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
             <span className="flex-1">Assembly</span>
@@ -1081,15 +1099,34 @@ export default function AssembliesLibraryPage() {
                       >
                         <CopyIcon className="w-3.5 h-3.5" />
                       </Button>
-                      {assembly.userId !== null && (
+                      {view === "archived" ? (
+                        <>
+                          <Button
+                            size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+                            onClick={() => restoreAssembly.mutate({ id: assembly.id })}
+                            aria-label={`Restore ${assembly.name}`}
+                          >
+                            <RotateCcw className="w-3 h-3" /> Restore
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => setPendingDelete({ id: assembly.id, name: assembly.name })}
+                            title="Delete permanently — cannot be undone"
+                            aria-label={`Delete ${assembly.name} forever`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </>
+                      ) : assembly.userId !== null && (
                         <Button
                           size="sm" variant="ghost"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                          onClick={() => removeAssembly.mutate({ id: assembly.id })}
-                          title="Remove from your library"
-                          aria-label={`Remove ${assembly.name}`}
+                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                          onClick={() => setPendingArchive({ id: assembly.id, name: assembly.name })}
+                          title="Archive — out of the working list, restorable any time"
+                          aria-label={`Archive ${assembly.name}`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <ArchiveIcon className="w-3.5 h-3.5" />
                         </Button>
                       )}
                     </div>
@@ -1148,6 +1185,21 @@ export default function AssembliesLibraryPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ArchiveItemDialog
+        pending={pendingArchive}
+        noun="assembly"
+        stillUsedNote="Bids that already use it are untouched — their line items froze their costs when they were added."
+        onClose={() => setPendingArchive(null)}
+        onConfirm={id => archiveAssembly.mutate({ id })}
+      />
+      <DeleteForeverDialog
+        pending={pendingDelete}
+        noun="assembly"
+        keepsNote="Bids that already used it keep the costs they were priced with."
+        onClose={() => setPendingDelete(null)}
+        onConfirm={id => deleteAssemblyForever.mutate({ id })}
+      />
     </div>
   );
 }

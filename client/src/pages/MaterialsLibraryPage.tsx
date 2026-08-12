@@ -15,7 +15,9 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { selectOnFocus } from "@/lib/selectOnFocus";
-import { Boxes, Check, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import {
+  Archive as ArchiveIcon, Boxes, Check, Loader2, Pencil, Plus, RotateCcw, Search, Trash2, X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -23,6 +25,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { smartSearch } from "@/lib/smartSearch";
+import { ScopeFilter, ViewTabs, type LibraryView } from "@/components/library/LibraryControls";
+import {
+  ArchiveItemDialog, DeleteForeverDialog, type PendingItem,
+} from "@/components/library/LibraryRemovalDialogs";
+import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
@@ -158,21 +165,27 @@ function MaterialRow({
   material,
   isBusy,
   showCategory,
+  isArchived,
   onSave,
   onRevert,
   onRemove,
+  onRestore,
+  onDeleteForever,
 }: {
   material: Material;
   isBusy: boolean;
   /** True while searching, where the flat list has no section header to lean on. */
   showCategory: boolean;
+  /** Rendering the Archived view — different actions, no inline editing. */
+  isArchived?: boolean;
   onSave: (id: number, draft: Draft) => Promise<void>;
   onRevert: (material: Material) => void;
   onRemove: (material: Material) => void;
+  onRestore?: (material: Material) => void;
+  onDeleteForever?: (material: Material) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
-  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const startEditing = () => {
     setDraft({
@@ -287,33 +300,40 @@ function MaterialRow({
           </Button>
         )}
 
-        {material.userId !== null && (
-          confirmRemove ? (
+        {/* Archived rows offer the way back and the way out; the working list
+            offers Archive. The inline "Sure?" two-step this replaced is gone —
+            the dialog says what actually happens, which "Sure?" never did. */}
+        {isArchived ? (
+          <>
             <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-              onClick={() => { setConfirmRemove(false); onRemove(material); }}
-              disabled={isBusy}
+              size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+              onClick={() => onRestore?.(material)}
+              aria-label={`Restore ${material.name}`}
             >
-              Sure?
+              <RotateCcw className="w-3 h-3" /> Restore
             </Button>
-          ) : (
             <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-              onClick={() => {
-                setConfirmRemove(true);
-                window.setTimeout(() => setConfirmRemove(false), 3000);
-              }}
-              disabled={isBusy}
-              title="Remove from your library"
-              aria-label={`Remove ${material.name}`}
+              size="sm" variant="ghost"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+              onClick={() => onDeleteForever?.(material)}
+              title="Delete permanently — cannot be undone"
+              aria-label={`Delete ${material.name} forever`}
             >
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
-          )
+          </>
+        ) : material.userId !== null && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+            onClick={() => onRemove(material)}
+            disabled={isBusy}
+            title="Archive — out of the working list, restorable any time"
+            aria-label={`Archive ${material.name}`}
+          >
+            <ArchiveIcon className="w-3.5 h-3.5" />
+          </Button>
         )}
       </div>
     </div>
@@ -328,18 +348,38 @@ export default function MaterialsLibraryPage() {
   const [newDraft, setNewDraft] = useState<Draft>(emptyDraft);
   const [busyId, setBusyId] = useState<number | null>(null);
 
-  const { data: materials = [], isLoading, refetch } = trpc.materials.list.useQuery();
+  const [view, setView] = useState<LibraryView>("active");
+  const [scope, setScope] = useState<LibraryScope>("all");
+  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingItem | null>(null);
+
+  const { data: materials = [], isLoading, refetch } = trpc.materials.list.useQuery({ status: view });
+  const { data: archivedRows = [] } = trpc.materials.list.useQuery({ status: "archived" });
 
   const onError = (e: { message: string }) => toast.error(e.message);
+  const utils = trpc.useUtils();
+  const refreshAll = () => { void utils.materials.list.invalidate(); void refetch(); };
 
   const createMaterial = trpc.materials.create.useMutation({ onError });
   const updateMaterial = trpc.materials.update.useMutation({ onError });
   const revertMaterial = trpc.materials.revert.useMutation({ onError });
-  const deactivateMaterial = trpc.materials.deactivate.useMutation({ onError });
+
+  const archiveMaterial = trpc.materials.archive.useMutation({
+    onError,
+    onSuccess: () => { toast.success("Archived — restore it any time."); refreshAll(); },
+  });
+  const restoreMaterial = trpc.materials.restore.useMutation({
+    onError,
+    onSuccess: () => { toast.success("Back in the working list."); refreshAll(); },
+  });
+  const deleteForever = trpc.materials.deleteForever.useMutation({
+    onError,
+    onSuccess: () => { toast.success("Deleted permanently."); refreshAll(); },
+  });
 
   const isBusy =
     createMaterial.isPending || updateMaterial.isPending ||
-    revertMaterial.isPending || deactivateMaterial.isPending;
+    revertMaterial.isPending || archiveMaterial.isPending;
 
   // smartSearch caches its index by array identity, so this must stay memoised.
   //
@@ -365,13 +405,16 @@ export default function MaterialsLibraryPage() {
   const searching = query.trim().length > 0;
 
   const visible = useMemo(() => {
-    if (!searching) return materials;
+    // Scope first: "Mine" is about what you own, and applying it before the
+    // search means the result count matches what the filter promised.
+    const inScope = filterByScope(materials, scope);
+    if (!searching) return inScope;
     const hits = smartSearch(searchable, query, 500);
     const order = new Map(hits.map((hit, index) => [Number(hit.id), index]));
-    return materials
+    return inScope
       .filter(m => order.has(m.id))
       .sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-  }, [materials, searchable, query, searching]);
+  }, [materials, searchable, query, searching, scope]);
 
   /**
    * Browsing shelves the catalog by category, in the declared order, with
@@ -432,18 +475,10 @@ export default function MaterialsLibraryPage() {
     }
   }, [revertMaterial, refetch]);
 
-  const handleRemove = useCallback(async (material: Material) => {
-    setBusyId(material.id);
-    try {
-      await deactivateMaterial.mutateAsync({ id: material.id });
-      toast.success(`Removed "${material.name}"`);
-      await refetch();
-    } catch {
-      /* handled by onError */
-    } finally {
-      setBusyId(null);
-    }
-  }, [deactivateMaterial, refetch]);
+  /** Asks first. The archive itself happens from the dialog's confirm. */
+  const handleRemove = useCallback((material: Material) => {
+    setPendingArchive({ id: material.id, name: material.name });
+  }, []);
 
   const handleCreate = useCallback(async () => {
     const problem = validateDraft(newDraft);
@@ -505,6 +540,11 @@ export default function MaterialsLibraryPage() {
               <X className="w-3.5 h-3.5" />
             </button>
           )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <ViewTabs view={view} onChange={setView} archivedCount={archivedRows.length} />
+          <ScopeFilter scope={scope} onChange={setScope} counts={scopeCounts(materials)} />
         </div>
 
         {/* Add form */}
@@ -582,6 +622,9 @@ export default function MaterialsLibraryPage() {
                 onSave={handleSave}
                 onRevert={handleRevert}
                 onRemove={handleRemove}
+                isArchived={view === "archived"}
+                onRestore={m => restoreMaterial.mutate({ id: m.id })}
+                onDeleteForever={m => setPendingDelete({ id: m.id, name: m.name })}
               />
             ))
           ) : (
@@ -602,6 +645,9 @@ export default function MaterialsLibraryPage() {
                     onSave={handleSave}
                     onRevert={handleRevert}
                     onRemove={handleRemove}
+                    isArchived={view === "archived"}
+                    onRestore={m => restoreMaterial.mutate({ id: m.id })}
+                    onDeleteForever={m => setPendingDelete({ id: m.id, name: m.name })}
                   />
                 ))}
               </div>
@@ -610,10 +656,26 @@ export default function MaterialsLibraryPage() {
         </div>
 
         <p className={cn("text-xs text-muted-foreground mt-2")}>
-          Editing a starter material gives you your own copy — the original stays untouched, and you can restore it any
-          time with the undo button.
+          {view === "active"
+            ? "Editing a starter material gives you your own copy — the original stays untouched, and you can restore it any time with the undo button. Removing one archives it rather than deleting it."
+            : "Restoring puts a material back in the working list. Deleting forever cannot be undone."}
         </p>
       </div>
+
+      <ArchiveItemDialog
+        pending={pendingArchive}
+        noun="material"
+        stillUsedNote="Assemblies that already use it keep working — an archived material keeps its place in every recipe it is part of."
+        onClose={() => setPendingArchive(null)}
+        onConfirm={id => archiveMaterial.mutate({ id })}
+      />
+      <DeleteForeverDialog
+        pending={pendingDelete}
+        noun="material"
+        keepsNote="Bids that already priced it keep the costs they were quoted at."
+        onClose={() => setPendingDelete(null)}
+        onConfirm={id => deleteForever.mutate({ id })}
+      />
     </div>
   );
 }

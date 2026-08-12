@@ -247,14 +247,14 @@ describe.skipIf(!hasDb)("materials.fork / revert", () => {
   });
 });
 
-describe.skipIf(!hasDb)("materials.deactivate", () => {
+describe.skipIf(!hasDb)("materials.archive", () => {
   it("hides the user's own material from the list", async () => {
     const mine = await caller().materials.create({
       name: "Short lived widget",
       unitOfSale: "each",
       costPerUnit: 1,
     });
-    await caller().materials.deactivate({ id: mine!.id });
+    await caller().materials.archive({ id: mine!.id });
 
     const rows = await caller().materials.list();
     expect(rows.some(r => r.id === mine!.id)).toBe(false);
@@ -262,16 +262,16 @@ describe.skipIf(!hasDb)("materials.deactivate", () => {
 
   it("refuses to remove a baseline material", async () => {
     const id = await baselineId();
-    await expect(caller().materials.deactivate({ id })).rejects.toThrow(/cannot be removed/i);
+    await expect(caller().materials.archive({ id })).rejects.toThrow(/cannot be removed/i);
   });
 
-  it("cannot deactivate another user's material", async () => {
+  it("cannot archive another user's material", async () => {
     const mine = await caller().materials.create({
       name: "Deactivate guard",
       unitOfSale: "each",
       costPerUnit: 1,
     });
-    await expect(otherCaller().materials.deactivate({ id: mine!.id })).rejects.toThrow(/not found/i);
+    await expect(otherCaller().materials.archive({ id: mine!.id })).rejects.toThrow(/not found/i);
   });
 });
 

@@ -24,8 +24,14 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  ArrowLeft, Check, Copy as CopyIcon, Package, Pencil, Plus, RotateCcw, Search, Trash2, X,
+  Archive as ArchiveIcon, ArrowLeft, Check, Copy as CopyIcon, Package, Pencil, Plus,
+  RotateCcw, Search, Trash2, X,
 } from "lucide-react";
+import { ScopeFilter, ViewTabs, type LibraryView } from "@/components/library/LibraryControls";
+import {
+  ArchiveItemDialog, DeleteForeverDialog, type PendingItem,
+} from "@/components/library/LibraryRemovalDialogs";
+import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -342,11 +348,19 @@ export default function KitsPage() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [duplicating, setDuplicating] = useState<{ id: number; name: string } | null>(null);
+  const [view, setView] = useState<LibraryView>("active");
+  const [scope, setScope] = useState<LibraryScope>("all");
+  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingItem | null>(null);
 
   const utils = trpc.useUtils();
-  const { data: kits = [], isLoading } = trpc.kits.list.useQuery();
+  const { data: kits = [], isLoading } = trpc.kits.list.useQuery({ status: view });
+  const { data: archivedRows = [] } = trpc.kits.list.useQuery({ status: "archived" });
 
   const refresh = useCallback(() => { void utils.kits.list.invalidate(); }, [utils]);
+
+  // Scope before anything else, so the count on the filter matches what shows.
+  const visibleKits = useMemo(() => filterByScope(kits, scope), [kits, scope]);
 
   const duplicateKit = trpc.kits.duplicate.useMutation({
     onError: error => toast.error(error.message),
@@ -364,17 +378,21 @@ export default function KitsPage() {
     onSettled: refresh,
   });
 
-  const removeKit = trpc.kits.remove.useMutation({
-    onMutate: async vars => {
-      await utils.kits.list.cancel();
-      const previous = utils.kits.list.getData();
-      utils.kits.list.setData(undefined, old => (old ?? []).filter(k => k.id !== vars.id) as typeof old);
-      return { previous };
-    },
-    onError: (error, _vars, context) => {
-      if (context?.previous !== undefined) utils.kits.list.setData(undefined, context.previous as never);
-      toast.error(error.message);
-    },
+  const archiveKit = trpc.kits.archive.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: () => toast.success("Archived — restore it any time from the Archived tab."),
+    onSettled: refresh,
+  });
+
+  const restoreKit = trpc.kits.restore.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: () => toast.success("Back in the working list."),
+    onSettled: refresh,
+  });
+
+  const deleteKitForever = trpc.kits.deleteForever.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: () => toast.success("Deleted permanently."),
     onSettled: refresh,
   });
 
@@ -399,6 +417,11 @@ export default function KitsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <ViewTabs view={view} onChange={setView} archivedCount={archivedRows.length} />
+          <ScopeFilter scope={scope} onChange={setScope} counts={scopeCounts(kits)} />
+        </div>
+
         <div className="rounded-xl border border-border bg-card overflow-hidden max-w-4xl">
           <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
             <span className="flex-1">Kit</span>
@@ -407,12 +430,16 @@ export default function KitsPage() {
 
           {isLoading ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading kits…</div>
-          ) : kits.length === 0 ? (
+          ) : visibleKits.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              No kits yet. Build one to bundle the assemblies you repeat.
+              {view === "archived"
+                ? "Nothing archived. Removing a kit from the working list puts it here."
+                : scope === "mine"
+                  ? "You have not created or customised any kits yet."
+                  : "No kits yet. Build one to bundle the assemblies you repeat."}
             </div>
           ) : (
-            kits.map(kit => (
+            visibleKits.map(kit => (
               <div
                 key={kit.id}
                 className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors group"
@@ -456,14 +483,34 @@ export default function KitsPage() {
                       <RotateCcw className="w-3.5 h-3.5" />
                     </Button>
                   )}
-                  {kit.userId !== null && (
+                  {view === "archived" ? (
+                    <>
+                      <Button
+                        size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+                        onClick={() => restoreKit.mutate({ id: kit.id })}
+                        aria-label={`Restore ${kit.name}`}
+                      >
+                        <RotateCcw className="w-3 h-3" /> Restore
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => setPendingDelete({ id: kit.id, name: kit.name })}
+                        title="Delete permanently — cannot be undone"
+                        aria-label={`Delete ${kit.name} forever`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </>
+                  ) : kit.userId !== null && (
                     <Button
                       size="sm" variant="ghost"
-                      className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                      onClick={() => removeKit.mutate({ id: kit.id })}
-                      aria-label={`Remove ${kit.name}`}
+                      className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                      onClick={() => setPendingArchive({ id: kit.id, name: kit.name })}
+                      title="Archive — out of the working list, restorable any time"
+                      aria-label={`Archive ${kit.name}`}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <ArchiveIcon className="w-3.5 h-3.5" />
                     </Button>
                   )}
                 </div>
@@ -516,6 +563,21 @@ export default function KitsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ArchiveItemDialog
+        pending={pendingArchive}
+        noun="kit"
+        stillUsedNote="Bids that already used it are untouched — a kit's items land as ordinary line items with their own frozen costs."
+        onClose={() => setPendingArchive(null)}
+        onConfirm={id => archiveKit.mutate({ id })}
+      />
+      <DeleteForeverDialog
+        pending={pendingDelete}
+        noun="kit"
+        keepsNote="Bids that already used it keep the line items it produced."
+        onClose={() => setPendingDelete(null)}
+        onConfirm={id => deleteKitForever.mutate({ id })}
+      />
     </div>
   );
 }

@@ -294,7 +294,7 @@ describe.skipIf(!hasDb)("kit fork and revert", () => {
   it("refuses to remove a starter kit", async () => {
     const list = await caller().kits.list();
     const starter = list.find(k => k.userId === null)!;
-    await expect(caller().kits.remove({ id: starter.id })).rejects.toThrow(/cannot be removed/i);
+    await expect(caller().kits.archive({ id: starter.id })).rejects.toThrow(/cannot be removed/i);
   });
 });
 

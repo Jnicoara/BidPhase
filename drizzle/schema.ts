@@ -339,8 +339,18 @@ export type LaborRateType = (typeof LABOR_RATE_TYPES)[number];
  * starter-derived row marks it `deleted` instead. Fully custom rows have no
  * starter to suppress and ARE hard-deleted.
  */
-export const MODIFIER_STATUSES = ["active", "archived", "deleted"] as const;
-export type ModifierStatus = (typeof MODIFIER_STATUSES)[number];
+export const LIBRARY_STATUSES = ["active", "archived", "deleted"] as const;
+export type LibraryStatus = (typeof LIBRARY_STATUSES)[number];
+
+/**
+ * Modifiers had this first; materials, assemblies and kits now share it.
+ *
+ * Kept as an alias rather than renamed everywhere so the enum's stored values
+ * are provably identical across the four tables — a second list with the same
+ * three strings is a list that can drift.
+ */
+export const MODIFIER_STATUSES = LIBRARY_STATUSES;
+export type ModifierStatus = LibraryStatus;
 
 /**
  * Residential / Commercial / Both — a FILTER on the assembly library, never a
@@ -423,6 +433,20 @@ export const materials = mysqlTable(
      */
     defaultQty: decimal("defaultQty", { precision: 10, scale: 4 }),
 
+    /**
+     * active / archived / deleted — the lifecycle Modifiers has had since
+     * Foundation, extended here so removing a material is recoverable.
+     *
+     * Archived rows are hidden from every working list but keep their id, so
+     * anything that referenced one still resolves. Unlike an archived BID there
+     * is no expiry: these are lightweight records with no attached files, so
+     * keeping one costs nothing and a countdown would only invent a deadline
+     * for the user to miss.
+     */
+    status: mysqlEnum("status", LIBRARY_STATUSES).default("active").notNull(),
+    /** When it was archived. Shown in the archive; nothing expires from it. */
+    archivedAt: timestamp("archivedAt"),
+
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -430,6 +454,8 @@ export const materials = mysqlTable(
   t => [
     index("materials_userId_idx").on(t.userId),
     index("materials_baselineId_idx").on(t.baselineId),
+    index("materials_status_idx").on(t.status),
+    index("materials_status_idx").on(t.status),
   ]
 );
 
@@ -547,6 +573,10 @@ export const assemblies = mysqlTable(
      */
     laborRateId: int("laborRateId").references(() => laborRates.id, { onDelete: "set null" }),
 
+    /** active / archived / deleted. See materials.status — same lifecycle. */
+    status: mysqlEnum("status", LIBRARY_STATUSES).default("active").notNull(),
+    archivedAt: timestamp("archivedAt"),
+
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -554,6 +584,8 @@ export const assemblies = mysqlTable(
   t => [
     index("assemblies_userId_idx").on(t.userId),
     index("assemblies_baselineId_idx").on(t.baselineId),
+    index("assemblies_status_idx").on(t.status),
+    index("assemblies_status_idx").on(t.status),
     index("assemblies_category_idx").on(t.category),
     index("assemblies_trade_idx").on(t.trade),
   ]
@@ -936,6 +968,10 @@ export const kits = mysqlTable(
     name: varchar("name", { length: 255 }).notNull(),
     description: varchar("description", { length: 512 }),
 
+    /** active / archived / deleted. See materials.status — same lifecycle. */
+    status: mysqlEnum("status", LIBRARY_STATUSES).default("active").notNull(),
+    archivedAt: timestamp("archivedAt"),
+
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -943,6 +979,8 @@ export const kits = mysqlTable(
   t => [
     index("kits_userId_idx").on(t.userId),
     index("kits_baselineId_idx").on(t.baselineId),
+    index("kits_status_idx").on(t.status),
+    index("kits_status_idx").on(t.status),
   ]
 );
 

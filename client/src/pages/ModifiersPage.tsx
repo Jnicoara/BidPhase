@@ -23,6 +23,9 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { selectOnFocus } from "@/lib/selectOnFocus";
+import { ScopeFilter } from "@/components/library/LibraryControls";
+import { ArchiveItemDialog, type PendingItem } from "@/components/library/LibraryRemovalDialogs";
+import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
 import { Archive, ArchiveRestore, Check, Pencil, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -268,7 +271,10 @@ export default function ModifiersPage() {
   const activeQuery = trpc.modifiers.list.useQuery({ status: "active" });
   const archivedQuery = trpc.modifiers.list.useQuery({ status: "archived" });
 
-  const active = (activeQuery.data ?? []) as Modifier[];
+  const activeAll = (activeQuery.data ?? []) as Modifier[];
+  const [scope, setScope] = useState<LibraryScope>("all");
+  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(null);
+  const active = filterByScope(activeAll, scope);
   const archived = (archivedQuery.data ?? []) as Modifier[];
 
   /** Both lists move together — archiving takes a row from one to the other. */
@@ -508,7 +514,7 @@ export default function ModifiersPage() {
                   modifier={modifier}
                   onSave={handleSave}
                   onRevert={m => revertModifier.mutate({ id: m.id })}
-                  onArchive={m => archiveModifier.mutate({ id: m.id })}
+                  onArchive={m => setPendingArchive({ id: m.id, name: m.name })}
                 />
               ))
             )

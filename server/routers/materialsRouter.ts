@@ -12,7 +12,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { MATERIAL_CATEGORIES, MATERIAL_UNITS_OF_SALE } from "../../drizzle/schema";
+import { LIBRARY_STATUSES, MATERIAL_CATEGORIES, MATERIAL_UNITS_OF_SALE } from "../../drizzle/schema";
 import * as db from "../db";
 
 /** decimal(10,4) — four decimal places, and it must stay under 10 total digits. */
@@ -33,10 +33,14 @@ const aliasSchema = z.string().trim().max(1024).nullable();
 const toDecimal = (value: number) => value.toFixed(4);
 
 export const materialsRouter = router({
-  /** Baseline rows plus the user's own, with forked baselines collapsed away. */
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return db.getLibraryMaterials(ctx.user.id);
-  }),
+  /** The working list, or the archive. Never returns `deleted` tombstones. */
+  list: protectedProcedure
+    .input(z.object({
+      status: z.enum(LIBRARY_STATUSES).exclude(["deleted"]).default("active"),
+    }).optional())
+    .query(async ({ input, ctx }) => {
+      return db.getLibraryMaterials(ctx.user.id, input?.status ?? "active");
+    }),
 
   /**
    * The materials this user reached for most recently, newest first.
@@ -159,11 +163,17 @@ export const materialsRouter = router({
     }),
 
   /**
-   * Hide a material. Soft-delete, because assemblies may already reference it.
-   * Baseline rows cannot be hidden — the user is expected to ignore what they
+   * "Delete" from the working list — actually an archive, always recoverable.
+   *
+   * The same lifecycle Modifiers has used since Foundation. It used to set
+   * `isActive = false`, which hid the row with no way back: a delete wearing a
+   * softer name. Assemblies may already reference the material, so it keeps its
+   * id either way.
+   *
+   * Baseline rows cannot be archived — the user is expected to ignore what they
    * do not use rather than curate the shipped library.
    */
-  deactivate: protectedProcedure
+  archive: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getMaterialById(input.id, ctx.user.id);
@@ -174,8 +184,42 @@ export const materialsRouter = router({
           message: "Materials from the starter library cannot be removed.",
         });
       }
+      if (target.status === "archived") return { id: input.id, alreadyArchived: true };
 
-      await db.deactivateMaterial(input.id, ctx.user.id);
+      const archivedId = await db.archiveMaterial(input.id, ctx.user.id);
+      return { id: archivedId, alreadyArchived: false };
+    }),
+
+  /** Put an archived material back on the working list. */
+  restore: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const target = await db.getMaterialById(input.id, ctx.user.id);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Material not found." });
+      if (target.status !== "archived") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "That material is not archived." });
+      }
+      await db.restoreMaterial(input.id, ctx.user.id);
+      return { success: true };
+    }),
+
+  /**
+   * Permanent removal. Refuses anything not already archived, so there is no
+   * path from the working list straight to destruction — the user archives
+   * first, then confirms again in the Archived view.
+   */
+  deleteForever: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const target = await db.getMaterialById(input.id, ctx.user.id);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Material not found." });
+      if (target.status !== "archived") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only archived materials can be deleted permanently. Archive it first.",
+        });
+      }
+      await db.deleteMaterialForever(input.id, ctx.user.id);
       return { success: true };
     }),
 });

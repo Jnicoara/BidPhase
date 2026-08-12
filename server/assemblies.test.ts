@@ -368,14 +368,14 @@ describe.skipIf(!hasDb)("fork and revert", () => {
 
   it("refuses to remove a starter but removes a custom one", async () => {
     const original = await starter();
-    await expect(caller().assemblies.remove({ id: original.id }))
+    await expect(caller().assemblies.archive({ id: original.id }))
       .rejects.toThrow(/cannot be removed/i);
 
     const created = await caller().assemblies.create({
       name: `Disposable ${Date.now()}`, category: "Devices", trade: "electrical",
       projectType: null, baseLaborHours: 1, laborRateId: null, materials: [], modifierIds: [],
     });
-    await caller().assemblies.remove({ id: created!.id });
+    await caller().assemblies.archive({ id: created!.id });
     expect((await caller().assemblies.list()).some(a => a.id === created!.id)).toBe(false);
   });
 

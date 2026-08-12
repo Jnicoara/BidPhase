@@ -14,7 +14,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { ASSEMBLY_CATEGORIES, PROJECT_TYPES } from "../../drizzle/schema";
+import { ASSEMBLY_CATEGORIES, LIBRARY_STATUSES, PROJECT_TYPES } from "../../drizzle/schema";
 import { calculateLineItem, calculateBidPrice } from "../../shared/pricing";
 import { hourlyCostOf, resolveLaborRate } from "../../shared/laborRateLookup";
 import * as db from "../db";
@@ -69,10 +69,14 @@ const updateSchema = z.object({
 const toDecimal = (value: number) => value.toFixed(4);
 
 export const assembliesRouter = router({
-  /** Starter assemblies plus the user's own, with forked starters collapsed. */
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return db.getLibraryAssemblies(ctx.user.id);
-  }),
+  /** The working list, or the archive. Never returns `deleted` tombstones. */
+  list: protectedProcedure
+    .input(z.object({
+      status: z.enum(LIBRARY_STATUSES).exclude(["deleted"]).default("active"),
+    }).optional())
+    .query(async ({ input, ctx }) => {
+      return db.getLibraryAssemblies(ctx.user.id, input?.status ?? "active");
+    }),
 
   /** One assembly with its full recipe. */
   get: protectedProcedure
@@ -213,8 +217,12 @@ export const assembliesRouter = router({
       return db.getAssemblyDetail(input.id, ctx.user.id);
     }),
 
-  /** Hide an assembly. Soft-delete — projects may already reference it. */
-  remove: protectedProcedure
+  /**
+   * "Delete" from the working list — actually an archive, always recoverable.
+   * The same lifecycle Modifiers has used since Foundation. Bids may already
+   * reference the assembly, so it keeps its id either way.
+   */
+  archive: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getAssemblyById(input.id, ctx.user.id);
@@ -225,8 +233,41 @@ export const assembliesRouter = router({
           message: "Starter assemblies cannot be removed.",
         });
       }
+      if (target.status === "archived") return { id: input.id, alreadyArchived: true };
 
-      await db.deactivateAssembly(input.id, ctx.user.id);
+      const archivedId = await db.archiveAssembly(input.id, ctx.user.id);
+      return { id: archivedId, alreadyArchived: false };
+    }),
+
+  /** Put an archived assembly back on the working list. */
+  restore: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const target = await db.getAssemblyById(input.id, ctx.user.id);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      if (target.status !== "archived") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "That assembly is not archived." });
+      }
+      await db.restoreAssembly(input.id, ctx.user.id);
+      return { success: true };
+    }),
+
+  /**
+   * Permanent removal. Refuses anything not already archived, so there is no
+   * path from the working list straight to destruction.
+   */
+  deleteForever: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const target = await db.getAssemblyById(input.id, ctx.user.id);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      if (target.status !== "archived") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only archived assemblies can be deleted permanently. Archive it first.",
+        });
+      }
+      await db.deleteAssemblyForever(input.id, ctx.user.id);
       return { success: true };
     }),
 
