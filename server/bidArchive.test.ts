@@ -395,6 +395,59 @@ describe.skipIf(!hasDb)("the purge sweep", () => {
   });
 });
 
+describe.skipIf(!hasDb)("removing a bid never destroys it", () => {
+  // Written after an audit of the delete flow. The Bids list used to archive on
+  // a single unconfirmed click of a trash can, which raised the question these
+  // answer: whatever the UI does, can that path lose a bid?
+
+  it("archiving keeps everything — the bid, its lines, its price", async () => {
+    const bid = await newBid();
+    const before = await caller().bids.get({ id: bid.id });
+
+    await caller().bids.archive({ id: bid.id });
+
+    const after = await caller().bids.get({ id: bid.id });
+    expect(after.bid.id).toBe(before.bid.id);
+    expect(after.bid.name).toBe(before.bid.name);
+    expect(after.bid.status).toBe(before.bid.status);
+    expect(after.lines).toHaveLength(before.lines.length);
+  });
+
+  it("is fully reversible, immediately", async () => {
+    // The recovery an accidental confirmation depends on.
+    const bid = await newBid();
+    await caller().bids.archive({ id: bid.id });
+    await caller().bids.restore({ id: bid.id });
+
+    const live = await caller().bids.list();
+    expect(live.map(b => b.id)).toContain(bid.id);
+    expect(await caller().bids.archived()).toHaveLength(0);
+  });
+
+  it("exposes no procedure that hard-deletes a live bid", async () => {
+    // The one destructive procedure refuses anything not already archived, so
+    // there is no path from a list — confirmed or not — straight to
+    // destruction. A mis-click can cost at most a trip to the Archive.
+    const bid = await newBid();
+    await expect(
+      caller().bids.deleteForever({ id: bid.id })
+    ).rejects.toThrow(/archived/i);
+
+    const still = await caller().bids.get({ id: bid.id });
+    expect(still.bid.id).toBe(bid.id);
+  });
+
+  it("puts an archived bid where the user can find it again", async () => {
+    // Archiving without a way back is deletion with extra steps.
+    const bid = await newBid("Findable again");
+    await caller().bids.archive({ id: bid.id });
+
+    const archive = await caller().bids.archived();
+    expect(archive.map(b => b.name)).toContain("Findable again");
+    expect(archive[0].daysRemaining).toBeGreaterThan(0);
+  });
+});
+
 describe.skipIf(!hasDb)("deleting from the archive by hand", () => {
   it("destroys an archived bid immediately", async () => {
     const bid = await newBid();

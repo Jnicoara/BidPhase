@@ -26,10 +26,8 @@ import { Archive, CalendarDays, LayoutDashboard, Plus, Check, X } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
+import { type PendingArchive } from "@/lib/archiveBid";
 import { RETENTION_DAYS } from "@shared/retention";
 import {
   BID_STATUS_ORDER, calendarDate, dueUrgency, groupBidsByStatus, type DueUrgency,
@@ -71,7 +69,7 @@ const URGENCY_LABEL: Partial<Record<DueUrgency, string>> = {
   today: "due today",
 };
 
-type DashboardBid = { id: number; name: string };
+
 
 export default function DashboardPage({ onOpenBid, onOpenArchive }: {
   onOpenBid: (id: number) => void;
@@ -79,7 +77,7 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
 }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
-  const [confirmArchive, setConfirmArchive] = useState<DashboardBid | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState<PendingArchive | null>(null);
 
   const utils = trpc.useUtils();
   const { data: bids = [], isLoading } = trpc.bids.dashboard.useQuery();
@@ -280,7 +278,7 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
                                   the dashboard is for reading, and a delete-ish
                                   control on every card competes with that. */}
                               <button
-                                onClick={e => { e.stopPropagation(); setConfirmArchive(bid); }}
+                                onClick={e => { e.stopPropagation(); setConfirmArchive({ id: bid.id, name: bid.name }); }}
                                 className="shrink-0 -mr-1 -mt-0.5 p-1 rounded text-muted-foreground/60 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-foreground hover:bg-muted transition-all"
                                 aria-label={`Archive ${bid.name}`}
                                 title="Archive — hides it here, recoverable for 30 days"
@@ -331,29 +329,13 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
         </p>
       </div>
 
-      <AlertDialog open={confirmArchive !== null} onOpenChange={open => !open && setConfirmArchive(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Archive “{confirmArchive?.name}”?</AlertDialogTitle>
-            <AlertDialogDescription>
-              It comes off the dashboard but is not deleted — its lines, pricing and plans stay
-              exactly as they are, and its status is unchanged. You can restore it from the
-              Archive for {RETENTION_DAYS} days, after which it is deleted permanently.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (confirmArchive) archiveBid.mutate({ id: confirmArchive.id });
-                setConfirmArchive(null);
-              }}
-            >
-              Archive bid
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Shared with the Bids list so the two prompts cannot drift — an audit
+          found one page asking and the other archiving on a single click. */}
+      <ArchiveBidDialog
+        pending={confirmArchive}
+        onClose={() => setConfirmArchive(null)}
+        onArchive={id => archiveBid.mutate({ id })}
+      />
     </div>
   );
 }

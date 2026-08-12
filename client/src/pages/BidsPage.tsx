@@ -25,7 +25,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  ArrowLeft, CalendarDays, Check, FileText, Plus, Search, Trash2, X,
+  Archive, ArrowLeft, CalendarDays, Check, FileText, Plus, Search, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,9 @@ import { InlineNumberField } from "@/components/InlineNumberField";
 import { asPercent, fromPercent } from "@/lib/inlineEdit";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { DuplicateUnitPanel } from "@/components/DuplicateUnitPanel";
+import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
+import { type PendingArchive } from "@/lib/archiveBid";
+import { RETENTION_DAYS } from "@shared/retention";
 
 const STATUSES = ["Draft", "Active", "Won", "Lost"] as const;
 type Status = (typeof STATUSES)[number];
@@ -572,9 +575,11 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
   const [openId, setOpenId] = useState<number | null>(initialBidId ?? null);
   const [newName, setNewName] = useState("");
   const [adding, setAdding] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState<PendingArchive | null>(null);
 
   const utils = trpc.useUtils();
   const { data: bids = [], isLoading } = trpc.bids.list.useQuery();
+  const { data: archived = [] } = trpc.bids.archived.useQuery();
 
   const createBid = trpc.bids.create.useMutation({
     onError: error => toast.error(error.message),
@@ -582,18 +587,42 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
     onSettled: () => { void utils.bids.list.invalidate(); },
   });
 
+  const restoreBid = trpc.bids.restore.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: () => toast.success("Back on your bids list."),
+    onSettled: () => {
+      void utils.bids.list.invalidate();
+      void utils.bids.archived.invalidate();
+      void utils.bids.dashboard.invalidate();
+    },
+  });
+
   const archiveBid = trpc.bids.archive.useMutation({
     onMutate: async vars => {
       await utils.bids.list.cancel();
       const previous = utils.bids.list.getData();
+      // Captured before the optimistic removal — afterwards the row is gone
+      // from the cache and every bid would be named "Bid" in the toast.
+      const name = previous?.find(b => b.id === vars.id)?.name;
       utils.bids.list.setData(undefined, old => (old ?? []).filter(b => b.id !== vars.id) as typeof old);
-      return { previous };
+      return { previous, name };
     },
     onError: (error, _vars, context) => {
       if (context?.previous !== undefined) utils.bids.list.setData(undefined, context.previous as never);
       toast.error(error.message);
     },
-    onSettled: () => { void utils.bids.list.invalidate(); },
+    onSuccess: (_result, vars, context) => {
+      // Undo in the toast as well as the dialog before it: the dialog stops the
+      // accident, this fixes the one that got through anyway.
+      toast.success(`${context?.name ?? "Bid"} archived — ${RETENTION_DAYS} days to change your mind.`, {
+        action: { label: "Undo", onClick: () => restoreBid.mutate({ id: vars.id }) },
+      });
+    },
+    onSettled: () => {
+      void utils.bids.list.invalidate();
+      void utils.bids.archived.invalidate();
+      void utils.bids.dashboard.invalidate();
+    },
   });
 
   if (openId !== null) {
@@ -612,6 +641,17 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
               bid never moves on its own.
             </p>
           </div>
+          {/* The way back to anything archived from here. Appears once there
+              is something in it — the Dashboard carries the same entry. */}
+          {archived.length > 0 && (
+            <Button
+              size="sm" variant="ghost" className="h-8 gap-1.5 text-xs shrink-0"
+              onClick={() => { window.location.hash = "/archive"; }}
+            >
+              <Archive className="w-3.5 h-3.5" /> Archive
+              <span className="text-muted-foreground">{archived.length}</span>
+            </Button>
+          )}
           <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setAdding(v => !v)}>
             <Plus className="w-3.5 h-3.5" /> New bid
           </Button>
@@ -688,20 +728,30 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
                     month: "short", day: "numeric", year: "numeric",
                   })}
                 </span>
+                {/* An Archive icon, not a trash can: this does not delete, and
+                    dressing a recoverable action as a destructive one teaches
+                    people to fear it. Confirmation comes from the shared
+                    dialog — this used to archive on a single click. */}
                 <Button
                   size="sm" variant="ghost"
-                  className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                  onClick={() => archiveBid.mutate({ id: bid.id })}
-                  title="Archive this bid"
+                  className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                  onClick={() => setConfirmArchive({ id: bid.id, name: bid.name })}
+                  title="Archive — off this list, restorable for 30 days"
                   aria-label={`Archive ${bid.name}`}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Archive className="w-3.5 h-3.5" />
                 </Button>
               </div>
             ))
           )}
         </div>
       </div>
+
+      <ArchiveBidDialog
+        pending={confirmArchive}
+        onClose={() => setConfirmArchive(null)}
+        onArchive={id => archiveBid.mutate({ id })}
+      />
     </div>
   );
 }
