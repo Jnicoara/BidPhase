@@ -52,7 +52,7 @@ import BidArchivePage from "@/pages/BidArchivePage";
 import KitsPage from "@/pages/KitsPage";
 import FirstRunPage from "@/pages/FirstRunPage";
 import { trpc } from "@/lib/trpc";
-import { Settings, Trash2, ChevronRight, Database, Home, FolderOpen, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText, Zap, LayoutDashboard } from "lucide-react";
+import { Settings, ChevronRight, Database, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText, Zap, LayoutDashboard, Archive as ArchiveIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Route =
@@ -355,6 +355,45 @@ export default function HelixBidShell() {
     </button>
   );
 
+  /**
+   * A labelled group of nav items.
+   *
+   * ── Why it has two appearances ──────────────────────────────────────────────
+   * The sidebar is 64px of icons until you hover it, so a text heading alone
+   * would leave the grouping invisible in the state the sidebar is in almost
+   * all of the time. Collapsed, each group is separated by a hairline rule;
+   * expanded, that rule is replaced by the actual word. Either way the three
+   * purposes read as three things rather than one long list.
+   *
+   * The headings are deliberately plain nouns — Workspace, Library, Settings —
+   * naming what the group is FOR, so someone scanning top to bottom can tell
+   * daily tools from building blocks from things they touch twice a year.
+   */
+  const NavSection = ({
+    label, children,
+  }: {
+    label: string;
+    children: React.ReactNode;
+  }) => (
+    <div className="flex flex-col gap-1">
+      <div className="px-2.5 pt-3 pb-1 first:pt-1">
+        <span
+          className="hidden group-hover:block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 whitespace-nowrap"
+          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+        >
+          {label}
+        </span>
+        {/* Collapsed stand-in for the heading. aria-hidden because the group is
+            already named for assistive tech by the <nav> aria-label below. */}
+        <span
+          className="block group-hover:hidden h-px bg-sidebar-border mx-1"
+          aria-hidden
+        />
+      </div>
+      {children}
+    </div>
+  );
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background" style={{ zoom: uiFontScale }}>
       {/* ── Desktop Sidebar ─────────────────────────────────────── */}
@@ -382,111 +421,134 @@ export default function HelixBidShell() {
           </span>
         </div>
 
-        {/* Nav items — top section */}
-        <nav className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto">
-          <NavBtn
-            onClick={() => navigate("home")}
-            isActive={isOnHome}
-            icon={Home}
-            label="Home"
-            title="Home"
-          />
-          <NavBtn
-            onClick={() => navigate("dashboard")}
-            isActive={isOnDashboard || isOnProjectDetail}
-            icon={LayoutDashboard}
-            label="Dashboard"
-            title="Dashboard"
-          />
-          <NavBtn
-            onClick={() => navigate("matdb")}
-            isActive={isInMatDb}
-            icon={Package}
-            label="Material Database"
-            title="Material Database"
-          />
-          <NavBtn
-            onClick={() => navigate("assemblies")}
-            isActive={isInAssemblies}
-            icon={Database}
-            label="Assembly Builder"
-            title="Assembly Builder"
-          />
-          <NavBtn
-            onClick={() => navigate("library-materials")}
-            isActive={isInLibraryMats}
-            icon={Boxes}
-            label="Materials"
-            title="Materials (Library)"
-          />
-          <NavBtn
-            onClick={() => navigate("library-labor-rates")}
-            isActive={isInLaborRates}
-            icon={HardHat}
-            label="Labor Rates"
-            title="Labor Rates (Library)"
-          />
-          <NavBtn
-            onClick={() => navigate("library-modifiers")}
-            isActive={isInModifiers}
-            icon={SlidersHorizontal}
-            label="Modifiers"
-            title="Modifiers (Library)"
-          />
-          <NavBtn
-            onClick={() => navigate("library-assemblies")}
-            isActive={isInLibraryAsms}
-            icon={Layers}
-            label="Assemblies"
-            title="Assemblies (Library)"
-          />
-          <NavBtn
-            onClick={() => navigate("library-kits")}
-            isActive={isInLibraryKits}
-            icon={Package}
-            label="Kits"
-            title="Kits (Library)"
-          />
-          <NavBtn
-            onClick={() => navigate("quickbid")}
-            isActive={isInQuickBid}
-            icon={Zap}
-            label="Quick bid"
-            title="Quick bid — count without a plan"
-          />
-          <NavBtn
-            onClick={() => navigate("bids")}
-            isActive={isInBids}
-            icon={FileText}
-            label="Bids"
-            title="Bids"
-          />
+        {/*
+          Three groups, in the order a job goes: the things you open every day,
+          the things you build once and reuse, and the things you set up and
+          forget. See NavSection for how the grouping survives the collapsed
+          64px state.
+
+          Two screens are deliberately absent. `assemblies` (the old
+          master_*-backed Assembly Builder) is superseded by Library §
+          Assemblies, and having both in one list meant two entries called
+          almost the same thing pointing at two different systems. `trash`
+          holds soft-deleted LEGACY projects and is superseded by the bid
+          Archive below. Both routes still resolve so no link or bookmark
+          breaks — they are just no longer advertised.
+
+          Takeoff is absent for a different reason: it is not a destination.
+          It lives at /bids/:id/plans and needs a bid to open, so a top-level
+          entry would dead-end on "which one?" — the worst thing to put in the
+          group meant to be someone's daily tools. It is entered from a bid,
+          where the context already exists.
+        */}
+        <nav
+          className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto"
+          aria-label="Main"
+        >
+          <NavSection label="Workspace">
+            <NavBtn
+              onClick={() => navigate("dashboard")}
+              isActive={isOnDashboard || isOnProjectDetail}
+              icon={LayoutDashboard}
+              label="Dashboard"
+              title="Dashboard — every bid by stage"
+            />
+            <NavBtn
+              onClick={() => navigate("quickbid")}
+              isActive={isInQuickBid}
+              icon={Zap}
+              label="Quick bid"
+              title="Quick bid — count without a plan"
+            />
+            <NavBtn
+              onClick={() => navigate("bids")}
+              isActive={isInBids || isInTakeoff}
+              icon={FileText}
+              label="Bids"
+              title="Bids — open a bid, or its plans"
+            />
+          </NavSection>
+
+          <NavSection label="Library">
+            <NavBtn
+              onClick={() => navigate("library-materials")}
+              isActive={isInLibraryMats}
+              icon={Boxes}
+              label="Materials"
+              title="Materials — the catalog assemblies are built from"
+            />
+            <NavBtn
+              onClick={() => navigate("library-labor-rates")}
+              isActive={isInLaborRates}
+              icon={HardHat}
+              label="Labor Rates"
+              title="Labor Rates — what an hour costs, by role"
+            />
+            <NavBtn
+              onClick={() => navigate("library-modifiers")}
+              isActive={isInModifiers}
+              icon={SlidersHorizontal}
+              label="Modifiers"
+              title="Modifiers — labor adjustments for job conditions"
+            />
+            <NavBtn
+              onClick={() => navigate("library-assemblies")}
+              isActive={isInLibraryAsms}
+              icon={Layers}
+              label="Assemblies"
+              title="Assemblies — reusable recipes of materials and labor"
+            />
+            <NavBtn
+              onClick={() => navigate("library-kits")}
+              isActive={isInLibraryKits}
+              icon={Package}
+              label="Kits"
+              title="Kits — groups of assemblies added together"
+            />
+            {/* Labelled "Supplier Pricing" rather than by its route name. The
+                screen is the supply-house price list, and calling it "Material
+                Database" next to "Materials" put two near-identical names in
+                one group for two unrelated tables. The route is unchanged. */}
+            <NavBtn
+              onClick={() => navigate("matdb")}
+              isActive={isInMatDb}
+              icon={Database}
+              label="Supplier Pricing"
+              title="Supplier Pricing — imported supply-house price list"
+            />
+          </NavSection>
         </nav>
 
-        {/* Bottom section */}
-        <div className="flex flex-col gap-1 p-2 border-t border-sidebar-border shrink-0">
-          {/* Admin Settings — only visible to admin role */}
-          {isAdmin && (
+        {/* Settings sits outside the scrolling nav so it stays reachable at the
+            bottom however long the Library grows. */}
+        <div className="flex flex-col gap-1 p-2 pt-0 shrink-0">
+          <NavSection label="Settings">
             <NavBtn
-              onClick={() => navigate("admin")}
-              isActive={isInAdmin}
-              icon={Shield}
-              label="Admin Settings"
-              title="Admin Settings"
+              onClick={() => navigate("settings")}
+              isActive={isInSettings}
+              icon={Settings}
+              label="Company Defaults"
+              title="Company defaults — pricing, theme and display"
             />
-          )}
-          <NavBtn
-            onClick={() => navigate("trash")}
-            isActive={isInTrash}
-            icon={Trash2}
-            label="Trash"
-          />
-          <NavBtn
-            onClick={() => navigate("settings")}
-            isActive={isInSettings}
-            icon={Settings}
-            label="Settings"
-          />
+            <NavBtn
+              onClick={() => navigate("bid-archive")}
+              isActive={isInBidArchive}
+              icon={ArchiveIcon}
+              label="Archive"
+              title="Archive — restore an archived bid"
+            />
+            {/* Admin only, and last: nobody else has it, and those who do do
+                not need it above the things they use. */}
+            {isAdmin && (
+              <NavBtn
+                onClick={() => navigate("admin")}
+                isActive={isInAdmin}
+                icon={Shield}
+                label="Admin Settings"
+                title="Admin Settings"
+              />
+            )}
+          </NavSection>
         </div>
 
         {/* Version tag */}
@@ -537,58 +599,45 @@ export default function HelixBidShell() {
         </div>
       </main>
 
-      {/* ── Mobile Bottom Nav ────────────────────────────────────── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex bg-sidebar border-t border-border">
-        <button
-          onClick={() => navigate("home")}
-          className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-            isOnHome ? "text-[#F5C518]" : "text-muted-foreground"
-          )}
-        >
-          <Home size={18} className={isOnHome ? "text-[#F5C518]" : ""} />
-          {isOnHome && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
-        </button>
-        <button
-          onClick={() => navigate("dashboard")}
-          className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-            (isOnDashboard || isOnProjectDetail) ? "text-[#F5C518]" : "text-muted-foreground"
-          )}
-        >
-          <LayoutDashboard size={18} className={(isOnDashboard || isOnProjectDetail) ? "text-[#F5C518]" : ""} />
-          {(isOnDashboard || isOnProjectDetail) && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
-        </button>
-        <button
-          onClick={() => navigate("assemblies")}
-          className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-            isInAssemblies ? "text-[#F5C518]" : "text-muted-foreground"
-          )}
-        >
-          <Database size={18} className={isInAssemblies ? "text-[#F5C518]" : ""} />
-          {isInAssemblies && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
-        </button>
-        <button
-          onClick={() => navigate("settings")}
-          className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-            isInSettings ? "text-[#F5C518]" : "text-muted-foreground"
-          )}
-        >
-          <Settings size={18} className={isInSettings ? "text-[#F5C518]" : ""} />
-          {isInSettings && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
-        </button>
-        <button
-          onClick={() => navigate("trash")}
-          className={cn(
-            "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
-            isInTrash ? "text-[#F5C518]" : "text-muted-foreground"
-          )}
-        >
-          <Trash2 size={18} className={isInTrash ? "text-[#F5C518]" : ""} />
-          {isInTrash && <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />}
-        </button>
+      {/*
+        ── Mobile Bottom Nav ──────────────────────────────────────────────────
+        The same three purposes, minus the room to say so. There is no space for
+        section headings across five icons, so this carries only the Workspace
+        items plus one way into the Library and one into Settings — grouping by
+        omission rather than by label.
+
+        It previously offered Home, the legacy Assembly Builder and the legacy
+        Trash. All three are gone for the reasons given on the sidebar above; on
+        a phone, where there are five slots total, spending two of them on
+        superseded screens was the costliest version of that mistake.
+      */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex bg-sidebar border-t border-border"
+        aria-label="Main"
+      >
+        {([
+          { label: "Dashboard", icon: LayoutDashboard, active: isOnDashboard || isOnProjectDetail, go: () => navigate("dashboard") },
+          { label: "Quick bid", icon: Zap, active: isInQuickBid, go: () => navigate("quickbid") },
+          { label: "Bids", icon: FileText, active: isInBids || isInTakeoff, go: () => navigate("bids") },
+          { label: "Materials", icon: Boxes, active: isInLibraryMats, go: () => navigate("library-materials") },
+          { label: "Settings", icon: Settings, active: isInSettings, go: () => navigate("settings") },
+        ] as const).map(item => (
+          <button
+            key={item.label}
+            onClick={item.go}
+            aria-label={item.label}
+            aria-current={item.active ? "page" : undefined}
+            className={cn(
+              "flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-medium transition-colors duration-150 relative",
+              item.active ? "text-[#F5C518]" : "text-muted-foreground"
+            )}
+          >
+            <item.icon size={18} className={item.active ? "text-[#F5C518]" : ""} />
+            {item.active && (
+              <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />
+            )}
+          </button>
+        ))}
       </nav>
     </div>
   );

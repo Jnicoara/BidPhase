@@ -702,7 +702,12 @@ export default function MaterialDatabasePage({ onBack }: MaterialDatabasePagePro
           )}
           <Database size={18} className="text-[#F5C518]" />
           <div>
-            <h1 className="text-base font-semibold leading-tight">Material Database</h1>
+            {/* Titled to match the sidebar. "Material Database" sat one letter
+                away from the Materials catalog, which is a different table for
+                a different job — clicking "Supplier Pricing" and landing on a
+                page called "Material Database" would just move the collision
+                one click later. The route is unchanged. */}
+            <h1 className="text-base font-semibold leading-tight">Supplier Pricing</h1>
             <p className="text-[11px] text-muted-foreground">
               {materials.length} items
               {missingPriceCount > 0 && (
