@@ -12,12 +12,15 @@
  * questions and also navigates to `#/admin/delete-everything` when the model
  * hallucinates it has not been made safe by the eleven that worked.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   NAVIGATION_TARGETS,
   NAVIGATION_TARGET_IDS,
   resolveNavigationTarget,
 } from "../shared/navigationTargets";
+import { appRouter } from "./routers";
+import { NAVIGATION_MODEL } from "./routers/navigationRouter";
+import type { TrpcContext } from "./_core/context";
 
 describe("the navigation allowlist", () => {
   it("resolves every id it publishes", () => {
@@ -107,5 +110,54 @@ describe("the navigation allowlist", () => {
     for (const id of ["labor-rates", "materials", "assemblies", "quick-bid", "bids"]) {
       expect(NAVIGATION_TARGET_IDS, `no target for ${id}`).toContain(id);
     }
+  });
+});
+
+/**
+ * The gateway is forced to reject, rather than relying on this environment
+ * happening to lack a key.
+ *
+ * Without the mock these tests would pass locally for the wrong reason and then
+ * fail on any machine that HAS a credential, because the call would succeed and
+ * log nothing — a test that inverts depending on the environment it runs in is
+ * worse than no test, since it teaches people the suite is unreliable.
+ */
+vi.mock("./_core/llm", () => ({
+  invokeLLM: vi.fn(async () => {
+    throw new Error("simulated gateway rejection: unknown model");
+  }),
+  listLLMModels: vi.fn(async () => ({ object: "list", data: [] })),
+}));
+
+describe("when the helper cannot reach a model", () => {
+  const caller = () =>
+    appRouter.createCaller({ user: { id: 1, role: "user" } } as unknown as TrpcContext);
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("says nothing alarming to the user", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const answer = await caller().navigation.ask({ question: "where are labor rates" });
+
+    // A missed navigation hint is not worth an error banner — the sidebar is
+    // right there. The user gets the ordinary "not sure" and no target.
+    expect(answer.target).toBeNull();
+    expect(answer.message).toMatch(/not sure/i);
+  });
+
+  it("logs why, and which model it tried", async () => {
+    // The point of the whole exercise. A wrong model id fails exactly like a
+    // missing key, so the log line has to name the model or the next person
+    // debugging this is back to guessing — which is how an OpenAI id survived
+    // in a Claude-only app.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await caller().navigation.ask({ question: "where are labor rates" });
+
+    const logged = warn.mock.calls.map(args => args.join(" ")).join("\n");
+    expect(logged).toContain("helper call failed");
+    expect(logged).toContain(NAVIGATION_MODEL);
+    // And the reason itself, so the log distinguishes a bad id from a dead
+    // gateway without anyone having to reproduce it.
+    expect(logged).toContain("unknown model");
   });
 });

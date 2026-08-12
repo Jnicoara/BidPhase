@@ -30,18 +30,29 @@ import {
 } from "../../shared/navigationTargets";
 
 /**
- * The fast tier, overridable per deployment.
+ * Claude, cheapest tier, overridable per deployment.
  *
- * Named here rather than inline so the choice is reviewable, and read from the
- * environment because the id for "the cheap one" is a property of whichever
- * gateway is in front of this, not of the app. `listLLMModels()` in
- * server/_core/llm.ts enumerates what the connected gateway actually offers.
+ * ── Claude, because one vendor is enough ─────────────────────────────────────
+ * The alias suggester already runs on Claude and the planned co-pilot will too.
+ * A second provider for a feature this small means two sets of credentials, two
+ * billing lines and two behaviours to reason about, in exchange for nothing.
  *
- * If the id is wrong the request fails and the helper falls back to text, the
- * same as it does with no key at all — a wrong model here degrades the feature,
- * it does not break the app.
+ * ── Haiku, because this is lookup and not reasoning ──────────────────────────
+ * The question is "which of eleven screens", answered by matching a sentence
+ * against a list. The heavier tier is for reading plans later; spending it here
+ * would make a help feature cost more per use than the estimating it assists.
+ *
+ * ── The id below is NOT verified against the live gateway ────────────────────
+ * It is the current Haiku-class id from Anthropic's model list. Whether this
+ * particular gateway exposes it under exactly that name is a separate question,
+ * and one no credential in this checkout could answer — see
+ * server/navigationModel.test.ts, which asks the gateway directly and fails
+ * with the real list whenever it can reach one. Until that test has run
+ * somewhere with a key, treat this as the intended id rather than a confirmed
+ * one, and prefer NAVIGATION_MODEL to correcting it here.
  */
-const NAVIGATION_MODEL = process.env.NAVIGATION_MODEL?.trim() || "gpt-4o-mini";
+export const NAVIGATION_MODEL =
+  process.env.NAVIGATION_MODEL?.trim() || "claude-haiku-4-5-20251001";
 
 /**
  * The only action the helper can take.
@@ -104,6 +115,28 @@ const FALLBACK: NavigationAnswer = {
   target: null,
 };
 
+/**
+ * Say why the helper gave up, in the server log and nowhere else.
+ *
+ * ── Loud in the log, silent on screen ────────────────────────────────────────
+ * Every branch that returns FALLBACK comes through here, because the failure
+ * this is really written for is the one that leaves no trace at all: a model id
+ * the gateway does not recognise. That fails identically to having no key, and
+ * from the outside both look like a helper that simply never answers — which is
+ * exactly how you end up guessing at the id a second time.
+ *
+ * So the line always names the model it tried. The user still sees only the
+ * ordinary "I'm not sure" — a missed navigation hint is not worth an error
+ * banner, and the sidebar is right there.
+ */
+function fallbackAfter(reason: string, detail?: unknown): NavigationAnswer {
+  console.warn(
+    `[navigation] helper call failed: ${reason} (model: ${NAVIGATION_MODEL})`,
+    detail ?? ""
+  );
+  return FALLBACK;
+}
+
 export const navigationRouter = router({
   ask: protectedProcedure
     .input(z.object({ question: z.string().trim().min(1).max(300) }))
@@ -121,9 +154,13 @@ export const navigationRouter = router({
           maxTokens: 200,
         });
       } catch (error) {
-        // Not an error the user needs to see: they can still use the sidebar.
-        console.warn("[navigation.ask] unavailable:", error);
-        return FALLBACK;
+        // The one that matters: a bad model id, a missing key and a timeout all
+        // land here and are indistinguishable on screen. The message carries
+        // the reason, so the log can tell them apart.
+        return fallbackAfter(
+          "request rejected",
+          error instanceof Error ? error.message : error
+        );
       }
 
       const choice = result.choices?.[0]?.message;
@@ -135,7 +172,7 @@ export const navigationRouter = router({
           args = JSON.parse(call.function.arguments || "{}");
         } catch {
           // Malformed arguments are the model's problem, not the user's.
-          return FALLBACK;
+          return fallbackAfter("tool arguments were not valid JSON", call.function.arguments);
         }
 
         // The gate. An id outside the list resolves to null and the answer
@@ -143,8 +180,7 @@ export const navigationRouter = router({
         // sent somewhere that does not exist.
         const target = resolveNavigationTarget(args.target);
         if (!target) {
-          console.warn(`[navigation.ask] model named an unknown target: ${args.target}`);
-          return FALLBACK;
+          return fallbackAfter(`model named an unknown target "${args.target}"`);
         }
 
         return {
@@ -154,6 +190,10 @@ export const navigationRouter = router({
       }
 
       const text = typeof choice?.content === "string" ? choice.content.trim() : "";
-      return text ? { message: text, target: null } : FALLBACK;
+      if (text) return { message: text, target: null };
+
+      // Reached the model, got neither a tool call nor prose. Rare, and worth
+      // seeing: it usually means the tool schema and the model disagree.
+      return fallbackAfter("model returned neither a tool call nor any text");
     }),
 });
