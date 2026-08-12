@@ -22,5 +22,6 @@
 export {
   BASELINE_MATERIALS,
   RENAMED_BASELINE_MATERIALS,
+  RETIRED_BASELINE_MATERIALS,
   type BaselineMaterial,
 } from "./materials/index";

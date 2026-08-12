@@ -65,8 +65,23 @@ material instead, or the test is really asserting the seed data has not changed.
 **Renaming a shipped material is not a text edit.** Baseline rows are matched by
 name, so changing one inserts a second row and orphans the first, and every
 assembly, kit and takeoff stamp points at the original's id. Add an entry to
-`RENAMED_BASELINE_MATERIALS` instead, which renames in place. `pnpm tsx
-scripts/dropOrphanBaselines.mts` reports rows that fell out of the catalog.
+`RENAMED_BASELINE_MATERIALS` instead, which renames in place. **Removing one is
+not a deletion either** — drop it from the catalog and list it in
+`RETIRED_BASELINE_MATERIALS`, which sets `isActive = false` so the row leaves
+every list but still resolves for bids already priced from it. `pnpm tsx
+scripts/dropOrphanBaselines.mts` reports rows that fell out of the catalog
+without going through either list; `pnpm tsx scripts/categoryAudit.mts` prints
+the curated shelves with their counts.
+
+**Sort order is by category, then by size — never alphabetically.** AWG runs
+backwards (18 is thinner than 1), then inverts again at 1/0, then becomes kcmil.
+A numeric sort gives 1, 2, 3, 4, 10, 14; a text sort files 4/0 between 4 and 6.
+Both look sorted on screen and send an estimator to the wrong row. The order is
+an explicit table in `shared/materialSizeOrder.ts`, which also covers raceway
+trade sizes, breaker amperages and fixture lengths — do not re-derive any of
+them arithmetically. A size is recognised only through its marker (`#`, an
+aught, `kcmil`, an inch mark, `ft`, `A`); a bare leading number is not a size,
+because `1/2" EMT` and `4 ft LED strip` both start with one.
 
 Rules that keep the aliases useful rather than noisy:
 

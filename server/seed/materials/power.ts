@@ -128,6 +128,31 @@ const disconnects: BaselineMaterial[] = ["30", "60", "100", "200"].flatMap(
   ]
 );
 
+/**
+ * Fuses are their own line, not a variant of the switch.
+ *
+ * A fused disconnect ships empty: the fuses are a separate purchase, at a real
+ * per-job cost, and they are also the part that gets replaced later. Folding
+ * them into the switch as an option would hide them from the takeoff entirely
+ * — the classic way a panel schedule prices out light.
+ *
+ * The amperages mirror the fused disconnects one for one, INCLUDING the 400A
+ * and 600A commercial ones further down this file. A fused switch with no fuse
+ * to go in it is the same omission wearing a different hat, so the rule is
+ * "every fused disconnect has a fuse" rather than a fixed list — and there is a
+ * test asserting exactly that, because the two lists are far apart on screen.
+ */
+const fuses: BaselineMaterial[] = ["30", "60", "100", "200", "400", "600"].map(amps => ({
+  ...gear("Panels & Breakers"),
+  name: `${amps}A cartridge fuse`,
+  searchAliases: aliases(
+    `${amps} amp`,
+    "class rk5 rk1 j t time delay dual element one time ferrule knife blade buss"
+  ),
+  // Fuses go in per pole, and nobody buys one.
+  defaultQty: 3,
+}));
+
 const spaDisconnects: BaselineMaterial[] = ["50", "60"].map(amps => ({
   ...gear("Panels & Breakers"),
   name: `${amps}A spa disconnect`,
@@ -224,5 +249,6 @@ export const PANELS_AND_BREAKERS: BaselineMaterial[] = [
   ...subPanels,
   ...meterBases,
   ...disconnects,
+  ...fuses,
   ...spaDisconnects,
 ];

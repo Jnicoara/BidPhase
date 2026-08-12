@@ -24,7 +24,9 @@ import "dotenv/config";
 import { eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "../server/db";
 import { assemblyMaterials, materials } from "../drizzle/schema";
-import { BASELINE_MATERIALS } from "../server/seed/baselineMaterials";
+import {
+  BASELINE_MATERIALS, RETIRED_BASELINE_MATERIALS,
+} from "../server/seed/baselineMaterials";
 
 const db = await getDb();
 if (!db) {
@@ -32,7 +34,12 @@ if (!db) {
   process.exit(1);
 }
 
-const shipped = new Set(BASELINE_MATERIALS.map(m => m.name));
+// Retired rows are expected to be present and inactive — they are deliberately
+// kept so that anything priced from them still resolves. They are not orphans.
+const shipped = new Set([
+  ...BASELINE_MATERIALS.map(m => m.name),
+  ...RETIRED_BASELINE_MATERIALS,
+]);
 const baselines = await db
   .select({ id: materials.id, name: materials.name })
   .from(materials)

@@ -10,7 +10,7 @@
  * the first time a starter material is edited, and the fact that the row's id
  * can change underneath us — hence the refetch after every mutation.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -56,6 +56,8 @@ import {
 } from "@/lib/libraryScope";
 import { AliasSuggestions } from "@/components/AliasSuggestions";
 import { countNeedingPricing, needsPricing } from "@shared/materialPricing";
+import { compareBySize } from "@shared/materialSizeOrder";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
@@ -138,6 +140,16 @@ const UNIT_LABEL: Record<Material["unitOfSale"], string> = {
   foot: "per ft",
   box: "per box",
 };
+
+/**
+ * One entry in the flattened, virtualised list — a shelf heading or a material.
+ *
+ * Headers are list items rather than wrappers so the whole screen is a single
+ * indexable sequence; a virtualiser cannot window a nested structure.
+ */
+type ListItem =
+  | { kind: "header"; label: string; count: number }
+  | { kind: "row"; material: Material };
 
 type Draft = {
   name: string;
@@ -661,7 +673,12 @@ export default function MaterialsLibraryPage() {
    * happens to sit on, so those results stay flat and relevance-ordered, and
    * each row prints its own category instead.
    *
-   * Rows arrive name-sorted from the server, so no per-group sort is needed.
+   * ── Within a shelf, by size — never alphabetically ───────────────────────
+   * Rows arrive name-sorted from the server, which is the wrong order for
+   * everything here: alphabetically, 1" EMT sits between 1/2" and 1-1/4", and
+   * #1/0 THHN lands next to #1 rather than above it. An estimator reads these
+   * lists by walking up the sizes, so they are re-sorted with the explicit
+   * ordering table in @shared/materialSizeOrder.
    */
   const groups = useMemo(() => {
     if (searching) return [];
@@ -673,9 +690,51 @@ export default function MaterialsLibraryPage() {
       else byCategory.set(key, [material]);
     }
     return [...CATEGORIES, "Uncategorized"]
-      .map(label => ({ label, items: byCategory.get(label) ?? [] }))
+      .map(label => ({
+        label,
+        items: (byCategory.get(label) ?? []).sort((a, b) => compareBySize(a.name, b.name)),
+      }))
       .filter(group => group.items.length > 0);
   }, [visible, searching]);
+
+  /**
+   * The list flattened to one array of section headers and rows.
+   *
+   * Virtualisation needs a single indexable sequence, so the shelves are
+   * flattened rather than nested — the header is just another row that happens
+   * to render differently. When searching there are no headers at all, so the
+   * same array carries both modes and the render below does not branch.
+   */
+  const listItems = useMemo((): ListItem[] => {
+    if (searching) {
+      return (visible as Material[]).map(material => ({ kind: "row" as const, material }));
+    }
+    return groups.flatMap(group => [
+      { kind: "header" as const, label: group.label, count: group.items.length },
+      ...group.items.map(material => ({ kind: "row" as const, material })),
+    ]);
+  }, [groups, visible, searching]);
+
+  /**
+   * The page's own scroll container is the virtualiser's viewport.
+   *
+   * The alternative — giving the table its own inner scrollbar — would strand
+   * the search box and filters above a second scrolling region, so the page
+   * keeps one scrollbar and the list reports its offset within it via
+   * scrollMargin.
+   */
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const rowVirtualizer = useVirtualizer({
+    count: listItems.length,
+    getScrollElement: () => scrollRef.current,
+    // A first guess only — every rendered row is measured, so a description or
+    // an open editor corrects itself.
+    estimateSize: index => (listItems[index]?.kind === "header" ? 30 : 57),
+    overscan: 10,
+    scrollMargin: listRef.current?.offsetTop ?? 0,
+  });
 
   const handleSave = useCallback(
     async (id: number, draft: Draft) => {
@@ -822,7 +881,7 @@ export default function MaterialsLibraryPage() {
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-5">
         {/* Search */}
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
@@ -1005,54 +1064,70 @@ export default function MaterialsLibraryPage() {
                 <>No materials yet. Add your first one to get started.</>
               )}
             </div>
-          ) : searching ? (
-            visible.map(material => (
-              <MaterialRow
-                key={material.id}
-                material={material as Material}
-                isBusy={isBusy && busyId === material.id}
-                showCategory
-                onSave={handleSave}
-                onSuggestAliases={requestAliasSuggestions}
-                onRevert={handleRevert}
-                onRemove={handleRemove}
-                isArchived={view === "archived"}
-                onRestore={m => restoreMaterial.mutate({ id: m.id })}
-                onDeleteForever={m =>
-                  setPendingDelete({ id: m.id, name: m.name })
-                }
-              />
-            ))
           ) : (
-            groups.map(group => (
-              <div key={group.label}>
-                <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/40 border-b border-border">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {group.label}
-                  </span>
-                  <span className="text-xs text-muted-foreground/70">
-                    {group.items.length}
-                  </span>
-                </div>
-                {group.items.map(material => (
-                  <MaterialRow
-                    key={material.id}
-                    material={material}
-                    isBusy={isBusy && busyId === material.id}
-                    showCategory={false}
-                    onSave={handleSave}
-                    onSuggestAliases={requestAliasSuggestions}
-                    onRevert={handleRevert}
-                    onRemove={handleRemove}
-                    isArchived={view === "archived"}
-                    onRestore={m => restoreMaterial.mutate({ id: m.id })}
-                    onDeleteForever={m =>
-                      setPendingDelete({ id: m.id, name: m.name })
-                    }
-                  />
-                ))}
-              </div>
-            ))
+            /*
+             * Windowed, not rendered whole.
+             *
+             * The shipped catalog is ~615 rows and a user's own grows on top of
+             * that. Every row carries an editor, a search index entry and half
+             * a dozen buttons, so rendering the lot put thousands of nodes in
+             * the DOM for the thirty an estimator can see — the screen was
+             * usable at 29 materials and visibly slow at 600, which is the bug
+             * this avoids rather than an optimisation for later.
+             *
+             * Heights are measured rather than assumed: a row grows when it has
+             * a description and grows a lot when it is being edited, and a
+             * fixed row height would make the scrollbar lie about where things
+             * are.
+             */
+            <div
+              ref={listRef}
+              className="relative"
+              style={{ height: rowVirtualizer.getTotalSize() }}
+            >
+              {rowVirtualizer.getVirtualItems().map(virtualRow => {
+                const item = listItems[virtualRow.index];
+                return (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    className="absolute left-0 w-full"
+                    style={{
+                      transform: `translateY(${
+                        virtualRow.start - rowVirtualizer.options.scrollMargin
+                      }px)`,
+                    }}
+                  >
+                    {item.kind === "header" ? (
+                      <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/40 border-b border-border">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {item.label}
+                        </span>
+                        <span className="text-xs text-muted-foreground/70">
+                          {item.count}
+                        </span>
+                      </div>
+                    ) : (
+                      <MaterialRow
+                        material={item.material}
+                        isBusy={isBusy && busyId === item.material.id}
+                        showCategory={searching}
+                        onSave={handleSave}
+                        onSuggestAliases={requestAliasSuggestions}
+                        onRevert={handleRevert}
+                        onRemove={handleRemove}
+                        isArchived={view === "archived"}
+                        onRestore={m => restoreMaterial.mutate({ id: m.id })}
+                        onDeleteForever={m =>
+                          setPendingDelete({ id: m.id, name: m.name })
+                        }
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
 

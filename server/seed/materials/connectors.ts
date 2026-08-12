@@ -67,31 +67,33 @@ const cableConnectors: BaselineMaterial[] = ['3/8"', '1/2"', '3/4"', '1"'].map(
   })
 );
 
-/** Lug ranges follow the conductor sizes people actually terminate. */
-const lugs: BaselineMaterial[] = [
-  "#6",
-  "#4",
-  "#2",
-  "#1/0",
-  "#2/0",
-  "#4/0",
-  "250",
-  "350",
-  "500",
-].map(size => {
-  const isKcmil = !size.startsWith("#");
-  return {
-    ...CONN,
-    name: `${size}${isKcmil ? " kcmil" : ""} crimp lug`,
-    searchAliases: aliases(
-      size.replace("#", ""),
-      isKcmil ? "mcm" : "awg gauge",
-      size.includes("/0") ? "aught ought" : "",
-      "compression terminal ring one hole two hole copper barrel"
-    ),
-    defaultQty: 2,
-  };
-});
+/**
+ * Lugs are sold by the RANGE of conductor they accept, not per gauge.
+ *
+ * One barrel takes 14 through 10 AWG; the counter sells it as a 14-10 lug and
+ * that is what the box says. Listing a lug per gauge invented rows nobody can
+ * order and, worse, implied a precision that does not exist — an estimator
+ * hunting for a "#3 lug" would find nothing while the part they need sits
+ * under 4-2. Five ranges cover everything from a device pigtail to a service.
+ */
+const LUG_RANGES = [
+  { range: "14-10 AWG", slang: "14 12 10 small device" },
+  { range: "8-6 AWG", slang: "8 6 feeder" },
+  { range: "4-2 AWG", slang: "4 3 2 feeder" },
+  { range: "1-1/0 AWG", slang: "1 1/0 aught ought service" },
+  { range: "2/0-4/0 AWG", slang: "2/0 3/0 4/0 aught ought service large" },
+];
+
+const lugs: BaselineMaterial[] = LUG_RANGES.map(({ range, slang }) => ({
+  ...CONN,
+  name: `${range} crimp lug`,
+  searchAliases: aliases(
+    slang,
+    "gauge compression terminal ring one hole two hole copper barrel mechanical"
+  ),
+  description: "Sized by the conductor range it accepts, not by a single gauge.",
+  defaultQty: 2,
+}));
 
 const terminations: BaselineMaterial[] = [
   {

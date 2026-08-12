@@ -51,7 +51,49 @@ export const RENAMED_BASELINE_MATERIALS: Record<string, string> = {
   '1/2" PVC': '1/2" PVC Sch 40',
   'EMT connector 1/2"': '1/2" EMT connector',
   'EMT connector 3/4"': '3/4" EMT connector',
+  // Written 5"/6" so the leading measurement is a real 5 inches. "5/6" reads
+  // as the fraction five-sixths to anything parsing sizes, which sorted the
+  // wafer below the 4" one.
+  '5/6" wafer LED downlight': '5"/6" wafer LED downlight',
+  // "light" -> "light bar", now that tape light shares the heading and the two
+  // are bought completely differently — per fixture against per foot.
+  '18" under-cabinet light': '18" under-cabinet light bar',
+  '24" under-cabinet light': '24" under-cabinet light bar',
+  '36" under-cabinet light': '36" under-cabinet light bar',
 };
+
+/**
+ * Baseline rows the catalog no longer ships.
+ *
+ * ── Retired, not deleted ─────────────────────────────────────────────────────
+ * A shipped row cannot simply vanish from this file: assemblies, kits, project
+ * items and takeoff stamps point at material ids, and a bid priced last month
+ * has to keep resolving the parts it was priced from. So retiring sets
+ * `isActive = false` — the row stops appearing in every list, including the
+ * archive, but keeps its id and everything referencing it keeps working. A user
+ * who had forked one keeps their own copy; that is theirs, not the catalog's.
+ *
+ * Use this only when a row is genuinely gone. When it has merely been renamed,
+ * use RENAMED_BASELINE_MATERIALS instead — that preserves the row AND keeps it
+ * in the catalog, which is almost always what a "removal" actually is.
+ */
+export const RETIRED_BASELINE_MATERIALS: string[] = [
+  // Duplicated 5"/6", which already covers the 6" trim opening. Two rows for
+  // one part is a choice between a thing and itself.
+  '6" wafer LED downlight',
+  // Lugs are sold by conductor RANGE, not per gauge — replaced by the five
+  // range-named rows in connectors.ts. The per-gauge names invented parts
+  // nobody can order.
+  "#6 crimp lug",
+  "#4 crimp lug",
+  "#2 crimp lug",
+  "#1/0 crimp lug",
+  "#2/0 crimp lug",
+  "#4/0 crimp lug",
+  "250 kcmil crimp lug",
+  "350 kcmil crimp lug",
+  "500 kcmil crimp lug",
+];
 
 /**
  * The catalog, with each row's aliases stripped of anything its own name

@@ -76,7 +76,9 @@ import {
   featureFlags,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-import { BASELINE_MATERIALS, RENAMED_BASELINE_MATERIALS } from "./seed/baselineMaterials";
+import {
+  BASELINE_MATERIALS, RENAMED_BASELINE_MATERIALS, RETIRED_BASELINE_MATERIALS,
+} from "./seed/baselineMaterials";
 import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
 import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
 import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
@@ -1204,12 +1206,39 @@ async function renameBaselineMaterials(): Promise<void> {
   }
 }
 
+/**
+ * Withdraw baseline rows the catalog no longer ships.
+ *
+ * Sets `isActive = false` rather than deleting: the row leaves every list but
+ * keeps its id, so a bid priced from it last month still resolves the part it
+ * was priced from. See RETIRED_BASELINE_MATERIALS for when to use this at all
+ * — a rename is not a retirement, and treating one as the other loses the row.
+ *
+ * Only baseline rows. A user who forked a retired material keeps their copy;
+ * it is theirs, and the catalog dropping the original says nothing about
+ * whether they still buy the part.
+ */
+async function retireBaselineMaterials(): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  if (RETIRED_BASELINE_MATERIALS.length === 0) return;
+
+  await db.update(materials)
+    .set({ isActive: false })
+    .where(and(
+      isNull(materials.userId),
+      inArray(materials.name, RETIRED_BASELINE_MATERIALS),
+      eq(materials.isActive, true)
+    ));
+}
+
 async function seedBaselineMaterialsUnlocked(): Promise<void> {
   const db = await getDb();
   if (!db) return;
 
   await dedupeBaselineRows("materials");
   await renameBaselineMaterials();
+  await retireBaselineMaterials();
 
   const existing = await db.select({ name: materials.name }).from(materials)
     .where(isNull(materials.userId));

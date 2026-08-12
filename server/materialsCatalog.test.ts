@@ -14,6 +14,7 @@ import { eq, isNull, sql } from "drizzle-orm";
 import {
   BASELINE_MATERIALS,
   RENAMED_BASELINE_MATERIALS,
+  RETIRED_BASELINE_MATERIALS,
 } from "./seed/baselineMaterials";
 import { MATERIAL_CATEGORIES } from "../drizzle/schema";
 import { materials } from "../drizzle/schema";
@@ -132,6 +133,65 @@ describe("alias hygiene across the whole catalog", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("sells the track and its heads as separate items", () => {
+    // A section of track lights nothing on its own. A takeoff listing only
+    // rail has priced the trim and forgotten the fixtures, which is most of
+    // the money.
+    const names = BASELINE_MATERIALS.map(m => m.name);
+    expect(names).toContain("4 ft lighting track");
+    expect(names).toContain("6 ft lighting track");
+    expect(names).toContain("8 ft lighting track");
+    expect(names).toContain("Track light head");
+  });
+
+  it("separates under-cabinet bars from tape sold by the foot", () => {
+    const byName = new Map(BASELINE_MATERIALS.map(m => [m.name, m]));
+    for (const size of ['12"', '18"', '24"', '36"']) {
+      const bar = byName.get(`${size} under-cabinet light bar`);
+      expect(bar, `${size} bar missing`).toBeDefined();
+      expect(bar!.unitOfSale).toBe("each");
+    }
+    // Tape is cut to the run, so it is taken off as footage. Pricing a reel as
+    // a unit, or a bar by the foot, is wrong by an order of magnitude.
+    expect(byName.get("LED tape light")?.unitOfSale).toBe("foot");
+  });
+
+  it("ships exactly two wafer sizes, with no duplicate 6 inch row", () => {
+    const wafers = BASELINE_MATERIALS.filter(m => m.name.includes("wafer")).map(m => m.name);
+    expect(wafers).toEqual(['4" wafer LED downlight', '5"/6" wafer LED downlight']);
+  });
+
+  it("stocks a fuse for every fused disconnect amperage", () => {
+    const fused = BASELINE_MATERIALS
+      .filter(m => /^\d+A fused disconnect$/.test(m.name))
+      .map(m => m.name.match(/^(\d+)/)![1]);
+    const fuses = BASELINE_MATERIALS
+      .filter(m => /cartridge fuse$/.test(m.name))
+      .map(m => m.name.match(/^(\d+)/)![1]);
+    for (const amps of fused) {
+      expect(fuses, `no ${amps}A fuse for the ${amps}A fused disconnect`).toContain(amps);
+    }
+  });
+
+  it("sizes crimp lugs by conductor range, not per gauge", () => {
+    const lugs = BASELINE_MATERIALS.filter(m => m.name.endsWith("crimp lug")).map(m => m.name);
+    expect(lugs).toEqual([
+      "14-10 AWG crimp lug",
+      "8-6 AWG crimp lug",
+      "4-2 AWG crimp lug",
+      "1-1/0 AWG crimp lug",
+      "2/0-4/0 AWG crimp lug",
+    ]);
+  });
+
+  it("never lists a retired name as a current material", () => {
+    // Retiring and shipping the same name would have the seeder insert it and
+    // deactivate it on every startup, flickering it in and out of the catalog.
+    const current = new Set(BASELINE_MATERIALS.map(m => m.name));
+    const clashes = RETIRED_BASELINE_MATERIALS.filter(name => current.has(name));
+    expect(clashes).toEqual([]);
+  });
+
   it("describes only what could genuinely be confused", () => {
     // Descriptions are meant to be sparse. If most rows carry one, they have
     // become boilerplate and stopped being read.
@@ -186,7 +246,10 @@ describe("searching the enlarged catalog", () => {
     expectHit("sealtite", '1/2" liquidtight flexible conduit');
     expectHit("condulet", '1/2" EMT LB conduit body');
     expectHit("mcm", "500 kcmil THHN");
-    expectHit("wafer", '6" wafer LED downlight');
+    // The 5"/6" wafer covers both trim openings, so "6 inch wafer" has to
+    // reach it — there is deliberately no standalone 6" row to find.
+    expectHit("wafer", '5"/6" wafer LED downlight');
+    expectHit("6 wafer", '5"/6" wafer LED downlight');
     expectHit("bx", "12-2 MC cable");
     expectHit("acorn", "Ground rod clamp");
     expectHit("driven electrode", "Ground rod, 8 ft");
@@ -344,6 +407,27 @@ describe.skipIf(!hasDb)("seeding the catalog into a live database", () => {
         1
       );
     }
+  });
+
+  it("withdraws retired rows from the catalog without destroying them", async () => {
+    // Retiring must not delete: assemblies, kits and takeoff stamps point at
+    // material ids, and a bid priced from one of these last month still has to
+    // resolve the part it was priced from. So the row survives, deactivated,
+    // and simply stops appearing anywhere.
+    const db = await getDb();
+    const rows = await db!.select().from(materials).where(isNull(materials.userId));
+    const byName = new Map(rows.map(r => [r.name, r]));
+
+    for (const name of RETIRED_BASELINE_MATERIALS) {
+      const row = byName.get(name);
+      if (!row) continue; // never existed in this database — fine
+      expect(row.isActive, `${name} is still active`).toBe(false);
+    }
+
+    // And none of them can be reached through the library any more.
+    const visible = await getLibraryMaterials(USER);
+    const leaked = visible.filter(m => RETIRED_BASELINE_MATERIALS.includes(m.name));
+    expect(leaked.map(m => m.name)).toEqual([]);
   });
 
   it("drags every shipped row back to unpriced", async () => {
