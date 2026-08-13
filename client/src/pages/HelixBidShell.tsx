@@ -9,16 +9,10 @@
  *   /dashboard  → Dashboard (all bids by status; replaced the Projects grid)
  *   /project/:id → Legacy project detail (PDF plan viewer / takeoff). Still
  *                  routed, but nothing links to it since Projects was removed.
- *   /residential → Residential estimating workspace (legacy)
- *   /commercial  → Commercial estimating workspace (legacy)
- *   /civil       → Infrastructure estimating workspace (legacy)
- *   /industrial  → Industrial estimating workspace (legacy)
- *   /material    → Labor & Material page
  *   /estimate    → Estimate Engine
  *   /settings    → Settings
  *   /trash       → Trash
- *   /matdb       → Material Database (supply-house price list)
- *   /assemblies  → Assembly Builder
+ *   /matdb       → Supplier Pricing (prices the real materials catalog)
  *   /library/materials   → Materials (Foundation library catalog)
  *   /library/labor-rates → Labor Rates (roles and what they cost per hour)
  *   /library/modifiers   → Modifiers (job-condition labor adjustments)
@@ -30,21 +24,13 @@
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import UnifiedProjects, {
-  CivilIcon,
-  CommercialIcon,
-  ResidentialIcon,
-  IndustrialIcon,
-} from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
-import MaterialListPage from "@/pages/MaterialListPage";
 import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
 import TrashPage from "@/pages/TrashPage";
 import EstimateEnginePage from "@/pages/EstimateEnginePage";
 import HelixBidHomePage from "@/pages/HelixBidHomePage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProjectDetailPage from "@/pages/ProjectDetailPage";
-import AssemblyBuilderPage from "@/pages/AssemblyBuilderPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
 import MaterialsLibraryPage from "@/pages/MaterialsLibraryPage";
 import LaborRatesPage from "@/pages/LaborRatesPage";
@@ -79,17 +65,10 @@ type Route =
   | "home"
   | "dashboard"
   | "project-detail"
-  | "landing"
-  | "civil"
-  | "commercial"
-  | "residential"
-  | "industrial"
-  | "material"
   | "settings"
   | "trash"
   | "estimate"
   | "matdb"
-  | "assemblies"
   | "library-materials"
   | "library-labor-rates"
   | "library-modifiers"
@@ -120,16 +99,10 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
     const id = parseInt(parts[1]);
     if (!isNaN(id)) return { route: "project-detail", projectId: id };
   }
-  if (p === "residential") return { route: "residential" };
-  if (p === "commercial") return { route: "commercial" };
-  if (p === "civil") return { route: "civil" };
-  if (p === "industrial") return { route: "industrial" };
-  if (p === "material") return { route: "material" };
   if (p === "matdb") return { route: "matdb" };
   if (p === "estimate") return { route: "estimate" };
   if (p === "settings") return { route: "settings" };
   if (p === "trash") return { route: "trash" };
-  if (p === "assemblies") return { route: "assemblies" };
   // Foundation bid layer. Distinct from /projects, which is the legacy
   // master_* system with its PDF/takeoff state.
   // The archive of soft-deleted BIDS. Distinct from /trash, which belongs to
@@ -230,22 +203,7 @@ export default function HelixBidShell() {
         setPreviousRoute(prev.route);
         return state;
       });
-      const r = state.route;
-      if (
-        r === "civil" ||
-        r === "commercial" ||
-        r === "residential" ||
-        r === "industrial"
-      ) {
-        setActiveCategory(r);
-        setActiveTab("projects");
-      } else if (r === "settings") {
-        setActiveTab("settings");
-      } else if (r === "material") {
-        setShowMaterialList(true);
-      } else {
-        setShowMaterialList(false);
-      }
+      if (state.route === "settings") setActiveTab("settings");
     };
     window.addEventListener("hashchange", onHashChange);
     window.addEventListener("popstate", onHashChange);
@@ -254,23 +212,16 @@ export default function HelixBidShell() {
       window.removeEventListener("hashchange", onHashChange);
       window.removeEventListener("popstate", onHashChange);
     };
-  }, [setActiveCategory, setActiveTab, setShowMaterialList]);
+  }, [setActiveTab]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const isOnHome = route === "home";
   const isOnDashboard = route === "dashboard";
   const isOnProjectDetail = route === "project-detail";
-  const isInCategory =
-    route === "civil" ||
-    route === "commercial" ||
-    route === "residential" ||
-    route === "industrial";
   const isInSettings = route === "settings";
   const isInTrash = route === "trash";
   const isInEstimate = route === "estimate";
-  const isInMaterial = route === "material";
   const isInMatDb = route === "matdb";
-  const isInAssemblies = route === "assemblies";
   const isInLibraryMats = route === "library-materials";
   const isInLaborRates = route === "library-labor-rates";
   const isInModifiers = route === "library-modifiers";
@@ -300,19 +251,8 @@ export default function HelixBidShell() {
     window.location.hash = "#/welcome";
   }, [onboarding?.isFirstRun, route]);
 
-  const currentCategory = isInCategory
-    ? (route as "civil" | "commercial" | "residential" | "industrial")
-    : activeCategory;
-
-  const openMaterialList = useCallback(() => navigate("material"), [navigate]);
-  const closeMaterialList = useCallback(() => {
-    if (window.history.length > 1) window.history.back();
-    else navigate(currentCategory);
-  }, [navigate, currentCategory]);
-
   // ── Content renderer ───────────────────────────────────────────────────────
   const renderContent = () => {
-    if (isInMaterial) return <MaterialListPage onBack={closeMaterialList} />;
     if (isInMatDb) return <MaterialDatabasePage onBack={goBack} />;
     if (isOnHome)
       return <HelixBidHomePage onGoToProjects={() => navigate("dashboard")} />;
@@ -328,13 +268,11 @@ export default function HelixBidShell() {
         <ProjectDetailPage
           projectId={activeProjectId}
           onBack={() => navigate("dashboard")}
-          onOpenMaterialList={openMaterialList}
         />
       );
     if (isInTrash) return <TrashPage onBack={goBack} />;
     if (isInSettings) return <SettingsTab onBack={goBack} />;
     if (isInEstimate) return <EstimateEnginePage onBack={goBack} />;
-    if (isInAssemblies) return <AssemblyBuilderPage />;
     if (isInLibraryMats) return <MaterialsLibraryPage />;
     if (isInLaborRates) return <LaborRatesPage />;
     if (isInModifiers) return <ModifiersPage />;
@@ -367,8 +305,14 @@ export default function HelixBidShell() {
     if (isInQuickBid) return <QuickBidPage />;
     if (isOnWelcome) return <FirstRunPage />;
     if (isInAdmin) return <AdminSettingsPage />;
-    // Legacy category workspace
-    return <UnifiedProjects category={currentCategory} />;
+    // Every legacy workspace this used to fall through to is gone. The
+    // Dashboard is the honest landing for an address that no longer exists.
+    return (
+      <DashboardPage
+        onOpenBid={id => navigate("bids", id)}
+        onOpenArchive={() => navigate("bid-archive")}
+      />
+    );
   };
 
   const routeKey =
@@ -645,15 +589,13 @@ export default function HelixBidShell() {
                         ? "Settings"
                         : isInEstimate
                           ? "Estimate Engine"
-                          : isInMaterial
-                            ? "Labor & Material"
-                            : isInAssemblies
-                              ? "Assembly Builder"
-                              : isInLibraryMats
-                                ? "Materials"
-                                : isInAdmin
-                                  ? "Admin Settings"
-                                  : "Workspace"}
+                          : isInMatDb
+                            ? "Supplier Pricing"
+                            : isInLibraryMats
+                              ? "Materials"
+                              : isInAdmin
+                                ? "Admin Settings"
+                                : "Workspace"}
             </span>
           </div>
         </header>

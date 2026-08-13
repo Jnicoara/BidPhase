@@ -17,21 +17,9 @@ import {
   LogOut,
   User,
 } from "lucide-react";
-import DataConnectorsPanel from "@/components/DataConnectorsPanel";
 import { BidPricingDefaultsSection } from "@/components/BidPricingDefaultsSection";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
-
-// ── Material DB types ──────────────────────────────────────────────────────────
-/** A single material record parsed from an imported CSV. */
-export interface MaterialRecord {
-  name: string;
-  sku: string;
-  cost: number; // unit cost in USD
-}
-
-/** localStorage key used by both SettingsTab (write) and other tabs (read) */
-export const MATERIAL_DB_KEY = "bp_material_db";
 
 const FONT_PRESETS = [
   { label: "80%", value: 0.8, title: "80% zoom" },
@@ -42,207 +30,6 @@ const FONT_PRESETS = [
   { label: "130%", value: 1.3, title: "130% zoom" },
   { label: "140%", value: 1.4, title: "140% zoom" },
 ];
-
-// ── MaterialDbSection ─────────────────────────────────────────────────────────
-/**
- * Parses a CSV and saves material records to localStorage.
- * Accepts flexible column names: Name/Description, SKU/Part, Cost/Price.
- */
-function MaterialDbSection() {
-  const [db, setDb] = useLocalStorage<MaterialRecord[]>(MATERIAL_DB_KEY, []);
-  const [parseStatus, setParseStatus] = useState<"idle" | "ok" | "error">(
-    "idle"
-  );
-  const [parseMsg, setParseMsg] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const parseCsv = (text: string): MaterialRecord[] => {
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length < 2)
-      throw new Error("CSV must have a header row and at least one data row.");
-    const headers = lines[0]
-      .split(",")
-      .map(h => h.trim().toLowerCase().replace(/["']/g, ""));
-    const col = (aliases: string[]) => {
-      for (const a of aliases) {
-        const i = headers.indexOf(a);
-        if (i >= 0) return i;
-      }
-      return -1;
-    };
-    const nameIdx = col(["name", "description", "item", "material"]);
-    const skuIdx = col(["sku", "part", "part number", "part#", "code", "id"]);
-    const costIdx = col([
-      "cost",
-      "price",
-      "unit cost",
-      "unit price",
-      "unitcost",
-      "unitprice",
-    ]);
-    if (nameIdx < 0)
-      throw new Error("Could not find a \'Name\' or \'Description\' column.");
-    return lines
-      .slice(1)
-      .map(line => {
-        const cells =
-          line
-            .match(/(?:"[^"]*"|[^,])+/g)
-            ?.map(c => c.replace(/^"|"$/g, "").trim()) ?? [];
-        return {
-          name: cells[nameIdx] ?? "",
-          sku: skuIdx >= 0 ? (cells[skuIdx] ?? "") : "",
-          cost:
-            costIdx >= 0
-              ? parseFloat(cells[costIdx]?.replace(/[^0-9.]/g, "") ?? "0") || 0
-              : 0,
-        };
-      })
-      .filter(r => r.name);
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.name.endsWith(".csv")) {
-      setParseStatus("error");
-      setParseMsg("Please select a .csv file.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const records = parseCsv(ev.target?.result as string);
-        setDb(records);
-        setParseStatus("ok");
-        setParseMsg(
-          `${records.length} material${records.length !== 1 ? "s" : ""} imported successfully.`
-        );
-        toast.success(
-          `Material database updated: ${records.length} items loaded.`
-        );
-      } catch (err) {
-        setParseStatus("error");
-        setParseMsg((err as Error).message);
-        toast.error("CSV import failed: " + (err as Error).message);
-      }
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    };
-    reader.readAsText(file);
-  };
-
-  const clearDb = () => {
-    setDb([]);
-    setParseStatus("idle");
-    setParseMsg("");
-    toast.info("Material database cleared.");
-  };
-
-  return (
-    <section className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-foreground mb-0.5">
-          Material Database
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          Import a CSV to build a local material database. Expected columns:{" "}
-          <span className="font-mono text-foreground">Name</span>,{" "}
-          <span className="font-mono text-foreground">SKU</span>,{" "}
-          <span className="font-mono text-foreground">Cost</span>. Common
-          aliases are accepted automatically.
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        <label className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary text-secondary-foreground text-xs font-medium cursor-pointer hover:bg-accent transition-colors">
-          <Upload size={13} />
-          Import CSV
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </label>
-        {db.length > 0 && (
-          <button
-            onClick={clearDb}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-border text-xs text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors"
-          >
-            <Trash2 size={12} /> Clear ({db.length})
-          </button>
-        )}
-      </div>
-      {parseStatus !== "idle" && (
-        <div
-          className={cn(
-            "flex items-start gap-2 rounded-md px-3 py-2 text-xs",
-            parseStatus === "ok"
-              ? "bg-green-500/10 border border-green-500/30 text-green-400"
-              : "bg-red-500/10 border border-red-500/30 text-red-400"
-          )}
-        >
-          {parseStatus === "ok" ? (
-            <CheckCircle2 size={13} className="mt-0.5 shrink-0" />
-          ) : (
-            <AlertCircle size={13} className="mt-0.5 shrink-0" />
-          )}
-          <span>{parseMsg}</span>
-        </div>
-      )}
-      {db.length > 0 && (
-        <div className="rounded-md border border-border overflow-hidden">
-          <div className="px-3 py-2 bg-muted/20 border-b border-border text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Preview — {db.length} record{db.length !== 1 ? "s" : ""}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border bg-muted/10">
-                  <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">
-                    Name
-                  </th>
-                  <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">
-                    SKU
-                  </th>
-                  <th className="text-right px-3 py-1.5 text-muted-foreground font-medium">
-                    Unit Cost
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {db.slice(0, 5).map((r, i) => (
-                  <tr
-                    key={i}
-                    className="border-b border-border/40 hover:bg-muted/10"
-                  >
-                    <td className="px-3 py-1.5 text-foreground">{r.name}</td>
-                    <td className="px-3 py-1.5 font-mono text-muted-foreground">
-                      {r.sku || "—"}
-                    </td>
-                    <td className="px-3 py-1.5 text-right font-mono text-[#F5C518]">
-                      {r.cost > 0 ? `$${r.cost.toFixed(2)}` : "—"}
-                    </td>
-                  </tr>
-                ))}
-                {db.length > 5 && (
-                  <tr>
-                    <td
-                      colSpan={3}
-                      className="px-3 py-1.5 text-center text-muted-foreground text-[10px]"
-                    >
-                      … and {db.length - 5} more
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
 
 // ── AccountSection ────────────────────────────────────────────────────────────
 function AccountSection() {
@@ -512,11 +299,10 @@ export default function SettingsTab({ onBack }: { onBack?: () => void }) {
           and the sidebar entry that lands here is called "Company Defaults". */}
       <BidPricingDefaultsSection />
 
-      {/* ── Material Database (CSV Importer) — legacy local storage ─── */}
-      <MaterialDbSection />
-
-      {/* ── Data Connectors (server-side, per-user) ─────────────────── */}
-      <DataConnectorsPanel />
+      {/* Two CSV importers used to live here, one writing to localStorage and
+          one to a separate per-user table. Both are gone: importing a supplier
+          price list now happens on Supplier Pricing, against the same catalog
+          the rest of the app uses. Three material lists was two too many. */}
 
       {/* ── Account ──────────────────────────────────────────────── */}
       <AccountSection />

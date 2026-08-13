@@ -625,6 +625,36 @@ export const materials = mysqlTable(
     defaultQty: decimal("defaultQty", { precision: 10, scale: 4 }),
 
     /**
+     * Which supply house this material's price came from, e.g. "Platt".
+     *
+     * Free text rather than a suppliers table on purpose: the useful question
+     * is "whose price is this, and how old" — not "manage my vendor list". A
+     * table would need CRUD, a picker and a merge story before it answered
+     * anything the name alone does not.
+     *
+     * NULL means the price came from nowhere in particular. It is never
+     * inferred: a starter row ships at $0 with no supplier, and it stays that
+     * way until someone types a real one.
+     */
+    supplierName: varchar("supplierName", { length: 128 }),
+
+    /**
+     * When `costPerUnit` was last set, which is what price staleness is
+     * measured from. NULL = never priced.
+     *
+     * Deliberately NOT `updatedAt`. That column moves when anything changes —
+     * a rename, an alias edit, a category fix — so ageing a price off it would
+     * show a nine-month-old price as fresh because someone corrected its
+     * spelling last week. Stale pricing that looks current is the failure this
+     * whole screen exists to prevent, so the date has to track the price and
+     * nothing else. Only a cost write touches it.
+     *
+     * See shared/priceStaleness.ts for the bands, which take the clock as a
+     * parameter so they can be tested without waiting 90 days.
+     */
+    priceUpdatedAt: timestamp("priceUpdatedAt"),
+
+    /**
      * active / archived / deleted — the lifecycle Modifiers has had since
      * Foundation, extended here so removing a material is recoverable.
      *
