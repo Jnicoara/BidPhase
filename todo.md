@@ -758,16 +758,29 @@ left as written rather than rewritten to match the rename.
 - [x] TypeScript: 0 errors
 
 ## v5.92 — Direct Anthropic API Configuration
+
 - [x] Add an encrypted server-side `ANTHROPIC_API_KEY` secret for direct Anthropic requests
 - [x] Configure HelixBid's server-only direct Anthropic client without exposing credentials to the browser or GitHub
 - [x] Add automated validation for the direct Anthropic configuration
+- **REVERTED 2026-08-12.** A stopgap while the Forge gateway key was thought to
+  be missing; the gateway works, so the second credential path was removed
+  (`server/directAnthropic.ts`, `server/anthropic.secret.test.ts`). The app
+  reaches Claude one way only, through `BUILT_IN_FORGE_API_KEY` — see
+  `references/deploying.md` § 8. If direct Anthropic access is ever wanted
+  deliberately, that doc needs updating too.
 
 ## v5.92 — GitHub Synchronization Verification
+
 - [x] Review the newer GitHub schema changes and identify the exact migrations required by the synchronized code
 - [x] Apply only verified, non-destructive schema migrations needed for the merged HelixBid release
 - [x] Verify the restarted application loads without server or client build errors
 
 ## v5.93 — Publish Verification & Internal Project Rename
+
 - [x] Verify the saved checkpoint and GitHub `main` are aligned before publishing
 - [x] Rename the internal Manus project identity from BidPhase to HelixBid
 - [x] Validate the renamed project configuration and document the safe Publish behavior
+- **Branding test reverted 2026-08-12.** `server/projectBranding.test.ts`
+  asserted `VITE_APP_TITLE === "HelixBid"`, a variable this repo never sets, so
+  it failed everywhere except the environment that defines it. The rename
+  itself stands; only the test was removed.
