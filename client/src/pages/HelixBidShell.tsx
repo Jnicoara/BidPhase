@@ -9,7 +9,6 @@
  *   /dashboard  → Dashboard (all bids by status; replaced the Projects grid)
  *   /project/:id → Legacy project detail (PDF plan viewer / takeoff). Still
  *                  routed, but nothing links to it since Projects was removed.
- *   /estimate    → Estimate Engine
  *   /settings    → Settings
  *   /trash       → Trash
  *   /matdb       → Supplier Pricing (prices the real materials catalog)
@@ -27,7 +26,6 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
 import TrashPage from "@/pages/TrashPage";
-import EstimateEnginePage from "@/pages/EstimateEnginePage";
 import HelixBidHomePage from "@/pages/HelixBidHomePage";
 import DashboardPage from "@/pages/DashboardPage";
 import ProjectDetailPage from "@/pages/ProjectDetailPage";
@@ -67,7 +65,6 @@ type Route =
   | "project-detail"
   | "settings"
   | "trash"
-  | "estimate"
   | "matdb"
   | "library-materials"
   | "library-labor-rates"
@@ -100,7 +97,6 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
     if (!isNaN(id)) return { route: "project-detail", projectId: id };
   }
   if (p === "matdb") return { route: "matdb" };
-  if (p === "estimate") return { route: "estimate" };
   if (p === "settings") return { route: "settings" };
   if (p === "trash") return { route: "trash" };
   // Foundation bid layer. Distinct from /projects, which is the legacy
@@ -220,7 +216,6 @@ export default function HelixBidShell() {
   const isOnProjectDetail = route === "project-detail";
   const isInSettings = route === "settings";
   const isInTrash = route === "trash";
-  const isInEstimate = route === "estimate";
   const isInMatDb = route === "matdb";
   const isInLibraryMats = route === "library-materials";
   const isInLaborRates = route === "library-labor-rates";
@@ -272,7 +267,6 @@ export default function HelixBidShell() {
       );
     if (isInTrash) return <TrashPage onBack={goBack} />;
     if (isInSettings) return <SettingsTab onBack={goBack} />;
-    if (isInEstimate) return <EstimateEnginePage onBack={goBack} />;
     if (isInLibraryMats) return <MaterialsLibraryPage />;
     if (isInLaborRates) return <LaborRatesPage />;
     if (isInModifiers) return <ModifiersPage />;
@@ -587,15 +581,13 @@ export default function HelixBidShell() {
                       ? "Trash"
                       : isInSettings
                         ? "Settings"
-                        : isInEstimate
-                          ? "Estimate Engine"
-                          : isInMatDb
-                            ? "Supplier Pricing"
-                            : isInLibraryMats
-                              ? "Materials"
-                              : isInAdmin
-                                ? "Admin Settings"
-                                : "Workspace"}
+                        : isInMatDb
+                          ? "Supplier Pricing"
+                          : isInLibraryMats
+                            ? "Materials"
+                            : isInAdmin
+                              ? "Admin Settings"
+                              : "Workspace"}
             </span>
           </div>
         </header>
