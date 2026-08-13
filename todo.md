@@ -794,4 +794,4 @@ left as written rather than rewritten to match the rename.
 - [x] Pull the latest GitHub main branch and inspect migrations 0029, 0030, and 0031
 - [x] Apply the verified pending schema migrations with `pnpm db:push` before release
 - [x] Correct the discovered missing `pricing_defaults.productivityPct` column required by the merged release
-- [ ] Validate the migrated release, synchronize GitHub main, and save the publish-ready checkpoint
+- [x] Validate the migrated release, synchronize GitHub main, and save the publish-ready checkpoint
