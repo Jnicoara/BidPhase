@@ -1,10 +1,11 @@
 /**
- * HelixBidHomePage — v5.46
+ * HelixBidHomePage
  * Dedicated landing page reached by clicking the BP logo.
  * Clean branded entry point with CTA to navigate to Projects.
  */
 import { Zap, FolderOpen, BarChart3, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { APP_VERSION_LABEL } from "@shared/version";
 
 interface HelixBidHomePageProps {
   onGoToProjects: () => void;
@@ -97,7 +98,7 @@ export default function HelixBidHomePage({ onGoToProjects }: HelixBidHomePagePro
       {/* ── Footer ── */}
       <div className="border-t border-border/40 py-4 text-center">
         <p className="text-xs text-muted-foreground/40 font-mono tracking-wide">
-          v5.46 · Field Edition
+          {APP_VERSION_LABEL}
         </p>
       </div>
     </div>

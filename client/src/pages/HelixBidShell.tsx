@@ -1,5 +1,5 @@
 /**
- * HelixBidShell — Main layout shell v5.50
+ * HelixBidShell — Main layout shell
  * Desktop: fixed left sidebar (icon-only 64px, expands to 220px on hover)
  * Mobile:  fixed bottom navigation bar
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
@@ -54,6 +54,7 @@ import FirstRunPage from "@/pages/FirstRunPage";
 import { trpc } from "@/lib/trpc";
 import { Settings, ChevronRight, Database, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText, Zap, LayoutDashboard, Archive as ArchiveIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { APP_VERSION_LABEL } from "@shared/version";
 
 type Route =
   | "home"
@@ -556,7 +557,7 @@ export default function HelixBidShell() {
           <span
             className="text-[10px] text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 font-mono"
           >
-            v5.50 · Field Edition
+            {APP_VERSION_LABEL}
           </span>
         </div>
       </aside>
