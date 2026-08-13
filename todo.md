@@ -705,3 +705,8 @@
 - [x] Renamed BidPhaseShell.tsx → HelixBidShell.tsx and BidPhaseHomePage.tsx → HelixBidHomePage.tsx
 - [x] All imports and references updated automatically
 - [x] TypeScript: 0 errors
+
+## v5.92 — Direct Anthropic API Configuration
+- [x] Add an encrypted server-side `ANTHROPIC_API_KEY` secret for direct Anthropic requests
+- [x] Configure HelixBid's server-only direct Anthropic client without exposing credentials to the browser or GitHub
+- [x] Add automated validation for the direct Anthropic configuration
