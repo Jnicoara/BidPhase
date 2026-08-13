@@ -45,6 +45,12 @@ import {
   InsertPricingDefaults,
   PricingDefaults,
   pricingDefaults,
+  InsertCompanyBranding,
+  CompanyBranding,
+  companyBranding,
+  InsertProposalSettings,
+  ProposalSettings,
+  proposalSettings,
   InsertBid,
   Bid,
   bids,
@@ -68,6 +74,15 @@ import {
   InsertSymbolLink,
   SymbolLink,
   symbolLinks,
+  InsertPlanCopilotRun,
+  PlanCopilotRun,
+  planCopilotRuns,
+  InsertPlanCopilotFinding,
+  PlanCopilotFinding,
+  planCopilotFindings,
+  PlanCopilotCorrection,
+  planCopilotCorrections,
+  CopilotFindingStatus,
   InsertTakeoffRunCircuit,
   TakeoffRunCircuit,
   takeoffRunCircuits,
@@ -101,6 +116,7 @@ import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
 import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
 import { BASELINE_KITS } from "./seed/baselineKits";
 import { hourlyCostFor } from "../shared/laborRateLookup";
+import { addAssemblyOverheadHours } from "../shared/pricing";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -2675,6 +2691,92 @@ export async function updatePricingDefaults(
     .where(eq(pricingDefaults.userId, userId));
 }
 
+// ─── Company branding & proposal presentation ─────────────────────────────────
+//
+// Both follow the same create-on-first-read shape as the pricing defaults
+// above: a user has a row from the first time anything asks for one, so no
+// caller has to handle "no settings yet" separately from "settings that are
+// still empty". The row is created BLANK on purpose — see the schema comment on
+// `company_branding`. Nothing here ever invents a company name.
+
+/** A user's branding, creating the (blank) row on first read. */
+export async function getCompanyBranding(
+  userId: number
+): Promise<CompanyBranding | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [existing] = await db
+    .select()
+    .from(companyBranding)
+    .where(eq(companyBranding.userId, userId))
+    .limit(1);
+  if (existing) return existing;
+
+  await db.insert(companyBranding).values({ userId });
+  const [created] = await db
+    .select()
+    .from(companyBranding)
+    .where(eq(companyBranding.userId, userId))
+    .limit(1);
+  return created;
+}
+
+export async function updateCompanyBranding(
+  userId: number,
+  data: Partial<InsertCompanyBranding>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await getCompanyBranding(userId); // ensure the row exists
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(companyBranding)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(eq(companyBranding.userId, userId));
+}
+
+/** A user's proposal presentation settings, creating the row on first read. */
+export async function getProposalSettings(
+  userId: number
+): Promise<ProposalSettings | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [existing] = await db
+    .select()
+    .from(proposalSettings)
+    .where(eq(proposalSettings.userId, userId))
+    .limit(1);
+  if (existing) return existing;
+
+  await db.insert(proposalSettings).values({ userId });
+  const [created] = await db
+    .select()
+    .from(proposalSettings)
+    .where(eq(proposalSettings.userId, userId))
+    .limit(1);
+  return created;
+}
+
+export async function updateProposalSettings(
+  userId: number,
+  data: Partial<InsertProposalSettings>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await getProposalSettings(userId); // ensure the row exists
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(proposalSettings)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(eq(proposalSettings.userId, userId));
+}
+
 // ─── Bids ─────────────────────────────────────────────────────────────────────
 
 /** The live bids — everything not sitting in the archive. */
@@ -3099,7 +3201,27 @@ export async function addAssemblyToBid(
     qty: qty.toFixed(4),
     unitLabel,
     snapshotMaterialCost: materialCost.toFixed(4),
-    snapshotLaborHours: Number(detail.baseLaborHours).toFixed(4),
+    /**
+     * Material-driven hours AND the assembly's overhead hours, as one figure.
+     *
+     * Rolled up here rather than frozen as two columns, for the same reason
+     * `snapshotMaterialCost` is one number rather than a copy of the recipe and
+     * `snapshotModifierPct` is one summed fraction rather than a list: the
+     * snapshot stores what the engine needs to re-price this line, not a replica
+     * of the library row it came from.
+     *
+     * It also removes a whole class of bug. Three places copy a line's snapshot
+     * — mass duplicate, unit generation and template push — and a second hours
+     * column is a column each of them could forget, which would silently
+     * under-price every generated room. One field cannot be half-copied.
+     *
+     * The split stays visible on the assembly itself, which is where an
+     * estimator would go to ask what the hours are made of.
+     */
+    snapshotLaborHours: addAssemblyOverheadHours(
+      Number(detail.baseLaborHours),
+      Number(detail.overheadLaborHours)
+    ).toFixed(4),
     snapshotModifierPct: modifierPct.toFixed(4),
     snapshotLaborRate: laborRate.toFixed(4),
     snapshotModifierNames: applied.map(m => m.name),
@@ -3651,6 +3773,8 @@ export type KitItemLine = {
   name: string;
   category: Assembly["category"];
   baseLaborHours: string;
+  /** Carried alongside the base hours so a kit's rollup counts them too. */
+  overheadLaborHours: string;
   laborRateId: number | null;
 };
 
@@ -3705,6 +3829,7 @@ export async function getKitItems(kitId: number): Promise<KitItemLine[]> {
       name: assemblies.name,
       category: assemblies.category,
       baseLaborHours: assemblies.baseLaborHours,
+      overheadLaborHours: assemblies.overheadLaborHours,
       laborRateId: assemblies.laborRateId,
     })
     .from(kitAssemblies)
@@ -4295,4 +4420,257 @@ export async function deleteSymbolLink(id: number, userId: number) {
   await db
     .delete(symbolLinks)
     .where(and(eq(symbolLinks.id, id), eq(symbolLinks.userId, userId)));
+}
+
+// ─── Plan co-pilot ────────────────────────────────────────────────────────────
+
+/**
+ * The stored reading of one sheet, if there is one.
+ *
+ * This is the cost control: a page already read is returned from here instead
+ * of paying a model to read it again. The newest run wins — a re-read leaves
+ * the old one in place rather than deleting it, so a user who re-reads and
+ * preferred the first answer has not lost it.
+ */
+export async function getLatestCopilotRun(
+  sheetId: number,
+  userId: number
+): Promise<PlanCopilotRun | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(planCopilotRuns)
+    .where(
+      and(
+        eq(planCopilotRuns.sheetId, sheetId),
+        eq(planCopilotRuns.userId, userId)
+      )
+    )
+    .orderBy(desc(planCopilotRuns.id))
+    .limit(1);
+  return row;
+}
+
+export async function createCopilotRun(
+  data: InsertPlanCopilotRun
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(planCopilotRuns).values(data);
+  return result.insertId;
+}
+
+export async function getCopilotRunById(
+  id: number,
+  userId: number
+): Promise<PlanCopilotRun | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(planCopilotRuns)
+    .where(and(eq(planCopilotRuns.id, id), eq(planCopilotRuns.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+export async function createCopilotFindings(
+  rows: InsertPlanCopilotFinding[]
+): Promise<void> {
+  if (rows.length === 0) return;
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(planCopilotFindings).values(rows);
+}
+
+export async function getCopilotFindings(
+  runId: number,
+  userId: number
+): Promise<PlanCopilotFinding[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(planCopilotFindings)
+    .where(
+      and(
+        eq(planCopilotFindings.runId, runId),
+        eq(planCopilotFindings.userId, userId)
+      )
+    )
+    .orderBy(asc(planCopilotFindings.id));
+}
+
+export async function getCopilotFindingsByIds(
+  ids: number[],
+  userId: number
+): Promise<PlanCopilotFinding[]> {
+  if (ids.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(planCopilotFindings)
+    .where(
+      and(
+        inArray(planCopilotFindings.id, ids),
+        eq(planCopilotFindings.userId, userId)
+      )
+    )
+    .orderBy(asc(planCopilotFindings.id));
+}
+
+/** Mark what became of a finding once the user has decided. */
+export async function setCopilotFindingStatus(
+  id: number,
+  userId: number,
+  status: CopilotFindingStatus,
+  stampId: number | null = null
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(planCopilotFindings)
+    .set({ status, stampId, updatedAt: new Date() })
+    .where(
+      and(
+        eq(planCopilotFindings.id, id),
+        eq(planCopilotFindings.userId, userId)
+      )
+    );
+}
+
+/**
+ * Re-point a finding after the user corrects what it is.
+ *
+ * Narrowly typed rather than taking the whole insert shape: a correction may
+ * change what a finding MEANS, but it must never be able to reach across and
+ * change which run or which user it belongs to.
+ */
+export async function updateCopilotFinding(
+  id: number,
+  userId: number,
+  data: {
+    symbolLinkId?: number | null;
+    assemblyId?: number | null;
+    assemblyName?: string | null;
+    confidence?: "high" | "low" | "unreadable";
+    status?: CopilotFindingStatus;
+    reason?: string | null;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(planCopilotFindings)
+    .set({ ...data, updatedAt: new Date() })
+    .where(
+      and(
+        eq(planCopilotFindings.id, id),
+        eq(planCopilotFindings.userId, userId)
+      )
+    );
+}
+
+/**
+ * What this user has already corrected on plans from the same source.
+ *
+ * Scoped by BOTH userId and sourceKey. Dropping either one is the bug this
+ * signature exists to make hard: without userId, one contractor's reading of an
+ * ambiguous mark rewrites another's; without sourceKey, a fix made for one
+ * architect's shorthand is applied to every firm's drawings.
+ */
+export async function getCopilotCorrections(
+  userId: number,
+  sourceKey: string
+): Promise<PlanCopilotCorrection[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(planCopilotCorrections)
+    .where(
+      and(
+        eq(planCopilotCorrections.userId, userId),
+        eq(planCopilotCorrections.sourceKey, sourceKey)
+      )
+    )
+    .orderBy(desc(planCopilotCorrections.timesApplied));
+}
+
+/**
+ * Remember a correction, or count another instance of one already known.
+ *
+ * Repeating a correction bumps `timesApplied` rather than adding a row, which
+ * is what lets the resolver break a tie in favour of the answer the user keeps
+ * giving. Re-pointing an existing correction at a different symbol resets the
+ * count to 1 — the user has changed their mind, and the old tally is a tally of
+ * a decision they no longer hold.
+ */
+export async function upsertCopilotCorrection(data: {
+  userId: number;
+  sourceKey: string;
+  rawLabel: string;
+  rawLabelKey: string;
+  symbolLinkId: number;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [existing] = await db
+    .select()
+    .from(planCopilotCorrections)
+    .where(
+      and(
+        eq(planCopilotCorrections.userId, data.userId),
+        eq(planCopilotCorrections.sourceKey, data.sourceKey),
+        eq(planCopilotCorrections.rawLabelKey, data.rawLabelKey)
+      )
+    )
+    .limit(1);
+
+  if (!existing) {
+    await db.insert(planCopilotCorrections).values({
+      userId: data.userId,
+      sourceKey: data.sourceKey,
+      rawLabel: data.rawLabel,
+      rawLabelKey: data.rawLabelKey,
+      symbolLinkId: data.symbolLinkId,
+      timesApplied: 1,
+    });
+    return;
+  }
+
+  const sameAnswer = existing.symbolLinkId === data.symbolLinkId;
+  await db
+    .update(planCopilotCorrections)
+    .set({
+      symbolLinkId: data.symbolLinkId,
+      rawLabel: data.rawLabel,
+      timesApplied: sameAnswer ? existing.timesApplied + 1 : 1,
+      updatedAt: new Date(),
+    })
+    .where(eq(planCopilotCorrections.id, existing.id));
+}
+
+/**
+ * Insert stamps and hand back their ids, in the order they were given.
+ *
+ * The plain createStamps() above is enough for the stamp tool, which does not
+ * care what row it made. Confirming a co-pilot finding does: the finding has to
+ * point at the stamp it became, so deleting the mark later can put the finding
+ * back to unconfirmed rather than leaving a dangling claim that it is on the
+ * bid. MySQL hands back the first id of a batch insert and guarantees the rest
+ * are consecutive, which is what the arithmetic below relies on.
+ */
+export async function createStampsReturningIds(
+  rows: InsertTakeoffStamp[]
+): Promise<number[]> {
+  if (rows.length === 0) return [];
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(takeoffStamps).values(rows);
+  const first = result.insertId;
+  return rows.map((_, index) => first + index);
 }

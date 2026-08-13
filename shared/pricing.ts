@@ -3,6 +3,8 @@
  * See ASSEMBLIES_PLAN.md § PRICING FLOW.
  *
  *   1. Direct Cost = Materials + (Labor hours × modifiers, SUMMED not compounded) × Labor Rate
+ *      where Labor hours = the assembly's material-driven hours PLUS its own
+ *      overhead hours (setup, testing, cleanup, trip), added before modifiers
  *   2. + Overhead  — optional, percentage or flat, applied BEFORE profit
  *   3. + Profit    — Markup % or Target Margin %, always an explicit choice
  *   4. = Final Bid Price
@@ -70,6 +72,14 @@ export type ProfitSetting = {
 export type LineItemInput = {
   materials: MaterialLine[];
   baseLaborHours: number;
+  /**
+   * The assembly's own overhead hours — setup, testing, cleanup, trip time.
+   *
+   * Added to `baseLaborHours` BEFORE modifiers, as its own step. Defaults to 0.
+   * See addAssemblyOverheadHours for why it is not a modifier and not the
+   * productivity factor.
+   */
+  overheadLaborHours?: number;
   /** Only the modifiers actually switched on for this line. */
   modifiers?: AppliedModifier[];
   /** Hourly cost of the labor role assigned to this line. */
@@ -87,6 +97,17 @@ export type LineItemInput = {
 
 export type LineItemBreakdown = {
   materialCost: number;
+  /** The assembly's overhead hours as applied. 0 when unset. */
+  overheadLaborHours: number;
+  /**
+   * Material hours + overhead hours, before any modifier or productivity step.
+   *
+   * Returned for the same reason `hoursAfterModifiers` is: the breakdown shows
+   * its work. An estimator has to be able to see that 0.55 h of device work
+   * plus 0.25 h of setup is what the percentages were then applied to, rather
+   * than a single 0.80 that appears from nowhere.
+   */
+  baseHoursWithOverhead: number;
   /** Summed modifier percentage, e.g. 0.25 for +25%. */
   modifierPct: number;
   /** The productivity factor applied, as a fraction. 0 when unset. */
@@ -369,6 +390,63 @@ export function applyProductivityToHours(
 }
 
 /**
+ * An assembly's own overhead hours: the time it takes that no material line
+ * accounts for — laying it out, testing it, cleaning up, the trip.
+ *
+ * ── The first step, and additive ─────────────────────────────────────────────
+ * These hours join the material-driven hours to form the base the rest of the
+ * pipeline works on:
+ *
+ *   (baseLaborHours + overheadLaborHours) × (1 + modifiers) × (1 + productivity)
+ *
+ * They are added first rather than bolted on at the end deliberately. Job
+ * conditions apply to setup and testing exactly as they apply to the work
+ * itself — a panel change on a lift at height takes longer to lay out too — so
+ * the overhead hours have to be inside what the modifiers multiply, not beside
+ * it.
+ *
+ * ── Three layers, and they must not be confused ──────────────────────────────
+ * This is the one people mix up with the productivity factor, so, plainly:
+ *
+ *   overhead hours      flat HOURS, set per assembly, added first
+ *   modifiers           PERCENTAGES describing this job, summed, applied next
+ *   productivity factor a PERCENTAGE describing the company's crews, last
+ *
+ * They differ in unit, in scope and in position. Overhead hours belong to one
+ * assembly and are a fixed quantity of time: 20 minutes of trip charge is 20
+ * minutes whether the crew is fast or slow. The productivity factor belongs to
+ * the company and scales everything, including these hours — which is correct,
+ * because a crew that beats book hours beats them on cleanup as well.
+ *
+ * Adding overhead as a modifier would be wrong in unit (hours are not a
+ * percentage). Adding it after productivity would be wrong in meaning (it would
+ * stop being affected by how the crew actually performs). Neither is a
+ * refactor to make later.
+ *
+ * Clamped at zero for the same reason the other steps are — see below.
+ */
+export function addAssemblyOverheadHours(
+  baseLaborHours: number,
+  overheadLaborHours = 0
+): number {
+  assertFinite(baseLaborHours, "baseLaborHours");
+  assertFinite(overheadLaborHours, "overheadLaborHours");
+  if (baseLaborHours < 0) {
+    throw new Error(
+      `baseLaborHours cannot be negative, received: ${baseLaborHours}`
+    );
+  }
+  // Negative overhead is not "a fast assembly", it is a data-entry error, and
+  // letting it through would quietly discount the work the recipe describes.
+  if (overheadLaborHours < 0) {
+    throw new Error(
+      `overheadLaborHours cannot be negative, received: ${overheadLaborHours}`
+    );
+  }
+  return baseLaborHours + overheadLaborHours;
+}
+
+/**
  * Apply summed modifiers to base labor hours.
  * Clamps at zero — no amount of negative modifiers makes a job take less than
  * no time. The caller is told via `clamped` so it can warn.
@@ -422,11 +500,21 @@ export function calculateLineItem(input: LineItemInput): LineItemBreakdown {
   // sees on the recipe, then scales cleanly by quantity.
   const materialCents = materialCostCents(input.materials) * quantity;
 
+  // Step one, before anything multiplies: the assembly's own overhead hours
+  // join its material-driven hours. See addAssemblyOverheadHours — this is
+  // additive and per-assembly, and is not related to the productivity factor
+  // applied two steps below.
+  const overheadLaborHours = input.overheadLaborHours ?? 0;
+  const baseHoursWithOverhead = addAssemblyOverheadHours(
+    input.baseLaborHours,
+    overheadLaborHours
+  );
+
   const {
     hours: afterModifiers,
     modifierPct,
     clamped,
-  } = applyModifiersToHours(input.baseLaborHours, input.modifiers);
+  } = applyModifiersToHours(baseHoursWithOverhead, input.modifiers);
 
   // Second, separate step — see applyProductivityToHours. Never summed into
   // modifierPct, and both figures are returned so a breakdown can show the two
@@ -442,6 +530,8 @@ export function calculateLineItem(input: LineItemInput): LineItemBreakdown {
 
   return {
     materialCost: fromCents(materialCents),
+    overheadLaborHours,
+    baseHoursWithOverhead,
     modifierPct,
     productivityPct,
     hoursAfterModifiers: afterModifiers,

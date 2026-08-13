@@ -1,8 +1,9 @@
 /**
  * Materials library API (Foundation).
  *
- * Distinct from dataRouter's /matdb supply-house price list — this is the
- * catalog assemblies are built from. See server/db.ts § Materials.
+ * The one material list in this app. /matdb (Supplier Pricing) used to run on a
+ * separate 1,103-row dataset with its own router; that is gone, and this router
+ * now serves both screens. See server/db.ts § Materials.
  *
  * The fork model is deliberately hidden from callers. A screen edits a material
  * by id and does not need to know whether it is a shipped baseline row or the
@@ -41,6 +42,7 @@ const aliasSchema = z.string().trim().max(1024).nullable();
 
 /** The user's note of the brand or part number they buy. Free text. */
 const brandNoteSchema = z.string().trim().max(255).nullable();
+const supplierSchema = z.string().trim().max(128).nullable();
 
 /** Money crosses the boundary as a number and is stored as an exact decimal string. */
 const toDecimal = (value: number) => value.toFixed(4);
@@ -205,6 +207,12 @@ export const materialsRouter = router({
    *
    * Returns the row that actually holds the edit — its id differs from the input
    * id when a fork happened, so callers should use the returned material.
+   *
+   * Writing a cost stamps `priceUpdatedAt`, which is what price staleness is
+   * measured from. It is stamped HERE rather than by the caller so every route
+   * to a price — this screen, Supplier Pricing, a CSV import — ages the same
+   * way. A price set through a path that forgot to stamp would show as fresh
+   * forever, which is the exact failure the colouring exists to catch.
    */
   update: protectedProcedure
     .input(
@@ -216,6 +224,7 @@ export const materialsRouter = router({
         category: categorySchema.optional(),
         searchAliases: aliasSchema.optional(),
         brandNote: brandNoteSchema.optional(),
+        supplierName: supplierSchema.optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -236,7 +245,7 @@ export const materialsRouter = router({
       await db.updateMaterial(editableId, ctx.user.id, {
         ...rest,
         ...(costPerUnit !== undefined
-          ? { costPerUnit: toDecimal(costPerUnit) }
+          ? { costPerUnit: toDecimal(costPerUnit), priceUpdatedAt: new Date() }
           : {}),
       });
 
@@ -359,5 +368,73 @@ export const materialsRouter = router({
       }
       await db.deleteMaterialForever(input.id, ctx.user.id);
       return { success: true };
+    }),
+
+  /**
+   * Apply a supply-house price list to the REAL catalog.
+   *
+   * This is what the old Supplier Pricing screen did against its own separate
+   * 1,103-row dataset, pointed at the catalog everything else already uses.
+   * There is one material list in this app, and a CSV is a way to price it —
+   * not a way to grow a second one.
+   *
+   * ── Matches by name, and never creates ───────────────────────────────────────
+   * A row whose name matches nothing is REPORTED, not inserted. Inserting would
+   * quietly rebuild the two-catalog problem one import at a time: a supplier
+   * sheet is full of items this contractor does not stock, and each unmatched
+   * line would become a material nobody curated, with no aliases, no category
+   * and no size ordering. The user gets the list back and decides.
+   *
+   * Baselines fork on write, exactly as a hand edit does — a shared row cannot
+   * carry one user's supplier price.
+   */
+  importPrices: protectedProcedure
+    .input(
+      z.object({
+        supplierName: z.string().trim().min(1).max(128),
+        rows: z
+          .array(
+            z.object({
+              name: nameSchema,
+              costPerUnit: costSchema,
+            })
+          )
+          .min(1)
+          .max(5000),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const existing = await db.getLibraryMaterials(ctx.user.id, "active");
+      // Name match is case- and space-insensitive: a supply house writes
+      // "12-2 NM-B" where the catalog says "12-2 NM-B " often enough that an
+      // exact match would report half a real price list as unmatched.
+      const key = (name: string) =>
+        name.trim().toLowerCase().replace(/\s+/g, " ");
+      const byName = new Map(existing.map(row => [key(row.name), row]));
+
+      const priced: string[] = [];
+      const unmatched: string[] = [];
+      const stamped = new Date();
+
+      for (const row of input.rows) {
+        const target = byName.get(key(row.name));
+        if (!target) {
+          unmatched.push(row.name);
+          continue;
+        }
+        const editableId =
+          target.userId === null
+            ? await db.forkMaterial(target.id, ctx.user.id)
+            : target.id;
+
+        await db.updateMaterial(editableId, ctx.user.id, {
+          costPerUnit: toDecimal(row.costPerUnit),
+          supplierName: input.supplierName,
+          priceUpdatedAt: stamped,
+        });
+        priced.push(target.name);
+      }
+
+      return { priced, unmatched };
     }),
 });

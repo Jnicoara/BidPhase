@@ -1,0 +1,321 @@
+/**
+ * Proposals — the client-facing document, and the two things that dress it.
+ *
+ * Three groups of procedures:
+ *   • branding  — the contractor's own letterhead. Per user, never shared.
+ *   • settings  — layout, accent colour, which sections appear.
+ *   • document  — one bid, rendered into the view model the page draws.
+ *
+ * ── The document is built on the server ──────────────────────────────────────
+ * `document` returns a finished ProposalDocument rather than the raw parts,
+ * for the same reason the bid rollup is server-side: the browser must never be
+ * the thing that decides what a client sees. If deciding what to hide happened
+ * in the renderer, then every layout would have to make that decision again and
+ * the third one to be written would eventually get it wrong — showing a
+ * contractor's overhead percentage to their customer is not a cosmetic bug.
+ *
+ * The narrowing itself lives in shared/proposal.ts (`buildProposal`), which is
+ * pure and directly tested. This router's job is to fetch, authorise, and hand
+ * it the pieces.
+ *
+ * ── Prices come from the bid's snapshot, not from today's catalog ────────────
+ * The numbers are produced by ../bidPricing, the same rollup the Bids screen
+ * reads. A proposal therefore quotes what was actually priced when the lines
+ * were added — re-pricing a material next month does not silently reissue the
+ * quote at a new number.
+ */
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+import { protectedProcedure, router } from "../_core/trpc";
+import { PROPOSAL_LAYOUTS } from "../../drizzle/schema";
+import {
+  buildProposal,
+  isValidAccent,
+  PROPOSAL_SECTION_IDS,
+  type BrandingFields,
+} from "../../shared/proposal";
+import { bidRollup, companyDefaultsFor } from "../bidPricing";
+import { storagePresignPut } from "../storage";
+import * as db from "../db";
+
+/** Logos are small. This is a letterhead image, not a plan sheet. */
+const MAX_LOGO_BYTES = 5 * 1024 * 1024;
+const LOGO_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/svg+xml",
+] as const;
+
+const sectionIdSchema = z.enum(PROPOSAL_SECTION_IDS);
+
+/** The branding row reduced to what the document needs, and nothing else. */
+function toBrandingFields(
+  row: Awaited<ReturnType<typeof db.getCompanyBranding>>
+): BrandingFields {
+  return {
+    companyName: row?.companyName ?? "",
+    licenseNumber: row?.licenseNumber ?? "",
+    address: row?.address ?? "",
+    phone: row?.phone ?? "",
+    email: row?.email ?? "",
+    website: row?.website ?? "",
+    logoUrl: row?.logoUrl ?? null,
+  };
+}
+
+async function requireBid(id: number, userId: number) {
+  const bid = await db.getBidById(id, userId);
+  if (!bid)
+    throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
+  return bid;
+}
+
+export const proposalsRouter = router({
+  // ── Branding ───────────────────────────────────────────────────────────────
+
+  /**
+   * This user's letterhead. Always returns a row — blank for a new account,
+   * which is exactly what the Settings screen and the document want to see.
+   */
+  branding: protectedProcedure.query(async ({ ctx }) => {
+    const row = await db.getCompanyBranding(ctx.user.id);
+    return {
+      companyName: row?.companyName ?? "",
+      licenseNumber: row?.licenseNumber ?? "",
+      address: row?.address ?? "",
+      phone: row?.phone ?? "",
+      email: row?.email ?? "",
+      website: row?.website ?? "",
+      logoKey: row?.logoKey ?? null,
+      logoUrl: row?.logoUrl ?? null,
+    };
+  }),
+
+  /**
+   * Save one or more branding fields.
+   *
+   * Every field is optional and only the ones sent are written, so the settings
+   * form can save field by field as the user leaves each one — the standing
+   * rule for self-saving inputs (CLAUDE.md § Editing fields).
+   */
+  setBranding: protectedProcedure
+    .input(
+      z.object({
+        companyName: z.string().trim().max(255).optional(),
+        licenseNumber: z.string().trim().max(128).optional(),
+        address: z.string().trim().max(512).optional(),
+        phone: z.string().trim().max(64).optional(),
+        email: z.string().trim().max(320).optional(),
+        website: z.string().trim().max(255).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const patch: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(input)) {
+        if (value !== undefined) patch[key] = value;
+      }
+      if (Object.keys(patch).length > 0) {
+        await db.updateCompanyBranding(ctx.user.id, patch);
+      }
+      return db.getCompanyBranding(ctx.user.id);
+    }),
+
+  /**
+   * Step 1 of a logo upload: check it, hand back somewhere to put it.
+   *
+   * Same two-step shape as attaching a plan (bidPdfsRouter): the browser PUTs
+   * straight to S3 and this server never holds the bytes. Overkill for a 40 KB
+   * logo on its own, but having one upload pattern in the app is worth more
+   * than saving a round trip on a file people upload once.
+   */
+  createLogoUploadTicket: protectedProcedure
+    .input(
+      z.object({
+        filename: z.string().trim().min(1).max(255),
+        contentType: z.enum(LOGO_TYPES),
+        byteSize: z.number().int().min(1),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (input.byteSize > MAX_LOGO_BYTES) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `That logo is ${(input.byteSize / 1024 / 1024).toFixed(1)} MB. Keep it under ${MAX_LOGO_BYTES / 1024 / 1024} MB — a letterhead image does not need to be larger.`,
+        });
+      }
+
+      const { key, uploadUrl } = await storagePresignPut(
+        `company-logos/${ctx.user.id}/${input.filename}`,
+        input.contentType
+      );
+      return { uploadUrl, storageKey: key };
+    }),
+
+  /**
+   * Step 2: the bytes are in storage — point the letterhead at them.
+   *
+   * The key has to be one this server just issued for THIS user. Without that
+   * check a caller could set their logo to any object in the bucket by naming
+   * its key, including another contractor's.
+   */
+  confirmLogo: protectedProcedure
+    .input(z.object({ storageKey: z.string().min(1).max(1024) }))
+    .mutation(async ({ input, ctx }) => {
+      const expectedPrefix = `company-logos/${ctx.user.id}/`;
+      if (!input.storageKey.startsWith(expectedPrefix)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "That upload does not belong to this account.",
+        });
+      }
+      await db.updateCompanyBranding(ctx.user.id, {
+        logoKey: input.storageKey,
+        // Served through the storage proxy, which 307s to a signed S3 URL.
+        logoUrl: `/manus-storage/${input.storageKey}`,
+      });
+      return db.getCompanyBranding(ctx.user.id);
+    }),
+
+  /** Remove the logo. The document goes back to prompting for one. */
+  clearLogo: protectedProcedure.mutation(async ({ ctx }) => {
+    await db.updateCompanyBranding(ctx.user.id, {
+      logoKey: null,
+      logoUrl: null,
+    });
+    return db.getCompanyBranding(ctx.user.id);
+  }),
+
+  // ── Presentation ───────────────────────────────────────────────────────────
+
+  settings: protectedProcedure.query(async ({ ctx }) => {
+    const row = await db.getProposalSettings(ctx.user.id);
+    return {
+      layout: row?.layout ?? "classic",
+      accentColor: row?.accentColor ?? "#F5C518",
+      hiddenSections: row?.hiddenSections ?? [],
+      termsText: row?.termsText ?? "",
+      validDays: row?.validDays ?? 30,
+    };
+  }),
+
+  /**
+   * Change how proposals look.
+   *
+   * Presentation only — there is deliberately no procedure here that can move a
+   * price. Clicking through the three layouts on a finished bid is safe by
+   * construction, not by care.
+   */
+  setSettings: protectedProcedure
+    .input(
+      z.object({
+        layout: z.enum(PROPOSAL_LAYOUTS).optional(),
+        accentColor: z.string().trim().max(9).optional(),
+        hiddenSections: z.array(sectionIdSchema).max(32).optional(),
+        termsText: z.string().max(4000).optional(),
+        /** 0 switches the validity line off; a year is already generous. */
+        validDays: z.number().int().min(0).max(365).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const patch: Record<string, unknown> = {};
+      if (input.layout !== undefined) patch.layout = input.layout;
+      if (input.accentColor !== undefined) {
+        // Refused rather than corrected: silently swapping an unreadable colour
+        // for the default would leave the user clicking a control that appears
+        // to do nothing.
+        if (!isValidAccent(input.accentColor)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `“${input.accentColor}” is not a colour. Use a hex value like #1F4E79.`,
+          });
+        }
+        patch.accentColor = input.accentColor;
+      }
+      if (input.hiddenSections !== undefined) {
+        // Deduplicated here so the stored list stays the small, readable thing
+        // a checkbox column writes.
+        patch.hiddenSections = Array.from(new Set(input.hiddenSections));
+      }
+      if (input.termsText !== undefined) patch.termsText = input.termsText;
+      if (input.validDays !== undefined) patch.validDays = input.validDays;
+
+      if (Object.keys(patch).length > 0) {
+        await db.updateProposalSettings(ctx.user.id, patch);
+      }
+      return db.getProposalSettings(ctx.user.id);
+    }),
+
+  // ── The document ───────────────────────────────────────────────────────────
+
+  /**
+   * One bid as a client-facing proposal.
+   *
+   * Returns the built document AND the bid's own internal totals. The second is
+   * not on the document — it is what the composer shows the contractor beside
+   * the preview, so they can see the bid price they know and confirm the
+   * proposal quotes the same figure.
+   */
+  document: protectedProcedure
+    .input(z.object({ bidId: z.number().int().positive() }))
+    .query(async ({ input, ctx }) => {
+      const bid = await requireBid(input.bidId, ctx.user.id);
+      const [lines, company, brandingRow, settingsRow] = await Promise.all([
+        db.getBidLineItems(bid.id),
+        companyDefaultsFor(ctx.user.id),
+        db.getCompanyBranding(ctx.user.id),
+        db.getProposalSettings(ctx.user.id),
+      ]);
+
+      const { priced, units, totals } = bidRollup(bid, lines, company);
+
+      const document = buildProposal({
+        bid: {
+          name: bid.name,
+          clientName: bid.clientName,
+          siteAddress: bid.siteAddress,
+          proposalNote: bid.proposalNote,
+        },
+        totals,
+        units: units.map(u => ({ label: u.label, directCost: u.directCost })),
+        lines: priced.map(({ line }) => ({
+          name: line.name,
+          qty: Number(line.qty),
+          unitLabel: line.unitLabel,
+        })),
+        branding: toBrandingFields(brandingRow),
+        design: {
+          layout: settingsRow?.layout ?? "classic",
+          accentColor: settingsRow?.accentColor ?? "#F5C518",
+          hiddenSections: settingsRow?.hiddenSections ?? [],
+          termsText: settingsRow?.termsText ?? null,
+          validDays: settingsRow?.validDays ?? 30,
+        },
+        // The clock is the server's, so two people looking at the same proposal
+        // on either side of midnight see the same date on it.
+        now: new Date(),
+      });
+
+      return {
+        document,
+        bid: {
+          id: bid.id,
+          name: bid.name,
+          status: bid.status,
+          clientName: bid.clientName,
+          siteAddress: bid.siteAddress,
+          proposalNote: bid.proposalNote,
+        },
+        /** The estimator's own view, for confirming the two agree. Never shown to a client. */
+        internalTotals: {
+          materialCost: totals.materialCost,
+          laborCost: totals.laborCost,
+          directCost: totals.directCost,
+          overheadAmount: totals.overheadAmount,
+          profitAmount: totals.profitAmount,
+          finalPrice: totals.finalPrice,
+        },
+        lineCount: lines.length,
+      };
+    }),
+});

@@ -32,7 +32,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import UnifiedProjects from "@/components/tabs/UnifiedProjects";
 
 // Tab content
 import ProjectAssembliesTab from "./tabs/ProjectAssembliesTab";
@@ -99,16 +98,29 @@ export default function ProjectDetailPage({
     updateProject.mutate({ id: projectId, status: val });
   };
 
-  // ── Estimating workspace ─────────────────────────────────────────────────
-  const renderEstimatingTab = () => {
-    if (!project) return null;
-    const cat = (project.category ?? "commercial") as
-      | "civil"
-      | "commercial"
-      | "residential"
-      | "industrial";
-    return <UnifiedProjects category={cat} />;
-  };
+  /**
+   * The legacy estimating workspace this used to embed is gone, along with the
+   * separate material catalog it priced from. Estimating happens on Bids now,
+   * against the one real catalog — so this points there rather than rendering
+   * a surface that would quietly disagree with it.
+   */
+  const renderEstimatingTab = () => (
+    <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+      <p className="text-sm text-muted-foreground max-w-sm">
+        Estimating moved to <span className="text-foreground">Bids</span>, which
+        prices from the same materials catalog as the rest of the app.
+      </p>
+      <Button
+        size="sm"
+        className="h-8 gap-1.5 text-xs"
+        onClick={() => {
+          window.location.hash = "/bids";
+        }}
+      >
+        Go to Bids
+      </Button>
+    </div>
+  );
 
   if (isLoading) {
     return (

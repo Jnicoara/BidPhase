@@ -1,25 +1,40 @@
 /**
  * Breakers, panels, disconnects and the commercial distribution gear.
  *
- * ── Breaker naming follows the trade, not the catalog ────────────────────────
- * A two-pole 20 amp breaker is a "20/2" out loud and on a takeoff sheet, and
- * that is the name used here — the shipped catalog already had "20/2 breaker"
- * and the rest of the range simply extends it. Single-pole keeps the "20A
- * breaker" form for the same reason: it is what the existing rows are called
- * and what the starter assemblies reference.
+ * ── Pole count is spelled out, the way a counter ticket is ───────────────────
+ * A two-pole 20 amp breaker is written "20A 2-Pole" in every supply-house
+ * catalog, and that is the displayed name here. It used to be "20/2", which is
+ * how the trade SAYS it — and that spelling is kept as a search alias, along
+ * with "double pole", "two pole" and "DP", so nothing stopped being findable.
+ * The rename went through RENAMED_BASELINE_MATERIALS (see ./index.ts): baseline
+ * rows are matched by name, so editing this string alone would have inserted a
+ * second row and orphaned every assembly pointing at the first.
+ *
+ * Single-pole keeps the bare "20A breaker" form. Adding "1-Pole" to it would be
+ * noise on the most common part in the catalog — pole count is worth saying
+ * where it is not one.
+ *
+ * ── Panels and Breakers are separate shelves ─────────────────────────────────
+ * A panel is a box you hang once; a breaker is a part you stock by the dozen.
+ * Shelving them together meant scrolling past five panel sizes to reach the 20A
+ * breakers. Disconnects, meter bases and fuses sit with Panels rather than
+ * Breakers: they are service equipment, and a fuse goes in a fused disconnect,
+ * not in a load center.
  */
 import { aliases, UNPRICED, type BaselineMaterial } from "./types";
 
-const gear = (category: "Panels & Breakers" | "Distribution Equipment") => ({
+const gear = (category: "Panels" | "Breakers" | "Distribution Equipment") => ({
   unitOfSale: "each" as const,
   costPerUnit: UNPRICED,
   category,
 });
 
 const BREAKER_SLANG = "circuit cb ocpd bolt on plug in load center";
+/** Said out loud and written on takeoff sheets; kept findable after the rename. */
+const TWO_POLE_SLANG = "2 pole double pole two pole dp 240 volt 240v";
 
 const singlePole: BaselineMaterial[] = ["15", "20", "30"].map(amps => ({
-  ...gear("Panels & Breakers"),
+  ...gear("Breakers"),
   name: `${amps}A breaker`,
   searchAliases: aliases(
     `${amps} amp`,
@@ -37,35 +52,88 @@ const doublePole: BaselineMaterial[] = [
   "70",
   "100",
 ].map(amps => ({
-  ...gear("Panels & Breakers"),
-  name: `${amps}/2 breaker`,
+  ...gear("Breakers"),
+  name: `${amps}A 2-Pole breaker`,
   searchAliases: aliases(
-    `${amps} amp ${amps}a`,
-    "2 pole double pole two pole dp 240 volt 240v",
+    `${amps} amp ${amps}a ${amps}/2`,
+    TWO_POLE_SLANG,
     BREAKER_SLANG
   ),
 }));
 
-const combos: BaselineMaterial[] = ["15", "20"].map(amps => ({
-  ...gear("Panels & Breakers"),
-  name: `${amps}A AFCI/GFCI combo breaker`,
-  searchAliases: aliases(
-    `${amps} amp`,
-    "arc fault ground dual function combination gfi afi bedroom kitchen",
-    BREAKER_SLANG
-  ),
-}));
+/**
+ * The three protected types, single- and two-pole.
+ *
+ * AFCI and GFCI are separate products from the combo, not steps toward it: a
+ * kitchen small-appliance circuit needs the combo, a bedroom needs AFCI alone,
+ * and a spa or well pump needs a two-pole GFCI. Shipping only the combo left an
+ * estimator either mis-specifying or adding the row by hand on every job.
+ */
+type Protected = { suffix: string; slang: string };
+
+const PROTECTED_TYPES: Protected[] = [
+  {
+    suffix: "AFCI",
+    slang: "arc fault afi combination arc bedroom living",
+  },
+  {
+    suffix: "GFCI",
+    slang: "ground fault gfi bathroom kitchen outdoor wet",
+  },
+  {
+    suffix: "AFCI/GFCI combo",
+    slang: "arc ground dual function combination gfi afi kitchen laundry",
+  },
+];
+
+/** Single-pole protected breakers — 15A and 20A cover the branch circuits. */
+const protectedSingle: BaselineMaterial[] = PROTECTED_TYPES.flatMap(type =>
+  ["15", "20"].map(amps => ({
+    ...gear("Breakers"),
+    name: `${amps}A ${type.suffix} breaker`,
+    searchAliases: aliases(
+      `${amps} amp`,
+      "single pole one pole 1p sp",
+      type.slang,
+      BREAKER_SLANG
+    ),
+  }))
+);
+
+/**
+ * Two-pole protected breakers.
+ *
+ * Amperages differ per type because the loads do: a two-pole GFCI is a spa,
+ * hot tub or well pump (20–60A), while two-pole AFCI and combo units exist at
+ * the smaller end where a 240V branch circuit still needs arc protection.
+ */
+const protectedDouble: BaselineMaterial[] = [
+  { type: PROTECTED_TYPES[1], amps: ["20", "30", "50", "60"] }, // GFCI
+  { type: PROTECTED_TYPES[0], amps: ["20", "30"] }, // AFCI
+  { type: PROTECTED_TYPES[2], amps: ["20", "30"] }, // combo
+].flatMap(({ type, amps }) =>
+  amps.map(a => ({
+    ...gear("Breakers"),
+    name: `${a}A 2-Pole ${type.suffix} breaker`,
+    searchAliases: aliases(
+      `${a} amp ${a}a ${a}/2`,
+      TWO_POLE_SLANG,
+      type.slang,
+      BREAKER_SLANG
+    ),
+  }))
+);
 
 /**
  * Tandems fit two circuits in one slot. Named by both halves because that is
  * how they are ordered — a "15/20 tandem" is not a 15A or a 20A breaker.
  */
 const tandems: BaselineMaterial[] = ["15/15", "20/20", "15/20"].map(config => ({
-  ...gear("Panels & Breakers"),
+  ...gear("Breakers"),
   name: `${config} tandem breaker`,
   searchAliases: aliases(
     config.replace("/", " "),
-    "twin duplex half slim skinny cheater two circuits one space",
+    "twin duplex half slim skinny cheater peanut two circuits one space",
     BREAKER_SLANG
   ),
 }));
@@ -73,7 +141,7 @@ const tandems: BaselineMaterial[] = ["15/15", "20/20", "15/20"].map(config => ({
 const PANEL_AMPS = ["100", "125", "150", "200", "400"];
 
 const mainPanels: BaselineMaterial[] = PANEL_AMPS.map(amps => ({
-  ...gear("Panels & Breakers"),
+  ...gear("Panels"),
   name: `${amps}A main panel`,
   searchAliases: aliases(
     `${amps} amp`,
@@ -82,7 +150,7 @@ const mainPanels: BaselineMaterial[] = PANEL_AMPS.map(amps => ({
 }));
 
 const subPanels: BaselineMaterial[] = PANEL_AMPS.map(amps => ({
-  ...gear("Panels & Breakers"),
+  ...gear("Panels"),
   name: `${amps}A main-lug sub-panel`,
   searchAliases: aliases(
     `${amps} amp`,
@@ -93,7 +161,7 @@ const subPanels: BaselineMaterial[] = PANEL_AMPS.map(amps => ({
 }));
 
 const meterBases: BaselineMaterial[] = ["100", "200", "400"].map(amps => ({
-  ...gear("Panels & Breakers"),
+  ...gear("Panels"),
   name: `${amps}A meter base`,
   searchAliases: aliases(
     `${amps} amp`,
@@ -110,7 +178,7 @@ const meterBases: BaselineMaterial[] = ["100", "200", "400"].map(amps => ({
 const disconnects: BaselineMaterial[] = ["30", "60", "100", "200"].flatMap(
   amps => [
     {
-      ...gear("Panels & Breakers"),
+      ...gear("Panels"),
       name: `${amps}A fused disconnect`,
       searchAliases: aliases(
         `${amps} amp`,
@@ -118,7 +186,7 @@ const disconnects: BaselineMaterial[] = ["30", "60", "100", "200"].flatMap(
       ),
     },
     {
-      ...gear("Panels & Breakers"),
+      ...gear("Panels"),
       name: `${amps}A non-fused disconnect`,
       searchAliases: aliases(
         `${amps} amp`,
@@ -144,7 +212,7 @@ const disconnects: BaselineMaterial[] = ["30", "60", "100", "200"].flatMap(
  */
 const fuses: BaselineMaterial[] = ["30", "60", "100", "200", "400", "600"].map(
   amps => ({
-    ...gear("Panels & Breakers"),
+    ...gear("Panels"),
     name: `${amps}A cartridge fuse`,
     searchAliases: aliases(
       `${amps} amp`,
@@ -156,7 +224,7 @@ const fuses: BaselineMaterial[] = ["30", "60", "100", "200", "400", "600"].map(
 );
 
 const spaDisconnects: BaselineMaterial[] = ["50", "60"].map(amps => ({
-  ...gear("Panels & Breakers"),
+  ...gear("Panels"),
   name: `${amps}A spa disconnect`,
   searchAliases: aliases(
     `${amps} amp`,
@@ -245,7 +313,8 @@ export const DISTRIBUTION: BaselineMaterial[] = [
 export const PANELS_AND_BREAKERS: BaselineMaterial[] = [
   ...singlePole,
   ...doublePole,
-  ...combos,
+  ...protectedSingle,
+  ...protectedDouble,
   ...tandems,
   ...mainPanels,
   ...subPanels,

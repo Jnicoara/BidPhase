@@ -60,6 +60,17 @@ export const RENAMED_BASELINE_MATERIALS: Record<string, string> = {
   '18" under-cabinet light': '18" under-cabinet light bar',
   '24" under-cabinet light': '24" under-cabinet light bar',
   '36" under-cabinet light': '36" under-cabinet light bar',
+  // "20/2" is how the trade SAYS it; "20A 2-Pole" is how every supply house
+  // WRITES it, and a catalog is a written thing. The spoken form survives as a
+  // search alias, so anyone typing "20/2" still lands on the same row — which
+  // is the point of renaming in place rather than adding a second one.
+  "20/2 breaker": "20A 2-Pole breaker",
+  "30/2 breaker": "30A 2-Pole breaker",
+  "40/2 breaker": "40A 2-Pole breaker",
+  "50/2 breaker": "50A 2-Pole breaker",
+  "60/2 breaker": "60A 2-Pole breaker",
+  "70/2 breaker": "70A 2-Pole breaker",
+  "100/2 breaker": "100A 2-Pole breaker",
 };
 
 /**

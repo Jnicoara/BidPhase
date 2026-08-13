@@ -532,7 +532,12 @@ export const MATERIAL_CATEGORIES = [
   "Receptacles",
   "Switches",
   "Wall Plates & Misc",
-  "Panels & Breakers",
+  // Split apart in 0028. A panel is a box you hang and a breaker is a part you
+  // stock by the dozen — shelving them together meant scrolling past five panel
+  // sizes to reach the 20A breakers, on a shelf an estimator reads constantly.
+  // Panels first: you hang the panel, then you populate it.
+  "Panels",
+  "Breakers",
   "Lighting Hardware",
   "Grounding & Bonding",
   "Life Safety",
@@ -623,6 +628,36 @@ export const materials = mysqlTable(
      * other quantity. Adding more is a data change, not a code change.
      */
     defaultQty: decimal("defaultQty", { precision: 10, scale: 4 }),
+
+    /**
+     * Which supply house this material's price came from, e.g. "Platt".
+     *
+     * Free text rather than a suppliers table on purpose: the useful question
+     * is "whose price is this, and how old" — not "manage my vendor list". A
+     * table would need CRUD, a picker and a merge story before it answered
+     * anything the name alone does not.
+     *
+     * NULL means the price came from nowhere in particular. It is never
+     * inferred: a starter row ships at $0 with no supplier, and it stays that
+     * way until someone types a real one.
+     */
+    supplierName: varchar("supplierName", { length: 128 }),
+
+    /**
+     * When `costPerUnit` was last set, which is what price staleness is
+     * measured from. NULL = never priced.
+     *
+     * Deliberately NOT `updatedAt`. That column moves when anything changes —
+     * a rename, an alias edit, a category fix — so ageing a price off it would
+     * show a nine-month-old price as fresh because someone corrected its
+     * spelling last week. Stale pricing that looks current is the failure this
+     * whole screen exists to prevent, so the date has to track the price and
+     * nothing else. Only a cost write touches it.
+     *
+     * See shared/priceStaleness.ts for the bands, which take the clock as a
+     * parameter so they can be tested without waiting 90 days.
+     */
+    priceUpdatedAt: timestamp("priceUpdatedAt"),
 
     /**
      * active / archived / deleted — the lifecycle Modifiers has had since
@@ -773,6 +808,39 @@ export const assemblies = mysqlTable(
       .notNull(),
 
     /**
+     * Time this assembly takes that no material line accounts for — laying out,
+     * testing, cleanup, the walk back to the van. Flat hours, added to
+     * `baseLaborHours` before anything else touches them.
+     *
+     * ── Per assembly, and flat, on purpose ───────────────────────────────────
+     * Not a company-wide number and not a percentage. Swapping a receptacle and
+     * changing out a panel carry completely different amounts of setup that has
+     * nothing to do with how many devices are in the recipe, so this is decided
+     * once per assembly by whoever knows that work.
+     *
+     * ── Not the productivity factor, and never mixed with it ─────────────────
+     * The two are unrelated layers and the only thing they share is the word
+     * "labor". This is ADDITIVE hours belonging to one assembly, applied first.
+     * The productivity factor is a company- or bid-level PERCENTAGE applied last
+     * to everything (see pricing_defaults.productivityPct). The order is
+     *
+     *   (material hours + overhead hours) × (1 + modifiers) × (1 + productivity)
+     *
+     * and shared/pricing.ts is the one place that knows it. Folding this into
+     * the modifier sum or the productivity step would make a fixed 20-minute
+     * trip charge scale with job conditions, which is exactly what it is not.
+     *
+     * Ships at 0 for every starter and every existing row, so nothing inflates
+     * until someone deliberately sets it.
+     */
+    overheadLaborHours: decimal("overheadLaborHours", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
+
+    /**
      * Which role does this work. Nullable, and "set null" on delete rather than
      * cascade: losing a labor rate must not silently delete the recipe that
      * referenced it. The UI shows such an assembly as needing a role picked.
@@ -908,6 +976,111 @@ export const pricingDefaults = mysqlTable("pricing_defaults", {
 export type PricingDefaults = typeof pricingDefaults.$inferSelect;
 export type InsertPricingDefaults = typeof pricingDefaults.$inferInsert;
 
+// ─── Company branding ─────────────────────────────────────────────────────────
+/**
+ * Who the contractor is, as it appears on a document a client receives.
+ *
+ * ── One row per user, never a shared default ─────────────────────────────────
+ * Every field here is the USER's company, not this app's and not some seeded
+ * example. A proposal that ships with somebody else's name on it is worse than
+ * one that ships blank, because blank is obviously unfinished and wrong-but-
+ * plausible is not. Nothing in here is ever populated with sample content.
+ *
+ * ── Blank is the flag ────────────────────────────────────────────────────────
+ * Text fields default to "" and the logo columns to NULL, and "still empty"
+ * IS the signal that the user has not filled this in — exactly the reasoning
+ * behind `needsPricing` reading the $0 itself instead of carrying a separate
+ * "has it been priced" flag (shared/materialPricing.ts). A second column saying
+ * whether branding was set up is a fact that can drift out of step with the
+ * fields it describes; the fields cannot disagree with themselves.
+ * `needsBranding` in shared/proposal.ts is what reads them.
+ */
+export const companyBranding = mysqlTable("company_branding", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  /** Trading name, as the client should see it. */
+  companyName: varchar("companyName", { length: 255 }).default("").notNull(),
+  /** Contractor licence number — on many jobs a legal requirement to state. */
+  licenseNumber: varchar("licenseNumber", { length: 128 })
+    .default("")
+    .notNull(),
+  /** Free-form, multi-line. Rendered line by line, never parsed. */
+  address: varchar("address", { length: 512 }).default("").notNull(),
+  phone: varchar("phone", { length: 64 }).default("").notNull(),
+  email: varchar("email", { length: 320 }).default("").notNull(),
+  website: varchar("website", { length: 255 }).default("").notNull(),
+
+  /**
+   * The logo in S3. Two columns for the same reason `bid_pdfs` splits them: the
+   * key is what this app owns and can re-sign, the URL is what a browser loads.
+   * NULL means no logo, which the document renders as a placeholder rather than
+   * as blank space.
+   */
+  logoKey: varchar("logoKey", { length: 1024 }),
+  logoUrl: varchar("logoUrl", { length: 1024 }),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CompanyBranding = typeof companyBranding.$inferSelect;
+export type InsertCompanyBranding = typeof companyBranding.$inferInsert;
+
+// ─── Proposal presentation ────────────────────────────────────────────────────
+/**
+ * How the client-facing proposal LOOKS: which of the pre-built layouts, what
+ * accent colour, and which optional sections are on.
+ *
+ * ── Presentation only, never pricing ─────────────────────────────────────────
+ * Nothing here can change a number. The document is built from the bid's own
+ * snapshot and its resolved pricing settings; this table decides what is shown
+ * and in what style. Keeping the two apart is what makes it safe to let a user
+ * click through three layouts on a finished bid.
+ *
+ * ── Hidden, not visible ──────────────────────────────────────────────────────
+ * `hiddenSections` stores the ones switched OFF, so a section added to the app
+ * later is on by default for everybody rather than silently missing from every
+ * existing user's proposals — a "visible list" would grandfather people out of
+ * new content they never chose to hide.
+ */
+export const PROPOSAL_LAYOUTS = ["classic", "modern", "minimal"] as const;
+export type ProposalLayout = (typeof PROPOSAL_LAYOUTS)[number];
+
+export const proposalSettings = mysqlTable("proposal_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  layout: mysqlEnum("layout", PROPOSAL_LAYOUTS).default("classic").notNull(),
+  /** Hex, `#RRGGBB`. Validated at the router, so the document can trust it. */
+  accentColor: varchar("accentColor", { length: 9 })
+    .default("#F5C518")
+    .notNull(),
+  /** Section ids the user switched off. See shared/proposal.ts. */
+  hiddenSections: json("hiddenSections").$type<string[]>(),
+
+  /**
+   * Boilerplate the contractor reuses on every proposal — payment terms, what
+   * is excluded, how long the price stands. Stored at company level because
+   * retyping it per bid is how it ends up inconsistent or missing.
+   */
+  termsText: text("termsText"),
+  /** How many days the quoted price is good for. 0 = do not state a validity. */
+  validDays: int("validDays").default(30).notNull(),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProposalSettings = typeof proposalSettings.$inferSelect;
+export type InsertProposalSettings = typeof proposalSettings.$inferInsert;
+
 // ─── Bids ─────────────────────────────────────────────────────────────────────
 // The Foundation bid layer. Deliberately NOT the legacy `projects` table, which
 // belongs to the master_* system and carries PDF/takeoff state — see the divider
@@ -962,6 +1135,22 @@ export const bids = mysqlTable(
      * there is no second field it could be half-overridden against.
      */
     productivityPct: decimal("productivityPct", { precision: 6, scale: 4 }),
+
+    /**
+     * Who the proposal is addressed to, and where the work is.
+     *
+     * Per-bid because they ARE the bid — unlike the branding and layout, which
+     * are the same on every document this contractor sends. NULL rather than ""
+     * so the proposal can tell "not filled in yet" from "deliberately empty"
+     * and prompt for it instead of printing a blank line where a client's name
+     * belongs.
+     *
+     * `proposalNote` is the one or two sentences of scope summary that opens
+     * the document — the part a contractor writes per job.
+     */
+    clientName: varchar("clientName", { length: 255 }),
+    siteAddress: varchar("siteAddress", { length: 512 }),
+    proposalNote: text("proposalNote"),
 
     /**
      * When the bid was archived, or NULL if it is live. This single column is
@@ -1406,6 +1595,238 @@ export const symbolLinks = mysqlTable(
 
 export type SymbolLink = typeof symbolLinks.$inferSelect;
 export type InsertSymbolLink = typeof symbolLinks.$inferInsert;
+
+// ─── Plan co-pilot (AI plan reading) ──────────────────────────────────────────
+/**
+ * One reading of one sheet by the plan co-pilot.
+ *
+ * ── A row per sheet, kept, because reading costs money ───────────────────────
+ * The feature reads a page when the user opens it, never the whole plan set up
+ * front — a forty-sheet submission would otherwise bill forty model calls
+ * before the estimator had looked at anything. A stored run is what makes that
+ * work: paging back to a sheet returns what was found the first time instead of
+ * paying to find it again. Re-reading is an explicit button.
+ *
+ * ── It holds findings, not decisions ─────────────────────────────────────────
+ * Nothing in this table or its children is on the bid. A finding becomes real
+ * work only when the user confirms it and a takeoff_stamps row is written
+ * through the ordinary stamp path — see planCopilotRouter.confirm. That is the
+ * "no autonomous edits" boundary, and it is why `stampId` below is nullable and
+ * starts null on every row.
+ */
+export const COPILOT_RUN_STATUSES = ["ok", "degraded", "failed"] as const;
+export type CopilotRunStatus = (typeof COPILOT_RUN_STATUSES)[number];
+
+/**
+ * The three confidence tiers, as a column type.
+ *
+ * Restated here rather than imported from shared/copilotConfidence.ts because
+ * this file is read by drizzle-kit as well as by the app, and it stays free of
+ * app imports for that reason (TAKEOFF_LOCATIONS and the rest do the same).
+ * server/planCopilot.test.ts asserts the two lists are identical, so a tier
+ * added on one side cannot silently fail to exist on the other.
+ */
+export const CONFIDENCE_TIER_VALUES = ["high", "low", "unreadable"] as const;
+
+export const planCopilotRuns = mysqlTable(
+  "plan_copilot_runs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+    sheetId: int("sheetId")
+      .notNull()
+      .references(() => bidPdfSheets.id, { onDelete: "cascade" }),
+    /** Denormalised for one-query ownership checks, as everywhere else here. */
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /**
+     * ok       — the sheet was read and the findings below are its result.
+     * degraded — it was reached but gave back little or nothing usable. The run
+     *            is still stored, so the panel can say so instead of looking
+     *            like it never ran.
+     * failed   — no key, a refusal, a timeout. Same reason for storing it.
+     */
+    status: mysqlEnum("status", COPILOT_RUN_STATUSES).default("ok").notNull(),
+
+    /** Scope of work in prose, for the user's trade. Never priced, never parsed. */
+    summary: text("summary"),
+    /** Why a degraded or failed run gave up, in the user's words. */
+    message: text("message"),
+
+    /** Which model answered, so a change in behaviour is traceable to one. */
+    model: varchar("model", { length: 128 }),
+    /**
+     * Which plan set this sheet belongs to, as shared/planSource.ts derives it.
+     * Corrections are filed under the same key — this is what carries a fix
+     * from one architect's sheet to the next.
+     */
+    sourceKey: varchar("sourceKey", { length: 191 })
+      .default("unknown")
+      .notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("plan_copilot_runs_bidId_idx").on(t.bidId),
+    index("plan_copilot_runs_sheetId_idx").on(t.sheetId),
+    index("plan_copilot_runs_userId_idx").on(t.userId),
+  ]
+);
+
+export type PlanCopilotRun = typeof planCopilotRuns.$inferSelect;
+export type InsertPlanCopilotRun = typeof planCopilotRuns.$inferInsert;
+
+/**
+ * One mark the co-pilot found on a sheet, and what became of it.
+ *
+ * ── Three confidence tiers, stored, not derived at display time ──────────────
+ * `high` / `low` / `unreadable` — see shared/copilotConfidence.ts for why the
+ * third one exists. It is stored rather than recomputed from `score` because
+ * the tier is not a pure function of the score: an unlinked symbol is capped at
+ * `low` however sure the model was, and an illegible mark is `unreadable` at
+ * any score. Recomputing from the number alone would quietly promote both.
+ *
+ * An `unreadable` row carries no assemblyId and no proposal. It is a place on
+ * the drawing to go and look at, and there is no action in the allowed list
+ * that turns one into a stamp.
+ */
+export const COPILOT_FINDING_STATUSES = [
+  "proposed",
+  "confirmed",
+  "dismissed",
+  "needs_review",
+] as const;
+export type CopilotFindingStatus = (typeof COPILOT_FINDING_STATUSES)[number];
+
+export const planCopilotFindings = mysqlTable(
+  "plan_copilot_findings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    runId: int("runId")
+      .notNull()
+      .references(() => planCopilotRuns.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** What the model called the mark. Kept verbatim — the correction keys on it. */
+    rawLabel: varchar("rawLabel", { length: 255 }).notNull(),
+    /** The legend entry it resolved to. Null when the label matched nothing. */
+    symbolLinkId: int("symbolLinkId").references(() => symbolLinks.id, {
+      onDelete: "set null",
+    }),
+    /** The assembly behind that legend entry, snapshotted the way a stamp is. */
+    assemblyId: int("assemblyId").references(() => assemblies.id, {
+      onDelete: "set null",
+    }),
+    assemblyName: varchar("assemblyName", { length: 255 }),
+
+    confidence: mysqlEnum("confidence", CONFIDENCE_TIER_VALUES)
+      .default("low")
+      .notNull(),
+    /** The model's own certainty, 0–1. Ordering and tooltips only. */
+    score: decimal("score", { precision: 5, scale: 4 }).default("0").notNull(),
+    /** Why it landed in that tier, in the user's words. */
+    reason: varchar("reason", { length: 512 }),
+    /** Anything the model added, e.g. "obscured by a dimension line". */
+    note: varchar("note", { length: 512 }),
+
+    /** Where on the sheet, in PDF PAGE POINTS. Null when it could not be placed. */
+    x: decimal("x", { precision: 12, scale: 4 }),
+    y: decimal("y", { precision: 12, scale: 4 }),
+
+    status: mysqlEnum("status", COPILOT_FINDING_STATUSES)
+      .default("proposed")
+      .notNull(),
+    /**
+     * The stamp this became, once the user confirmed it.
+     *
+     * Null on every row until a person says yes. Deleting the stamp afterwards
+     * sets this back to null rather than deleting the finding, so the panel can
+     * still show what was proposed on a sheet someone has since cleaned up.
+     */
+    stampId: int("stampId").references(() => takeoffStamps.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("plan_copilot_findings_runId_idx").on(t.runId),
+    index("plan_copilot_findings_userId_idx").on(t.userId),
+    index("plan_copilot_findings_status_idx").on(t.status),
+  ]
+);
+
+export type PlanCopilotFinding = typeof planCopilotFindings.$inferSelect;
+export type InsertPlanCopilotFinding = typeof planCopilotFindings.$inferInsert;
+
+/**
+ * "This mark is really that symbol" — remembered, per user, per plan source.
+ *
+ * ── Per account, never pooled ────────────────────────────────────────────────
+ * Scoped by userId exactly as materials, labor rates and assemblies are. One
+ * contractor's corrections are their own: two estimators can legitimately read
+ * the same ambiguous mark differently, and averaging them across accounts would
+ * mean a stranger's opinion changes what your plans say.
+ *
+ * ── Why sourceKey and not bidId ──────────────────────────────────────────────
+ * The value is in the NEXT set of plans from the same architect, not in the
+ * rest of this one bid. sourceKey (shared/planSource.ts) is the widest honest
+ * grouping available today — a firm name off the title block, falling back to
+ * the filename — and it is a heuristic on purpose: a key that misses simply
+ * means the hint is not consulted, and the reading falls back to the legend.
+ *
+ * `timesApplied` breaks ties when a user has corrected the same label two
+ * different ways: the one they keep choosing wins.
+ */
+export const planCopilotCorrections = mysqlTable(
+  "plan_copilot_corrections",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** Which plan set this was learned on. See shared/planSource.ts. */
+    sourceKey: varchar("sourceKey", { length: 191 })
+      .default("unknown")
+      .notNull(),
+    /** Normalised form of what the model called it — the lookup key. */
+    rawLabelKey: varchar("rawLabelKey", { length: 255 }).notNull(),
+    /** Exactly what the model called it, for showing the user what they fixed. */
+    rawLabel: varchar("rawLabel", { length: 255 }).notNull(),
+
+    /** What the user said it really is. */
+    symbolLinkId: int("symbolLinkId")
+      .notNull()
+      .references(() => symbolLinks.id, { onDelete: "cascade" }),
+
+    timesApplied: int("timesApplied").default(1).notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("plan_copilot_corrections_userId_idx").on(t.userId),
+    index("plan_copilot_corrections_sourceKey_idx").on(t.sourceKey),
+    unique("plan_copilot_corrections_unique").on(
+      t.userId,
+      t.sourceKey,
+      t.rawLabelKey
+    ),
+  ]
+);
+
+export type PlanCopilotCorrection = typeof planCopilotCorrections.$inferSelect;
+export type InsertPlanCopilotCorrection =
+  typeof planCopilotCorrections.$inferInsert;
 
 // ─── Bid Line Items ───────────────────────────────────────────────────────────
 /**

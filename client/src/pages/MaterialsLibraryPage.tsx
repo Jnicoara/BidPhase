@@ -56,38 +56,25 @@ import {
 } from "@/lib/libraryScope";
 import { AliasSuggestions } from "@/components/AliasSuggestions";
 import { countNeedingPricing, needsPricing } from "@shared/materialPricing";
-import { compareBySize } from "@shared/materialSizeOrder";
+import {
+  MATERIAL_CATEGORY_ORDER,
+  groupMaterialsByCategory,
+  type MaterialCategoryName,
+} from "@shared/materialOrder";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 // ─── Types & helpers ──────────────────────────────────────────────────────────
 
 /**
- * Mirrors MATERIAL_CATEGORIES in drizzle/schema.ts, which is the source of
- * truth — the client does not import from drizzle, so this is kept in step by
- * hand, same as UNITS below. Order here is the order the sections render in.
+ * Shelves and their order come from @shared/materialOrder, which every screen
+ * listing materials imports. This used to be a hand-copied array with a comment
+ * asking the next person to keep it in step with the schema — which is how
+ * "Panels & Breakers" survived here after the split, and how this screen and
+ * Supplier Pricing ended up listing one catalog in two orders.
  */
-const CATEGORIES = [
-  "Wire & Cable",
-  "Conduit",
-  "Conduit Fittings",
-  "Boxes",
-  "Receptacles",
-  "Switches",
-  "Wall Plates & Misc",
-  "Panels & Breakers",
-  "Lighting Hardware",
-  "Grounding & Bonding",
-  "Life Safety",
-  "Low Voltage",
-  "Connectors & Terminations",
-  "Strut & Supports",
-  "Fasteners & Anchors",
-  "Equipment & Appliances",
-  "Distribution Equipment",
-  "Consumables",
-] as const;
+const CATEGORIES = MATERIAL_CATEGORY_ORDER;
 
-type Category = (typeof CATEGORIES)[number];
+type Category = MaterialCategoryName;
 
 type Material = {
   id: number;
@@ -674,31 +661,18 @@ export default function MaterialsLibraryPage() {
    * happens to sit on, so those results stay flat and relevance-ordered, and
    * each row prints its own category instead.
    *
-   * ── Within a shelf, by size — never alphabetically ───────────────────────
+   * ── Within a shelf: Type, then Size — never alphabetically ───────────────
    * Rows arrive name-sorted from the server, which is the wrong order for
    * everything here: alphabetically, 1" EMT sits between 1/2" and 1-1/4", and
-   * #1/0 THHN lands next to #1 rather than above it. An estimator reads these
-   * lists by walking up the sizes, so they are re-sorted with the explicit
-   * ordering table in @shared/materialSizeOrder.
+   * #1/0 THHN lands next to #1 rather than above it. Size alone is not enough
+   * either — it interleaves the five conduit families at every trade size. The
+   * whole rule lives in @shared/materialOrder and is used by every screen that
+   * lists materials, so no two of them can disagree about the order.
    */
-  const groups = useMemo(() => {
-    if (searching) return [];
-    const byCategory = new Map<string, Material[]>();
-    for (const material of visible as Material[]) {
-      const key = material.category ?? "Uncategorized";
-      const bucket = byCategory.get(key);
-      if (bucket) bucket.push(material);
-      else byCategory.set(key, [material]);
-    }
-    return [...CATEGORIES, "Uncategorized"]
-      .map(label => ({
-        label,
-        items: (byCategory.get(label) ?? []).sort((a, b) =>
-          compareBySize(a.name, b.name)
-        ),
-      }))
-      .filter(group => group.items.length > 0);
-  }, [visible, searching]);
+  const groups = useMemo(
+    () => (searching ? [] : groupMaterialsByCategory(visible as Material[])),
+    [visible, searching]
+  );
 
   /**
    * The list flattened to one array of section headers and rows.

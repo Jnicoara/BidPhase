@@ -512,3 +512,148 @@ describe.skipIf(!hasDb)("seeding the catalog into a live database", () => {
     expect(countNeedingPricing(after)).toBe(before - 1);
   });
 });
+
+/**
+ * Breakers: the naming standard, the shelf split, and type coverage.
+ *
+ * The coverage half is not decoration. A catalog that ships only the AFCI/GFCI
+ * combo forces an estimator either to mis-specify a bedroom circuit or to add
+ * the row by hand on every job — and the second one silently rebuilds a private
+ * catalog, which is the failure the whole one-list rule exists to stop.
+ */
+describe("breakers", () => {
+  const breakers = () =>
+    BASELINE_MATERIALS.filter(m => m.category === "Breakers");
+  const named = (name: string) => BASELINE_MATERIALS.find(m => m.name === name);
+
+  it("writes pole count the way a supply house does", () => {
+    // "20/2" is how it is said; "20A 2-Pole" is how it is written and ordered.
+    for (const amps of ["20", "30", "40", "50", "60", "70", "100"]) {
+      expect(named(`${amps}A 2-Pole breaker`)).toBeDefined();
+      expect(named(`${amps}/2 breaker`)).toBeUndefined();
+    }
+  });
+
+  it("keeps the spoken forms searchable after the rename", () => {
+    // Asserted through SEARCH, not by reading the alias string. `aliases()`
+    // strips words the name already carries, and the name now contains
+    // "2-Pole" — so "pole" is correctly absent from the aliases while still
+    // being findable. Checking the string would have failed on a rule working
+    // exactly as intended.
+    const index = BASELINE_MATERIALS.map((m, i) => ({
+      id: String(i),
+      description: m.name,
+      unit: m.unitOfSale,
+      searchAliases: m.searchAliases,
+    }));
+    const find = (query: string) =>
+      smartSearch(index, query, 8).map(
+        hit => BASELINE_MATERIALS[Number(hit.id)].name
+      );
+
+    for (const term of [
+      "20/2",
+      "double pole",
+      "two pole",
+      "dp 20",
+      "2 pole 20",
+    ]) {
+      expect(find(term), `"${term}" should still find it`).toContain(
+        "20A 2-Pole breaker"
+      );
+    }
+  });
+
+  it("renames in place rather than adding a second row", () => {
+    // Baseline rows are matched by name, so a text edit would have orphaned
+    // every assembly pointing at the old one.
+    for (const amps of ["20", "30", "40", "50", "60", "70", "100"]) {
+      expect(RENAMED_BASELINE_MATERIALS[`${amps}/2 breaker`]).toBe(
+        `${amps}A 2-Pole breaker`
+      );
+    }
+  });
+
+  it("leaves single-pole unmarked", () => {
+    // Pole count is worth saying where it is not one. "1-Pole" on the most
+    // common part in the catalog is noise.
+    expect(named("20A breaker")).toBeDefined();
+    expect(named("20A 1-Pole breaker")).toBeUndefined();
+  });
+
+  it("ships all three protected types, single-pole", () => {
+    for (const type of ["AFCI", "GFCI", "AFCI/GFCI combo"]) {
+      for (const amps of ["15", "20"]) {
+        expect(
+          named(`${amps}A ${type} breaker`),
+          `${amps}A ${type} missing`
+        ).toBeDefined();
+      }
+    }
+  });
+
+  it("ships all three protected types, two-pole", () => {
+    // The gap that prompted this: only the single-pole combo existed, so a spa
+    // (2-pole GFCI) had no row at all.
+    const required = [
+      "20A 2-Pole GFCI breaker",
+      "30A 2-Pole GFCI breaker",
+      "50A 2-Pole GFCI breaker",
+      "60A 2-Pole GFCI breaker",
+      "20A 2-Pole AFCI breaker",
+      "30A 2-Pole AFCI breaker",
+      "20A 2-Pole AFCI/GFCI combo breaker",
+      "30A 2-Pole AFCI/GFCI combo breaker",
+    ];
+    for (const name of required) {
+      expect(named(name), `${name} missing`).toBeDefined();
+    }
+  });
+
+  it("gives every protected breaker its own trade slang", () => {
+    for (const row of breakers().filter(m => /AFCI|GFCI/.test(m.name))) {
+      const aliases = (row.searchAliases ?? "").toLowerCase();
+      if (row.name.includes("AFCI")) expect(aliases).toContain("arc");
+      if (row.name.includes("GFCI")) expect(aliases).toContain("gfi");
+    }
+  });
+});
+
+describe("the Panels / Breakers split", () => {
+  const inCategory = (category: string) =>
+    BASELINE_MATERIALS.filter(m => m.category === category).map(m => m.name);
+
+  it("has no material left on the merged shelf", () => {
+    expect(
+      BASELINE_MATERIALS.filter(
+        m => (m.category as string) === "Panels & Breakers"
+      )
+    ).toHaveLength(0);
+  });
+
+  it("puts every breaker on Breakers", () => {
+    const strays = BASELINE_MATERIALS.filter(
+      m => /breaker/i.test(m.name) && m.category !== "Breakers"
+    );
+    expect(strays.map(s => s.name)).toEqual([]);
+  });
+
+  it("puts panels, meter bases and disconnects on Panels", () => {
+    const panels = inCategory("Panels");
+    for (const name of [
+      "200A main panel",
+      "200A main-lug sub-panel",
+      "200A meter base",
+      "60A fused disconnect",
+    ]) {
+      expect(panels, `${name} should be on Panels`).toContain(name);
+    }
+  });
+
+  it("keeps fuses with the disconnects they go in, not with breakers", () => {
+    // A fuse goes in a fused disconnect, not a load center. Splitting the pair
+    // across two shelves would separate two rows that are always bought together.
+    expect(inCategory("Panels")).toContain("60A cartridge fuse");
+    expect(inCategory("Breakers")).not.toContain("60A cartridge fuse");
+  });
+});

@@ -190,6 +190,41 @@
       "when": 1786588548472,
       "tag": "0026_shallow_sharon_carter",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1786596362343,
+      "tag": "0027_productive_ego",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1786599099338,
+      "tag": "0028_brainy_black_cat",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1786632314821,
+      "tag": "0029_lucky_the_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1786635480920,
+      "tag": "0030_romantic_impossible_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1786651812875,
+      "tag": "0031_typical_wrecking_crew",
+      "breakpoints": true
     }
   ]
 }

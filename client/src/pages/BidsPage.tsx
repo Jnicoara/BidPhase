@@ -29,6 +29,7 @@ import {
   ArrowLeft,
   CalendarDays,
   Check,
+  FileSignature,
   FileText,
   Plus,
   Search,
@@ -317,6 +318,21 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
             {sheetCount > 0 && (
               <span className="text-muted-foreground">{sheetCount}</span>
             )}
+          </Button>
+
+          {/* The way out of the app: this bid as a document a client receives.
+              Its own screen rather than a dialog, because it is a full page
+              being composed and it has to be printable. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => {
+              window.location.hash = `/bids/${bid.id}/proposal`;
+            }}
+          >
+            <FileSignature className="w-3.5 h-3.5" />
+            Proposal
           </Button>
 
           <DueDateField

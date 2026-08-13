@@ -75,6 +75,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -83,7 +84,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { smartSearch } from "@/lib/smartSearch";
-import { calculateBidPrice, calculateLineItem } from "@shared/pricing";
+import {
+  addAssemblyOverheadHours,
+  calculateBidPrice,
+  calculateLineItem,
+} from "@shared/pricing";
 import {
   defaultLaborHoursFor,
   isPlaceholderHours,
@@ -116,6 +121,7 @@ type Assembly = {
   trade: string;
   projectType: ProjectType | null;
   baseLaborHours: string;
+  overheadLaborHours: string;
   laborRateId: number | null;
 };
 
@@ -133,6 +139,7 @@ type Draft = {
   trade: string;
   projectType: ProjectType | null;
   baseLaborHours: string;
+  overheadLaborHours: string;
   laborRateId: number | null;
   materials: MaterialLine[];
   modifierIds: number[];
@@ -157,6 +164,10 @@ const emptyDraft = (): Draft => ({
   trade: "electrical",
   projectType: "both",
   baseLaborHours: String(defaultLaborHoursFor("").hours),
+  // 0, always. There is no sensible default amount of setup time — it depends
+  // entirely on the work — and a suggested figure here would be a number
+  // nobody chose quietly inflating every new assembly.
+  overheadLaborHours: "0",
   laborRateId: null,
   materials: [],
   modifierIds: [],
@@ -218,13 +229,20 @@ function CostPreview({
           qty: m.qty,
         })),
         baseLaborHours: Number(draft.baseLaborHours) || 0,
+        overheadLaborHours: Number(draft.overheadLaborHours) || 0,
         modifiers: modifierPcts,
         laborRate,
       });
     } catch {
       return null;
     }
-  }, [draft.materials, draft.baseLaborHours, modifierPcts, laborRate]);
+  }, [
+    draft.materials,
+    draft.baseLaborHours,
+    draft.overheadLaborHours,
+    modifierPcts,
+    laborRate,
+  ]);
 
   const bid = useMemo(() => {
     if (!line || profitMethod === "none") return null;
@@ -308,11 +326,19 @@ function CostPreview({
       <Row
         label={
           line.modifierPct !== 0
-            ? `Labor ${round(Number(draft.baseLaborHours) || 0, 3)} h → ${round(line.adjustedLaborHours, 3)} h`
+            ? `Labor ${round(line.baseHoursWithOverhead, 3)} h → ${round(line.adjustedLaborHours, 3)} h`
             : `Labor ${round(line.adjustedLaborHours, 3)} h`
         }
         value={money(line.laborCost)}
       />
+      {/* Named where it lands, so an estimator reading the preview can see
+          which part of the hours is setup rather than device work. */}
+      {line.overheadLaborHours > 0 && (
+        <div className="text-xs text-muted-foreground pl-1 pb-1">
+          Includes {round(line.overheadLaborHours, 3)} h of assembly overhead,
+          added before modifiers.
+        </div>
+      )}
       {line.modifierPct !== 0 && (
         <div className="text-xs text-muted-foreground pl-1 pb-1">
           {modifierPcts.length} modifier{modifierPcts.length === 1 ? "" : "s"},
@@ -645,6 +671,15 @@ function AssemblyBuilder({
       hours < 0
     ) {
       toast.error("Enter labor hours (0 or more).");
+      return;
+    }
+    const overhead = Number(draft.overheadLaborHours);
+    if (
+      draft.overheadLaborHours.trim() === "" ||
+      Number.isNaN(overhead) ||
+      overhead < 0
+    ) {
+      toast.error("Assembly overhead must be 0 or more hours.");
       return;
     }
     if (draft.materials.some(line => !(line.qty >= 0))) {
@@ -996,6 +1031,64 @@ function AssemblyBuilder({
                   with your own figure.
                 </p>
               )}
+
+              {/*
+                Assembly overhead — explained, not left as a bare number.
+
+                It gets the same treatment as the productivity factor in
+                Settings, and for the same reason: the NAME does not tell you
+                what it does, and an unexplained hours box invites someone to
+                use it as a fudge factor. The text says what belongs in it, what
+                does not, and where it lands in the arithmetic.
+              */}
+              <div className="border-t border-border pt-3 mt-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">Assembly overhead</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      value={draft.overheadLaborHours}
+                      onChange={e =>
+                        setDraft({
+                          ...draft,
+                          overheadLaborHours: e.target.value,
+                        })
+                      }
+                      className="h-8 w-24 text-sm text-right"
+                      inputMode="decimal"
+                      onFocus={selectOnFocus}
+                      aria-label="Assembly overhead hours"
+                    />
+                    <span className="text-xs text-muted-foreground">hours</span>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Extra time for setup, testing or cleanup that is not tied to a
+                  specific material — laying the job out, ringing it out at the
+                  end, the trip. Leave it at 0 unless this assembly really
+                  carries time the material lines above do not explain.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Added to the hours above before any modifiers are applied, so
+                  job conditions scale it too. It is a fixed number of hours for
+                  this one assembly — not a percentage, and nothing to do with
+                  the company-wide productivity factor in Settings.
+                </p>
+                {Number(draft.overheadLaborHours) > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {round(Number(draft.baseLaborHours) || 0, 3)} h +{" "}
+                    {round(Number(draft.overheadLaborHours) || 0, 3)} h ={" "}
+                    <span className="text-foreground font-medium">
+                      {round(
+                        (Number(draft.baseLaborHours) || 0) +
+                          (Number(draft.overheadLaborHours) || 0),
+                        3
+                      )}{" "}
+                      h
+                    </span>{" "}
+                    before modifiers.
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Modifiers */}
@@ -1189,6 +1282,7 @@ export default function AssembliesLibraryPage() {
             trade: draft.trade,
             projectType: draft.projectType,
             baseLaborHours: Number(draft.baseLaborHours),
+            overheadLaborHours: Number(draft.overheadLaborHours),
             laborRateId: draft.laborRateId,
             materials: draft.materials.map(m => ({
               materialId: m.materialId,
@@ -1218,6 +1312,7 @@ export default function AssembliesLibraryPage() {
       trade: detail.trade,
       projectType: (detail.projectType as ProjectType | null) ?? null,
       baseLaborHours: String(Number(detail.baseLaborHours)),
+      overheadLaborHours: String(Number(detail.overheadLaborHours)),
       laborRateId: detail.laborRateId,
       materials: detail.materials.map(m => ({
         materialId: m.materialId,
@@ -1245,6 +1340,7 @@ export default function AssembliesLibraryPage() {
               trade: draft.trade,
               projectType: draft.projectType,
               baseLaborHours: Number(draft.baseLaborHours),
+              overheadLaborHours: Number(draft.overheadLaborHours),
               laborRateId: draft.laborRateId,
               materials: draft.materials.map(m => ({
                 materialId: m.materialId,
@@ -1368,8 +1464,25 @@ export default function AssembliesLibraryPage() {
                       </div>
                     </button>
 
-                    <span className="font-mono text-sm w-24 text-right shrink-0">
-                      {round(Number(assembly.baseLaborHours), 3)} h
+                    {/* The hours this assembly actually costs — material work
+                        plus its own overhead. Showing the base alone would
+                        disagree with what lands on a bid. */}
+                    <span
+                      className="font-mono text-sm w-24 text-right shrink-0"
+                      title={
+                        Number(assembly.overheadLaborHours) > 0
+                          ? `${round(Number(assembly.baseLaborHours), 3)} h of work + ${round(Number(assembly.overheadLaborHours), 3)} h assembly overhead`
+                          : undefined
+                      }
+                    >
+                      {round(
+                        addAssemblyOverheadHours(
+                          Number(assembly.baseLaborHours),
+                          Number(assembly.overheadLaborHours)
+                        ),
+                        3
+                      )}{" "}
+                      h
                     </span>
 
                     <div className="flex items-center gap-0.5 w-20 justify-end shrink-0">

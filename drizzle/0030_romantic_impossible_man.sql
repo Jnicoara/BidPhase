@@ -1,0 +1,1 @@
+ALTER TABLE `assemblies` ADD `overheadLaborHours` decimal(10,4) DEFAULT '0' NOT NULL;

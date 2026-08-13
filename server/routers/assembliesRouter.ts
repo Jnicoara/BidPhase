@@ -53,6 +53,12 @@ const createSchema = z.object({
   trade: tradeSchema.default("electrical"),
   projectType: z.enum(PROJECT_TYPES).nullable().default(null),
   baseLaborHours: hoursSchema,
+  /**
+   * Setup, testing, cleanup and trip time — hours this assembly costs that no
+   * material line explains. Defaults to 0 so an assembly created without one
+   * prices exactly as it did before the field existed.
+   */
+  overheadLaborHours: hoursSchema.default(0),
   laborRateId: z.number().int().positive().nullable().default(null),
   materials: materialsSchema.default([]),
   modifierIds: modifierIdsSchema.default([]),
@@ -65,6 +71,10 @@ const updateSchema = z.object({
   trade: tradeSchema.optional(),
   projectType: z.enum(PROJECT_TYPES).nullable().optional(),
   baseLaborHours: hoursSchema.optional(),
+  // Plainly optional, with no default underneath — see the note above. A
+  // partial update that omits this must leave the overhead hours alone, not
+  // silently reset them to 0.
+  overheadLaborHours: hoursSchema.optional(),
   laborRateId: z.number().int().positive().nullable().optional(),
   materials: materialsSchema.optional(),
   modifierIds: modifierIdsSchema.optional(),
@@ -123,6 +133,7 @@ export const assembliesRouter = router({
         trade: input.trade,
         projectType: input.projectType,
         baseLaborHours: toDecimal(input.baseLaborHours),
+        overheadLaborHours: toDecimal(input.overheadLaborHours),
         laborRateId: input.laborRateId,
       });
 
@@ -168,6 +179,12 @@ export const assembliesRouter = router({
       if (rest.laborRateId !== undefined) patch.laborRateId = rest.laborRateId;
       if (rest.baseLaborHours !== undefined)
         patch.baseLaborHours = toDecimal(rest.baseLaborHours);
+      // Reaches the fork, never the starter — `editableId` above is already the
+      // user's own copy when the target was a shipped row. Setting overhead
+      // hours on a starter gives you your own assembly, exactly like editing
+      // its hours or its recipe does.
+      if (rest.overheadLaborHours !== undefined)
+        patch.overheadLaborHours = toDecimal(rest.overheadLaborHours);
 
       if (Object.keys(patch).length > 0) {
         await db.updateAssembly(editableId, ctx.user.id, patch);
@@ -386,6 +403,7 @@ export const assembliesRouter = router({
           qty: Number(m.qty),
         })),
         baseLaborHours: Number(detail.baseLaborHours),
+        overheadLaborHours: Number(detail.overheadLaborHours),
         modifiers: applied,
         laborRate,
         quantity: input.quantity,

@@ -1,1337 +1,501 @@
 /**
- * MaterialDatabasePage — Supply House Material Database Manager
+ * Supplier Pricing — put your supply house's prices on the real catalog.
  *
- * Features:
- *  1. CSV Import with column-mapping screen + replace-all confirmation
- *  2. Inline-editable table (User_Price saves immediately)
- *  3. Age indicators on Last_Updated (green <30d, yellow 30-90d, red >90d)
- *  4. Reset-to-default button (undo icon) with confirmation
- *  5. Red-flag rows where both userPrice and defaultPrice are missing
- *  6. + Add Custom Material quick-entry form
+ * ── One catalog, not two ─────────────────────────────────────────────────────
+ * This screen used to run on its own separate 1,103-item dataset that shared
+ * nothing with the Materials library. Two lists meant two answers to "what does
+ * a #12 THHN cost", and a bid could be built from either. It now reads and
+ * writes the SAME `materials` rows as everything else — the price you set here
+ * is the price an assembly uses, immediately, because it is the same row.
+ *
+ * What this screen adds over the Materials library is the supply-house lens:
+ * whose price this is, and how old. Everything else about a material —
+ * name, category, aliases — is edited on Materials.
+ *
+ * ── Staleness is the whole point ─────────────────────────────────────────────
+ * A missing price is already shouted about (`shared/materialPricing.ts`). The
+ * quiet failure is a real-looking number nobody has re-checked since copper
+ * moved. Age colouring is in `shared/priceStaleness.ts`, which takes the clock
+ * as a parameter so the 30/90-day bands are testable.
+ *
+ * ── Editing rules ────────────────────────────────────────────────────────────
+ * The price is an InlineNumberField, so it gets all five rules from
+ * CLAUDE.md § Editing fields without this file re-implementing any of them.
+ * Writing a price stamps `priceUpdatedAt` on the server, not here — every route
+ * to a price has to age the same way.
  */
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  ArrowLeft,
   Upload,
-  Plus,
-  Trash2,
-  Loader2,
-  AlertCircle,
-  Database,
-  RotateCcw,
-  ChevronDown,
-  ChevronRight,
   Search,
   X,
-  Check,
-  ArrowLeft,
-  FileSpreadsheet,
+  Store,
   AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { InlineNumberField } from "@/components/InlineNumberField";
 import { smartSearch } from "@/lib/smartSearch";
-import type { SearchableItem } from "@/lib/smartSearch";
-import { CATALOG } from "@/lib/materialCatalog";
-import { Badge } from "@/components/ui/badge";
+import { sortMaterialsForDisplay } from "@shared/materialOrder";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+  PRICE_AGE_CLASSES,
+  priceAgeDisplay,
+  summarisePriceAges,
+  type PriceAge,
+} from "@shared/priceStaleness";
 
 type Material = {
   id: number;
-  itemCode: string | null;
+  userId: number | null;
+  name: string;
   category: string | null;
-  description: string;
-  unit: string | null;
-  defaultPrice: number | null;
-  userPrice: number | null;
-  lastUpdated: Date | null;
-  unitMaterialCost: number | null;
+  unitOfSale: string;
+  costPerUnit: string;
+  supplierName: string | null;
+  priceUpdatedAt: Date | string | null;
+  searchAliases: string | null;
 };
 
-type ColumnMapping = {
-  itemId: string;
-  category: string;
-  description: string;
-  unit: string;
-  userPrice: string;
-  defaultPrice: string;
-};
-
-const REQUIRED_APP_COLS = ["description"] as const;
-const APP_COLUMNS: {
-  key: keyof ColumnMapping;
-  label: string;
-  required: boolean;
-  hint: string;
-}[] = [
-  {
-    key: "description",
-    label: "Description",
-    required: true,
-    hint: "Item name / description",
-  },
-  {
-    key: "category",
-    label: "Category",
-    required: false,
-    hint: "Category or trade section",
-  },
-  {
-    key: "itemId",
-    label: "Item ID / Code",
-    required: false,
-    hint: "SKU, item code, or ID (auto-generated if missing)",
-  },
-  {
-    key: "unit",
-    label: "Unit (EA, FT, etc.)",
-    required: false,
-    hint: "Unit of measure",
-  },
-  {
-    key: "userPrice",
-    label: "User_Price",
-    required: false,
-    hint: "Your supply house price",
-  },
-  {
-    key: "defaultPrice",
-    label: "Default_Price",
-    required: false,
-    hint: "App baseline price",
-  },
+const AGE_FILTERS: Array<{ key: PriceAge | "all"; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "stale", label: "Over 90 days" },
+  { key: "aging", label: "30–90 days" },
+  { key: "fresh", label: "Under 30 days" },
+  { key: "unpriced", label: "No price" },
 ];
 
-// ─── CSV Parser ───────────────────────────────────────────────────────────────
-
-function parseCSVRaw(text: string): {
-  headers: string[];
-  rows: Record<string, string>[];
-} {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) return { headers: [], rows: [] };
-  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
-  const rows = lines.slice(1).map(line => {
-    const values = line.split(",").map(v => v.trim().replace(/^"|"$/g, ""));
-    return Object.fromEntries(headers.map((h, i) => [h, values[i] ?? ""]));
-  });
-  return { headers, rows };
-}
-
-function autoDetectMapping(headers: string[]): Partial<ColumnMapping> {
-  const lower = headers.map(h => h.toLowerCase());
-  const find = (candidates: string[]) => {
-    for (const c of candidates) {
-      const idx = lower.findIndex(h => h.includes(c));
-      if (idx >= 0) return headers[idx];
-    }
-    return "";
-  };
-  return {
-    description: find(["description", "desc", "name", "item", "material"]),
-    category: find(["category", "cat", "section", "trade", "phase", "type"]),
-    itemId: find([
-      "item_id",
-      "itemid",
-      "item_code",
-      "itemcode",
-      "code",
-      "sku",
-      "id",
-      "part",
-    ]),
-    unit: find(["unit", "uom", "measure"]),
-    userPrice: find([
-      "user_price",
-      "userprice",
-      "my_price",
-      "myprice",
-      "supply_price",
-      "cost",
-      "price",
-    ]),
-    defaultPrice: find([
-      "default_price",
-      "defaultprice",
-      "base_price",
-      "baseprice",
-      "list_price",
-      "listprice",
-    ]),
-  };
-}
-
-// ─── Age indicator ────────────────────────────────────────────────────────────
-
-function ageClass(lastUpdated: Date | null): string {
-  if (!lastUpdated) return "";
-  const days = (Date.now() - new Date(lastUpdated).getTime()) / 86_400_000;
-  if (days <= 30) return "text-emerald-400";
-  if (days <= 90) return "text-yellow-400";
-  return "text-red-400";
-}
-
-function ageLabel(lastUpdated: Date | null): string {
-  if (!lastUpdated) return "—";
-  const d = new Date(lastUpdated);
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-// ─── Effective price helper ───────────────────────────────────────────────────
-
-function effectivePrice(m: Material): number | null {
-  if (m.userPrice != null && m.userPrice > 0) return m.userPrice;
-  if (m.defaultPrice != null && m.defaultPrice > 0) return m.defaultPrice;
-  if (m.unitMaterialCost != null && m.unitMaterialCost > 0)
-    return m.unitMaterialCost;
-  return null;
-}
-
-function isMissingPrice(m: Material): boolean {
-  return effectivePrice(m) === null;
-}
-
-// ─── Inline price editor ──────────────────────────────────────────────────────
-
-function PriceCell({
-  material,
-  onSave,
-  onReset,
+export default function MaterialDatabasePage({
+  onBack,
 }: {
-  material: Material;
-  onSave: (id: number, price: number | null) => void;
-  onReset: (id: number) => void;
+  onBack?: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [resetPending, setResetPending] = useState(false);
-  const missing = isMissingPrice(material);
-  const hasUserPrice = material.userPrice != null;
-  const hasDefault =
-    (material.defaultPrice ?? 0) > 0 || (material.unitMaterialCost ?? 0) > 0;
+  const utils = trpc.useUtils();
+  const { data: materials = [], isLoading } = trpc.materials.list.useQuery({
+    status: "active",
+  }) as { data: Material[]; isLoading: boolean };
 
-  const commit = () => {
-    const val = parseFloat(draft);
-    if (!isNaN(val) && val >= 0) {
-      onSave(material.id, val);
-    } else if (draft.trim() === "") {
-      onSave(material.id, null);
-    }
-    setEditing(false);
+  const [query, setQuery] = useState("");
+  const [ageFilter, setAgeFilter] = useState<PriceAge | "all">("all");
+  const [importOpen, setImportOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * One clock for the whole render. Calling `new Date()` per row would let a
+   * list straddle midnight and colour two identical prices differently.
+   */
+  const now = useMemo(() => new Date(), [materials]);
+  const tally = useMemo(
+    () => summarisePriceAges(materials, now),
+    [materials, now]
+  );
+
+  const refresh = () => {
+    void utils.materials.list.invalidate();
   };
 
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1">
-        <span className="text-muted-foreground text-xs">$</span>
-        <input
-          autoFocus
-          type="number"
-          step="0.01"
-          min="0"
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => {
-            if (e.key === "Enter") commit();
-            if (e.key === "Escape") setEditing(false);
-          }}
-          className="w-20 bg-transparent border-b border-[#F5C518] outline-none text-[#F5C518] font-mono text-xs py-0.5"
-        />
-      </div>
-    );
-  }
+  const updateMaterial = trpc.materials.update.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: () => refresh(),
+  });
+
+  const rows = useMemo(() => {
+    let list = materials;
+    if (ageFilter !== "all") {
+      list = list.filter(
+        m => priceAgeDisplay(m.priceUpdatedAt, now).age === ageFilter
+      );
+    }
+    if (query.trim()) {
+      // smartSearch scores aliases below the item's own name, which is what
+      // keeps "recep" returning the receptacle rather than its wall plate.
+      const searchable = list.map(m => ({
+        id: String(m.id),
+        description: m.name,
+        category: m.category,
+        unit: m.unitOfSale,
+        searchAliases: m.searchAliases,
+        supplierName: m.supplierName,
+      }));
+      const hits = smartSearch(searchable, query, 500);
+      const order = new Map(hits.map((h, i) => [h.id, i]));
+      list = list
+        .filter(m => order.has(String(m.id)))
+        .sort((a, b) => order.get(String(a.id))! - order.get(String(b.id))!);
+      // Search results stay relevance-ordered; imposing catalog order on them
+      // would bury the best match under whichever shelf it sits on.
+      return list;
+    }
+    // Category → Type → Size, the same rule the Materials screen uses. This
+    // screen previously showed whatever order the server returned, so the two
+    // listed one catalog two ways.
+    return sortMaterialsForDisplay(list);
+  }, [materials, query, ageFilter, now]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 48,
+    overscan: 12,
+  });
 
   return (
-    <div className="flex items-center gap-1.5 group">
-      {/* Reset confirmation mini-dialog */}
-      {resetPending && (
-        <div className="flex items-center gap-1 text-[10px] bg-card border border-border rounded px-2 py-1 shadow-lg z-10">
-          <span className="text-muted-foreground">Reset to default?</span>
-          <button
-            onClick={() => {
-              onReset(material.id);
-              setResetPending(false);
-            }}
-            className="text-emerald-400 hover:text-emerald-300 font-medium px-1"
-          >
-            Yes
-          </button>
-          <button
-            onClick={() => setResetPending(false)}
-            className="text-muted-foreground hover:text-foreground px-1"
-          >
-            No
-          </button>
-        </div>
-      )}
-
-      {/* Price display */}
-      <button
-        onClick={() => {
-          setDraft(String(material.userPrice ?? ""));
-          setEditing(true);
-        }}
-        className={cn(
-          "font-mono text-xs px-1.5 py-0.5 rounded transition-colors",
-          missing
-            ? "bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse"
-            : hasUserPrice
-              ? "text-[#F5C518] hover:bg-[#F5C518]/10"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
-        )}
-        title={
-          missing
-            ? "No price set — click to add. Required for bid calculations."
-            : "Click to edit user price"
-        }
-      >
-        {missing
-          ? "⚠ No price"
-          : hasUserPrice
-            ? `$${material.userPrice!.toFixed(2)}`
-            : material.defaultPrice != null
-              ? `$${material.defaultPrice.toFixed(2)}`
-              : `$${(material.unitMaterialCost ?? 0).toFixed(2)}`}
-      </button>
-
-      {/* Source badge */}
-      {!missing && (
-        <span
-          className={cn(
-            "text-[9px] px-1 rounded",
-            hasUserPrice
-              ? "bg-[#F5C518]/15 text-[#F5C518]/80"
-              : "bg-muted/40 text-muted-foreground"
+    <div className="flex flex-col h-full bg-background">
+      {/* ── Header ── */}
+      <div className="border-b border-border px-6 py-4">
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 text-xs"
+              onClick={onBack}
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </Button>
           )}
-        >
-          {hasUserPrice ? "custom" : "default"}
-        </span>
-      )}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-semibold">Supplier Pricing</h1>
+            <p className="text-xs text-muted-foreground">
+              Your supply house's prices, on the same catalog everything else
+              uses. Set a price here and every assembly that uses it follows.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className="w-3.5 h-3.5" /> Import price list
+          </Button>
+        </div>
+      </div>
 
-      {/* Reset button — only show when userPrice exists and a default is available */}
-      {hasUserPrice && hasDefault && !resetPending && (
-        <button
-          onClick={() => setResetPending(true)}
-          className="opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity text-muted-foreground hover:text-amber-400"
-          title="Reset to default price"
-        >
-          <RotateCcw size={10} />
-        </button>
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        {/* ── Search + age filters ── */}
+        <div className="px-6 pt-4 pb-3 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search materials…"
+              className="pl-9 h-9"
+              aria-label="Search materials"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {AGE_FILTERS.map(filter => {
+              const count =
+                filter.key === "all" ? materials.length : tally[filter.key];
+              const active = ageFilter === filter.key;
+              return (
+                <button
+                  key={filter.key}
+                  onClick={() => setAgeFilter(filter.key)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors",
+                    active
+                      ? "border-[#F5C518]/50 bg-[#F5C518]/10 text-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {filter.key !== "all" && filter.key !== "unpriced" && (
+                    <span
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full",
+                        filter.key === "fresh" && "bg-emerald-400",
+                        filter.key === "aging" && "bg-amber-400",
+                        filter.key === "stale" && "bg-red-400"
+                      )}
+                    />
+                  )}
+                  {filter.label}
+                  <span className="text-muted-foreground/70">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {tally.stale > 0 && ageFilter !== "stale" && (
+            <button
+              onClick={() => setAgeFilter("stale")}
+              className="flex items-center gap-2 text-xs text-red-400 hover:underline"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {tally.stale} price{tally.stale === 1 ? "" : "s"} over 90 days old
+              — bidding from these is bidding on old numbers.
+            </button>
+          )}
+        </div>
+
+        {/* ── Table ── */}
+        <div className="flex-1 min-h-0 px-6 pb-6">
+          <div className="h-full rounded-xl border border-border bg-card overflow-hidden flex flex-col">
+            <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground shrink-0">
+              <span className="flex-1">Material</span>
+              <span className="w-40 shrink-0">Supplier</span>
+              <span className="w-28 text-right shrink-0">Price</span>
+              <span className="w-20 text-right shrink-0">Age</span>
+            </div>
+
+            {isLoading ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                Loading…
+              </div>
+            ) : rows.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                Nothing matches. Clear the search or pick a different age
+                filter.
+              </div>
+            ) : (
+              <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+                <div
+                  style={{
+                    height: rowVirtualizer.getTotalSize(),
+                    position: "relative",
+                  }}
+                >
+                  {rowVirtualizer.getVirtualItems().map(virtual => {
+                    const material = rows[virtual.index];
+                    const age = priceAgeDisplay(material.priceUpdatedAt, now);
+                    return (
+                      <div
+                        key={material.id}
+                        data-index={virtual.index}
+                        ref={rowVirtualizer.measureElement}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          transform: `translateY(${virtual.start}px)`,
+                        }}
+                        className="flex items-center gap-3 px-4 py-2 border-b border-border hover:bg-muted/20 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm truncate">
+                            {material.name}
+                          </div>
+                          {material.category && (
+                            <div className="text-xs text-muted-foreground truncate">
+                              {material.category} · per {material.unitOfSale}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="w-40 shrink-0">
+                          <Input
+                            defaultValue={material.supplierName ?? ""}
+                            placeholder="—"
+                            className="h-7 text-xs"
+                            aria-label={`Supplier for ${material.name}`}
+                            onBlur={e => {
+                              const next = e.target.value.trim() || null;
+                              if (next === (material.supplierName ?? null))
+                                return;
+                              updateMaterial.mutate({
+                                id: material.id,
+                                supplierName: next,
+                              });
+                            }}
+                          />
+                        </div>
+
+                        <div className="w-28 shrink-0 flex justify-end">
+                          <InlineNumberField
+                            value={Number(material.costPerUnit)}
+                            ariaLabel={`Price for ${material.name}`}
+                            className="h-7 w-24 text-xs text-right"
+                            rules={{ min: 0, allowEmpty: false }}
+                            onSave={next =>
+                              updateMaterial.mutate({
+                                id: material.id,
+                                costPerUnit: next,
+                              })
+                            }
+                          />
+                        </div>
+
+                        <div
+                          className={cn(
+                            "w-20 text-right shrink-0 text-xs font-mono",
+                            PRICE_AGE_CLASSES[age.age]
+                          )}
+                          title={age.title}
+                        >
+                          {age.label}
+                          <span className="sr-only"> — {age.title}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {importOpen && (
+        <ImportPriceListDialog
+          onClose={() => setImportOpen(false)}
+          onDone={refresh}
+        />
       )}
     </div>
   );
 }
 
-// ─── Column Mapping Screen ────────────────────────────────────────────────────
-
-function ColumnMappingDialog({
-  headers,
-  rowCount,
-  onConfirm,
-  onCancel,
-}: {
-  headers: string[];
-  rowCount: number;
-  onConfirm: (mapping: ColumnMapping) => void;
-  onCancel: () => void;
-}) {
-  const [mapping, setMapping] = useState<ColumnMapping>(() => {
-    const auto = autoDetectMapping(headers);
-    return {
-      description: auto.description ?? "",
-      category: auto.category ?? "",
-      itemId: auto.itemId ?? "",
-      unit: auto.unit ?? "",
-      userPrice: auto.userPrice ?? "",
-      defaultPrice: auto.defaultPrice ?? "",
-    };
-  });
-
-  const canProceed = mapping.description !== "";
-
-  return (
-    <DialogContent className="max-w-lg">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <FileSpreadsheet size={18} className="text-[#F5C518]" />
-          Map CSV Columns
-        </DialogTitle>
-        <DialogDescription>
-          Your file has <strong>{rowCount}</strong> rows and{" "}
-          <strong>{headers.length}</strong> columns. Select which column maps to
-          each required field. Auto-detection has been applied — review and
-          adjust as needed.
-        </DialogDescription>
-      </DialogHeader>
-
-      <div className="space-y-3 py-2">
-        {APP_COLUMNS.map(col => (
-          <div
-            key={col.key}
-            className="grid grid-cols-[140px_1fr] items-center gap-3"
-          >
-            <div>
-              <span className="text-sm font-medium">{col.label}</span>
-              {col.required && (
-                <span className="text-red-400 ml-1 text-xs">*</span>
-              )}
-              <p className="text-[10px] text-muted-foreground">{col.hint}</p>
-            </div>
-            <Select
-              value={mapping[col.key] || "__none__"}
-              onValueChange={v =>
-                setMapping(p => ({
-                  ...p,
-                  [col.key]: v === "__none__" ? "" : v,
-                }))
-              }
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="— skip —" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">— skip —</SelectItem>
-                {headers.map(h => (
-                  <SelectItem key={h} value={h}>
-                    {h}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ))}
-      </div>
-
-      {!canProceed && (
-        <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
-          <AlertCircle size={12} />
-          You must map the <strong>Description</strong> column to continue.
-        </div>
-      )}
-
-      <DialogFooter>
-        <Button variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          disabled={!canProceed}
-          onClick={() => onConfirm(mapping)}
-          className="bg-[#F5C518] text-black hover:bg-[#F5C518]/90"
-        >
-          Continue to Import
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  );
-}
-
-// ─── Replace Confirmation Dialog ──────────────────────────────────────────────
-
-function ReplaceConfirmDialog({
-  rowCount,
-  existingCount,
-  onConfirm,
-  onCancel,
-}: {
-  rowCount: number;
-  existingCount: number;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  const [typed, setTyped] = useState("");
-  const confirmed = typed.trim().toUpperCase() === "REPLACE";
-
-  return (
-    <DialogContent className="max-w-md">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2 text-red-400">
-          <AlertTriangle size={18} />
-          Replace Entire Database?
-        </DialogTitle>
-        <DialogDescription className="text-sm leading-relaxed">
-          This will{" "}
-          <strong className="text-red-400">
-            permanently delete all {existingCount} existing materials
-          </strong>{" "}
-          and replace them with the <strong>{rowCount} rows</strong> from your
-          CSV.
-          <br />
-          <br />
-          All custom pricing (User_Price) and Last_Updated dates will be wiped.
-          This cannot be undone.
-        </DialogDescription>
-      </DialogHeader>
-
-      <div className="space-y-3 py-2">
-        <p className="text-xs text-muted-foreground">
-          Type <span className="font-mono font-bold text-red-400">REPLACE</span>{" "}
-          to confirm:
-        </p>
-        <input
-          autoFocus
-          type="text"
-          value={typed}
-          onChange={e => setTyped(e.target.value)}
-          placeholder="Type REPLACE to confirm"
-          className="w-full bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-red-500/60 font-mono"
-        />
-      </div>
-
-      <DialogFooter>
-        <Button variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button disabled={!confirmed} onClick={onConfirm} variant="destructive">
-          Replace Database
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  );
-}
-
-// ─── Add Custom Material Dialog ───────────────────────────────────────────────
-
-function AddMaterialDialog({
-  onAdd,
+/**
+ * CSV price import, carried over from the old screen and re-pointed.
+ *
+ * It PRICES existing materials and never creates new ones. A supplier sheet is
+ * full of items this contractor does not stock; inserting each unmatched line
+ * would rebuild the two-catalog problem one import at a time, with rows nobody
+ * curated. Unmatched names come back as a list instead.
+ */
+function ImportPriceListDialog({
   onClose,
+  onDone,
 }: {
-  onAdd: (data: {
-    description: string;
-    category: string;
-    itemCode: string;
-    unit: string;
-    defaultPrice: number | null;
-    userPrice: number | null;
-  }) => void;
   onClose: () => void;
+  onDone: () => void;
 }) {
-  const [form, setForm] = useState({
-    description: "",
-    category: "",
-    itemCode: "",
-    unit: "EA",
-    defaultPrice: "",
-    userPrice: "",
-  });
+  const [supplier, setSupplier] = useState("");
+  const [text, setText] = useState("");
+  const [result, setResult] = useState<{
+    priced: string[];
+    unmatched: string[];
+  } | null>(null);
 
-  const set = (k: keyof typeof form, v: string) =>
-    setForm(p => ({ ...p, [k]: v }));
-  const canSubmit = form.description.trim().length > 0;
-
-  const handleSubmit = () => {
-    onAdd({
-      description: form.description.trim(),
-      category: form.category.trim(),
-      itemCode: form.itemCode.trim(),
-      unit: form.unit.trim() || "EA",
-      defaultPrice: form.defaultPrice ? parseFloat(form.defaultPrice) : null,
-      userPrice: form.userPrice ? parseFloat(form.userPrice) : null,
-    });
-  };
-
-  return (
-    <DialogContent className="max-w-md">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Plus size={16} className="text-[#F5C518]" />
-          Add Custom Material
-        </DialogTitle>
-        <DialogDescription>
-          Manually add a single item to your material database.
-        </DialogDescription>
-      </DialogHeader>
-
-      <div className="space-y-3 py-2">
-        {[
-          {
-            key: "description" as const,
-            label: "Description *",
-            placeholder: 'e.g. 1/2" EMT Conduit',
-            required: true,
-          },
-          {
-            key: "category" as const,
-            label: "Category",
-            placeholder: "e.g. Conduit & Fittings",
-            required: false,
-          },
-          {
-            key: "itemCode" as const,
-            label: "Item Code / SKU",
-            placeholder: "e.g. EMT-050",
-            required: false,
-          },
-          {
-            key: "unit" as const,
-            label: "Unit",
-            placeholder: "EA, FT, LF, etc.",
-            required: false,
-          },
-        ].map(({ key, label, placeholder, required }) => (
-          <div key={key} className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              {label}
-            </label>
-            <input
-              type="text"
-              value={form[key]}
-              onChange={e => set(key, e.target.value)}
-              placeholder={placeholder}
-              className="w-full bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-[#F5C518]/60 placeholder:text-muted-foreground/50"
-            />
-          </div>
-        ))}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              Default Price ($)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={form.defaultPrice}
-              onChange={e => set("defaultPrice", e.target.value)}
-              placeholder="0.00"
-              className="w-full bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-[#F5C518]/60 font-mono"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">
-              User Price ($)
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={form.userPrice}
-              onChange={e => set("userPrice", e.target.value)}
-              placeholder="0.00"
-              className="w-full bg-muted/30 border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-[#F5C518]/60 font-mono"
-            />
-          </div>
-        </div>
-      </div>
-
-      <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          disabled={!canSubmit}
-          onClick={handleSubmit}
-          className="bg-[#F5C518] text-black hover:bg-[#F5C518]/90"
-        >
-          Add Item
-        </Button>
-      </DialogFooter>
-    </DialogContent>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-interface MaterialDatabasePageProps {
-  onBack?: () => void;
-}
-
-export default function MaterialDatabasePage({
-  onBack,
-}: MaterialDatabasePageProps) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [search, setSearch] = useState("");
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    new Set(["__all__"])
-  );
-
-  // ── CSV import state machine ──────────────────────────────────────────────
-  type ImportStage =
-    | { stage: "idle" }
-    | { stage: "mapping"; headers: string[]; rows: Record<string, string>[] }
-    | {
-        stage: "confirm-replace";
-        headers: string[];
-        rows: Record<string, string>[];
-        mapping: ColumnMapping;
-      }
-    | { stage: "importing" };
-
-  const [importState, setImportState] = useState<ImportStage>({
-    stage: "idle",
-  });
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showReloadConfirm, setShowReloadConfirm] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-
-  // ── tRPC ──────────────────────────────────────────────────────────────────
-  const utils = trpc.useUtils();
-  const { data: materials = [], isLoading } =
-    trpc.data.materials.list.useQuery();
-
-  const bulkImport = trpc.data.materials.bulkImport.useMutation({
-    onSuccess: res => {
-      toast.success(`Imported ${res.count} items successfully`);
-      utils.data.materials.list.invalidate();
-      setImportState({ stage: "idle" });
-    },
-    onError: err => {
-      toast.error(`Import failed: ${err.message}`);
-      setImportState({ stage: "idle" });
-    },
-  });
-
-  const updatePrice = trpc.data.materials.updatePrice.useMutation({
-    onSuccess: () => utils.data.materials.list.invalidate(),
-    onError: err => toast.error(err.message),
-  });
-
-  const resetPrice = trpc.data.materials.resetPrice.useMutation({
-    onSuccess: () => {
-      toast.success("Price reset to default");
-      utils.data.materials.list.invalidate();
-    },
-    onError: err => toast.error(err.message),
-  });
-
-  const addSingle = trpc.data.materials.addSingle.useMutation({
-    onSuccess: () => {
-      toast.success("Item added");
-      utils.data.materials.list.invalidate();
-      setShowAddDialog(false);
-    },
-    onError: err => toast.error(err.message),
-  });
-
-  const deleteMaterial = trpc.data.materials.delete.useMutation({
-    onSuccess: () => {
-      utils.data.materials.list.invalidate();
-      setDeletingId(null);
-    },
-    onError: err => toast.error(err.message),
-  });
-
-  const restoreSnapshot = trpc.data.materials.restoreSnapshot.useMutation({
-    onSuccess: res => {
+  const importPrices = trpc.materials.importPrices.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: data => {
+      setResult(data);
       toast.success(
-        res.count > 0
-          ? `Restored ${res.count} items from your previous database.`
-          : "Database cleared — no previous data to restore."
+        `Priced ${data.priced.length} material${data.priced.length === 1 ? "" : "s"}` +
+          (data.unmatched.length
+            ? `, ${data.unmatched.length} name${data.unmatched.length === 1 ? "" : "s"} matched nothing`
+            : "")
       );
-      utils.data.materials.list.invalidate();
+      onDone();
     },
-    onError: err => toast.error(`Restore failed: ${err.message}`),
   });
 
-  const seedFromCatalog = trpc.data.materials.seedFromCatalog.useMutation({
-    onSuccess: res => {
-      utils.data.materials.list.invalidate();
-      // Show a timed Undo toast — the snapshot is held in memory for 15s
-      const snapshot = res.snapshot;
-      toast.success(`Loaded ${res.count} items from the master catalog.`, {
-        duration: 15000,
-        action:
-          snapshot.length > 0
-            ? {
-                label: "Undo",
-                onClick: () => {
-                  restoreSnapshot.mutate({
-                    snapshot: snapshot.map(item => ({
-                      description: item.description,
-                      category: item.category ?? null,
-                      itemCode: item.itemCode ?? null,
-                      unit: item.unit ?? "EA",
-                      defaultPrice: item.defaultPrice ?? null,
-                      userPrice: item.userPrice ?? null,
-                      unitMaterialCost: item.unitMaterialCost ?? 0,
-                      baseLaborHours: item.baseLaborHours ?? 0,
-                      phase: item.phase ?? null,
-                      source: item.source ?? "custom",
-                      externalSku: item.externalSku ?? null,
-                      lastUpdated:
-                        item.lastUpdated instanceof Date
-                          ? item.lastUpdated.toISOString()
-                          : (item.lastUpdated ?? null),
-                    })),
-                  });
-                },
-              }
-            : undefined,
-        description:
-          snapshot.length > 0
-            ? `Your previous ${snapshot.length} items are saved for 15 seconds — click Undo to restore them.`
-            : undefined,
-      });
-    },
-    onError: err => toast.error(`Seed failed: ${err.message}`),
-  });
-
-  // ── File pick ─────────────────────────────────────────────────────────────
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (fileRef.current) fileRef.current.value = "";
-
-    const text = await file.text();
-    const { headers, rows } = parseCSVRaw(text);
-
-    if (headers.length === 0 || rows.length === 0) {
-      toast.error(
-        "No data found. Make sure your CSV has a header row and at least one data row."
-      );
-      return;
+  /** Name,Price — the two columns every supply-house export has. */
+  const parse = (raw: string) => {
+    const lines = raw.split(/\r?\n/).filter(l => l.trim());
+    const out: Array<{ name: string; costPerUnit: number }> = [];
+    for (const line of lines) {
+      const cells = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+      if (cells.length < 2) continue;
+      const name = cells[0];
+      const cost = Number(cells[cells.length - 1].replace(/[$,]/g, ""));
+      // Skips the header row for free: "Price" is not a number.
+      if (!name || !Number.isFinite(cost) || cost < 0) continue;
+      out.push({ name, costPerUnit: cost });
     }
-
-    setImportState({ stage: "mapping", headers, rows });
+    return out;
   };
 
-  // ── After column mapping confirmed ────────────────────────────────────────
-  const handleMappingConfirm = (mapping: ColumnMapping) => {
-    const { rows, headers } = importState as {
-      stage: "mapping";
-      headers: string[];
-      rows: Record<string, string>[];
-    };
-    if (materials.length > 0) {
-      setImportState({ stage: "confirm-replace", headers, rows, mapping });
-    } else {
-      executeImport(rows, mapping, false);
-    }
-  };
+  const parsed = parse(text);
 
-  // ── Execute the actual import ─────────────────────────────────────────────
-  const executeImport = (
-    rows: Record<string, string>[],
-    mapping: ColumnMapping,
-    replaceAll: boolean
-  ) => {
-    setImportState({ stage: "importing" });
-    const items = rows
-      .map((row, idx) => {
-        const get = (col: string) => (col ? (row[col]?.trim() ?? "") : "");
-        const desc = get(mapping.description);
-        if (!desc) return null;
-        const up = parseFloat(get(mapping.userPrice));
-        const dp = parseFloat(get(mapping.defaultPrice));
-        return {
-          description: desc,
-          category: get(mapping.category) || undefined,
-          itemCode: get(mapping.itemId) || `AUTO-${idx + 1}`,
-          unit: get(mapping.unit) || "EA",
-          userPrice: isNaN(up) ? undefined : up,
-          defaultPrice: isNaN(dp) ? undefined : dp,
-          unitMaterialCost: isNaN(dp) ? (isNaN(up) ? 0 : up) : dp,
-          source: "import" as const,
-        };
-      })
-      .filter(Boolean) as Parameters<typeof bulkImport.mutate>[0]["items"];
-
-    if (items.length === 0) {
-      toast.error(
-        "No valid rows found after mapping. Check that your Description column has data."
-      );
-      setImportState({ stage: "idle" });
-      return;
-    }
-
-    bulkImport.mutate({ items, replaceAll });
-  };
-
-  // ── Grouped materials ─────────────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    if (!search.trim()) return materials;
-    // Use smartSearch for trade slang + fuzzy matching; cast to SearchableItem shape
-    type MaterialAsSearchable = (typeof materials)[number] & SearchableItem;
-    return smartSearch<MaterialAsSearchable>(
-      materials as MaterialAsSearchable[],
-      search,
-      500 // large limit — show all matches in the full table view
-    ) as typeof materials;
-  }, [materials, search]);
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, Material[]>();
-    for (const m of filtered) {
-      const cat = m.category ?? "Uncategorized";
-      if (!map.has(cat)) map.set(cat, []);
-      map.get(cat)!.push(m as Material);
-    }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [filtered]);
-
-  const toggleCategory = (cat: string) =>
-    setExpandedCategories(p => {
-      const n = new Set(p);
-      n.has(cat) ? n.delete(cat) : n.add(cat);
-      return n;
-    });
-
-  const missingPriceCount = materials.filter(m =>
-    isMissingPrice(m as Material)
-  ).length;
-
-  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-background text-foreground">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-border/60 shrink-0">
-        <div className="flex items-center gap-3">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="text-muted-foreground hover:text-foreground transition-colors mr-1"
-            >
-              <ArrowLeft size={16} />
-            </button>
-          )}
-          <Database size={18} className="text-[#F5C518]" />
-          <div>
-            {/* Titled to match the sidebar. "Material Database" sat one letter
-                away from the Materials catalog, which is a different table for
-                a different job — clicking "Supplier Pricing" and landing on a
-                page called "Material Database" would just move the collision
-                one click later. The route is unchanged. */}
-            <h1 className="text-base font-semibold leading-tight">
-              Supplier Pricing
-            </h1>
-            <p className="text-[11px] text-muted-foreground">
-              {materials.length} items
-              {missingPriceCount > 0 && (
-                <span className="ml-2 text-red-400">
-                  · {missingPriceCount} missing price
-                </span>
-              )}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-5 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold">Import a price list</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Paste two columns — material name, then price. Names are matched
+            against your catalog; anything that matches nothing is reported back
+            rather than added.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <Store className="w-3.5 h-3.5" /> Supplier
+          </label>
+          <Input
+            value={supplier}
+            onChange={e => setSupplier(e.target.value)}
+            placeholder="e.g. Platt"
+            className="h-8 text-sm"
+            aria-label="Supplier name"
+          />
+        </div>
+
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          rows={8}
+          placeholder={'#12 THHN, 0.42\n1/2" EMT, 1.18'}
+          aria-label="Price list rows"
+          className="w-full rounded-md border border-border bg-background p-2 text-xs font-mono"
+        />
+
+        {result ? (
+          <div className="text-xs space-y-1 max-h-40 overflow-y-auto">
+            <div className="text-emerald-400">
+              Priced {result.priced.length}.
+            </div>
+            {result.unmatched.length > 0 && (
+              <div className="text-amber-400">
+                No match for: {result.unmatched.slice(0, 20).join(", ")}
+                {result.unmatched.length > 20
+                  ? ` and ${result.unmatched.length - 20} more`
+                  : ""}
+              </div>
+            )}
+          </div>
+        ) : (
+          parsed.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {parsed.length} row{parsed.length === 1 ? "" : "s"} ready.
             </p>
-          </div>
-        </div>
+          )
+        )}
 
-        <div className="flex items-center gap-2">
-          {/* Search */}
-          <div className="relative">
-            <Search
-              size={12}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-            />
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search items…"
-              className="pl-7 pr-3 py-1.5 bg-muted/30 border border-border/60 rounded-lg text-xs outline-none focus:border-[#F5C518]/60 w-44"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X size={10} />
-              </button>
-            )}
-          </div>
-
-          {/* Add custom */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowAddDialog(true)}
-            className="gap-1.5 text-xs h-8"
-          >
-            <Plus size={12} />
-            Add Custom Material
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            {result ? "Done" : "Cancel"}
           </Button>
-
-          {/* Reload master catalog */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowReloadConfirm(true)}
-            className="gap-1.5 text-xs h-8"
-            disabled={seedFromCatalog.isPending}
-          >
-            {seedFromCatalog.isPending ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Database size={12} />
-            )}
-            Reload Master Catalog
-          </Button>
-
-          {/* Import */}
-          <Button
-            size="sm"
-            onClick={() => fileRef.current?.click()}
-            className="gap-1.5 text-xs h-8 bg-[#F5C518] text-black hover:bg-[#F5C518]/90"
-            disabled={importState.stage === "importing"}
-          >
-            {importState.stage === "importing" ? (
-              <Loader2 size={12} className="animate-spin" />
-            ) : (
-              <Upload size={12} />
-            )}
-            Import Material List
-          </Button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={handleFile}
-          />
+          {!result && (
+            <Button
+              size="sm"
+              disabled={
+                !supplier.trim() ||
+                parsed.length === 0 ||
+                importPrices.isPending
+              }
+              onClick={() =>
+                importPrices.mutate({
+                  supplierName: supplier.trim(),
+                  rows: parsed,
+                })
+              }
+            >
+              Apply to {parsed.length}
+            </Button>
+          )}
         </div>
       </div>
-
-      {/* ── Legend ── */}
-      <div className="flex items-center gap-4 px-5 py-2 border-b border-border/30 text-[10px] text-muted-foreground shrink-0">
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-[#F5C518]/60 inline-block" />{" "}
-          Custom price (User_Price)
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-muted-foreground/40 inline-block" />{" "}
-          Default price
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-red-500/60 inline-block" />{" "}
-          Missing price — quote required
-        </span>
-        <span className="ml-auto flex items-center gap-3">
-          <span className="text-emerald-400">● &lt;30 days</span>
-          <span className="text-yellow-400">● 30–90 days</span>
-          <span className="text-red-400">● &gt;90 days</span>
-          <span className="text-muted-foreground/50">Last_Updated age</span>
-        </span>
-      </div>
-
-      {/* ── Table header ── */}
-      <div className="grid grid-cols-[1fr_100px_80px_130px_130px_36px] gap-2 px-5 py-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/40 shrink-0">
-        <span>Description</span>
-        <span>Item Code</span>
-        <span>Unit</span>
-        <span>User_Price</span>
-        <span>Last_Updated</span>
-        <span />
-      </div>
-
-      {/* ── Body ── */}
-      <div className="flex-1 overflow-y-auto">
-        {isLoading && (
-          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm gap-2">
-            <Loader2 size={16} className="animate-spin" />
-            Loading materials…
-          </div>
-        )}
-
-        {!isLoading && materials.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 gap-6 text-center px-8">
-            <Database size={48} className="text-muted-foreground/20" />
-            <div>
-              <p className="text-base font-semibold text-foreground">
-                Your material database is empty
-              </p>
-              <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                Load the built-in master catalog of{" "}
-                {CATALOG.length.toLocaleString()} common electrical items with
-                baseline prices, or import your own supply house CSV.
-              </p>
-            </div>
-            {/* Primary CTA — load master catalog */}
-            <div className="bg-[#F5C518]/10 border border-[#F5C518]/30 rounded-xl p-5 max-w-sm w-full">
-              <p className="text-sm font-semibold text-[#F5C518] mb-1">
-                Recommended: Load Master Catalog
-              </p>
-              <p className="text-xs text-muted-foreground mb-4">
-                {CATALOG.length.toLocaleString()} items across Distribution,
-                Conduit, Wire, Rough-in, Devices, Lighting &amp; Civil. Prices
-                are editable — update them with your own supply house quotes at
-                any time.
-              </p>
-              <Button
-                className="w-full bg-[#F5C518] text-black hover:bg-[#F5C518]/90 font-semibold"
-                disabled={seedFromCatalog.isPending}
-                onClick={() => seedFromCatalog.mutate({ replaceAll: false })}
-              >
-                {seedFromCatalog.isPending ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin mr-2" />
-                    Loading catalog…
-                  </>
-                ) : (
-                  <>
-                    <Database size={14} className="mr-2" />
-                    Load Master Catalog ({CATALOG.length.toLocaleString()}{" "}
-                    items)
-                  </>
-                )}
-              </Button>
-            </div>
-            {/* Secondary options */}
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowAddDialog(true)}
-                className="gap-1.5 text-xs"
-              >
-                <Plus size={12} />
-                Add Custom Material
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => fileRef.current?.click()}
-                className="gap-1.5 text-xs"
-              >
-                <Upload size={12} />
-                Import CSV
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {!isLoading && materials.length > 0 && filtered.length === 0 && (
-          <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
-            No items match your search.
-          </div>
-        )}
-
-        {grouped.map(([category, items]) => (
-          <div key={category}>
-            {/* Category header */}
-            <button
-              onClick={() => toggleCategory(category)}
-              className="w-full flex items-center gap-2 px-5 py-2 bg-muted/20 hover:bg-muted/30 transition-colors border-b border-border/30 text-left"
-            >
-              {expandedCategories.has(category) ? (
-                <ChevronDown size={12} className="text-muted-foreground" />
-              ) : (
-                <ChevronRight size={12} className="text-muted-foreground" />
-              )}
-              <span className="text-xs font-semibold text-foreground">
-                {category}
-              </span>
-              <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
-                {items.length}
-              </Badge>
-              {items.some(m => isMissingPrice(m)) && (
-                <span className="text-[10px] text-red-400 ml-1">
-                  ⚠ {items.filter(m => isMissingPrice(m)).length} missing price
-                </span>
-              )}
-            </button>
-
-            {/* Rows */}
-            {expandedCategories.has(category) &&
-              items.map(m => (
-                <div
-                  key={m.id}
-                  className={cn(
-                    "grid grid-cols-[1fr_100px_80px_130px_130px_36px] gap-2 px-5 py-2 border-b border-border/20 hover:bg-muted/10 transition-colors items-center",
-                    isMissingPrice(m) && "bg-red-500/5"
-                  )}
-                >
-                  {/* Description */}
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">
-                      {m.description}
-                    </p>
-                  </div>
-
-                  {/* Item Code */}
-                  <span className="text-[10px] font-mono text-muted-foreground truncate">
-                    {m.itemCode ?? "—"}
-                  </span>
-
-                  {/* Unit */}
-                  <span className="text-[10px] text-muted-foreground">
-                    {m.unit ?? "EA"}
-                  </span>
-
-                  {/* User_Price (inline editable) */}
-                  <PriceCell
-                    material={m}
-                    onSave={(id, price) =>
-                      updatePrice.mutate({ id, userPrice: price })
-                    }
-                    onReset={id => resetPrice.mutate({ id })}
-                  />
-
-                  {/* Last_Updated */}
-                  <span
-                    className={cn(
-                      "text-[10px] font-mono",
-                      ageClass(m.lastUpdated)
-                    )}
-                  >
-                    {ageLabel(m.lastUpdated)}
-                  </span>
-
-                  {/* Delete */}
-                  <button
-                    onClick={() => setDeletingId(m.id)}
-                    className="text-muted-foreground/40 hover:text-red-400 transition-colors"
-                    title="Delete item"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))}
-          </div>
-        ))}
-      </div>
-
-      {/* ── Dialogs ── */}
-      <Dialog
-        open={importState.stage === "mapping"}
-        onOpenChange={o => {
-          if (!o) setImportState({ stage: "idle" });
-        }}
-      >
-        {importState.stage === "mapping" && (
-          <ColumnMappingDialog
-            headers={importState.headers}
-            rowCount={importState.rows.length}
-            onConfirm={handleMappingConfirm}
-            onCancel={() => setImportState({ stage: "idle" })}
-          />
-        )}
-      </Dialog>
-
-      <Dialog
-        open={importState.stage === "confirm-replace"}
-        onOpenChange={o => {
-          if (!o) setImportState({ stage: "idle" });
-        }}
-      >
-        {importState.stage === "confirm-replace" && (
-          <ReplaceConfirmDialog
-            rowCount={importState.rows.length}
-            existingCount={materials.length}
-            onConfirm={() => {
-              const s = importState as Extract<
-                typeof importState,
-                { stage: "confirm-replace" }
-              >;
-              executeImport(s.rows, s.mapping, true);
-            }}
-            onCancel={() => setImportState({ stage: "idle" })}
-          />
-        )}
-      </Dialog>
-
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        {showAddDialog && (
-          <AddMaterialDialog
-            onAdd={data =>
-              addSingle.mutate({
-                description: data.description,
-                category: data.category || undefined,
-                itemCode: data.itemCode || undefined,
-                unit: data.unit,
-                defaultPrice: data.defaultPrice ?? undefined,
-                userPrice: data.userPrice ?? undefined,
-                unitMaterialCost: data.defaultPrice ?? 0,
-                source: "custom",
-              })
-            }
-            onClose={() => setShowAddDialog(false)}
-          />
-        )}
-      </Dialog>
-
-      {/* Reload master catalog confirmation */}
-      <Dialog open={showReloadConfirm} onOpenChange={setShowReloadConfirm}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle size={18} className="text-yellow-400" />
-              Reload Master Catalog?
-            </DialogTitle>
-            <DialogDescription>
-              This will <strong>replace your entire material database</strong>{" "}
-              with the {CATALOG.length.toLocaleString()}-item master catalog.
-              Any custom prices (User_Price) and Last_Updated dates you have
-              saved will be permanently lost.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowReloadConfirm(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-[#F5C518] text-black hover:bg-[#F5C518]/90 font-semibold"
-              disabled={seedFromCatalog.isPending}
-              onClick={() => {
-                setShowReloadConfirm(false);
-                seedFromCatalog.mutate({ replaceAll: true });
-              }}
-            >
-              {seedFromCatalog.isPending ? (
-                <>
-                  <Loader2 size={14} className="animate-spin mr-2" />
-                  Loading…
-                </>
-              ) : (
-                <>
-                  <Database size={14} className="mr-2" />
-                  Yes, Reload Catalog
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete confirmation */}
-      <Dialog
-        open={deletingId !== null}
-        onOpenChange={o => {
-          if (!o) setDeletingId(null);
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Delete Material?</DialogTitle>
-            <DialogDescription>
-              This item will be permanently removed from your database.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDeletingId(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (deletingId) deleteMaterial.mutate({ id: deletingId });
-              }}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
