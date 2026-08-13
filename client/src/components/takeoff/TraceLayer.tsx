@@ -50,6 +50,28 @@ export type PlacedStamp = {
   y: number;
 };
 
+/**
+ * A mark the plan reader proposed and nobody has accepted yet.
+ *
+ * Drawn deliberately unlike a placed stamp: dashed, hollow, and in the tier's
+ * own colour. A traced suggestion is dashed for the same reason (see the
+ * polyline below) — anything provisional has to read as provisional at a
+ * glance, or the drawing stops being a record of what has been counted.
+ */
+export type ProposedStamp = {
+  id: number;
+  label: string;
+  confidence: "high" | "low" | "unreadable";
+  x: number;
+  y: number;
+};
+
+const PROPOSAL_COLOR: Record<ProposedStamp["confidence"], string> = {
+  high: "#34D399",
+  low: "#F5C518",
+  unreadable: "#94A3B8",
+};
+
 export function TraceLayer({
   width,
   height,
@@ -67,6 +89,7 @@ export function TraceLayer({
   stamping,
   stampAssemblyName,
   stamps,
+  proposals,
   onDropStamp,
   selectedStampId,
   onSelectStamp,
@@ -91,6 +114,8 @@ export function TraceLayer({
   stamping: boolean;
   stampAssemblyName: string | null;
   stamps: PlacedStamp[];
+  /** Awaiting the user's decision. Never counted, never priced. */
+  proposals?: ProposedStamp[];
   onDropStamp: (at: { x: number; y: number }) => void;
   selectedStampId: number | null;
   onSelectStamp: (id: number | null) => void;
@@ -295,6 +320,30 @@ export function TraceLayer({
               />
               <circle cx={at.x} cy={at.y} r={3} fill="#F5C518" />
               <title>{placed.assemblyName}</title>
+            </g>
+          );
+        })}
+
+        {/* Proposals from the plan reader. Under the focus ring and over the
+            page, dashed and hollow: an estimator glancing at the drawing must
+            be able to tell what has been counted from what has only been
+            offered, without reading a legend to do it. */}
+        {(proposals ?? []).map(proposal => {
+          const at = toScreen({ x: proposal.x, y: proposal.y });
+          const color = PROPOSAL_COLOR[proposal.confidence];
+          return (
+            <g key={`proposal-${proposal.id}`}>
+              <circle
+                cx={at.x}
+                cy={at.y}
+                r={10}
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                strokeDasharray="4 3"
+                strokeOpacity={0.9}
+              />
+              <title>{proposal.label} — proposed, not placed</title>
             </g>
           );
         })}

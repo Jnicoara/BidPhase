@@ -89,6 +89,8 @@ import {
   type QueuedStamp,
 } from "@/lib/traceDraft";
 import { LegendPanel } from "@/components/takeoff/LegendPanel";
+import { CoPilotPanel } from "@/components/takeoff/CoPilotPanel";
+import { snapshotPage } from "@/lib/planSnapshot";
 import { groupStamps } from "@shared/takeoffCounts";
 import { LayersPanel } from "@/components/takeoff/LayersPanel";
 import {
@@ -249,6 +251,7 @@ function PlanPane({
   onPage,
   onDocumentReady,
   onSheetVisible,
+  onPageRendered,
   overlay,
 }: {
   doc: Document;
@@ -262,6 +265,13 @@ function PlanPane({
   }) => void;
   /** Fires when a page is shown, with its extracted text, for scale detection. */
   onSheetVisible: (pageNumber: number, text: string) => void;
+  /**
+   * Fires each time a page finishes rasterising, with the canvas holding it.
+   *
+   * The plan reader is sent this raster rather than making its own — the worker
+   * has already paid for it once. See lib/planSnapshot.ts.
+   */
+  onPageRendered?: (pageNumber: number, canvas: HTMLCanvasElement) => void;
   /**
    * The tracing layer, drawn over the page at the same size. Given the canvas
    * dimensions so its coordinate space matches the rasterised page exactly —
@@ -341,6 +351,7 @@ function PlanPane({
         setCanvasSize({ width: bitmap.width, height: bitmap.height });
         bitmap.close();
         setRendering(false);
+        onPageRendered?.(page, canvas);
       })
       .catch(err => {
         if (cancelled) return;
@@ -722,6 +733,182 @@ export default function TakeoffPage({
     onSettled: () => void utils.takeoffStamps.symbols.invalidate(),
   });
 
+  // ── Plan reader (AI co-pilot) ─────────────────────────────────────────────
+  /**
+   * The rasterised page, and the text pulled off it.
+   *
+   * Both are per page and both are captured as a side effect of the viewer
+   * doing its ordinary job, so opening the reader costs nothing extra — the
+   * canvas is already drawn and the text was already extracted for scale
+   * detection.
+   */
+  const pageCanvas = useRef<HTMLCanvasElement | null>(null);
+  const pageTextByPage = useRef<Map<number, string>>(new Map());
+  const [renderedPage, setRenderedPage] = useState<number | null>(null);
+  const [copilotAnswer, setCopilotAnswer] = useState<string | null>(null);
+  /**
+   * Read each sheet as it is opened, rather than on a button press.
+   *
+   * Remembered per browser rather than per account: it is a preference about
+   * how this one machine works, and a contractor on a metered connection in a
+   * truck may well want it off there and on at the office. Each sheet is still
+   * read at most once — the server returns a stored reading unless the user
+   * asks for a re-read — so leaving it on cannot run away with the bill.
+   */
+  const [autoRead, setAutoRead] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return (
+      window.localStorage.getItem("helixbid.planReader.autoRead") !== "off"
+    );
+  });
+  const setAutoReadPersisted = useCallback((on: boolean) => {
+    setAutoRead(on);
+    try {
+      window.localStorage.setItem(
+        "helixbid.planReader.autoRead",
+        on ? "on" : "off"
+      );
+    } catch {
+      // Private browsing. The preference simply does not stick.
+    }
+  }, []);
+
+  const handlePageRendered = useCallback(
+    (pageNumber: number, canvas: HTMLCanvasElement) => {
+      pageCanvas.current = canvas;
+      setRenderedPage(pageNumber);
+    },
+    []
+  );
+
+  const { data: copilot } = trpc.planCopilot.state.useQuery(
+    { sheetId: activeSheet?.id ?? 0 },
+    { enabled: Boolean(activeSheet) }
+  );
+
+  const refreshCopilot = useCallback(() => {
+    if (activeSheet)
+      void utils.planCopilot.state.invalidate({ sheetId: activeSheet.id });
+  }, [utils, activeSheet?.id]);
+
+  const readSheet = trpc.planCopilot.read.useMutation({
+    onError: e => toast.error(e.message),
+    onSettled: refreshCopilot,
+  });
+  const askCopilot = trpc.planCopilot.ask.useMutation({
+    onError: e => toast.error(e.message),
+    onSuccess: result => setCopilotAnswer(result.answer),
+  });
+  const confirmFindings = trpc.planCopilot.confirm.useMutation({
+    onError: e => toast.error(e.message),
+    onSuccess: result => {
+      if (result.placed > 0) {
+        toast.success(
+          `Placed ${result.placed} ${result.placed === 1 ? "stamp" : "stamps"}.`
+        );
+      }
+      // Every refusal is shown rather than counted. A user who ticked twelve
+      // and got eleven needs to know which one did not go on, and why.
+      for (const reason of result.refused) toast.warning(reason);
+    },
+    onSettled: () => {
+      refreshCopilot();
+      refreshStamps();
+    },
+  });
+  const dismissFindings = trpc.planCopilot.dismiss.useMutation({
+    onError: e => toast.error(e.message),
+    onSettled: refreshCopilot,
+  });
+  const correctFinding = trpc.planCopilot.correct.useMutation({
+    onError: e => toast.error(e.message),
+    onSuccess: result =>
+      toast.success(
+        result.assemblyName
+          ? `Noted — reading that as ${result.assemblyName} from now on.`
+          : `Noted — reading that as “${result.symbolLabel}” from now on.`
+      ),
+    onSettled: refreshCopilot,
+  });
+
+  /** True once this page is drawn, so there is something to send. */
+  const canRead = renderedPage === page && Boolean(activeSheet);
+
+  const runReader = useCallback(
+    (force: boolean) => {
+      if (!activeSheet || !canRead) return;
+      const snapshot = snapshotPage(pageCanvas.current, RENDER_SCALE);
+      if (!snapshot) {
+        toast.error("The page is still drawing — give it a moment.");
+        return;
+      }
+      readSheet.mutate({
+        bidId,
+        sheetId: activeSheet.id,
+        pageImage: snapshot.image,
+        pageText: pageTextByPage.current.get(page) ?? "",
+        pageWidthPoints: snapshot.pageWidthPoints,
+        pageHeightPoints: snapshot.pageHeightPoints,
+        force,
+      });
+    },
+    [activeSheet?.id, canRead, bidId, page, readSheet]
+  );
+
+  /**
+   * Read a sheet when it is opened — this one, not the other thirty-nine.
+   *
+   * The whole cost-control decision in one effect: reading is driven by what
+   * the estimator is actually looking at. A forty-sheet submission read up
+   * front would bill forty times before anyone had seen a drawing, and most of
+   * those sheets are schedules, details and civil work the electrician will
+   * never take off.
+   */
+  const readerFired = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (!autoRead || !canRead || !activeSheet) return;
+    // A sheet that already has a stored reading costs nothing to show, so there
+    // is nothing to fire for. `copilot` being undefined means the query has not
+    // answered yet — firing then would race it and pay for a second read.
+    if (copilot === undefined || copilot.runId !== null) return;
+    if (readerFired.current.has(activeSheet.id)) return;
+    readerFired.current.add(activeSheet.id);
+    runReader(false);
+  }, [autoRead, canRead, activeSheet?.id, copilot?.runId, runReader]);
+
+  /** A question is about the sheet on screen, so the answer goes with it. */
+  useEffect(() => {
+    setCopilotAnswer(null);
+  }, [activeSheet?.id]);
+
+  /**
+   * Proposals still awaiting a decision, for drawing on the plan.
+   *
+   * Only the ones a user could accept: an unreadable finding is a place to look
+   * rather than a mark to place, and drawing it like a pending stamp would put
+   * the guess back on the drawing that the third tier exists to keep off it.
+   * It is still listed in the panel, and clicking it still jumps the viewer.
+   */
+  const proposals = useMemo(
+    () =>
+      (copilot?.findings ?? [])
+        .filter(
+          f =>
+            f.status === "proposed" &&
+            f.acceptable &&
+            f.x !== null &&
+            f.y !== null
+        )
+        .map(f => ({
+          id: f.id,
+          label: f.assemblyName ?? f.rawLabel,
+          confidence: f.confidence,
+          x: f.x as number,
+          y: f.y as number,
+        })),
+    [copilot?.findings]
+  );
+
   /**
    * Queue a click and flush shortly after.
    *
@@ -1066,6 +1253,10 @@ export default function TakeoffPage({
 
   const handleSheetVisible = useCallback(
     (pageNumber: number, text: string) => {
+      // Kept for the plan reader too. The extraction has already happened for
+      // scale detection, so the reader gets the sheet's own words — title
+      // block, general notes, keynotes — for free alongside the picture.
+      pageTextByPage.current.set(pageNumber, text);
       const sheet = sheets.find(s => s.pageNumber === pageNumber);
       // Nothing to attach a reading to yet; ensureSheets is still in flight and
       // this page's text will be re-read the next time it is shown.
@@ -1406,6 +1597,7 @@ export default function TakeoffPage({
                     }
                     onDocumentReady={handleDocumentReady}
                     onSheetVisible={handleSheetVisible}
+                    onPageRendered={handlePageRendered}
                     overlay={size =>
                       measurability ? (
                         <>
@@ -1474,6 +1666,7 @@ export default function TakeoffPage({
                               x: st.x,
                               y: st.y,
                             }))}
+                            proposals={proposals}
                             onDropStamp={queueStamp}
                             selectedStampId={selectedStampId}
                             onSelectStamp={setSelectedStampId}
@@ -1566,6 +1759,58 @@ export default function TakeoffPage({
                 onRemoveStamp={id => removeStamp.mutate({ id })}
                 legend={
                   <>
+                    {/* Above the layers and the legend: what the reader found
+                        is the thing a user comes to this pane to act on, and
+                        the legend it depends on sits below it where it is
+                        still one glance away. */}
+                    <CoPilotPanel
+                      state={copilot}
+                      reading={readSheet.isPending}
+                      autoRead={autoRead}
+                      onAutoReadChange={setAutoReadPersisted}
+                      canRead={canRead}
+                      onRead={runReader}
+                      onConfirm={findingIds => {
+                        if (!copilot?.runId) return;
+                        confirmFindings.mutate({
+                          runId: copilot.runId,
+                          findingIds,
+                          confirmed: true,
+                        });
+                      }}
+                      onDismiss={findingIds =>
+                        dismissFindings.mutate({ findingIds })
+                      }
+                      onCorrect={(findingId, symbolLinkId) =>
+                        correctFinding.mutate({
+                          findingId,
+                          symbolLinkId,
+                          confirmed: true,
+                        })
+                      }
+                      onJumpTo={at => {
+                        setFocusPoint(at);
+                        window.setTimeout(() => setFocusPoint(null), 2200);
+                      }}
+                      symbols={symbols}
+                      onAsk={question => {
+                        if (!activeSheet) return;
+                        const snapshot = snapshotPage(
+                          pageCanvas.current,
+                          RENDER_SCALE
+                        );
+                        if (!snapshot) return;
+                        askCopilot.mutate({
+                          sheetId: activeSheet.id,
+                          question,
+                          pageImage: snapshot.image,
+                          pageText: pageTextByPage.current.get(page) ?? "",
+                        });
+                      }}
+                      asking={askCopilot.isPending}
+                      answer={copilotAnswer}
+                      onClearAnswer={() => setCopilotAnswer(null)}
+                    />
                     <LayersPanel
                       present={present}
                       state={effectiveLayers}

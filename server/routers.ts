@@ -21,6 +21,7 @@ import { takeoffStampsRouter } from "./routers/takeoffStampsRouter";
 import { kitsRouter } from "./routers/kitsRouter";
 import { onboardingRouter } from "./routers/onboardingRouter";
 import { navigationRouter } from "./routers/navigationRouter";
+import { planCopilotRouter } from "./routers/planCopilotRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -45,6 +46,9 @@ export const appRouter = router({
   kits: kitsRouter,
   onboarding: onboardingRouter,
   navigation: navigationRouter,
+  // Separate from `navigation` on purpose — separate scope, separate action
+  // list, separate model call. See the header of planCopilotRouter.
+  planCopilot: planCopilotRouter,
 });
 
 export type AppRouter = typeof appRouter;
