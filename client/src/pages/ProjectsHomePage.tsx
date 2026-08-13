@@ -8,44 +8,71 @@
  */
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import { Search, Plus, Calendar, User, MapPin, ChevronRight, Loader2, FolderOpen } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Calendar,
+  User,
+  MapPin,
+  ChevronRight,
+  Loader2,
+  FolderOpen,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 
 type ProjectStatus = "Bidding" | "Won" | "In Progress" | "Lost";
 
 const STATUS_STYLES: Record<ProjectStatus, string> = {
-  Bidding:      "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
-  Won:          "bg-green-500/20 text-green-400 border border-green-500/30",
+  Bidding: "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30",
+  Won: "bg-green-500/20 text-green-400 border border-green-500/30",
   "In Progress": "bg-blue-500/20 text-blue-400 border border-blue-500/30",
-  Lost:         "bg-zinc-600/40 text-zinc-400 border border-zinc-600/30",
+  Lost: "bg-zinc-600/40 text-zinc-400 border border-zinc-600/30",
 };
 
 interface ProjectsHomePageProps {
   onOpenProject: (projectId: number) => void;
 }
 
-export default function ProjectsHomePage({ onOpenProject }: ProjectsHomePageProps) {
+export default function ProjectsHomePage({
+  onOpenProject,
+}: ProjectsHomePageProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showNewModal, setShowNewModal] = useState(false);
 
   // Fetch all projects
-  const { data: allProjects = [], isLoading, refetch } = trpc.projects.list.useQuery();
+  const {
+    data: allProjects = [],
+    isLoading,
+    refetch,
+  } = trpc.projects.list.useQuery();
 
   // Client-side wildcard filter across name, customerName, address
   const filteredProjects = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return allProjects;
-    return allProjects.filter(p =>
-      (p.name ?? "").toLowerCase().includes(q) ||
-      (p.customerName ?? "").toLowerCase().includes(q) ||
-      (p.address ?? "").toLowerCase().includes(q)
+    return allProjects.filter(
+      p =>
+        (p.name ?? "").toLowerCase().includes(q) ||
+        (p.customerName ?? "").toLowerCase().includes(q) ||
+        (p.address ?? "").toLowerCase().includes(q)
     );
   }, [allProjects, searchQuery]);
 
@@ -58,7 +85,9 @@ export default function ProjectsHomePage({ onOpenProject }: ProjectsHomePageProp
             <span className="text-foreground">Bid</span>
             <span className="text-[#F5C518]">Phase</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Electrical Estimating</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Electrical Estimating
+          </p>
         </div>
         <Button
           onClick={() => setShowNewModal(true)}
@@ -72,7 +101,10 @@ export default function ProjectsHomePage({ onOpenProject }: ProjectsHomePageProp
       {/* ── Search bar ── */}
       <div className="px-6 py-5">
         <div className="relative max-w-2xl">
-          <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Search
+            size={20}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+          />
           <Input
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
@@ -91,7 +123,8 @@ export default function ProjectsHomePage({ onOpenProject }: ProjectsHomePageProp
         </div>
         {searchQuery && (
           <p className="mt-2 text-sm text-muted-foreground">
-            {filteredProjects.length} result{filteredProjects.length !== 1 ? "s" : ""} for "{searchQuery}"
+            {filteredProjects.length} result
+            {filteredProjects.length !== 1 ? "s" : ""} for "{searchQuery}"
           </p>
         )}
       </div>
@@ -107,7 +140,9 @@ export default function ProjectsHomePage({ onOpenProject }: ProjectsHomePageProp
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <FolderOpen size={48} className="text-muted-foreground/40 mb-4" />
             <p className="text-lg font-medium text-muted-foreground">
-              {searchQuery ? "No projects match your search" : "No projects yet"}
+              {searchQuery
+                ? "No projects match your search"
+                : "No projects yet"}
             </p>
             {!searchQuery && (
               <p className="text-sm text-muted-foreground/60 mt-1">
@@ -129,13 +164,20 @@ export default function ProjectsHomePage({ onOpenProject }: ProjectsHomePageProp
               >
                 {/* Status badge */}
                 <div className="flex items-start justify-between mb-3">
-                  <span className={cn(
-                    "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
-                    STATUS_STYLES[(project.status as ProjectStatus) ?? "Bidding"]
-                  )}>
+                  <span
+                    className={cn(
+                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold",
+                      STATUS_STYLES[
+                        (project.status as ProjectStatus) ?? "Bidding"
+                      ]
+                    )}
+                  >
                     {project.status ?? "Bidding"}
                   </span>
-                  <ChevronRight size={16} className="text-muted-foreground/40 group-hover:text-[#F5C518]/60 transition-colors mt-0.5" />
+                  <ChevronRight
+                    size={16}
+                    className="text-muted-foreground/40 group-hover:text-[#F5C518]/60 transition-colors mt-0.5"
+                  />
                 </div>
 
                 {/* Project name */}
@@ -147,25 +189,40 @@ export default function ProjectsHomePage({ onOpenProject }: ProjectsHomePageProp
                 <div className="space-y-1.5">
                   {project.customerName && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <User size={13} className="shrink-0 text-muted-foreground/60" />
+                      <User
+                        size={13}
+                        className="shrink-0 text-muted-foreground/60"
+                      />
                       <span className="truncate">{project.customerName}</span>
                     </div>
                   )}
                   {project.address && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin size={13} className="shrink-0 text-muted-foreground/60" />
+                      <MapPin
+                        size={13}
+                        className="shrink-0 text-muted-foreground/60"
+                      />
                       <span className="truncate">{project.address}</span>
                     </div>
                   )}
                   {project.bidDate && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar size={13} className="shrink-0 text-muted-foreground/60" />
-                      <span>{new Date(project.bidDate).toLocaleDateString()}</span>
+                      <Calendar
+                        size={13}
+                        className="shrink-0 text-muted-foreground/60"
+                      />
+                      <span>
+                        {new Date(project.bidDate).toLocaleDateString()}
+                      </span>
                     </div>
                   )}
-                  {!project.customerName && !project.address && !project.bidDate && (
-                    <p className="text-xs text-muted-foreground/40 italic">No details added</p>
-                  )}
+                  {!project.customerName &&
+                    !project.address &&
+                    !project.bidDate && (
+                      <p className="text-xs text-muted-foreground/40 italic">
+                        No details added
+                      </p>
+                    )}
                 </div>
               </button>
             ))}
@@ -177,7 +234,7 @@ export default function ProjectsHomePage({ onOpenProject }: ProjectsHomePageProp
       <NewProjectModal
         open={showNewModal}
         onClose={() => setShowNewModal(false)}
-        onCreated={(id) => {
+        onCreated={id => {
           refetch();
           setShowNewModal(false);
           onOpenProject(id);
@@ -205,13 +262,18 @@ function NewProjectModal({
   const [notes, setNotes] = useState("");
 
   const createProject = trpc.projects.create.useMutation({
-    onSuccess: (project) => {
+    onSuccess: project => {
       toast.success("Project created");
       onCreated(project.id);
       // Reset form
-      setName(""); setCustomerName(""); setAddress(""); setBidDate(""); setStatus("Bidding"); setNotes("");
+      setName("");
+      setCustomerName("");
+      setAddress("");
+      setBidDate("");
+      setStatus("Bidding");
+      setNotes("");
     },
-    onError: (e) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -235,7 +297,9 @@ function NewProjectModal({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="space-y-1.5">
-            <Label className="text-sm font-semibold text-foreground">Project Name *</Label>
+            <Label className="text-sm font-semibold text-foreground">
+              Project Name *
+            </Label>
             <Input
               value={name}
               onChange={e => setName(e.target.value)}
@@ -247,7 +311,9 @@ function NewProjectModal({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-sm font-semibold text-foreground">Customer Name</Label>
+              <Label className="text-sm font-semibold text-foreground">
+                Customer Name
+              </Label>
               <Input
                 value={customerName}
                 onChange={e => setCustomerName(e.target.value)}
@@ -256,8 +322,13 @@ function NewProjectModal({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-sm font-semibold text-foreground">Status</Label>
-              <Select value={status} onValueChange={v => setStatus(v as ProjectStatus)}>
+              <Label className="text-sm font-semibold text-foreground">
+                Status
+              </Label>
+              <Select
+                value={status}
+                onValueChange={v => setStatus(v as ProjectStatus)}
+              >
                 <SelectTrigger className="h-11 bg-background border-border/60">
                   <SelectValue />
                 </SelectTrigger>
@@ -271,7 +342,9 @@ function NewProjectModal({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-sm font-semibold text-foreground">Address</Label>
+            <Label className="text-sm font-semibold text-foreground">
+              Address
+            </Label>
             <Input
               value={address}
               onChange={e => setAddress(e.target.value)}
@@ -280,7 +353,9 @@ function NewProjectModal({
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-sm font-semibold text-foreground">Bid Date</Label>
+            <Label className="text-sm font-semibold text-foreground">
+              Bid Date
+            </Label>
             <Input
               type="date"
               value={bidDate}
@@ -289,7 +364,9 @@ function NewProjectModal({
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-sm font-semibold text-foreground">Notes</Label>
+            <Label className="text-sm font-semibold text-foreground">
+              Notes
+            </Label>
             <Textarea
               value={notes}
               onChange={e => setNotes(e.target.value)}
@@ -299,7 +376,12 @@ function NewProjectModal({
             />
           </div>
           <div className="flex gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-11 text-base">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="flex-1 h-11 text-base"
+            >
               Cancel
             </Button>
             <Button
@@ -307,7 +389,11 @@ function NewProjectModal({
               disabled={!name.trim() || createProject.isPending}
               className="flex-1 h-11 text-base bg-[#F5C518] hover:bg-[#e6b800] text-black font-semibold"
             >
-              {createProject.isPending ? <Loader2 size={18} className="animate-spin" /> : "Create Project"}
+              {createProject.isPending ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                "Create Project"
+              )}
             </Button>
           </div>
         </form>

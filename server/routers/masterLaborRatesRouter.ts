@@ -10,12 +10,14 @@ export const masterLaborRatesRouter = router({
   }),
 
   create: protectedProcedure
-    .input(z.object({
-      name: z.string().min(1).max(128),
-      ratePerHour: z.number().min(0),
-      type: z.enum(RATE_TYPES).default("journeyman"),
-      isDefault: z.boolean().default(false),
-    }))
+    .input(
+      z.object({
+        name: z.string().min(1).max(128),
+        ratePerHour: z.number().min(0),
+        type: z.enum(RATE_TYPES).default("journeyman"),
+        isDefault: z.boolean().default(false),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await db.createMasterLaborRate({
         userId: ctx.user.id,
@@ -30,18 +32,24 @@ export const masterLaborRatesRouter = router({
     }),
 
   update: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      name: z.string().min(1).max(128).optional(),
-      ratePerHour: z.number().min(0).optional(),
-      type: z.enum(RATE_TYPES).optional(),
-      isDefault: z.boolean().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        name: z.string().min(1).max(128).optional(),
+        ratePerHour: z.number().min(0).optional(),
+        type: z.enum(RATE_TYPES).optional(),
+        isDefault: z.boolean().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const { id, ratePerHour, ...rest } = input;
       const data: Record<string, unknown> = { ...rest };
       if (ratePerHour !== undefined) data.ratePerHour = String(ratePerHour);
-      await db.updateMasterLaborRate(id, ctx.user.id, data as Parameters<typeof db.updateMasterLaborRate>[2]);
+      await db.updateMasterLaborRate(
+        id,
+        ctx.user.id,
+        data as Parameters<typeof db.updateMasterLaborRate>[2]
+      );
       return { success: true };
     }),
 

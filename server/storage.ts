@@ -10,7 +10,7 @@ function getForgeConfig() {
 
   if (!forgeUrl || !forgeKey) {
     throw new Error(
-      "Storage config missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY",
+      "Storage config missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
     );
   }
 
@@ -31,7 +31,7 @@ function appendHashSuffix(relKey: string): string {
 export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
-  contentType = "application/octet-stream",
+  contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
@@ -71,7 +71,48 @@ export async function storagePut(
   return { key, url: `/manus-storage/${key}` };
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
+/**
+ * A presigned PUT the BROWSER uploads to, instead of posting bytes to us.
+ *
+ * `storagePut` above takes the whole file into this process first, which caps
+ * an upload at whatever the request body limit is — and on Cloud Run that is
+ * 32 MiB, well below the sizes a scanned plan set reaches. Handing the signed
+ * URL to the client takes this server out of the data path entirely: no body
+ * limit applies, nothing is buffered in memory here, and the browser can report
+ * real progress because it owns the transfer.
+ *
+ * The key is generated the same way, hash suffix and all, so two uploads of
+ * "E1.pdf" cannot overwrite each other.
+ */
+export async function storagePresignPut(
+  relKey: string,
+  contentType = "application/octet-stream"
+): Promise<{ key: string; uploadUrl: string }> {
+  const { forgeUrl, forgeKey } = getForgeConfig();
+  const key = appendHashSuffix(normalizeKey(relKey));
+
+  const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
+  presignUrl.searchParams.set("path", key);
+  presignUrl.searchParams.set("content_type", contentType);
+
+  const presignResp = await fetch(presignUrl, {
+    headers: { Authorization: `Bearer ${forgeKey}` },
+  });
+
+  if (!presignResp.ok) {
+    const msg = await presignResp.text().catch(() => presignResp.statusText);
+    throw new Error(`Storage presign failed (${presignResp.status}): ${msg}`);
+  }
+
+  const { url } = (await presignResp.json()) as { url: string };
+  if (!url) throw new Error("Forge returned empty presign URL");
+
+  return { key, uploadUrl: url };
+}
+
+export async function storageGet(
+  relKey: string
+): Promise<{ key: string; url: string }> {
   const key = normalizeKey(relKey);
   return { key, url: `/manus-storage/${key}` };
 }

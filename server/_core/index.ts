@@ -8,7 +8,15 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { seedDefaultFeatureFlags } from "../db";
+import { purgeArchivedBidsHandler } from "../scheduled/purgeArchivedBids";
+import {
+  seedBaselineAssemblies,
+  seedBaselineKits,
+  seedBaselineLaborRates,
+  seedBaselineMaterials,
+  seedBaselineModifiers,
+  seedDefaultFeatureFlags,
+} from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,6 +45,10 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  // Scheduled (cron) callbacks. `/api/scheduled/*` is NOT auto-registered, and
+  // must be mounted before the Vite/static fallthrough or the platform's POST
+  // lands on the SPA index instead of the handler.
+  app.post("/api/scheduled/purgeArchivedBids", purgeArchivedBidsHandler);
   // tRPC API
   app.use(
     "/api/trpc",
@@ -62,7 +74,29 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
     // Seed default feature flags (no-op if already seeded)
-    seedDefaultFeatureFlags().catch(err => console.warn("[FeatureFlags] Seed failed:", err));
+    seedDefaultFeatureFlags().catch(err =>
+      console.warn("[FeatureFlags] Seed failed:", err)
+    );
+    // Library seeds. Assemblies MUST run last: their recipes are resolved by
+    // name against the material and modifier catalogs, and an assembly whose
+    // materials have not landed yet is skipped rather than half-built.
+    Promise.all([
+      seedBaselineMaterials().catch(err =>
+        console.warn("[BaselineMaterials] Seed failed:", err)
+      ),
+      seedBaselineLaborRates().catch(err =>
+        console.warn("[BaselineLaborRates] Seed failed:", err)
+      ),
+      seedBaselineModifiers().catch(err =>
+        console.warn("[BaselineModifiers] Seed failed:", err)
+      ),
+    ])
+      .then(() => seedBaselineAssemblies())
+      // Kits reference assemblies by name, so they come last of all.
+      .then(() => seedBaselineKits())
+      .catch(err =>
+        console.warn("[BaselineAssemblies/Kits] Seed failed:", err)
+      );
   });
 }
 

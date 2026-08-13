@@ -76,12 +76,8 @@
           "name": "bid_summary_projectId_projects_id_fk",
           "tableFrom": "bid_summary",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -89,12 +85,8 @@
           "name": "bid_summary_defaultLaborRateId_master_labor_rates_id_fk",
           "tableFrom": "bid_summary",
           "tableTo": "master_labor_rates",
-          "columnsFrom": [
-            "defaultLaborRateId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["defaultLaborRateId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -102,17 +94,13 @@
       "compositePrimaryKeys": {
         "bid_summary_id": {
           "name": "bid_summary_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "bid_summary_projectId_unique": {
           "name": "bid_summary_projectId_unique",
-          "columns": [
-            "projectId"
-          ]
+          "columns": ["projectId"]
         }
       },
       "checkConstraint": {}
@@ -184,9 +172,7 @@
       "indexes": {
         "master_assemblies_userId_idx": {
           "name": "master_assemblies_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -195,12 +181,8 @@
           "name": "master_assemblies_userId_users_id_fk",
           "tableFrom": "master_assemblies",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -208,9 +190,7 @@
       "compositePrimaryKeys": {
         "master_assemblies_id": {
           "name": "master_assemblies_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -260,16 +240,12 @@
       "indexes": {
         "master_assembly_items_assemblyId_idx": {
           "name": "master_assembly_items_assemblyId_idx",
-          "columns": [
-            "assemblyId"
-          ],
+          "columns": ["assemblyId"],
           "isUnique": false
         },
         "master_assembly_items_masterItemId_idx": {
           "name": "master_assembly_items_masterItemId_idx",
-          "columns": [
-            "masterItemId"
-          ],
+          "columns": ["masterItemId"],
           "isUnique": false
         }
       },
@@ -278,12 +254,8 @@
           "name": "master_assembly_items_assemblyId_master_assemblies_id_fk",
           "tableFrom": "master_assembly_items",
           "tableTo": "master_assemblies",
-          "columnsFrom": [
-            "assemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["assemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -291,12 +263,8 @@
           "name": "master_assembly_items_masterItemId_master_items_id_fk",
           "tableFrom": "master_assembly_items",
           "tableTo": "master_items",
-          "columnsFrom": [
-            "masterItemId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["masterItemId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -304,9 +272,7 @@
       "compositePrimaryKeys": {
         "master_assembly_items_id": {
           "name": "master_assembly_items_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -410,16 +376,12 @@
       "indexes": {
         "master_items_userId_idx": {
           "name": "master_items_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "master_items_category_idx": {
           "name": "master_items_category_idx",
-          "columns": [
-            "category"
-          ],
+          "columns": ["category"],
           "isUnique": false
         }
       },
@@ -428,12 +390,8 @@
           "name": "master_items_userId_users_id_fk",
           "tableFrom": "master_items",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -441,9 +399,7 @@
       "compositePrimaryKeys": {
         "master_items_id": {
           "name": "master_items_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -518,9 +474,7 @@
       "indexes": {
         "master_labor_rates_userId_idx": {
           "name": "master_labor_rates_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -529,12 +483,8 @@
           "name": "master_labor_rates_userId_users_id_fk",
           "tableFrom": "master_labor_rates",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -542,9 +492,7 @@
       "compositePrimaryKeys": {
         "master_labor_rates_id": {
           "name": "master_labor_rates_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -617,9 +565,7 @@
       "indexes": {
         "project_assemblies_projectId_idx": {
           "name": "project_assemblies_projectId_idx",
-          "columns": [
-            "projectId"
-          ],
+          "columns": ["projectId"],
           "isUnique": false
         }
       },
@@ -628,12 +574,8 @@
           "name": "project_assemblies_projectId_projects_id_fk",
           "tableFrom": "project_assemblies",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -641,12 +583,8 @@
           "name": "project_assemblies_masterAssemblyId_master_assemblies_id_fk",
           "tableFrom": "project_assemblies",
           "tableTo": "master_assemblies",
-          "columnsFrom": [
-            "masterAssemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["masterAssemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -654,9 +592,7 @@
       "compositePrimaryKeys": {
         "project_assemblies_id": {
           "name": "project_assemblies_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -777,9 +713,7 @@
       "indexes": {
         "project_assembly_items_assemblyId_idx": {
           "name": "project_assembly_items_assemblyId_idx",
-          "columns": [
-            "projectAssemblyId"
-          ],
+          "columns": ["projectAssemblyId"],
           "isUnique": false
         }
       },
@@ -788,12 +722,8 @@
           "name": "project_assembly_items_projectAssemblyId_project_assemblies_id_fk",
           "tableFrom": "project_assembly_items",
           "tableTo": "project_assemblies",
-          "columnsFrom": [
-            "projectAssemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectAssemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -801,12 +731,8 @@
           "name": "project_assembly_items_masterItemId_master_items_id_fk",
           "tableFrom": "project_assembly_items",
           "tableTo": "master_items",
-          "columnsFrom": [
-            "masterItemId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["masterItemId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -814,9 +740,7 @@
       "compositePrimaryKeys": {
         "project_assembly_items_id": {
           "name": "project_assembly_items_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -944,9 +868,7 @@
       "indexes": {
         "project_items_projectId_idx": {
           "name": "project_items_projectId_idx",
-          "columns": [
-            "projectId"
-          ],
+          "columns": ["projectId"],
           "isUnique": false
         }
       },
@@ -955,12 +877,8 @@
           "name": "project_items_projectId_projects_id_fk",
           "tableFrom": "project_items",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -968,12 +886,8 @@
           "name": "project_items_masterItemId_master_items_id_fk",
           "tableFrom": "project_items",
           "tableTo": "master_items",
-          "columnsFrom": [
-            "masterItemId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["masterItemId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -981,9 +895,7 @@
       "compositePrimaryKeys": {
         "project_items_id": {
           "name": "project_items_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1100,9 +1012,7 @@
       "indexes": {
         "projects_userId_idx": {
           "name": "projects_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -1111,12 +1021,8 @@
           "name": "projects_userId_users_id_fk",
           "tableFrom": "projects",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1124,9 +1030,7 @@
       "compositePrimaryKeys": {
         "projects_id": {
           "name": "projects_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1266,16 +1170,12 @@
       "indexes": {
         "user_materials_db_userId_idx": {
           "name": "user_materials_db_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "user_materials_db_category_idx": {
           "name": "user_materials_db_category_idx",
-          "columns": [
-            "category"
-          ],
+          "columns": ["category"],
           "isUnique": false
         }
       },
@@ -1284,12 +1184,8 @@
           "name": "user_materials_db_userId_users_id_fk",
           "tableFrom": "user_materials_db",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1297,9 +1193,7 @@
       "compositePrimaryKeys": {
         "user_materials_db_id": {
           "name": "user_materials_db_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1397,17 +1291,13 @@
       "compositePrimaryKeys": {
         "users_id": {
           "name": "users_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "users_openId_unique": {
           "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ]
+          "columns": ["openId"]
         }
       },
       "checkConstraint": {}

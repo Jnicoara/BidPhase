@@ -16,7 +16,11 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Search, X, ChevronDown, Tag, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CATALOG, CATALOG_CATEGORIES, getCatalogItem } from "@/lib/materialCatalog";
+import {
+  CATALOG,
+  CATALOG_CATEGORIES,
+  getCatalogItem,
+} from "@/lib/materialCatalog";
 import { smartSearch } from "@/lib/smartSearch";
 import type { SearchableItem } from "@/lib/smartSearch";
 import type { CatalogItem } from "@/lib/materialCatalog";
@@ -53,24 +57,43 @@ export default function CatalogPicker({
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [showUserDb, setShowUserDb] = useState(false);
   // Position of the dropdown portal
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [dropdownPos, setDropdownPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
 
   // Load user materials DB (only when picker is open)
-  const { data: userMaterials = [] } = trpc.data.materials.list.useQuery(undefined, {
-    enabled: open,
-    staleTime: 30_000,
-  });
+  const { data: userMaterials = [] } = trpc.data.materials.list.useQuery(
+    undefined,
+    {
+      enabled: open,
+      staleTime: 30_000,
+    }
+  );
 
   // Convert user DB rows to CatalogItem shape with effective price
-  const userDbItems = useMemo((): CatalogItem[] =>
-    userMaterials.map((m) => ({
-      id: `db-${m.id}`,
-      category: m.category ?? m.phase ?? "My Materials",
-      description: m.description,
-      unit: m.unit ?? "EA",
-      unitPrice: dbEffectivePrice(m as { userPrice: number | null; defaultPrice: number | null; unitMaterialCost: number | null }),
-      notes: m.userPrice != null ? "custom price" : m.defaultPrice != null ? "default price" : undefined,
-    })),
+  const userDbItems = useMemo(
+    (): CatalogItem[] =>
+      userMaterials.map(m => ({
+        id: `db-${m.id}`,
+        category: m.category ?? m.phase ?? "My Materials",
+        description: m.description,
+        unit: m.unit ?? "EA",
+        unitPrice: dbEffectivePrice(
+          m as {
+            userPrice: number | null;
+            defaultPrice: number | null;
+            unitMaterialCost: number | null;
+          }
+        ),
+        notes:
+          m.userPrice != null
+            ? "custom price"
+            : m.defaultPrice != null
+              ? "default price"
+              : undefined,
+      })),
     [userMaterials]
   );
 
@@ -88,9 +111,10 @@ export default function CatalogPicker({
     const dropdownHeight = 360;
     // Prefer below, flip above if not enough space
     const spaceBelow = viewportHeight - rect.bottom;
-    const top = spaceBelow >= dropdownHeight
-      ? rect.bottom + 4
-      : rect.top - dropdownHeight - 4;
+    const top =
+      spaceBelow >= dropdownHeight
+        ? rect.bottom + 4
+        : rect.top - dropdownHeight - 4;
     setDropdownPos({ top, left: rect.left, width: Math.max(rect.width, 320) });
   }, []);
 
@@ -99,12 +123,8 @@ export default function CatalogPicker({
     if (!open) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (
-        triggerRef.current && triggerRef.current.contains(target)
-      ) return;
-      if (
-        dropdownRef.current && dropdownRef.current.contains(target)
-      ) return;
+      if (triggerRef.current && triggerRef.current.contains(target)) return;
+      if (dropdownRef.current && dropdownRef.current.contains(target)) return;
       setOpen(false);
     };
     document.addEventListener("mousedown", handler);
@@ -132,11 +152,14 @@ export default function CatalogPicker({
     setTimeout(() => inputRef.current?.focus(), 50);
   };
 
-  const handleSelect = useCallback((item: CatalogItem) => {
-    onChange(item);
-    setOpen(false);
-    setQuery("");
-  }, [onChange]);
+  const handleSelect = useCallback(
+    (item: CatalogItem) => {
+      onChange(item);
+      setOpen(false);
+      setQuery("");
+    },
+    [onChange]
+  );
 
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -147,158 +170,227 @@ export default function CatalogPicker({
   const results = useMemo((): CatalogItem[] => {
     if (query.trim()) {
       // Search both App Catalog and My Materials simultaneously, merge and deduplicate
-      const catalogResults = smartSearch<CatalogItem & SearchableItem>(CATALOG as (CatalogItem & SearchableItem)[], query, 30) as CatalogItem[];
-      const dbResults = smartSearch<CatalogItem & SearchableItem>(userDbItems as (CatalogItem & SearchableItem)[], query, 20) as CatalogItem[];
+      const catalogResults = smartSearch<CatalogItem & SearchableItem>(
+        CATALOG as (CatalogItem & SearchableItem)[],
+        query,
+        30
+      ) as CatalogItem[];
+      const dbResults = smartSearch<CatalogItem & SearchableItem>(
+        userDbItems as (CatalogItem & SearchableItem)[],
+        query,
+        20
+      ) as CatalogItem[];
       // Put user DB results first (they have custom pricing), then catalog results
       const merged = [...dbResults, ...catalogResults];
       // Deduplicate by description (case-insensitive)
       const seen = new Set<string>();
-      return merged.filter((i) => {
-        const key = i.description.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }).slice(0, 50);
+      return merged
+        .filter(i => {
+          const key = i.description.toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, 50);
     }
     // No query: show the selected source with category filter
     const source: CatalogItem[] = showUserDb ? userDbItems : CATALOG;
-    if (activeCategory) return source.filter((i) => i.category === activeCategory).slice(0, 50);
+    if (activeCategory)
+      return source.filter(i => i.category === activeCategory).slice(0, 50);
     return source.slice(0, 30);
   }, [showUserDb, query, activeCategory, userDbItems]);
 
   // User DB categories
   const userDbCategories = useMemo(() => {
-    const cats = new Set(userDbItems.map((i) => i.category));
+    const cats = new Set(userDbItems.map(i => i.category));
     return Array.from(cats).sort();
   }, [userDbItems]);
 
-  const dropdown = open && dropdownPos ? createPortal(
-    <div
-      ref={dropdownRef}
-      className="fixed z-[9999] bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
-      style={{
-        top: dropdownPos.top,
-        left: dropdownPos.left,
-        width: dropdownPos.width,
-        maxWidth: "90vw",
-        maxHeight: "360px",
-      }}
-    >
-      {/* Source toggle: App Catalog vs My Materials */}
-      <div className="flex border-b border-border shrink-0">
-        <button
-          onClick={() => { setShowUserDb(false); setActiveCategory(null); }}
-          className={cn(
-            "flex-1 py-1.5 text-[10px] font-medium transition-colors",
-            !showUserDb ? "bg-[#F5C518]/15 text-[#F5C518]" : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          App Catalog
-        </button>
-        <button
-          onClick={() => { setShowUserDb(true); setActiveCategory(null); }}
-          className={cn(
-            "flex-1 py-1.5 text-[10px] font-medium transition-colors flex items-center justify-center gap-1",
-            showUserDb ? "bg-[#F5C518]/15 text-[#F5C518]" : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Database size={10} />
-          My Materials
-          {userMaterials.length > 0 && (
-            <span className="ml-1 bg-muted/60 rounded px-1 text-[9px]">{userMaterials.length}</span>
-          )}
-        </button>
-      </div>
-
-      {/* Search input */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0">
-        <Search size={12} className="text-muted-foreground shrink-0" />
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setActiveCategory(null); }}
-          placeholder={showUserDb ? "Search your materials…" : "Search by name, category…"}
-          className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none font-mono"
-        />
-        {query && (
-          <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X size={11} />
-          </button>
-        )}
-      </div>
-
-      {/* Category chips (only shown when no query) */}
-      {!query && (
-        <div className="px-3 py-2 border-b border-border/50 shrink-0">
-          <div className="grid grid-cols-2 gap-1">
-            <button
-              onClick={() => setActiveCategory(null)}
-              className={cn("px-2 py-1 rounded text-[10px] font-medium transition-colors border text-center",
-                !activeCategory ? "bg-[#F5C518] text-black border-[#F5C518]" : "bg-transparent text-muted-foreground border-border hover:border-[#F5C518]/40"
-              )}
-            >All</button>
-            {(showUserDb ? userDbCategories : CATALOG_CATEGORIES).map((cat) => (
+  const dropdown =
+    open && dropdownPos
+      ? createPortal(
+          <div
+            ref={dropdownRef}
+            className="fixed z-[9999] bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
+            style={{
+              top: dropdownPos.top,
+              left: dropdownPos.left,
+              width: dropdownPos.width,
+              maxWidth: "90vw",
+              maxHeight: "360px",
+            }}
+          >
+            {/* Source toggle: App Catalog vs My Materials */}
+            <div className="flex border-b border-border shrink-0">
               <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={cn("px-2 py-1 rounded text-[10px] font-medium transition-colors border text-center leading-tight",
-                  activeCategory === cat ? "bg-[#F5C518] text-black border-[#F5C518]" : "bg-transparent text-muted-foreground border-border hover:border-[#F5C518]/40"
+                onClick={() => {
+                  setShowUserDb(false);
+                  setActiveCategory(null);
+                }}
+                className={cn(
+                  "flex-1 py-1.5 text-[10px] font-medium transition-colors",
+                  !showUserDb
+                    ? "bg-[#F5C518]/15 text-[#F5C518]"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
-              >{cat}</button>
-            ))}
-          </div>
-        </div>
-      )}
+              >
+                App Catalog
+              </button>
+              <button
+                onClick={() => {
+                  setShowUserDb(true);
+                  setActiveCategory(null);
+                }}
+                className={cn(
+                  "flex-1 py-1.5 text-[10px] font-medium transition-colors flex items-center justify-center gap-1",
+                  showUserDb
+                    ? "bg-[#F5C518]/15 text-[#F5C518]"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Database size={10} />
+                My Materials
+                {userMaterials.length > 0 && (
+                  <span className="ml-1 bg-muted/60 rounded px-1 text-[9px]">
+                    {userMaterials.length}
+                  </span>
+                )}
+              </button>
+            </div>
 
-      {/* Results list */}
-      <div className="overflow-y-auto flex-1">
-        {results.length === 0 ? (
-          <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-            {showUserDb && userMaterials.length === 0
-              ? "No materials in your database yet. Import a CSV or add items manually."
-              : `No items found for "${query}"`}
-          </div>
-        ) : (
-          results.map((item) => (
-            <button
-              key={item.id}
-              onMouseDown={(e) => { e.preventDefault(); handleSelect(item); }}
-              className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/30",
-                value === item.id && "bg-[#F5C518]/10"
+            {/* Search input */}
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0">
+              <Search size={12} className="text-muted-foreground shrink-0" />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={e => {
+                  setQuery(e.target.value);
+                  setActiveCategory(null);
+                }}
+                placeholder={
+                  showUserDb
+                    ? "Search your materials…"
+                    : "Search by name, category…"
+                }
+                className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none font-mono"
+              />
+              {query && (
+                <button
+                  onClick={() => setQuery("")}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X size={11} />
+                </button>
               )}
-            >
-              <div className="flex-1 min-w-0">
-                <div className={cn("text-xs font-medium truncate", value === item.id ? "text-[#F5C518]" : "text-foreground")}>
-                  {item.description}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-muted-foreground font-mono">{item.category}</span>
+            </div>
 
+            {/* Category chips (only shown when no query) */}
+            {!query && (
+              <div className="px-3 py-2 border-b border-border/50 shrink-0">
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    onClick={() => setActiveCategory(null)}
+                    className={cn(
+                      "px-2 py-1 rounded text-[10px] font-medium transition-colors border text-center",
+                      !activeCategory
+                        ? "bg-[#F5C518] text-black border-[#F5C518]"
+                        : "bg-transparent text-muted-foreground border-border hover:border-[#F5C518]/40"
+                    )}
+                  >
+                    All
+                  </button>
+                  {(showUserDb ? userDbCategories : CATALOG_CATEGORIES).map(
+                    cat => (
+                      <button
+                        key={cat}
+                        onClick={() => setActiveCategory(cat)}
+                        className={cn(
+                          "px-2 py-1 rounded text-[10px] font-medium transition-colors border text-center leading-tight",
+                          activeCategory === cat
+                            ? "bg-[#F5C518] text-black border-[#F5C518]"
+                            : "bg-transparent text-muted-foreground border-border hover:border-[#F5C518]/40"
+                        )}
+                      >
+                        {cat}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
-              <div className="shrink-0 text-right">
-                {item.unitPrice > 0 ? (
-                  <>
-                    <div className="text-xs font-bold font-mono text-[#F5C518]">${item.unitPrice.toFixed(2)}</div>
-                    <div className="text-[10px] text-muted-foreground font-mono">/{item.unit}</div>
-                  </>
-                ) : (
-                  <div className="text-[10px] text-red-400 font-mono">⚠ no price</div>
-                )}
-              </div>
-            </button>
-          ))
-        )}
-      </div>
+            )}
 
-      {/* Footer hint */}
-      <div className="px-3 py-1.5 border-t border-border/50 shrink-0">
-        <p className="text-[10px] text-muted-foreground">{CATALOG.length + userDbItems.length} items total ({CATALOG.length} catalog + {userDbItems.length} custom) · prices editable after selection</p>
-      </div>
-    </div>,
-    document.body
-  ) : null;
+            {/* Results list */}
+            <div className="overflow-y-auto flex-1">
+              {results.length === 0 ? (
+                <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+                  {showUserDb && userMaterials.length === 0
+                    ? "No materials in your database yet. Import a CSV or add items manually."
+                    : `No items found for "${query}"`}
+                </div>
+              ) : (
+                results.map(item => (
+                  <button
+                    key={item.id}
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      handleSelect(item);
+                    }}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/30",
+                      value === item.id && "bg-[#F5C518]/10"
+                    )}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className={cn(
+                          "text-xs font-medium truncate",
+                          value === item.id
+                            ? "text-[#F5C518]"
+                            : "text-foreground"
+                        )}
+                      >
+                        {item.description}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {item.category}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {item.unitPrice > 0 ? (
+                        <>
+                          <div className="text-xs font-bold font-mono text-[#F5C518]">
+                            ${item.unitPrice.toFixed(2)}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono">
+                            /{item.unit}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-[10px] text-red-400 font-mono">
+                          ⚠ no price
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+
+            {/* Footer hint */}
+            <div className="px-3 py-1.5 border-t border-border/50 shrink-0">
+              <p className="text-[10px] text-muted-foreground">
+                {CATALOG.length + userDbItems.length} items total (
+                {CATALOG.length} catalog + {userDbItems.length} custom) · prices
+                editable after selection
+              </p>
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
     <div className={cn("relative", className)}>
@@ -317,15 +409,32 @@ export default function CatalogPicker({
           open && "border-[#F5C518]/70 bg-muted/30"
         )}
       >
-        <Tag size={11} className={cn("shrink-0", selectedItem ? "text-[#F5C518]" : "text-muted-foreground")} />
-        <span className={cn("flex-1 truncate font-mono", selectedItem ? "text-foreground" : "text-muted-foreground")}>
+        <Tag
+          size={11}
+          className={cn(
+            "shrink-0",
+            selectedItem ? "text-[#F5C518]" : "text-muted-foreground"
+          )}
+        />
+        <span
+          className={cn(
+            "flex-1 truncate font-mono",
+            selectedItem ? "text-foreground" : "text-muted-foreground"
+          )}
+        >
           {selectedItem ? selectedItem.description : placeholder}
         </span>
         {selectedItem ? (
           <>
-            <span className="text-[10px] font-mono text-[#F5C518] shrink-0">${selectedItem.unitPrice.toFixed(2)}/{selectedItem.unit}</span>
+            <span className="text-[10px] font-mono text-[#F5C518] shrink-0">
+              ${selectedItem.unitPrice.toFixed(2)}/{selectedItem.unit}
+            </span>
             <button
-              onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleClear(e); }}
+              onMouseDown={e => {
+                e.stopPropagation();
+                e.preventDefault();
+                handleClear(e);
+              }}
               className="shrink-0 text-muted-foreground hover:text-foreground transition-colors ml-1"
               title="Clear selection"
             >

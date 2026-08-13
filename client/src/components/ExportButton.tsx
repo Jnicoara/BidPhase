@@ -21,7 +21,14 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useApp } from "@/contexts/AppContext";
 import type { RunItem, CountSession } from "@/contexts/AppContext";
 import { toast } from "sonner";
-import { Download, FileText, FileSpreadsheet, ChevronUp, X, Printer } from "lucide-react";
+import {
+  Download,
+  FileText,
+  FileSpreadsheet,
+  ChevronUp,
+  X,
+  Printer,
+} from "lucide-react";
 import { jsPDF } from "jspdf";
 
 // ─── Shared data helpers ──────────────────────────────────────────────────────
@@ -29,21 +36,23 @@ import { jsPDF } from "jspdf";
 /** Fitting id → human-readable label (in sync with FITTING_TYPES in AppContext.tsx) */
 const FITTING_LABELS: Record<string, string> = {
   connector: "Connectors",
-  coupling:  "Couplings",
-  lb:        "LBs",
-  elbow90:   "90° Elbows",
-  elbow45:   "45° Elbows",
-  sweep:     "Sweeps",
-  offset:    "Offsets",
+  coupling: "Couplings",
+  lb: "LBs",
+  elbow90: "90° Elbows",
+  elbow45: "45° Elbows",
+  sweep: "Sweeps",
+  offset: "Offsets",
 };
 
 function conductorSpec(run: RunItem): string {
   const mat = run.conductorMaterial ?? "CU";
-  const sz  = run.conductorSize ?? "12";
+  const sz = run.conductorSize ?? "12";
   return `#${sz} AWG ${mat === "CU" ? "Cu" : "Al"}`;
 }
 
-function calcSticks(feet: number): number { return Math.ceil(feet / 10); }
+function calcSticks(feet: number): number {
+  return Math.ceil(feet / 10);
+}
 function calcWire(feet: number, conductors: number): number {
   return parseFloat((feet * conductors * 1.1).toFixed(1));
 }
@@ -72,23 +81,23 @@ function buildPDF(
   residentialName: string,
   jobInfo: JobInfo,
   civilCountSessions: CountSession[] = [],
-  roomCountSessions: CountSession[] = [],
+  roomCountSessions: CountSession[] = []
 ): jsPDF {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
-  const PW = doc.internal.pageSize.getWidth();   // 612
-  const PH = doc.internal.pageSize.getHeight();  // 792
+  const PW = doc.internal.pageSize.getWidth(); // 612
+  const PH = doc.internal.pageSize.getHeight(); // 792
   const ML = 48;
   const MR = 48;
   const CW = PW - ML - MR;
   const dateStr = new Date().toLocaleString();
 
   // ── Color palette ────────────────────────────────────────────────────────
-  const YELLOW  = [245, 197, 24]  as [number, number, number];
-  const DARK    = [18, 18, 18]    as [number, number, number];
-  const MID     = [60, 60, 60]    as [number, number, number];
-  const LIGHT   = [120, 120, 120] as [number, number, number];
-  const RULE    = [220, 220, 220] as [number, number, number];
-  const ROWALT  = [248, 248, 248] as [number, number, number];
+  const YELLOW = [245, 197, 24] as [number, number, number];
+  const DARK = [18, 18, 18] as [number, number, number];
+  const MID = [60, 60, 60] as [number, number, number];
+  const LIGHT = [120, 120, 120] as [number, number, number];
+  const RULE = [220, 220, 220] as [number, number, number];
+  const ROWALT = [248, 248, 248] as [number, number, number];
 
   let y = 0;
   let pageNum = 1;
@@ -141,7 +150,8 @@ function buildPDF(
 
   // ── Job / contractor info block ──────────────────────────────────────────
   // Rendered to the right of the HelixBid brand, or below if fields are filled
-  const hasJobInfo = jobInfo.jobName || jobInfo.contractorName || jobInfo.address;
+  const hasJobInfo =
+    jobInfo.jobName || jobInfo.contractorName || jobInfo.address;
   if (hasJobInfo) {
     // Right-aligned info block
     let infoY = 48;
@@ -193,7 +203,9 @@ function buildPDF(
     y += 28;
   }
 
-  function tableHeader(cols: { label: string; width: number; align?: "left" | "right" }[]) {
+  function tableHeader(
+    cols: { label: string; width: number; align?: "left" | "right" }[]
+  ) {
     checkY(18);
     doc.setFillColor(...YELLOW);
     doc.rect(ML, y, CW, 16, "F");
@@ -216,7 +228,7 @@ function buildPDF(
     cols: { label: string; width: number; align?: "left" | "right" }[],
     values: string[],
     isAlt: boolean,
-    isSubRow = false,
+    isSubRow = false
   ) {
     checkY(14);
     if (isAlt) {
@@ -240,7 +252,11 @@ function buildPDF(
     y += 14;
   }
 
-  function totalsRow(label: string, values: string[], cols: { width: number }[]) {
+  function totalsRow(
+    label: string,
+    values: string[],
+    cols: { width: number }[]
+  ) {
     checkY(16);
     doc.setFillColor(235, 235, 235);
     doc.rect(ML, y, CW, 16, "F");
@@ -263,28 +279,28 @@ function buildPDF(
     sectionHeader("Infrastructure", civilName);
 
     const civilCols = [
-      { label: "Run Name",       width: 110 },
-      { label: "Pg",             width: 24,  align: "right" as const },
-      { label: "Type",           width: 38 },
-      { label: "Size",           width: 38 },
-      { label: "Dist (ft)",      width: 56,  align: "right" as const },
-      { label: "Sticks",         width: 44,  align: "right" as const },
-      { label: "Wire (ft)",      width: 56,  align: "right" as const },
-      { label: "Cond.",          width: 36,  align: "right" as const },
+      { label: "Run Name", width: 110 },
+      { label: "Pg", width: 24, align: "right" as const },
+      { label: "Type", width: 38 },
+      { label: "Size", width: 38 },
+      { label: "Dist (ft)", width: 56, align: "right" as const },
+      { label: "Sticks", width: 44, align: "right" as const },
+      { label: "Wire (ft)", width: 56, align: "right" as const },
+      { label: "Cond.", width: 36, align: "right" as const },
       { label: "Conductor Spec", width: CW - 402 },
     ];
 
     tableHeader(civilCols);
 
     let totalSticks = 0;
-    let totalWire   = 0;
-    let rowIdx      = 0;
+    let totalWire = 0;
+    let rowIdx = 0;
 
     for (const run of runs) {
       const sticks = calcSticks(run.feet);
-      const wire   = calcWire(run.feet, run.conductors);
+      const wire = calcWire(run.feet, run.conductors);
       totalSticks += sticks;
-      totalWire   += wire;
+      totalWire += wire;
 
       tableRow(
         civilCols,
@@ -299,7 +315,7 @@ function buildPDF(
           String(run.conductors),
           conductorSpec(run),
         ],
-        rowIdx % 2 === 1,
+        rowIdx % 2 === 1
       );
       rowIdx++;
 
@@ -307,22 +323,43 @@ function buildPDF(
         if (count > 0) {
           tableRow(
             civilCols,
-            [`  ↳ ${FITTING_LABELS[key] ?? key}`, "", "", "", "", String(count), "", "", ""],
+            [
+              `  ↳ ${FITTING_LABELS[key] ?? key}`,
+              "",
+              "",
+              "",
+              "",
+              String(count),
+              "",
+              "",
+              "",
+            ],
             rowIdx % 2 === 1,
-            true,
+            true
           );
           rowIdx++;
         }
       }
     }
 
-        totalsRow("TOTAL", [String(totalSticks), totalWire.toFixed(1)], [
-      { width: 110 }, { width: 24 }, { width: 38 }, { width: 38 },
-      { width: 56 }, { width: 44 }, { width: 56 },
-    ]);
+    totalsRow(
+      "TOTAL",
+      [String(totalSticks), totalWire.toFixed(1)],
+      [
+        { width: 110 },
+        { width: 24 },
+        { width: 38 },
+        { width: 38 },
+        { width: 56 },
+        { width: 44 },
+        { width: 56 },
+      ]
+    );
     y += 16;
     // Civil count sessions appended after run totals
-    const civilActiveSessions = civilCountSessions.filter(cs => cs.pins.length > 0);
+    const civilActiveSessions = civilCountSessions.filter(
+      cs => cs.pins.length > 0
+    );
     if (civilActiveSessions.length > 0) {
       checkY(40);
       doc.setFontSize(8);
@@ -350,15 +387,19 @@ function buildPDF(
     doc.setFontSize(8.5);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...MID);
-    doc.text(`Assembly: ${assemblyState.assemblyId}  ×  ${assemblyState.quantity}`, ML + 4, y + 10);
+    doc.text(
+      `Assembly: ${assemblyState.assemblyId}  ×  ${assemblyState.quantity}`,
+      ML + 4,
+      y + 10
+    );
     y += 20;
 
     const commCols = [
       { label: "Description", width: CW - 220 },
-      { label: "Unit",        width: 50 },
-      { label: "Qty",         width: 50,  align: "right" as const },
-      { label: "Unit Cost",   width: 60,  align: "right" as const },
-      { label: "Ext. Cost",   width: 60,  align: "right" as const },
+      { label: "Unit", width: 50 },
+      { label: "Qty", width: 50, align: "right" as const },
+      { label: "Unit Cost", width: 60, align: "right" as const },
+      { label: "Ext. Cost", width: 60, align: "right" as const },
     ];
 
     tableHeader(commCols);
@@ -369,37 +410,55 @@ function buildPDF(
       totalExtCost += ext;
       tableRow(
         commCols,
-        [m.description, m.unit, String(m.quantity), `$${m.unitCost.toFixed(2)}`, `$${ext.toFixed(2)}`],
-        i % 2 === 1,
+        [
+          m.description,
+          m.unit,
+          String(m.quantity),
+          `$${m.unitCost.toFixed(2)}`,
+          `$${ext.toFixed(2)}`,
+        ],
+        i % 2 === 1
       );
     });
 
-    totalsRow("TOTAL", [`$${totalExtCost.toFixed(2)}`], [
-      { width: CW - 220 }, { width: 50 }, { width: 50 }, { width: 60 }, { width: 60 },
-    ]);
+    totalsRow(
+      "TOTAL",
+      [`$${totalExtCost.toFixed(2)}`],
+      [
+        { width: CW - 220 },
+        { width: 50 },
+        { width: 50 },
+        { width: 60 },
+        { width: 60 },
+      ]
+    );
 
     checkY(20);
     y += 6;
     doc.setFontSize(8.5);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...DARK);
-    doc.text(`Total Labor Hours: ${assemblyState.totalLaborHours} hrs`, ML + 4, y + 10);
+    doc.text(
+      `Total Labor Hours: ${assemblyState.totalLaborHours} hrs`,
+      ML + 4,
+      y + 10
+    );
     y += 20;
   }
 
   // ── Section 2b: Count Summary ─────────────────────────────────────────────
   const countSessions = assemblyState.countSessions ?? [];
-  const activeSessions = countSessions.filter((cs) => cs.pins.length > 0);
+  const activeSessions = countSessions.filter(cs => cs.pins.length > 0);
   if (activeSessions.length > 0) {
     checkY(60);
     sectionHeader("Unit Count", commercialName);
 
     const countCols = [
-      { label: "Session Name",  width: CW - 200 },
-      { label: "Icon",          width: 60 },
-      { label: "Count",         width: 50,  align: "right" as const },
-      { label: "Unit Cost",     width: 60,  align: "right" as const },
-      { label: "Ext. Cost",     width: 60,  align: "right" as const },
+      { label: "Session Name", width: CW - 200 },
+      { label: "Icon", width: 60 },
+      { label: "Count", width: 50, align: "right" as const },
+      { label: "Unit Cost", width: 60, align: "right" as const },
+      { label: "Ext. Cost", width: 60, align: "right" as const },
     ];
 
     tableHeader(countCols);
@@ -417,7 +476,7 @@ function buildPDF(
       const b = parseInt(cs.color.slice(5, 7), 16);
 
       if (i % 2 === 1) {
-        doc.setFillColor(...ROWALT as [number, number, number]);
+        doc.setFillColor(...(ROWALT as [number, number, number]));
         doc.rect(ML, y, CW, 18, "F");
       }
 
@@ -428,40 +487,59 @@ function buildPDF(
       // Session name (offset to clear the dot)
       doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
-      doc.setTextColor(...DARK as [number, number, number]);
+      doc.setTextColor(...(DARK as [number, number, number]));
       doc.text(cs.name, dotX + 12, rowY + 4);
 
       // Icon label (abbreviated)
-      doc.setTextColor(...MID as [number, number, number]);
+      doc.setTextColor(...(MID as [number, number, number]));
       let xOff = ML + (CW - 200);
       doc.text(cs.iconId.replace(/-/g, " "), xOff + 4, rowY + 4);
       xOff += 60;
 
       // Count
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(...DARK as [number, number, number]);
+      doc.setTextColor(...(DARK as [number, number, number]));
       doc.text(String(cs.pins.length), xOff + 46, rowY + 4, { align: "right" });
       xOff += 50;
 
       // Unit cost
       doc.setFont("helvetica", "normal");
-      doc.setTextColor(...MID as [number, number, number]);
-      doc.text(cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "—", xOff + 56, rowY + 4, { align: "right" });
+      doc.setTextColor(...(MID as [number, number, number]));
+      doc.text(
+        cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "—",
+        xOff + 56,
+        rowY + 4,
+        { align: "right" }
+      );
       xOff += 60;
 
       // Ext cost
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(ext != null ? DARK[0] : LIGHT[0], ext != null ? DARK[1] : LIGHT[1], ext != null ? DARK[2] : LIGHT[2]);
-      doc.text(ext != null ? `$${ext.toFixed(2)}` : "—", xOff + 56, rowY + 4, { align: "right" });
+      doc.setTextColor(
+        ext != null ? DARK[0] : LIGHT[0],
+        ext != null ? DARK[1] : LIGHT[1],
+        ext != null ? DARK[2] : LIGHT[2]
+      );
+      doc.text(ext != null ? `$${ext.toFixed(2)}` : "—", xOff + 56, rowY + 4, {
+        align: "right",
+      });
 
       y += 18;
       checkY(18);
     });
 
     if (countExtTotal > 0) {
-      totalsRow("TOTAL COUNTED", [`$${countExtTotal.toFixed(2)}`], [
-        { width: CW - 200 }, { width: 60 }, { width: 50 }, { width: 60 }, { width: 60 },
-      ]);
+      totalsRow(
+        "TOTAL COUNTED",
+        [`$${countExtTotal.toFixed(2)}`],
+        [
+          { width: CW - 200 },
+          { width: 60 },
+          { width: 50 },
+          { width: 60 },
+          { width: 60 },
+        ]
+      );
     }
     y += 8;
   }
@@ -479,23 +557,35 @@ function buildPDF(
 
     const resCols = [
       { label: "Description", width: CW - 120 },
-      { label: "Unit",        width: 60 },
-      { label: "Qty",         width: 60, align: "right" as const },
+      { label: "Unit", width: 60 },
+      { label: "Qty", width: 60, align: "right" as const },
     ];
 
     tableHeader(resCols);
-        const resAllRows = [...roomState.materials];
+    const resAllRows = [...roomState.materials];
     resAllRows.forEach((m, i) => {
-      tableRow(resCols, [m.description, m.unit, String(m.quantity)], i % 2 === 1);
+      tableRow(
+        resCols,
+        [m.description, m.unit, String(m.quantity)],
+        i % 2 === 1
+      );
     });
     // Unit Count sessions appended as extra rows
-    roomCountSessions.filter(cs => cs.pins.length > 0).forEach((cs, i) => {
-      tableRow(resCols, [cs.name + " (Unit Count)", "EA", String(cs.pins.length)], (resAllRows.length + i) % 2 === 1);
-    });
+    roomCountSessions
+      .filter(cs => cs.pins.length > 0)
+      .forEach((cs, i) => {
+        tableRow(
+          resCols,
+          [cs.name + " (Unit Count)", "EA", String(cs.pins.length)],
+          (resAllRows.length + i) % 2 === 1
+        );
+      });
     y += 10;
   }
   // ── Civil count sessions (if any, even without runs) ─────────────────────
-  const activeCivilSessions = civilCountSessions.filter(cs => cs.pins.length > 0);
+  const activeCivilSessions = civilCountSessions.filter(
+    cs => cs.pins.length > 0
+  );
   if (runs.length === 0 && activeCivilSessions.length > 0) {
     checkY(60);
     sectionHeader("Civil — Count Sessions", civilName);
@@ -525,7 +615,7 @@ function escapeCSV(val: string | number): string {
 }
 
 function buildCSV(rows: string[][]): string {
-  return rows.map((row) => row.map(escapeCSV).join(",")).join("\n");
+  return rows.map(row => row.map(escapeCSV).join(",")).join("\n");
 }
 
 function exportCSV(
@@ -536,17 +626,47 @@ function exportCSV(
   commercialName: string,
   residentialName: string,
   civilCountSessions: CountSession[] = [],
-  roomCountSessions: CountSession[] = [],
+  roomCountSessions: CountSession[] = []
 ): void {
   const rows: string[][] = [];
 
   rows.push(["HelixBid — Material Export", "", "", "", "", "", "", "", ""]);
-  rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", "", "", ""]);
+  rows.push([
+    `Generated: ${new Date().toLocaleString()}`,
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+  ]);
   rows.push([]);
 
   if (runs.length > 0) {
-    rows.push([`SECTION: Infrastructure — ${civilName}`, "", "", "", "", "", "", "", ""]);
-    rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft w/ 10% slack)", "Conductors", "Conductor Spec"]);
+    rows.push([
+      `SECTION: Infrastructure — ${civilName}`,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+    rows.push([
+      "Run Name",
+      "Page",
+      "Conduit Type",
+      "Conduit Size",
+      "Distance (ft)",
+      "Pipe Sticks",
+      "Wire (ft w/ 10% slack)",
+      "Conductors",
+      "Conductor Spec",
+    ]);
     for (const run of runs) {
       rows.push([
         run.name,
@@ -559,78 +679,219 @@ function exportCSV(
         String(run.conductors),
         conductorSpec(run),
       ]);
-      const hasFittings = Object.values(run.fittings).some((v) => v > 0);
+      const hasFittings = Object.values(run.fittings).some(v => v > 0);
       if (hasFittings) {
         rows.push(["  Fittings:", "", "", "", "", "", "", "", ""]);
         for (const [key, count] of Object.entries(run.fittings)) {
-          if (count > 0) rows.push([`    ${FITTING_LABELS[key] ?? key}`, "EA", String(count), "", "", "", "", "", ""]);
+          if (count > 0)
+            rows.push([
+              `    ${FITTING_LABELS[key] ?? key}`,
+              "EA",
+              String(count),
+              "",
+              "",
+              "",
+              "",
+              "",
+              "",
+            ]);
         }
       }
     }
     const totalSticks = runs.reduce((a, r) => a + calcSticks(r.feet), 0);
-    const totalWire   = runs.reduce((a, r) => a + calcWire(r.feet, r.conductors), 0);
-    rows.push(["TOTAL", "", "", "", "", String(totalSticks), String(parseFloat(totalWire.toFixed(1))), "", ""]);
+    const totalWire = runs.reduce(
+      (a, r) => a + calcWire(r.feet, r.conductors),
+      0
+    );
+    rows.push([
+      "TOTAL",
+      "",
+      "",
+      "",
+      "",
+      String(totalSticks),
+      String(parseFloat(totalWire.toFixed(1))),
+      "",
+      "",
+    ]);
     // Unit Count sessions for Civil
-    const csvCivilActiveSessions = civilCountSessions.filter((cs) => cs.pins.length > 0);
+    const csvCivilActiveSessions = civilCountSessions.filter(
+      cs => cs.pins.length > 0
+    );
     if (csvCivilActiveSessions.length > 0) {
       rows.push(["Unit Count", "", "", "", "", "", "", "", ""]);
       for (const cs of csvCivilActiveSessions) {
-        const ext = cs.unitCost != null ? `$${(cs.unitCost * cs.pins.length).toFixed(2)}` : "";
-        rows.push([cs.name, "EA", String(cs.pins.length), cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "", ext, "", "", "", ""]);
+        const ext =
+          cs.unitCost != null
+            ? `$${(cs.unitCost * cs.pins.length).toFixed(2)}`
+            : "";
+        rows.push([
+          cs.name,
+          "EA",
+          String(cs.pins.length),
+          cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "",
+          ext,
+          "",
+          "",
+          "",
+          "",
+        ]);
       }
     }
     rows.push([]);
   }
 
   if (assemblyState.materials.length > 0) {
-    rows.push([`SECTION: Commercial — ${commercialName}`, "", "", "", "", "", "", "", ""]);
-    rows.push([`Assembly: ${assemblyState.assemblyId} × ${assemblyState.quantity}`, "", "", "", "", "", "", "", ""]);
-    rows.push(["Description", "Unit", "Quantity", "Unit Cost", "Ext. Cost", "", "", "", ""]);
+    rows.push([
+      `SECTION: Commercial — ${commercialName}`,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+    rows.push([
+      `Assembly: ${assemblyState.assemblyId} × ${assemblyState.quantity}`,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+    rows.push([
+      "Description",
+      "Unit",
+      "Quantity",
+      "Unit Cost",
+      "Ext. Cost",
+      "",
+      "",
+      "",
+      "",
+    ]);
     for (const m of assemblyState.materials) {
-      rows.push([m.description, m.unit, String(m.quantity), `$${m.unitCost.toFixed(2)}`, `$${(m.unitCost * m.quantity).toFixed(2)}`, "", "", "", ""]);
+      rows.push([
+        m.description,
+        m.unit,
+        String(m.quantity),
+        `$${m.unitCost.toFixed(2)}`,
+        `$${(m.unitCost * m.quantity).toFixed(2)}`,
+        "",
+        "",
+        "",
+        "",
+      ]);
     }
-    rows.push(["Total Labor Hours", "HRS", String(assemblyState.totalLaborHours), "", "", "", "", "", ""]);
+    rows.push([
+      "Total Labor Hours",
+      "HRS",
+      String(assemblyState.totalLaborHours),
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
     // Unit Count sessions for Commercial
-    const csvCommercialActiveSessions = (assemblyState.countSessions ?? []).filter((cs) => cs.pins.length > 0);
+    const csvCommercialActiveSessions = (
+      assemblyState.countSessions ?? []
+    ).filter(cs => cs.pins.length > 0);
     if (csvCommercialActiveSessions.length > 0) {
       rows.push(["Unit Count", "", "", "", "", "", "", "", ""]);
       for (const cs of csvCommercialActiveSessions) {
-        const ext = cs.unitCost != null ? `$${(cs.unitCost * cs.pins.length).toFixed(2)}` : "";
-        rows.push([cs.name, "EA", String(cs.pins.length), cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "", ext, "", "", "", ""]);
+        const ext =
+          cs.unitCost != null
+            ? `$${(cs.unitCost * cs.pins.length).toFixed(2)}`
+            : "";
+        rows.push([
+          cs.name,
+          "EA",
+          String(cs.pins.length),
+          cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "",
+          ext,
+          "",
+          "",
+          "",
+          "",
+        ]);
       }
     }
     rows.push([]);
   }
 
   if (roomState.materials.length > 0) {
-    rows.push([`SECTION: Residential — ${residentialName}`, "", "", "", "", "", "", "", ""]);
+    rows.push([
+      `SECTION: Residential — ${residentialName}`,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
     rows.push([`Room: ${roomState.roomId}`, "", "", "", "", "", "", "", ""]);
     rows.push(["Description", "Unit", "Quantity", "", "", "", "", "", ""]);
     for (const m of roomState.materials) {
-      rows.push([m.description, m.unit, String(m.quantity), "", "", "", "", "", ""]);
+      rows.push([
+        m.description,
+        m.unit,
+        String(m.quantity),
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ]);
     }
     // Unit Count sessions for Residential
-    const csvResActiveSessions = roomCountSessions.filter((cs) => cs.pins.length > 0);
+    const csvResActiveSessions = roomCountSessions.filter(
+      cs => cs.pins.length > 0
+    );
     if (csvResActiveSessions.length > 0) {
       rows.push(["Unit Count", "", "", "", "", "", "", "", ""]);
       for (const cs of csvResActiveSessions) {
-        const ext = cs.unitCost != null ? `$${(cs.unitCost * cs.pins.length).toFixed(2)}` : "";
-        rows.push([cs.name, "EA", String(cs.pins.length), cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "", ext, "", "", "", ""]);
+        const ext =
+          cs.unitCost != null
+            ? `$${(cs.unitCost * cs.pins.length).toFixed(2)}`
+            : "";
+        rows.push([
+          cs.name,
+          "EA",
+          String(cs.pins.length),
+          cs.unitCost != null ? `$${cs.unitCost.toFixed(2)}` : "",
+          ext,
+          "",
+          "",
+          "",
+          "",
+        ]);
       }
     }
     rows.push([]);
   }
 
   if (rows.length <= 3) {
-    toast.error("No data to export. Open a project and add runs or assemblies first.");
+    toast.error(
+      "No data to export. Open a project and add runs or assemblies first."
+    );
     return;
   }
 
-  const csv  = buildCSV(rows);
+  const csv = buildCSV(rows);
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
   a.download = `HelixBid_Export_${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
@@ -680,32 +941,68 @@ function PrintPreviewModal({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const regeneratePreview = useCallback(() => {
-    const doc = buildPDF(runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo, civilCountSessions, roomCountSessions);
+    const doc = buildPDF(
+      runs,
+      assemblyState,
+      roomState,
+      civilName,
+      commercialName,
+      residentialName,
+      jobInfo,
+      civilCountSessions,
+      roomCountSessions
+    );
     // jsPDF can output the first page as a data URI for <img> preview
     const dataUri = doc.output("datauristring");
     setPreviewSrc(dataUri);
-  }, [runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo, civilCountSessions, roomCountSessions]);
+  }, [
+    runs,
+    assemblyState,
+    roomState,
+    civilName,
+    commercialName,
+    residentialName,
+    jobInfo,
+    civilCountSessions,
+    roomCountSessions,
+  ]);
 
   // Initial render + debounced re-render on form change
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(regeneratePreview, 300);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [regeneratePreview]);
 
   // Close on Escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
   const handleDownload = () => {
-    const doc = buildPDF(runs, assemblyState, roomState, civilName, commercialName, residentialName, jobInfo, civilCountSessions, roomCountSessions);
+    const doc = buildPDF(
+      runs,
+      assemblyState,
+      roomState,
+      civilName,
+      commercialName,
+      residentialName,
+      jobInfo,
+      civilCountSessions,
+      roomCountSessions
+    );
     const jobSlug = jobInfo.jobName
       ? `_${jobInfo.jobName.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "")}`
       : "";
-    doc.save(`HelixBid_BOM${jobSlug}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(
+      `HelixBid_BOM${jobSlug}_${new Date().toISOString().slice(0, 10)}.pdf`
+    );
     toast.success("Bill of Materials downloaded.");
     onClose();
   };
@@ -714,29 +1011,42 @@ function PrintPreviewModal({
     label: string,
     key: keyof JobInfo,
     placeholder: string,
-    multiline = false,
+    multiline = false
   ) => (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-[#999]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+      <label
+        className="text-xs font-medium text-[#999]"
+        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+      >
         {label}
       </label>
       {multiline ? (
         <textarea
           rows={2}
           value={jobInfo[key]}
-          onChange={(e) => setJobInfo((p) => ({ ...p, [key]: e.target.value }))}
+          onChange={e => setJobInfo(p => ({ ...p, [key]: e.target.value }))}
           placeholder={placeholder}
           className="rounded-lg px-3 py-2 text-sm transition-colors resize-none focus:outline-none focus:border-[#F5C518]/60"
-          style={{ fontFamily: "'Space Grotesk', sans-serif", background: 'var(--bp-input-bg)', border: '1px solid var(--bp-input-border)', color: 'var(--bp-panel-text)' }}
+          style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            background: "var(--bp-input-bg)",
+            border: "1px solid var(--bp-input-border)",
+            color: "var(--bp-panel-text)",
+          }}
         />
       ) : (
         <input
           type="text"
           value={jobInfo[key]}
-          onChange={(e) => setJobInfo((p) => ({ ...p, [key]: e.target.value }))}
+          onChange={e => setJobInfo(p => ({ ...p, [key]: e.target.value }))}
           placeholder={placeholder}
           className="rounded-lg px-3 py-2 text-sm transition-colors focus:outline-none focus:border-[#F5C518]/60"
-          style={{ fontFamily: "'Space Grotesk', sans-serif", background: 'var(--bp-input-bg)', border: '1px solid var(--bp-input-border)', color: 'var(--bp-panel-text)' }}
+          style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            background: "var(--bp-input-bg)",
+            border: "1px solid var(--bp-input-border)",
+            color: "var(--bp-panel-text)",
+          }}
         />
       )}
     </div>
@@ -747,23 +1057,34 @@ function PrintPreviewModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm
                  animate-in fade-in duration-150"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       {/* Modal panel */}
       <div
         className="relative flex flex-col md:flex-row gap-0 rounded-2xl shadow-2xl overflow-hidden w-full max-w-4xl mx-4
                    animate-in slide-in-from-bottom-4 fade-in duration-200"
-        style={{ maxHeight: "90vh", background: 'var(--bp-panel-bg)', border: '1px solid var(--bp-panel-border)' }}
+        style={{
+          maxHeight: "90vh",
+          background: "var(--bp-panel-bg)",
+          border: "1px solid var(--bp-panel-border)",
+        }}
       >
         {/* ── Left: form ── */}
         <div className="flex flex-col gap-5 p-6 md:w-72 shrink-0 border-r border-white/10 overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-bold text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <h2
+                className="text-base font-bold text-white"
+                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              >
                 Export PDF
               </h2>
-              <p className="text-xs text-[#777] mt-0.5">Add job details to the header</p>
+              <p className="text-xs text-[#777] mt-0.5">
+                Add job details to the header
+              </p>
             </div>
             <button
               onClick={onClose}
@@ -775,7 +1096,11 @@ function PrintPreviewModal({
 
           {/* Form fields */}
           {field("Job Name", "jobName", "e.g. Main St. Substation")}
-          {field("Contractor / Company", "contractorName", "e.g. Acme Electric Co.")}
+          {field(
+            "Contractor / Company",
+            "contractorName",
+            "e.g. Acme Electric Co."
+          )}
           {field("Address", "address", "123 Main St, City, ST 00000", true)}
 
           {/* Spacer */}
@@ -795,12 +1120,21 @@ function PrintPreviewModal({
         </div>
 
         {/* ── Right: preview ── */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bp-panel-preview-bg)' }}>
+        <div
+          className="flex-1 flex flex-col overflow-hidden"
+          style={{ background: "var(--bp-panel-preview-bg)" }}
+        >
           <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
-            <span className="text-xs font-medium text-[#666]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <span
+              className="text-xs font-medium text-[#666]"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            >
               First-page preview
             </span>
-            <span className="text-xs text-[#444]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <span
+              className="text-xs text-[#444]"
+              style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+            >
               Updates as you type
             </span>
           </div>
@@ -830,7 +1164,9 @@ interface ExportButtonProps {
   onOpenMaterialList?: () => void;
 }
 
-export default function ExportButton({ onOpenMaterialList }: ExportButtonProps = {}) {
+export default function ExportButton({
+  onOpenMaterialList,
+}: ExportButtonProps = {}) {
   const {
     civilState,
     assemblyState,
@@ -840,7 +1176,7 @@ export default function ExportButton({ onOpenMaterialList }: ExportButtonProps =
     activeResidentialProject,
   } = useApp();
 
-  const [open, setOpen]           = useState(false);
+  const [open, setOpen] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -865,13 +1201,24 @@ export default function ExportButton({ onOpenMaterialList }: ExportButtonProps =
 
   const handleCSV = () => {
     setOpen(false);
-    exportCSV(runs, assemblyState, roomState, activeCivilProject.name, activeCommercialProject.name, activeResidentialProject.name, civilState.countSessions ?? [], roomState.countSessions ?? []);
+    exportCSV(
+      runs,
+      assemblyState,
+      roomState,
+      activeCivilProject.name,
+      activeCommercialProject.name,
+      activeResidentialProject.name,
+      civilState.countSessions ?? [],
+      roomState.countSessions ?? []
+    );
   };
 
   const handlePDFClick = () => {
     setOpen(false);
     if (!hasData) {
-      toast.error("No data to export. Open a project and add runs or assemblies first.");
+      toast.error(
+        "No data to export. Open a project and add runs or assemblies first."
+      );
       return;
     }
     setShowPreview(true);
@@ -904,38 +1251,71 @@ export default function ExportButton({ onOpenMaterialList }: ExportButtonProps =
           <div
             className="flex flex-col gap-1 rounded-xl shadow-xl overflow-hidden
                        animate-in slide-in-from-bottom-2 fade-in duration-150"
-            style={{ background: 'var(--bp-panel-bg-2)', border: '1px solid var(--bp-panel-border)' }}
+            style={{
+              background: "var(--bp-panel-bg-2)",
+              border: "1px solid var(--bp-panel-border)",
+            }}
           >
             <button
               onClick={handlePDFClick}
               className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors duration-100 text-left"
-              style={{ fontFamily: "'Space Grotesk', sans-serif", color: 'var(--bp-panel-text)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bp-panel-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                color: "var(--bp-panel-text)",
+              }}
+              onMouseEnter={e =>
+                (e.currentTarget.style.background = "var(--bp-panel-hover)")
+              }
+              onMouseLeave={e =>
+                (e.currentTarget.style.background = "transparent")
+              }
             >
               <FileText size={15} className="text-[#F5C518]" />
               Export PDF
             </button>
-            <div className="h-px mx-3" style={{ background: 'var(--bp-panel-divider)' }} />
+            <div
+              className="h-px mx-3"
+              style={{ background: "var(--bp-panel-divider)" }}
+            />
             <button
               onClick={handleCSV}
               className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors duration-100 text-left"
-              style={{ fontFamily: "'Space Grotesk', sans-serif", color: 'var(--bp-panel-text)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bp-panel-hover)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                color: "var(--bp-panel-text)",
+              }}
+              onMouseEnter={e =>
+                (e.currentTarget.style.background = "var(--bp-panel-hover)")
+              }
+              onMouseLeave={e =>
+                (e.currentTarget.style.background = "transparent")
+              }
             >
               <FileSpreadsheet size={15} className="text-[#F5C518]" />
               Export CSV
             </button>
             {onOpenMaterialList && (
               <>
-                <div className="h-px mx-3" style={{ background: 'var(--bp-panel-divider)' }} />
+                <div
+                  className="h-px mx-3"
+                  style={{ background: "var(--bp-panel-divider)" }}
+                />
                 <button
-                  onClick={() => { setOpen(false); onOpenMaterialList(); }}
+                  onClick={() => {
+                    setOpen(false);
+                    onOpenMaterialList();
+                  }}
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors duration-100 text-left"
-                  style={{ fontFamily: "'Space Grotesk', sans-serif", color: 'var(--bp-panel-text)' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bp-panel-hover)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  style={{
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    color: "var(--bp-panel-text)",
+                  }}
+                  onMouseEnter={e =>
+                    (e.currentTarget.style.background = "var(--bp-panel-hover)")
+                  }
+                  onMouseLeave={e =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
                 >
                   <FileText size={15} className="text-blue-400" />
                   Labor & Material
@@ -947,7 +1327,7 @@ export default function ExportButton({ onOpenMaterialList }: ExportButtonProps =
 
         {/* Main toggle button */}
         <button
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen(v => !v)}
           title="Export Labor & Material"
           className="flex items-center gap-2 px-4 py-3 rounded-full
                      bg-[#F5C518] text-black font-semibold text-sm

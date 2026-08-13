@@ -1,0 +1,91 @@
+/**
+ * How big a plan PDF may be, and what to say when it is not.
+ *
+ * ── One number, both sides ───────────────────────────────────────────────────
+ * The client refuses an oversized file before spending minutes uploading it,
+ * and the server refuses it again because a client check is a courtesy and not
+ * a control. Those two checks must agree, so the number lives here rather than
+ * being written down twice — the previous pair drifted apart the moment either
+ * moved.
+ *
+ * ── Why 150MB and not "no limit" ─────────────────────────────────────────────
+ * A scanned commercial set genuinely runs to a hundred megabytes or more, and
+ * the old 30MB ceiling turned those away. But an unbounded upload is a way to
+ * fill a bucket by accident or on purpose, and there is no honest error to show
+ * once it has happened. 150MB clears real plan sets with room to spare while
+ * staying a bound.
+ */
+
+/** Largest plan PDF the app accepts. */
+export const MAX_PDF_BYTES = 150 * 1024 * 1024;
+
+/** Human-readable size, matching how the UI prints every other file size. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  const mb = bytes / (1024 * 1024);
+  // Whole numbers for round limits ("150MB"), one decimal for real files.
+  return Number.isInteger(mb) ? `${mb}MB` : `${mb.toFixed(1)}MB`;
+}
+
+/** The first bytes of every PDF. Used to catch a file that is not one. */
+export const PDF_MAGIC = "%PDF-";
+
+export type UploadRejection = { ok: false; message: string };
+export type UploadAcceptance = { ok: true };
+export type UploadCheck = UploadRejection | UploadAcceptance;
+
+/**
+ * Whether a file may be uploaded, and what to tell the user if not.
+ *
+ * The messages say what happened, what the limit is, and what to do about it —
+ * an estimator who has just waited on a large file needs to know whether to
+ * split the set or convert the file, not that validation failed.
+ */
+export function checkPdfUpload({
+  filename,
+  byteSize,
+}: {
+  filename: string;
+  byteSize: number;
+}): UploadCheck {
+  if (byteSize <= 0) {
+    return {
+      ok: false,
+      message: `${filename} is empty — there is nothing to attach.`,
+    };
+  }
+
+  if (byteSize > MAX_PDF_BYTES) {
+    return {
+      ok: false,
+      message:
+        `${filename} is ${formatBytes(byteSize)}, over the ${formatBytes(MAX_PDF_BYTES)} limit. ` +
+        `Split the sheet set and attach it in parts, or export it at a lower resolution.`,
+    };
+  }
+
+  if (!filename.toLowerCase().endsWith(".pdf")) {
+    return {
+      ok: false,
+      message: `${filename} is not a PDF. Plans have to be PDFs — export one from your viewer and try again.`,
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Whether these opening bytes belong to a PDF.
+ *
+ * Checked because a file renamed to .pdf passes every other test and then
+ * fails to open with nothing explaining why. Runs in the browser now that the
+ * bytes go straight to storage and never reach the server — see the router.
+ */
+export function looksLikePdf(firstBytes: Uint8Array): boolean {
+  if (firstBytes.length < PDF_MAGIC.length) return false;
+  for (let i = 0; i < PDF_MAGIC.length; i++) {
+    if (firstBytes[i] !== PDF_MAGIC.charCodeAt(i)) return false;
+  }
+  return true;
+}

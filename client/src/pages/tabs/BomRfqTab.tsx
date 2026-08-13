@@ -28,8 +28,10 @@ interface BomRow {
 }
 
 export default function BomRfqTab({ projectId }: BomRfqTabProps) {
-  const { data: assemblies = [], isLoading: loadingAsm } = trpc.projectAssemblies.list.useQuery({ projectId });
-  const { data: projectItems = [], isLoading: loadingItems } = trpc.projectItems.list.useQuery({ projectId });
+  const { data: assemblies = [], isLoading: loadingAsm } =
+    trpc.projectAssemblies.list.useQuery({ projectId });
+  const { data: projectItems = [], isLoading: loadingItems } =
+    trpc.projectItems.list.useQuery({ projectId });
 
   const isLoading = loadingAsm || loadingItems;
 
@@ -46,7 +48,9 @@ export default function BomRfqTab({ projectId }: BomRfqTabProps) {
       unitLab: number,
       source: string
     ) => {
-      const key = itemCode ? `code:${itemCode}` : `desc:${description.toLowerCase().trim()}`;
+      const key = itemCode
+        ? `code:${itemCode}`
+        : `desc:${description.toLowerCase().trim()}`;
       if (map.has(key)) {
         const row = map.get(key)!;
         row.totalQty += qty;
@@ -69,36 +73,67 @@ export default function BomRfqTab({ projectId }: BomRfqTabProps) {
     };
 
     // From assemblies
-    type AsmItem = { itemCode?: string | null; description: string; unit: string; qty?: string | number | null; overrideMaterialCost?: string | number | null; masterMaterialCost?: string | number | null; overrideLaborHours?: string | number | null; masterLaborHours?: string | number | null };
-    for (const asm of (assemblies as Array<{ name: string; items?: AsmItem[] }>)) {
-      for (const item of (asm.items ?? [])) {
+    type AsmItem = {
+      itemCode?: string | null;
+      description: string;
+      unit: string;
+      qty?: string | number | null;
+      overrideMaterialCost?: string | number | null;
+      masterMaterialCost?: string | number | null;
+      overrideLaborHours?: string | number | null;
+      masterLaborHours?: string | number | null;
+    };
+    for (const asm of assemblies as Array<{
+      name: string;
+      items?: AsmItem[];
+    }>) {
+      for (const item of asm.items ?? []) {
         addRow(
           item.itemCode ?? null,
           item.description,
           item.unit,
           parseFloat(String(item.qty ?? 1)),
-          parseFloat(String(item.overrideMaterialCost ?? item.masterMaterialCost ?? 0)),
-          parseFloat(String(item.overrideLaborHours ?? item.masterLaborHours ?? 0)),
+          parseFloat(
+            String(item.overrideMaterialCost ?? item.masterMaterialCost ?? 0)
+          ),
+          parseFloat(
+            String(item.overrideLaborHours ?? item.masterLaborHours ?? 0)
+          ),
           asm.name
         );
       }
     }
 
     // From standalone project items
-    type ProjItem = { itemCode?: string | null; description: string; unit: string; qty?: string | number | null; overrideMaterialCost?: string | number | null; masterMaterialCost?: string | number | null; overrideLaborHours?: string | number | null; masterLaborHours?: string | number | null };
-    for (const item of (projectItems as ProjItem[])) {
+    type ProjItem = {
+      itemCode?: string | null;
+      description: string;
+      unit: string;
+      qty?: string | number | null;
+      overrideMaterialCost?: string | number | null;
+      masterMaterialCost?: string | number | null;
+      overrideLaborHours?: string | number | null;
+      masterLaborHours?: string | number | null;
+    };
+    for (const item of projectItems as ProjItem[]) {
       addRow(
         item.itemCode ?? null,
         item.description,
         item.unit,
         parseFloat(String(item.qty ?? 1)),
-        parseFloat(String(item.overrideMaterialCost ?? item.masterMaterialCost ?? 0)),
-        parseFloat(String(item.overrideLaborHours ?? item.masterLaborHours ?? 0)),
+        parseFloat(
+          String(item.overrideMaterialCost ?? item.masterMaterialCost ?? 0)
+        ),
+        parseFloat(
+          String(item.overrideLaborHours ?? item.masterLaborHours ?? 0)
+        ),
         "Standalone Items"
       );
     }
 
-    return Array.from(map.values()).sort((a, b) => a.description.localeCompare(b.description));
+    return Array.from(map.values()).sort((a, b) =>
+      a.description.localeCompare(b.description)
+    );
   }, [assemblies, projectItems]);
 
   // ── Totals ────────────────────────────────────────────────────────────────
@@ -107,33 +142,57 @@ export default function BomRfqTab({ projectId }: BomRfqTabProps) {
 
   // ── Export helpers ────────────────────────────────────────────────────────
   const toTsv = () => {
-    const header = ["Item Code", "Description", "Unit", "Total Qty", "Unit Mat $", "Total Mat $", "Total Lab Hrs", "Sources"].join("\t");
-    const rows = bom.map(r => [
-      r.itemCode ?? "",
-      r.description,
-      r.unit,
-      r.totalQty,
-      r.unitMat.toFixed(2),
-      r.totalMat.toFixed(2),
-      r.totalLabHrs.toFixed(3),
-      r.sources.join("; "),
-    ].join("\t"));
+    const header = [
+      "Item Code",
+      "Description",
+      "Unit",
+      "Total Qty",
+      "Unit Mat $",
+      "Total Mat $",
+      "Total Lab Hrs",
+      "Sources",
+    ].join("\t");
+    const rows = bom.map(r =>
+      [
+        r.itemCode ?? "",
+        r.description,
+        r.unit,
+        r.totalQty,
+        r.unitMat.toFixed(2),
+        r.totalMat.toFixed(2),
+        r.totalLabHrs.toFixed(3),
+        r.sources.join("; "),
+      ].join("\t")
+    );
     return [header, ...rows].join("\n");
   };
 
   const toCsv = () => {
     const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const header = ["Item Code", "Description", "Unit", "Total Qty", "Unit Mat $", "Total Mat $", "Total Lab Hrs", "Sources"].map(esc).join(",");
-    const rows = bom.map(r => [
-      esc(r.itemCode ?? ""),
-      esc(r.description),
-      esc(r.unit),
-      r.totalQty,
-      r.unitMat.toFixed(2),
-      r.totalMat.toFixed(2),
-      r.totalLabHrs.toFixed(3),
-      esc(r.sources.join("; ")),
-    ].join(","));
+    const header = [
+      "Item Code",
+      "Description",
+      "Unit",
+      "Total Qty",
+      "Unit Mat $",
+      "Total Mat $",
+      "Total Lab Hrs",
+      "Sources",
+    ]
+      .map(esc)
+      .join(",");
+    const rows = bom.map(r =>
+      [
+        esc(r.itemCode ?? ""),
+        esc(r.description),
+        esc(r.unit),
+        r.totalQty,
+        r.unitMat.toFixed(2),
+        r.totalMat.toFixed(2),
+        r.totalLabHrs.toFixed(3),
+        esc(r.sources.join("; ")),
+      ].join(",")
+    );
     return [header, ...rows].join("\n");
   };
 
@@ -154,28 +213,42 @@ export default function BomRfqTab({ projectId }: BomRfqTabProps) {
     URL.revokeObjectURL(url);
   };
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center py-24 text-muted-foreground gap-3">
-      <Loader2 size={20} className="animate-spin" /> Building BOM…
-    </div>
-  );
+  if (isLoading)
+    return (
+      <div className="flex items-center justify-center py-24 text-muted-foreground gap-3">
+        <Loader2 size={20} className="animate-spin" /> Building BOM…
+      </div>
+    );
 
   return (
     <div className="p-5 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h3 className="text-base font-semibold text-foreground">Bill of Materials / RFQ</h3>
+          <h3 className="text-base font-semibold text-foreground">
+            Bill of Materials / RFQ
+          </h3>
           <p className="text-sm text-muted-foreground mt-0.5">
             Aggregated from all project assemblies and standalone items.
-            Identical items are combined by item code (or description if no code).
+            Identical items are combined by item code (or description if no
+            code).
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleCopy} className="gap-2 h-9 text-sm" disabled={bom.length === 0}>
+          <Button
+            variant="outline"
+            onClick={handleCopy}
+            className="gap-2 h-9 text-sm"
+            disabled={bom.length === 0}
+          >
             <Copy size={14} /> Copy TSV
           </Button>
-          <Button variant="outline" onClick={handleDownloadCsv} className="gap-2 h-9 text-sm" disabled={bom.length === 0}>
+          <Button
+            variant="outline"
+            onClick={handleDownloadCsv}
+            className="gap-2 h-9 text-sm"
+            disabled={bom.length === 0}
+          >
             <Download size={14} /> Download CSV
           </Button>
         </div>
@@ -195,14 +268,30 @@ export default function BomRfqTab({ projectId }: BomRfqTabProps) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/30 border-b border-border/40">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Item Code</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Description</th>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Unit</th>
-                  <th className="text-right px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total Qty</th>
-                  <th className="text-right px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Unit Mat $</th>
-                  <th className="text-right px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total Mat $</th>
-                  <th className="text-right px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total Lab Hrs</th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sources</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Item Code
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Description
+                  </th>
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Unit
+                  </th>
+                  <th className="text-right px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Total Qty
+                  </th>
+                  <th className="text-right px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Unit Mat $
+                  </th>
+                  <th className="text-right px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Total Mat $
+                  </th>
+                  <th className="text-right px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Total Lab Hrs
+                  </th>
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Sources
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -215,12 +304,22 @@ export default function BomRfqTab({ projectId }: BomRfqTabProps) {
                     )}
                   >
                     <td className="px-4 py-2.5 text-muted-foreground font-mono text-xs">
-                      {row.itemCode ?? <span className="text-muted-foreground/30 italic">—</span>}
+                      {row.itemCode ?? (
+                        <span className="text-muted-foreground/30 italic">
+                          —
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-2.5 text-foreground font-medium">{row.description}</td>
-                    <td className="px-3 py-2.5 text-center text-muted-foreground">{row.unit}</td>
+                    <td className="px-4 py-2.5 text-foreground font-medium">
+                      {row.description}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-muted-foreground">
+                      {row.unit}
+                    </td>
                     <td className="px-3 py-2.5 text-right font-mono text-foreground">
-                      {row.totalQty % 1 === 0 ? row.totalQty.toFixed(0) : row.totalQty.toFixed(2)}
+                      {row.totalQty % 1 === 0
+                        ? row.totalQty.toFixed(0)
+                        : row.totalQty.toFixed(2)}
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">
                       ${row.unitMat.toFixed(2)}
@@ -239,8 +338,12 @@ export default function BomRfqTab({ projectId }: BomRfqTabProps) {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-border/40 bg-muted/20">
-                  <td colSpan={5} className="px-4 py-3 text-right text-sm font-semibold text-muted-foreground">
-                    Grand Totals ({bom.length} line item{bom.length !== 1 ? "s" : ""}):
+                  <td
+                    colSpan={5}
+                    className="px-4 py-3 text-right text-sm font-semibold text-muted-foreground"
+                  >
+                    Grand Totals ({bom.length} line item
+                    {bom.length !== 1 ? "s" : ""}):
                   </td>
                   <td className="px-3 py-3 text-right font-mono font-bold text-[#F5C518] text-base">
                     ${grandTotalMat.toFixed(2)}

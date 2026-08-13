@@ -44,7 +44,7 @@ export const dataRouter = router({
         if (input.replaceAll) {
           await db.clearUserMaterials(ctx.user.id);
         }
-        const rows = input.items.map((item) => ({
+        const rows = input.items.map(item => ({
           ...item,
           userId: ctx.user.id,
           itemCode: item.itemCode ?? null,
@@ -124,7 +124,11 @@ export const dataRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         const { id, ...patch } = input;
-        await db.updateMaterialRow(id, ctx.user.id, patch as Parameters<typeof db.updateMaterialRow>[2]);
+        await db.updateMaterialRow(
+          id,
+          ctx.user.id,
+          patch as Parameters<typeof db.updateMaterialRow>[2]
+        );
         return { success: true };
       }),
 
@@ -162,7 +166,7 @@ export const dataRouter = router({
           snapshot = await db.getUserMaterials(ctx.user.id);
           await db.clearUserMaterials(ctx.user.id);
         }
-        const rows = CATALOG.map((item) => ({
+        const rows = CATALOG.map(item => ({
           userId: ctx.user.id,
           itemCode: item.id,
           category: item.category,
@@ -201,8 +205,9 @@ export const dataRouter = router({
         // Case-insensitive substring match on description
         const needle = input.description.toLowerCase().trim();
         const match = allMaterials.find(
-          (m) => m.description.toLowerCase().includes(needle) ||
-                 needle.includes(m.description.toLowerCase())
+          m =>
+            m.description.toLowerCase().includes(needle) ||
+            needle.includes(m.description.toLowerCase())
         );
         if (match) {
           await db.updateMaterialPrice(match.id, ctx.user.id, input.userPrice);
@@ -255,7 +260,7 @@ export const dataRouter = router({
       .mutation(async ({ input, ctx }) => {
         await db.clearUserMaterials(ctx.user.id);
         if (input.snapshot.length > 0) {
-          const rows = input.snapshot.map((item) => ({
+          const rows = input.snapshot.map(item => ({
             userId: ctx.user.id,
             itemCode: item.itemCode,
             category: item.category,

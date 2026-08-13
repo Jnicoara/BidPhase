@@ -14,7 +14,7 @@ try {
     "SELECT hash FROM __drizzle_migrations WHERE hash = ?",
     [hash]
   );
-  
+
   if (existing.length > 0) {
     console.log("Migration 0004 already recorded in __drizzle_migrations");
   } else {

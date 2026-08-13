@@ -11,17 +11,26 @@ export const masterAssembliesRouter = router({
   get: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const assembly = await db.getMasterAssemblyWithItems(input.id, ctx.user.id);
-      if (!assembly) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      const assembly = await db.getMasterAssemblyWithItems(
+        input.id,
+        ctx.user.id
+      );
+      if (!assembly)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
       return assembly;
     }),
 
   create: protectedProcedure
-    .input(z.object({
-      name: z.string().min(1).max(255),
-      description: z.string().max(2000).optional(),
-      phase: z.string().max(128).optional(),
-    }))
+    .input(
+      z.object({
+        name: z.string().min(1).max(255),
+        description: z.string().max(2000).optional(),
+        phase: z.string().max(128).optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await db.createMasterAssembly({
         userId: ctx.user.id,
@@ -35,12 +44,14 @@ export const masterAssembliesRouter = router({
     }),
 
   update: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      name: z.string().min(1).max(255).optional(),
-      description: z.string().max(2000).nullable().optional(),
-      phase: z.string().max(128).nullable().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        name: z.string().min(1).max(255).optional(),
+        description: z.string().max(2000).nullable().optional(),
+        phase: z.string().max(128).nullable().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
       await db.updateMasterAssembly(id, ctx.user.id, data);
@@ -55,12 +66,14 @@ export const masterAssembliesRouter = router({
     }),
 
   addItem: protectedProcedure
-    .input(z.object({
-      assemblyId: z.number().int().positive(),
-      masterItemId: z.number().int().positive(),
-      qty: z.number().min(0).default(1),
-      sortOrder: z.number().int().default(0),
-    }))
+    .input(
+      z.object({
+        assemblyId: z.number().int().positive(),
+        masterItemId: z.number().int().positive(),
+        qty: z.number().min(0).default(1),
+        sortOrder: z.number().int().default(0),
+      })
+    )
     .mutation(async ({ input }) => {
       await db.addItemToMasterAssembly({
         assemblyId: input.assemblyId,
@@ -72,17 +85,22 @@ export const masterAssembliesRouter = router({
     }),
 
   updateItem: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      qty: z.number().min(0).optional(),
-      sortOrder: z.number().int().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        qty: z.number().min(0).optional(),
+        sortOrder: z.number().int().optional(),
+      })
+    )
     .mutation(async ({ input }) => {
       const { id, qty, sortOrder } = input;
       const data: Record<string, unknown> = {};
       if (qty !== undefined) data.qty = String(qty);
       if (sortOrder !== undefined) data.sortOrder = sortOrder;
-      await db.updateMasterAssemblyItem(id, data as Parameters<typeof db.updateMasterAssemblyItem>[1]);
+      await db.updateMasterAssemblyItem(
+        id,
+        data as Parameters<typeof db.updateMasterAssemblyItem>[1]
+      );
       return { success: true };
     }),
 

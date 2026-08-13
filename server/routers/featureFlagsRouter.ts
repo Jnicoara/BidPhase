@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { adminProcedure, protectedProcedure, publicProcedure, router } from "../_core/trpc";
+import {
+  adminProcedure,
+  protectedProcedure,
+  publicProcedure,
+  router,
+} from "../_core/trpc";
 import * as db from "../db";
 
 export const featureFlagsRouter = router({

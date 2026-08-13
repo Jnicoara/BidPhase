@@ -13,7 +13,8 @@ function effectivePrice(m: {
 }): number | null {
   if (m.userPrice != null && m.userPrice > 0) return m.userPrice;
   if (m.defaultPrice != null && m.defaultPrice > 0) return m.defaultPrice;
-  if (m.unitMaterialCost != null && m.unitMaterialCost > 0) return m.unitMaterialCost;
+  if (m.unitMaterialCost != null && m.unitMaterialCost > 0)
+    return m.unitMaterialCost;
   return null;
 }
 
@@ -23,7 +24,9 @@ function isMissingPrice(m: Parameters<typeof effectivePrice>[0]): boolean {
 
 // ─── Age indicator logic ──────────────────────────────────────────────────────
 
-function ageClass(lastUpdated: Date | null): "green" | "yellow" | "red" | "none" {
+function ageClass(
+  lastUpdated: Date | null
+): "green" | "yellow" | "red" | "none" {
   if (!lastUpdated) return "none";
   const days = (Date.now() - lastUpdated.getTime()) / 86_400_000;
   if (days <= 30) return "green";
@@ -34,10 +37,10 @@ function ageClass(lastUpdated: Date | null): "green" | "yellow" | "red" | "none"
 // ─── CSV auto-detect logic ────────────────────────────────────────────────────
 
 function autoDetectMapping(headers: string[]): Record<string, string> {
-  const lower = headers.map((h) => h.toLowerCase());
+  const lower = headers.map(h => h.toLowerCase());
   const find = (candidates: string[]) => {
     for (const c of candidates) {
-      const idx = lower.findIndex((h) => h.includes(c));
+      const idx = lower.findIndex(h => h.includes(c));
       if (idx >= 0) return headers[idx];
     }
     return "";
@@ -45,10 +48,31 @@ function autoDetectMapping(headers: string[]): Record<string, string> {
   return {
     description: find(["description", "desc", "name", "item", "material"]),
     category: find(["category", "cat", "section", "trade", "phase"]),
-    itemId: find(["item_id", "itemid", "item_code", "itemcode", "code", "sku", "id"]),
+    itemId: find([
+      "item_id",
+      "itemid",
+      "item_code",
+      "itemcode",
+      "code",
+      "sku",
+      "id",
+    ]),
     unit: find(["unit", "uom"]),
-    userPrice: find(["user_price", "userprice", "my_price", "supply_price", "cost", "price"]),
-    defaultPrice: find(["default_price", "defaultprice", "base_price", "list_price", "listprice"]),
+    userPrice: find([
+      "user_price",
+      "userprice",
+      "my_price",
+      "supply_price",
+      "cost",
+      "price",
+    ]),
+    defaultPrice: find([
+      "default_price",
+      "defaultprice",
+      "base_price",
+      "list_price",
+      "listprice",
+    ]),
   };
 }
 
@@ -56,37 +80,85 @@ function autoDetectMapping(headers: string[]): Record<string, string> {
 
 describe("effectivePrice fallback chain", () => {
   it("returns userPrice when set and positive", () => {
-    expect(effectivePrice({ userPrice: 12.50, defaultPrice: 8.00, unitMaterialCost: 5.00 })).toBe(12.50);
+    expect(
+      effectivePrice({
+        userPrice: 12.5,
+        defaultPrice: 8.0,
+        unitMaterialCost: 5.0,
+      })
+    ).toBe(12.5);
   });
 
   it("falls back to defaultPrice when userPrice is null", () => {
-    expect(effectivePrice({ userPrice: null, defaultPrice: 8.00, unitMaterialCost: 5.00 })).toBe(8.00);
+    expect(
+      effectivePrice({
+        userPrice: null,
+        defaultPrice: 8.0,
+        unitMaterialCost: 5.0,
+      })
+    ).toBe(8.0);
   });
 
   it("falls back to unitMaterialCost when userPrice and defaultPrice are both null", () => {
-    expect(effectivePrice({ userPrice: null, defaultPrice: null, unitMaterialCost: 5.00 })).toBe(5.00);
+    expect(
+      effectivePrice({
+        userPrice: null,
+        defaultPrice: null,
+        unitMaterialCost: 5.0,
+      })
+    ).toBe(5.0);
   });
 
   it("returns null when all prices are null", () => {
-    expect(effectivePrice({ userPrice: null, defaultPrice: null, unitMaterialCost: null })).toBeNull();
+    expect(
+      effectivePrice({
+        userPrice: null,
+        defaultPrice: null,
+        unitMaterialCost: null,
+      })
+    ).toBeNull();
   });
 
   it("returns null when all prices are zero", () => {
-    expect(effectivePrice({ userPrice: 0, defaultPrice: 0, unitMaterialCost: 0 })).toBeNull();
+    expect(
+      effectivePrice({ userPrice: 0, defaultPrice: 0, unitMaterialCost: 0 })
+    ).toBeNull();
   });
 
   it("treats zero userPrice as missing (falls through to defaultPrice)", () => {
-    expect(effectivePrice({ userPrice: 0, defaultPrice: 8.00, unitMaterialCost: 5.00 })).toBe(8.00);
+    expect(
+      effectivePrice({ userPrice: 0, defaultPrice: 8.0, unitMaterialCost: 5.0 })
+    ).toBe(8.0);
   });
 
   it("isMissingPrice returns true when all prices are null/zero", () => {
-    expect(isMissingPrice({ userPrice: null, defaultPrice: null, unitMaterialCost: null })).toBe(true);
-    expect(isMissingPrice({ userPrice: 0, defaultPrice: 0, unitMaterialCost: 0 })).toBe(true);
+    expect(
+      isMissingPrice({
+        userPrice: null,
+        defaultPrice: null,
+        unitMaterialCost: null,
+      })
+    ).toBe(true);
+    expect(
+      isMissingPrice({ userPrice: 0, defaultPrice: 0, unitMaterialCost: 0 })
+    ).toBe(true);
   });
 
   it("isMissingPrice returns false when any price is positive", () => {
-    expect(isMissingPrice({ userPrice: null, defaultPrice: 5.00, unitMaterialCost: null })).toBe(false);
-    expect(isMissingPrice({ userPrice: 12.50, defaultPrice: null, unitMaterialCost: null })).toBe(false);
+    expect(
+      isMissingPrice({
+        userPrice: null,
+        defaultPrice: 5.0,
+        unitMaterialCost: null,
+      })
+    ).toBe(false);
+    expect(
+      isMissingPrice({
+        userPrice: 12.5,
+        defaultPrice: null,
+        unitMaterialCost: null,
+      })
+    ).toBe(false);
   });
 });
 
@@ -123,7 +195,14 @@ describe("age indicator", () => {
 
 describe("CSV column auto-detection", () => {
   it("detects standard supply house headers", () => {
-    const headers = ["Item_Code", "Category", "Description", "Unit", "User_Price", "Default_Price"];
+    const headers = [
+      "Item_Code",
+      "Category",
+      "Description",
+      "Unit",
+      "User_Price",
+      "Default_Price",
+    ];
     const mapping = autoDetectMapping(headers);
     expect(mapping.description).toBe("Description");
     expect(mapping.category).toBe("Category");
@@ -137,7 +216,14 @@ describe("CSV column auto-detection", () => {
     // "List Price" contains "list_price" as a substring only when spaces are replaced
     // The auto-detect uses h.includes(candidate) where candidate is "list_price" — won't match "List Price"
     // Use a header that actually matches: "ListPrice" contains "listprice"
-    const headers = ["SKU", "Trade", "Material Name", "UOM", "Cost", "ListPrice"];
+    const headers = [
+      "SKU",
+      "Trade",
+      "Material Name",
+      "UOM",
+      "Cost",
+      "ListPrice",
+    ];
     const mapping = autoDetectMapping(headers);
     expect(mapping.description).toBe("Material Name");
     expect(mapping.category).toBe("Trade");

@@ -1,4 +1,7 @@
-# BidPhase TODO
+# HelixBid TODO
+
+Entries below v5.75 say "BidPhase" — that was the name at the time, and they are
+left as written rather than rewritten to match the rename.
 
 ## SaaS Multi-User Upgrade (v4.0)
 
@@ -232,17 +235,20 @@
 - [x] Fix: two collapse/expand buttons still visible in the right panel (strip + header)
 
 ## v5.17 — Header Arrows, Page Label, PDF Tool Fix
+
 - [x] Right panel header: add a left-pointing arrow (expand) next to the right-pointing arrow (collapse) so both directions are always available in the header
 - [x] Right panel header: change "Pg N" badge to "Page N" (spell out "Page")
 - [x] Fix: tools and cursor do not appear after replacing a PDF in the viewer (z-index / overlay not cleared properly)
 
 ## v5.18 — Panel Controls & Pin Size Fix
+
 - [x] Remove Total Reset button from under the material summary section in the right panel
 - [x] Add reset-to-default-size button in the right panel header (next to the toggle arrow) to snap panel back to 40% width
 - [x] Dot shape: when panel collapses, the dot should drop into the shape list (not stay in header)
 - [x] Pin shapes: scale with zoom — shrink as user zooms out so they don't clutter the drawing
 
 ## v5.19 — Measurement & UX Polish
+
 - [x] Double-left-click on canvas in measure mode: drop a disconnected start point (lifts the pen) so user can start a new segment on the same run without connecting to the last endpoint
 - [x] Remove Pause and Finish buttons from the measuring toolbar
 - [x] Unit count sessions: remove the pencil rename button; make the session name label itself inline-editable on click
@@ -296,16 +302,19 @@
 - [x] Run total only in toolbar: removed per-segment breakdown from right panel; right panel shows total footage only
 
 ## v5.28 — Pinch & Panel Touch Fixes
+
 - [x] Fix pinch-to-zoom jitter: removed React state from pagesContainerRef transform in JSX; useLayoutEffect now exclusively drives the transform from refs on every render, so React's reconciler can never overwrite the gesture transform with stale state
 - [x] Suppress left panel from opening during touch/pinch gestures: added touchAction:none + userSelect:none to viewport, preventDefault on 2-finger touchstart, and context menu suppression during touch
 - [x] Added single-finger touch pan support (idle mode only) so users can pan on mobile without needing two fingers
 
 ## v5.29 — Pan Jitter, Sidebar & Label Fixes
+
 - [x] Fix mouse pan jitter: stop calling setPanOffset during mousemove drag; write directly to DOM via ref, sync React state only on mouseup
 - [x] Fix left sidebar activating during pan: body.bp-dragging class added on mousedown, CSS pointer-events:none on aside during drag; global mouseup listener cleans up if mouse released outside viewport
 - [x] Fix measurement run total label occlusion: refactored drawRun into drawRunGeometry (lines+dots) + drawRunLabels (labels only); main draw loop now does all geometry first then all labels on top
 
 ## v5.30 — Material Database Overhaul
+
 - [x] Schema: add category, userPrice, defaultPrice, lastUpdated columns to userMaterialsDb; push migration
 - [x] Backend: add updatePrice, resetPrice, addSingle procedures to dataRouter; update bulkImport to handle new columns
 - [x] CSV column mapping UI: after file select, show mapping screen before import
@@ -319,6 +328,7 @@
 - [x] Update estimating engine fallback: userPrice > defaultPrice, flag if both missing; CatalogPicker now shows user DB items with effective price
 
 ## v5.31 — Master Electrical Catalog & Run Cost Integration
+
 - [x] Generate 623-item master electrical catalog (Distribution, Conduit, Wire, Rough-in, Devices, Civil) in materialCatalog.ts
 - [x] Replace static materialCatalog.ts with new comprehensive catalog; added getConduitPricePerFoot() and getWirePricePerFoot() lookup helpers
 - [x] Build DB seeder: hasMaterials + seedFromCatalog procedures; MaterialDatabasePage shows seed banner when DB is empty
@@ -328,12 +338,14 @@
 - [x] Run totals show emerald-green material cost breakdown (conduit cost + wire cost + total) with cost/ft × billable ft formula displayed
 
 ## v5.32 — Catalog Expansion to 1,021 Items
+
 - [x] Expanded master electrical catalog from 623 to 1,021 items
 - [x] Added: Lighting (48 items: LED wafers, vapor tights, exit/emergency, outdoor, commercial), Low Voltage & Data (26 items: structured wiring, patch panels), Civil & Misc expanded (69 items: ground rods, grounding, marking tape, site materials), additional Distribution (252 total), Conduit Fittings (219 total), Wire & Cable (127 total)
 - [x] Fixed all Unicode inch symbol and escaped-quote issues in description strings
 - [x] TypeScript: 0 errors, dev server: clean
 
 ## v5.35 — Smart Fuzzy Search with Trade Slang
+
 - [x] Build shared smartSearch utility: fuzzy matching + trade alias/synonym map covering boxes, conduit, wire, breakers, devices, fittings, and civil slang
 - [x] Wire smartSearch into CatalogPicker (Unit Count) replacing current filter
 - [x] Wire smartSearch into MaterialDatabasePage replacing current filter
@@ -366,6 +378,7 @@
 - [x] TypeScript: 0 errors after all changes
 
 ## v5.39 — Run Tool Fixes
+
 - [x] Rename "Conduit" run type button to "Conduit & Wire"
 - [x] Wire Only mode: remove conductor size (AWG) picker — size is embedded in wire type selection
 - [x] Run type: ensure selecting one type clears the other (no dual runType + conduitOnly conflict)
@@ -376,6 +389,7 @@
 - [x] Diagnose and fix pricing calculation bug: MC/NM catalog lookup now uses full wireTypeId (e.g. mc-12-2 → wir-mc-12-2) instead of size-only fallback
 
 ## v5.40 — Price Sync + Run Type Rename + LFNC Expansion
+
 - [x] Rename run type button from "Conduit & Wire" to "Conduit / Wire"
 - [x] Add LFNC sizes 3/8", 1/2", 3/4", 1", 1-1/4", 1-1/2", 2" to materialCatalog.ts (per foot)
 - [x] Add LFNC fittings: straight connectors, 90° connectors, couplings (all sizes) to materialCatalog.ts
@@ -386,6 +400,7 @@
 - [x] TypeScript: 0 errors after all changes
 
 ## v5.41 — Catalog Sync, Grounding Conductor, Live Pricing, Measurement Fix
+
 - [x] Verify all new catalog items (LFNC sizes/fittings, MC fittings) are in the master CATALOG array so seedFromCatalog pushes them everywhere
 - [x] Add grounding conductor toggle to RunCard (off by default); when on, show size picker (14, 12, 10, 8, 6, 4, 2, 1/0 AWG); include grounding wire footage in billable wire total and cost
 - [x] Rename "Conductors" label to "Current Carrying Conductors" in RunCard
@@ -393,11 +408,12 @@
 - [x] Remove "Estimated Material Cost" section from right panel (replaced by live cost in Labor & Material section)
 - [x] Wire live material cost display into the Labor & Material section so it updates as user toggles conduit/wire selections
 - [x] Fix conductor count calculation bug: calcWire returns per-conductor footage but was not being multiplied by conductors in Wire Only cost display, totalWire aggregation, and wire map breakdown
-- [x] Fix double-count bug in conduit mode: calcConduitWire already multiplies by conductors internally; removed redundant * r.conductors in CrossPageTotals cost aggregation
+- [x] Fix double-count bug in conduit mode: calcConduitWire already multiplies by conductors internally; removed redundant \* r.conductors in CrossPageTotals cost aggregation
 - [x] Audit measurement tool: math chain confirmed correct (round-trip cancels); scale display formula verified (162 px/in = 72 points × scale 2.25)
 - [x] TypeScript: 0 errors after all changes
 
 ## v5.42 — EGC Reposition + Calc Bug Fixes
+
 - [x] Fix wire footage bug: 235 ft × 3 conductors × 0% waste should equal exactly 705 ft — changed wireTermMakeup/numPullPoints defaults from 2 to 0 in RunCard and CrossPageTotals
 - [x] Fix conduit pricing bug: conduit cost is coming in way too high — findUserPrice now prefers per-foot rows and normalizes per-stick entries by dividing by stick length
 - [x] Move EGC (grounding conductor) toggle to a prominent position in RunCard — now appears after conductor size section, before Estimating Inputs
@@ -408,6 +424,7 @@
 ## v5.45 — Major Feature Expansion (6 Systems)
 
 ### 1. Database Schema Expansion
+
 - [x] Add customerName, address, bidDate, notes, status (enum: Bidding/Won/In Progress/Lost) to projects table
 - [x] Create master_items table (userId, itemCode, category, description, unit, masterMaterialCost, masterLaborHours, isActive)
 - [x] Create master_assemblies table (userId, name, description, phase, isActive)
@@ -420,6 +437,7 @@
 - [x] Push all schema migrations with pnpm db:push
 
 ### 2. tRPC Procedures
+
 - [x] projects router: add search query, update mutation (customerName, address, bidDate, notes, status)
 - [x] masterItems router: list, create, update, delete, bulkImport
 - [x] masterAssemblies router: list, get (with items), create, update, delete, addItem, removeItem, reorderItems
@@ -429,6 +447,7 @@
 - [x] bidSummary router: get, upsert (percentageLaborFactor, lumpSumHours, markupPct)
 
 ### 3. Homepage
+
 - [x] Replace current homepage with clean project grid (Project Name, Customer, Bid Date, Status badge)
 - [x] Large search bar at top — wildcard filter across projectName, customerName, address simultaneously
 - [x] Status color badges (Bidding=yellow, Won=green, In Progress=blue, Lost=gray)
@@ -436,17 +455,20 @@
 - [x] Click project → navigate to Project Detail view
 
 ### 4. Project Detail View
+
 - [x] Editable header: Customer Name, Address, Bid Date (date picker), Status (dropdown), Notes (textarea)
 - [x] Auto-save on blur for all header fields
 - [x] "Back to Projects" button (large, obvious)
 - [x] Estimating workspace below header (tabs: Assemblies, Standalone Items, Bid Summary, BOM/RFQ)
 
 ### 5. Master Items & Assemblies Management UI
+
 - [x] Settings/Master Catalog page: list master items with search, add/edit/delete
 - [x] Master Assemblies page: list assemblies, click to expand items, add/remove items, set qty
 - [x] Master Labor Rates page: list rates, add/edit/delete
 
 ### 6. Project Assembly Workspace
+
 - [x] "Add Assembly" button — opens master assembly picker, adds copy to project
 - [x] Assembly card: shows name, phase, item list with qty/override price/override labor hours
 - [x] Inline edit for qty, overrideMaterialCost, overrideLaborHours per item
@@ -455,6 +477,7 @@
 - [x] Phase grouping: items/assemblies can be tagged to a phase
 
 ### 7. Bid Summary
+
 - [x] Show rawTotalHours (sum of all overrideLaborHours × qty across all items/assemblies)
 - [x] percentageLaborFactor input (default 1.0) — multiplier on rawTotalHours
 - [x] lumpSumHours input (default 0) — flat add/subtract
@@ -464,6 +487,7 @@
 - [x] Grand total display: material + markup + (finalAdjustedHours × laborRate)
 
 ### 8. BOM & RFQ Generation
+
 - [x] Aggregate all project items + assembly items by itemCode/description, sum quantities
 - [x] Internal BOM view: description, SKU, aggregated qty, unit, overrideMaterialCost, extended cost
 - [x] RFQ view: description, SKU, aggregated qty, unit — NO pricing or labor
@@ -471,6 +495,7 @@
 - [x] Export RFQ as CSV (price-stripped)
 
 ### 9. Tests & Cleanup
+
 - [x] Vitest: test bid summary math (rawHours × factor + lumpSum = finalHours)
 - [x] Vitest: test BOM aggregation (same item across 2 assemblies sums correctly)
 - [x] Vitest: test override/reset (override changes value, reset restores master)
@@ -488,6 +513,7 @@
 - [x] TypeScript: 0 errors after all changes
 
 ## v5.49 — Project Meta Fields + EGC in L&M Panel + Clear Page Reorder
+
 - [x] Add customerName, address, bidDate, status optional fields to CivilProject interface in AppContext
 - [x] Add updateProjectMeta function to AppContext to update those fields per project
 - [x] Update ProjectsPage cards to show status badge, customer, address, bid date and allow inline editing via expand/collapse
@@ -498,17 +524,20 @@
 ## v5.50 — RBAC + Assembly Builder + Admin Feature Flags
 
 ### Step 1: RBAC
+
 - [ ] Add "contractor" to the role enum in schema.ts (alongside "user" and "admin")
 - [ ] Push DB migration for role enum change
 - [ ] Expose ctx.user.role to frontend via auth.me query
 - [ ] Add useIsAdmin() and useIsContractor() hooks to frontend
 
 ### Step 2: Assemblies DB (already exists — verify and document)
+
 - [ ] Confirm master_assemblies, master_assembly_items tables are live
 - [ ] Confirm masterAssembliesRouter procedures are wired and functional
 - [ ] Confirm laborHours field exists on assembly items
 
 ### Step 3: Assembly Builder UI
+
 - [ ] Create standalone AssemblyBuilderPage accessible from sidebar
 - [ ] List all master assemblies with search/filter
 - [ ] Create/edit assembly: name, description, phase, add items from materials DB with qty
@@ -516,6 +545,7 @@
 - [ ] Wire to masterAssembliesRouter (list, create, update, addItem, removeItem)
 
 ### Step 4: Feature Flags System
+
 - [ ] Add feature_flags table: id, flagKey (unique), label, description, enabledForContractors, updatedAt
 - [ ] Push DB migration for feature_flags table
 - [ ] Add featureFlagsRouter: getAll (admin), upsert (admin), getForUser (public — returns only keys + enabled state, no admin data)
@@ -523,6 +553,7 @@
 - [ ] Add useFeatureFlag(key) hook to frontend that reads from getForUser query
 
 ### Step 5: Admin Settings Page
+
 - [ ] Create AdminSettingsPage accessible ONLY when role === "admin"
 - [ ] Add "Admin" nav item to sidebar (only visible to admins)
 - [ ] Feature Flags section: list all flags with toggle switches, label, description
@@ -534,12 +565,14 @@
 ## v5.50 — RBAC + Assembly Builder + Feature Flags (COMPLETE)
 
 ### Step 1: RBAC
+
 - [x] Add `contractor` to the role enum in drizzle/schema.ts (alongside existing `user` and `admin`)
-- [x] `adminProcedure` already existed in server/_core/trpc.ts — no change needed
+- [x] `adminProcedure` already existed in server/\_core/trpc.ts — no change needed
 - [x] Owner openId is auto-promoted to `admin` on every login upsert in db.ts — no change needed
 - [x] All existing pages remain accessible to contractor/user role by default
 
 ### Step 2: Assemblies Database
+
 - [x] `master_assemblies` and `master_assembly_items` tables already existed from v5.45 — no new migration needed
 - [x] `feature_flags` table added to schema (flagKey, label, description, enabledForContractors, timestamps)
 - [x] DB migration pushed (pnpm db:push)
@@ -547,6 +580,7 @@
 - [x] `seedDefaultFeatureFlags` called at server startup — seeds `enable_labor_units` flag (default OFF)
 
 ### Step 3: Assembly Builder UI
+
 - [x] `AssemblyBuilderPage` created at client/src/pages/AssemblyBuilderPage.tsx
 - [x] Create/rename/delete assemblies with name and optional phase
 - [x] Expand assembly to see item list; add items from master catalog via search
@@ -556,6 +590,7 @@
 - [x] Assembly Builder wired into BidPhaseShell routing at /assemblies with Package icon in sidebar
 
 ### Step 4: Admin Dashboard — Feature Flags UI
+
 - [x] `featureFlagsRouter` created with `getAll` (admin only), `upsert` (admin only), `getForUser` (authenticated)
 - [x] `AdminSettingsPage` created at client/src/pages/AdminSettingsPage.tsx
 - [x] Toggle switches for each flag with ON/OFF badge and description
@@ -564,12 +599,14 @@
 - [x] Route `/admin` wired into BidPhaseShell
 
 ### Step 5: Labor Units Feature Toggle
+
 - [x] `enable_labor_units` flag seeded as first toggle (default OFF for contractors)
 - [x] `useFeatureFlag("enable_labor_units")` used in AssemblyBuilderPage to hide/show labor columns
 - [x] `featureFlags.getForUser` returns all flags as `Record<string, boolean>` — admins always get true
 - [x] System is scalable: add new flags via `seedDefaultFeatureFlags` or Admin Settings UI, consume with `useFeatureFlag(key)`
 
 ### Tests
+
 - [x] All 38 existing vitest tests pass (0 regressions)
 - [x] TypeScript: 0 errors
 
@@ -587,6 +624,7 @@
 - [x] TypeScript: 0 errors
 
 ## v5.52 — Unified Search Aliases + Unit Count Toolbar Styling
+
 - [x] Expanded ALIAS_MAP in smartSearch.ts with comprehensive trade slang: plug/outlet/receptacle/device, GFI/GFCI/ground fault, AFCI/arc fault, USB, spec grade, tamper resistant, weatherproof, 3-way/4-way/dimmer/fan switch, can/pot/wafer/downlight/troffer/strip/vapor tight, smoke/CO/combo detector, doorbell/chime/transformer, thermostat/stat, panel/loadcenter/breaker/CB, meter socket/base/can, disconnect/safety switch, conduit fittings, wire/cable types, boxes, strut/channel, and more
 - [x] Removed all duplicate ALIAS_MAP keys (52 duplicates removed)
 - [x] Unit Count toolbar Delete button now uses icon-only ghost style matching Runs toolbar Trash button
@@ -595,6 +633,7 @@
 - [x] TypeScript: 0 errors
 
 ## v5.53 — Assembly Add-Item Fix, Assembly Unit Counter, Multi-Circuit Runs
+
 - [x] Fix Assembly Builder: catalog items with null category/itemCode now pass zod validation (z.string().nullable().optional())
 - [x] Unit Count: count sessions can be linked to a master assembly — each pin represents one assembly instance
 - [x] Unit Count: assembly search picker in active session config; shows assembly name badge when linked; X to unlink
@@ -636,6 +675,7 @@
 - [x] TypeScript: 0 errors
 
 ## v5.58 — RunCard Reorder, Cover Plates Simplified, Search Engine v2
+
 - [x] Move conduit type/size/empty selector to directly after Run Type toggle (before conductors)
 - [x] Simplify cover plates: remove screwless/jumbo/midsize specialty items; replace with 20 standard mid-size (Midway) white cover plates (1G/2G/3G/4G × Blank/Duplex/Toggle/Decora/GFCI)
 - [x] Rewrite smartSearch v2: per-token alias expansion, prefix-aware tiered scoring (exact→starts-with→word-boundary→contains), all-tokens-must-match filter, item index cache
@@ -643,6 +683,7 @@
 - [x] TypeScript: 0 errors
 
 ## v5.59 — Assembly Picker UX, EGC Wire Totals, Locked Takeoff, Export Button
+
 - [x] Unit counter: replace assembly text search with searchable dropdown (shows all assemblies, filters as you type, auto-fills session name from assembly name)
 - [x] Unit counter: auto-fill session name from assembly name when assembly is linked
 - [x] Run calculator: lock Measured Takeoff field — read-only when feetFromPlan=true; shows lock icon and hint; only plan tool can update
@@ -660,13 +701,16 @@
 - [x] TypeScript: 0 errors
 
 ## v5.70 — Smooth Crosshair Rebuild (Dedicated Canvas Approach)
+
 - [x] Rolled back to stable baseline before all RAF/snapshot jitter experiments
 - [x] Crosshair moved to dedicated crosshairCanvas (zIndex 11, pointer-events:none) — main canvas never redrawn on mouse move
 - [x] crosshairPosRef + RAF deduplicate crosshair draws; no React state change on mouse move = zero jitter
 - [x] Viewport cursor: grab off-page at all times, grabbing when panning; canvas cursor:none in active tool mode
 - [x] Page navigation (goToPage) now calls zoomReset() so clicking any page chip or arrow re-centers at 40% zoom
 - [x] TypeScript: 0 errors
+
 ## v5.71 — Estimating Defaults to 0, Zoom Glitch Fix, Instant Page Load
+
 - [x] Crosshair canvas size synced inside drawCanvas — prevents stale canvas dimensions after zoom causing crosshair to draw at wrong scale
 - [x] bitmapCanvasRef added: displays cached bitmap instantly on page navigation (z-index 1, behind overlay canvas); eliminates blank-page flash when switching pages
 - [x] onRenderSuccess caches current page to bitmapCanvas and prefetches adjacent pages
@@ -676,12 +720,16 @@
 - [x] All ?? 10 fallback defaults in run calculations changed to ?? 0
 - [x] handlePush new run defaults changed to 0 for all estimating fields
 - [x] TypeScript: 0 errors
+
 ## v5.72 — PlanPanel Consistency Fixes
+
 - [x] Page centering on navigation works for all projects (old and new) — re-center again after cached/real page render so page changes always land with the full sheet visible
 - [x] Bitmap cache and instant page load works for all projects — legacy saved PDFs now auto-derive and persist pdfHash on restore so old projects use the same bitmap cache + prefetch path
 - [x] Restore scrollable page overview panel — wheel zoom is disabled while the overview overlay is open so the page picker can scroll naturally again
 - [x] TypeScript: 0 errors
+
 ## v5.73 — Project Switching & Fast Page Load
+
 - [x] useLocalStorage re-reads from localStorage when key changes (project switch) — fixes stale page/zoom/hash
 - [x] PlanPanel tabKey-change effect resets all transient state (numPages, autoFittedRef, bitmapPageRef, mode, pan, zoom) on project switch
 - [x] Document key includes tabKey so switching projects always forces a fresh react-pdf mount
@@ -691,16 +739,19 @@
 - [x] TypeScript: 0 errors
 
 ## v5.74 — Smooth All Projects + Remove M Logo
+
 - [ ] Fix lag/jitter on page load and navigation for all projects (match Pine St smoothness)
 - [ ] Remove M logo/icon from measurement distance display on runs
 
 ## v5.74 — Smooth All Projects + M Logo Fix
+
 - [x] Remove "M=measure" text from hint bar (was appearing as M logo next to run distance)
 - [x] Skip pdfLoading gate when bitmap cache already has the current page — instant display on project switch
 - [x] Replace heavy react-pdf thumbnail rendering in page overview with lightweight bitmap cache canvases
 - [x] TypeScript: 0 errors
 
 ## v5.75 — Rename to HelixBid
+
 - [x] Renamed all occurrences of "BidPhase" / "Bid Phase" to "HelixBid" across all source files, comments, UI text, exports, page titles, IndexedDB name, and package.json
 - [x] Renamed BidPhaseShell.tsx → HelixBidShell.tsx and BidPhaseHomePage.tsx → HelixBidHomePage.tsx
 - [x] All imports and references updated automatically

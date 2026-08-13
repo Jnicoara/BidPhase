@@ -77,16 +77,12 @@
       "indexes": {
         "count_sessions_projectId_idx": {
           "name": "count_sessions_projectId_idx",
-          "columns": [
-            "projectId"
-          ],
+          "columns": ["projectId"],
           "isUnique": false
         },
         "count_sessions_userId_idx": {
           "name": "count_sessions_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -95,12 +91,8 @@
           "name": "count_sessions_projectId_projects_id_fk",
           "tableFrom": "count_sessions",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -108,12 +100,8 @@
           "name": "count_sessions_userId_users_id_fk",
           "tableFrom": "count_sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -121,9 +109,7 @@
       "compositePrimaryKeys": {
         "count_sessions_id": {
           "name": "count_sessions_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -243,16 +229,12 @@
       "indexes": {
         "estimate_sessions_userId_idx": {
           "name": "estimate_sessions_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "estimate_sessions_projectId_idx": {
           "name": "estimate_sessions_projectId_idx",
-          "columns": [
-            "projectId"
-          ],
+          "columns": ["projectId"],
           "isUnique": false
         }
       },
@@ -261,12 +243,8 @@
           "name": "estimate_sessions_projectId_projects_id_fk",
           "tableFrom": "estimate_sessions",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -274,12 +252,8 @@
           "name": "estimate_sessions_userId_users_id_fk",
           "tableFrom": "estimate_sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -287,9 +261,7 @@
       "compositePrimaryKeys": {
         "estimate_sessions_id": {
           "name": "estimate_sessions_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -394,16 +366,12 @@
       "indexes": {
         "material_rows_projectId_idx": {
           "name": "material_rows_projectId_idx",
-          "columns": [
-            "projectId"
-          ],
+          "columns": ["projectId"],
           "isUnique": false
         },
         "material_rows_userId_idx": {
           "name": "material_rows_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -412,12 +380,8 @@
           "name": "material_rows_projectId_projects_id_fk",
           "tableFrom": "material_rows",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -425,12 +389,8 @@
           "name": "material_rows_userId_users_id_fk",
           "tableFrom": "material_rows",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -438,9 +398,7 @@
       "compositePrimaryKeys": {
         "material_rows_id": {
           "name": "material_rows_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -532,16 +490,12 @@
       "indexes": {
         "plan_images_projectId_idx": {
           "name": "plan_images_projectId_idx",
-          "columns": [
-            "projectId"
-          ],
+          "columns": ["projectId"],
           "isUnique": false
         },
         "plan_images_userId_idx": {
           "name": "plan_images_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -550,12 +504,8 @@
           "name": "plan_images_projectId_projects_id_fk",
           "tableFrom": "plan_images",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -563,12 +513,8 @@
           "name": "plan_images_userId_users_id_fk",
           "tableFrom": "plan_images",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -576,9 +522,7 @@
       "compositePrimaryKeys": {
         "plan_images_id": {
           "name": "plan_images_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -659,9 +603,7 @@
       "indexes": {
         "projects_userId_idx": {
           "name": "projects_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -670,12 +612,8 @@
           "name": "projects_userId_users_id_fk",
           "tableFrom": "projects",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -683,9 +621,7 @@
       "compositePrimaryKeys": {
         "projects_id": {
           "name": "projects_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -788,9 +724,7 @@
       "indexes": {
         "user_api_connectors_userId_idx": {
           "name": "user_api_connectors_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -799,12 +733,8 @@
           "name": "user_api_connectors_userId_users_id_fk",
           "tableFrom": "user_api_connectors",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -812,9 +742,7 @@
       "compositePrimaryKeys": {
         "user_api_connectors_id": {
           "name": "user_api_connectors_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -910,9 +838,7 @@
       "indexes": {
         "user_assemblies_userId_idx": {
           "name": "user_assemblies_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -921,12 +847,8 @@
           "name": "user_assemblies_userId_users_id_fk",
           "tableFrom": "user_assemblies",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -934,9 +856,7 @@
       "compositePrimaryKeys": {
         "user_assemblies_id": {
           "name": "user_assemblies_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1009,9 +929,7 @@
       "indexes": {
         "user_labor_standards_userId_idx": {
           "name": "user_labor_standards_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -1020,12 +938,8 @@
           "name": "user_labor_standards_userId_users_id_fk",
           "tableFrom": "user_labor_standards",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1033,9 +947,7 @@
       "compositePrimaryKeys": {
         "user_labor_standards_id": {
           "name": "user_labor_standards_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1147,9 +1059,7 @@
       "indexes": {
         "user_materials_db_userId_idx": {
           "name": "user_materials_db_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -1158,12 +1068,8 @@
           "name": "user_materials_db_userId_users_id_fk",
           "tableFrom": "user_materials_db",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1171,9 +1077,7 @@
       "compositePrimaryKeys": {
         "user_materials_db_id": {
           "name": "user_materials_db_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1256,17 +1160,13 @@
       "compositePrimaryKeys": {
         "users_id": {
           "name": "users_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "users_openId_unique": {
           "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ]
+          "columns": ["openId"]
         }
       },
       "checkConstraint": {}

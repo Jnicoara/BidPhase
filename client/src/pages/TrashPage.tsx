@@ -12,7 +12,8 @@ const MS_30_DAYS = 30 * 24 * 60 * 60 * 1000;
 // Category labels removed — projects are no longer categorized in the UI
 
 export default function TrashPage({ onBack }: { onBack: () => void }) {
-  const { trashedProjects, restoreProject, permanentlyDeleteProject } = useApp();
+  const { trashedProjects, restoreProject, permanentlyDeleteProject } =
+    useApp();
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const now = Date.now();
@@ -56,7 +57,7 @@ export default function TrashPage({ onBack }: { onBack: () => void }) {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl">
-            {sorted.map((p) => {
+            {sorted.map(p => {
               const pid = p.project.id;
               const pname = p.project.name;
               const days = daysLeft(p.deletedAt);
@@ -68,7 +69,9 @@ export default function TrashPage({ onBack }: { onBack: () => void }) {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{pname}</p>
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {pname}
+                      </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         Deleted {new Date(p.deletedAt).toLocaleDateString()}
                       </p>

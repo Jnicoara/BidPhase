@@ -25,7 +25,11 @@ export const projectsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const project = await db.getProjectById(input.id, ctx.user.id);
-      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found." });
+      if (!project)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Project not found.",
+        });
       return project;
     }),
 
@@ -78,7 +82,11 @@ export const projectsRouter = router({
       if (bidDate !== undefined) {
         data.bidDate = bidDate ? new Date(bidDate) : null;
       }
-      await db.updateProject(id, ctx.user.id, data as Parameters<typeof db.updateProject>[2]);
+      await db.updateProject(
+        id,
+        ctx.user.id,
+        data as Parameters<typeof db.updateProject>[2]
+      );
       return { success: true };
     }),
 
@@ -109,13 +117,25 @@ export const projectsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const project = await db.getProjectById(input.projectId, ctx.user.id);
-      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found." });
+      if (!project)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Project not found.",
+        });
       const base64 = input.dataUrl.split(",")[1];
-      if (!base64) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid data URL." });
+      if (!base64)
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid data URL.",
+        });
       const buffer = Buffer.from(base64, "base64");
       const filename = input.filename ?? "plan.pdf";
       const storageKey = `pdfs/${ctx.user.id}/${input.projectId}/${filename}`;
-      const { key, url } = await storagePut(storageKey, buffer, "application/pdf");
+      const { key, url } = await storagePut(
+        storageKey,
+        buffer,
+        "application/pdf"
+      );
       await db.updateProject(input.projectId, ctx.user.id, {
         pdfUrl: url,
         pdfKey: key,
@@ -129,7 +149,11 @@ export const projectsRouter = router({
     .input(z.object({ projectId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const project = await db.getProjectById(input.projectId, ctx.user.id);
-      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found." });
+      if (!project)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Project not found.",
+        });
       if (!project.pdfKey) return { url: null, key: null, filename: null };
       return {
         url: `/manus-storage/${project.pdfKey}`,

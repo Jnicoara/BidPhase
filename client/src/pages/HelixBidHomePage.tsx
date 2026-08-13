@@ -1,10 +1,11 @@
 /**
- * HelixBidHomePage — v5.46
+ * HelixBidHomePage
  * Dedicated landing page reached by clicking the BP logo.
  * Clean branded entry point with CTA to navigate to Projects.
  */
 import { Zap, FolderOpen, BarChart3, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { APP_VERSION_LABEL } from "@shared/version";
 
 interface HelixBidHomePageProps {
   onGoToProjects: () => void;
@@ -33,7 +34,9 @@ const FEATURES = [
   },
 ];
 
-export default function HelixBidHomePage({ onGoToProjects }: HelixBidHomePageProps) {
+export default function HelixBidHomePage({
+  onGoToProjects,
+}: HelixBidHomePageProps) {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* ── Hero ── */}
@@ -53,10 +56,12 @@ export default function HelixBidHomePage({ onGoToProjects }: HelixBidHomePagePro
           className="text-5xl font-bold tracking-tight mb-3"
           style={{ fontFamily: "'Space Grotesk', sans-serif" }}
         >
-          <span className="text-foreground">Helix</span><span className="text-[#F5C518]">Bid</span>
+          <span className="text-foreground">Helix</span>
+          <span className="text-[#F5C518]">Bid</span>
         </h1>
         <p className="text-lg text-muted-foreground max-w-md mb-10">
-          Electrical estimating built for the field. Fast takeoffs, accurate bids, less paperwork.
+          Electrical estimating built for the field. Fast takeoffs, accurate
+          bids, less paperwork.
         </p>
 
         {/* CTA */}
@@ -86,8 +91,12 @@ export default function HelixBidHomePage({ onGoToProjects }: HelixBidHomePagePro
                 <Icon size={18} className="text-[#F5C518]" />
               </div>
               <div>
-                <p className="font-semibold text-foreground text-sm mb-1">{title}</p>
-                <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+                <p className="font-semibold text-foreground text-sm mb-1">
+                  {title}
+                </p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {desc}
+                </p>
               </div>
             </div>
           ))}
@@ -97,7 +106,7 @@ export default function HelixBidHomePage({ onGoToProjects }: HelixBidHomePagePro
       {/* ── Footer ── */}
       <div className="border-t border-border/40 py-4 text-center">
         <p className="text-xs text-muted-foreground/40 font-mono tracking-wide">
-          v5.46 · Field Edition
+          {APP_VERSION_LABEL}
         </p>
       </div>
     </div>

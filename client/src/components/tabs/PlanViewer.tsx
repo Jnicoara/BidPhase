@@ -19,12 +19,7 @@
  * scaleRatio = pixels_per_foot at the zoom level when scale was set.
  * When zoom changes, scaleRatio is adjusted proportionally.
  */
-import {
-  useState,
-  useRef,
-  useCallback,
-  useEffect,
-} from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -59,14 +54,18 @@ interface NormPoint {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const PAGE_GAP = 16;       // px gap between pages
-const BASE_DPI = 1.5;      // base render scale for quality
+const PAGE_GAP = 16; // px gap between pages
+const BASE_DPI = 1.5; // base render scale for quality
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 5.0;
-const ZOOM_STEPS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0];
-const DEBOUNCE_MS = 350;   // ms after last zoom event before PDF re-renders
+const ZOOM_STEPS = [
+  0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0,
+];
+const DEBOUNCE_MS = 350; // ms after last zoom event before PDF re-renders
 
-function clamp(v: number, lo: number, hi: number) { return Math.min(hi, Math.max(lo, v)); }
+function clamp(v: number, lo: number, hi: number) {
+  return Math.min(hi, Math.max(lo, v));
+}
 function dist2D(ax: number, ay: number, bx: number, by: number) {
   return Math.sqrt((bx - ax) ** 2 + (by - ay) ** 2);
 }
@@ -75,49 +74,77 @@ export default function PlanViewer() {
   const { pushDistanceToCivil } = useApp();
 
   // ── PDF state ──────────────────────────────────────────────────────────────
-  const [pdfFile, setPdfFile] = useLocalStorage<string | null>("bp_pdf_file", null);
+  const [pdfFile, setPdfFile] = useLocalStorage<string | null>(
+    "bp_pdf_file",
+    null
+  );
   const [numPages, setNumPages] = useState<number>(0);
 
   // ── Zoom state ─────────────────────────────────────────────────────────────
   // renderZoom: the zoom level the PDF is currently rendered at (triggers re-render)
-  const [renderZoom, setRenderZoom] = useLocalStorage<number>("bp_zoom_v6", 1.0);
+  const [renderZoom, setRenderZoom] = useLocalStorage<number>(
+    "bp_zoom_v6",
+    1.0
+  );
   // displayZoom: the zoom level shown in the badge (updates instantly on wheel)
   const [displayZoom, setDisplayZoom] = useState<number>(renderZoom);
   const displayZoomRef = useRef(displayZoom);
   const renderZoomRef = useRef(renderZoom);
-  useEffect(() => { displayZoomRef.current = displayZoom; }, [displayZoom]);
-  useEffect(() => { renderZoomRef.current = renderZoom; }, [renderZoom]);
+  useEffect(() => {
+    displayZoomRef.current = displayZoom;
+  }, [displayZoom]);
+  useEffect(() => {
+    renderZoomRef.current = renderZoom;
+  }, [renderZoom]);
 
   // Debounce timer for PDF re-render
   const zoomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Scale state ────────────────────────────────────────────────────────────
   // scaleRatio: pixels per foot at renderZoom=1.0 (zoom-independent)
-  const [scaleRatio, setScaleRatio] = useLocalStorage<number | null>("bp_scale_ratio_v6", null);
-  const [scalePoints, setScalePoints] = useLocalStorage<NormPoint[]>("bp_scale_pts_v6", []);
+  const [scaleRatio, setScaleRatio] = useLocalStorage<number | null>(
+    "bp_scale_ratio_v6",
+    null
+  );
+  const [scalePoints, setScalePoints] = useLocalStorage<NormPoint[]>(
+    "bp_scale_pts_v6",
+    []
+  );
   const [knownDistance, setKnownDistance] = useState<string>("");
 
   // ── Measure state ──────────────────────────────────────────────────────────
-  const [measurePoints, setMeasurePoints] = useLocalStorage<NormPoint[]>("bp_measure_pts_v6", []);
-  const [measuredFeet, setMeasuredFeet] = useLocalStorage<number | null>("bp_measured_ft_v6", null);
+  const [measurePoints, setMeasurePoints] = useLocalStorage<NormPoint[]>(
+    "bp_measure_pts_v6",
+    []
+  );
+  const [measuredFeet, setMeasuredFeet] = useLocalStorage<number | null>(
+    "bp_measured_ft_v6",
+    null
+  );
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [mode, setMode] = useState<Mode>("none");
-  const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
+  const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(
+    null
+  );
 
   // ── Refs ───────────────────────────────────────────────────────────────────
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const pagesContainerRef = useRef<HTMLDivElement>(null);
   const modeRef = useRef(mode);
-  useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   // pageSizes[i] = { w, h } at current renderZoom
   const pageSizesRef = useRef<{ w: number; h: number }[]>([]);
   const [pageSizesReady, setPageSizesReady] = useState(0);
 
   // Pinch zoom
-  const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(null);
+  const pinchRef = useRef<{ startDist: number; startZoom: number } | null>(
+    null
+  );
 
   // ── Page top offsets ───────────────────────────────────────────────────────
   const getPageTops = useCallback((): number[] => {
@@ -185,7 +212,7 @@ export default function PlanViewer() {
     const tops = getPageTops();
     const lastIdx = sizes.length - 1;
     const totalH = tops[lastIdx] + (sizes[lastIdx]?.h ?? 0);
-    const maxW = Math.max(...sizes.map((s) => s?.w ?? 0), 1);
+    const maxW = Math.max(...sizes.map(s => s?.w ?? 0), 1);
 
     canvas.width = maxW;
     canvas.height = totalH;
@@ -206,7 +233,11 @@ export default function PlanViewer() {
       ctx.stroke();
     };
 
-    const drawPoly = (pts: { x: number; y: number }[], color: string, dashed = false) => {
+    const drawPoly = (
+      pts: { x: number; y: number }[],
+      color: string,
+      dashed = false
+    ) => {
       if (pts.length < 2) return;
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
@@ -219,7 +250,10 @@ export default function PlanViewer() {
     };
 
     // Scale reference line
-    const scalePts = scalePoints.map(normToCanvas).filter(Boolean) as { x: number; y: number }[];
+    const scalePts = scalePoints.map(normToCanvas).filter(Boolean) as {
+      x: number;
+      y: number;
+    }[];
     if (scalePts.length >= 2) drawPoly(scalePts, "#F5C518", true);
     scalePts.forEach((p, i) => {
       drawDot(p.x, p.y, "#F5C518", 6);
@@ -229,9 +263,12 @@ export default function PlanViewer() {
     });
 
     // Measure polyline
-    const measPts = measurePoints.map(normToCanvas).filter(Boolean) as { x: number; y: number }[];
+    const measPts = measurePoints.map(normToCanvas).filter(Boolean) as {
+      x: number;
+      y: number;
+    }[];
     if (measPts.length >= 2) drawPoly(measPts, "#22C55E");
-    measPts.forEach((p) => drawDot(p.x, p.y, "#22C55E", 5));
+    measPts.forEach(p => drawDot(p.x, p.y, "#22C55E", 5));
 
     // Crosshair
     if (crosshair) {
@@ -239,15 +276,25 @@ export default function PlanViewer() {
       ctx.strokeStyle = "rgba(245,197,24,0.55)";
       ctx.lineWidth = 1;
       ctx.setLineDash([5, 5]);
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
       ctx.setLineDash([]);
-      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = "#F5C518"; ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#F5C518";
+      ctx.fill();
     }
   }, [scalePoints, measurePoints, crosshair, normToCanvas, getPageTops]);
 
-  useEffect(() => { drawCanvas(); }, [drawCanvas, pageSizesReady]);
+  useEffect(() => {
+    drawCanvas();
+  }, [drawCanvas, pageSizesReady]);
 
   // ── Recompute measurement ──────────────────────────────────────────────────
   useEffect(() => {
@@ -268,9 +315,12 @@ export default function PlanViewer() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== "application/pdf") { toast.error("Please upload a PDF file."); return; }
+    if (file.type !== "application/pdf") {
+      toast.error("Please upload a PDF file.");
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = ev => {
       setPdfFile(ev.target?.result as string);
       setScaleRatio(null);
       setScalePoints([]);
@@ -286,10 +336,13 @@ export default function PlanViewer() {
   // ── Page render callback (via react-pdf onRenderSuccess) ────────────────────
   // Using onRenderSuccess avoids calling setState inside a ref callback
   // (which causes infinite update loops in React 19).
-  const onPageRenderSuccess = useCallback((pageIndex: number, page: { width: number; height: number }) => {
-    pageSizesRef.current[pageIndex] = { w: page.width, h: page.height };
-    setPageSizesReady((n) => n + 1);
-  }, []);
+  const onPageRenderSuccess = useCallback(
+    (pageIndex: number, page: { width: number; height: number }) => {
+      pageSizesRef.current[pageIndex] = { w: page.width, h: page.height };
+      setPageSizesReady(n => n + 1);
+    },
+    []
+  );
 
   // ── Zoom helpers ───────────────────────────────────────────────────────────
   /**
@@ -298,55 +351,62 @@ export default function PlanViewer() {
    * - Debounces the actual PDF re-render by DEBOUNCE_MS
    * - Adjusts scroll so the focal content point stays under the cursor
    */
-  const applyZoom = useCallback((
-    newZoomRaw: number,
-    focalClientX?: number,
-    focalClientY?: number
-  ) => {
-    const scrollEl = scrollAreaRef.current;
-    if (!scrollEl) return;
+  const applyZoom = useCallback(
+    (newZoomRaw: number, focalClientX?: number, focalClientY?: number) => {
+      const scrollEl = scrollAreaRef.current;
+      if (!scrollEl) return;
 
-    const oldZoom = displayZoomRef.current;
-    const newZoom = clamp(parseFloat(newZoomRaw.toFixed(4)), MIN_ZOOM, MAX_ZOOM);
-    if (Math.abs(newZoom - oldZoom) < 0.001) return;
+      const oldZoom = displayZoomRef.current;
+      const newZoom = clamp(
+        parseFloat(newZoomRaw.toFixed(4)),
+        MIN_ZOOM,
+        MAX_ZOOM
+      );
+      if (Math.abs(newZoom - oldZoom) < 0.001) return;
 
-    // Determine focal point in scroll-area-local coords
-    const rect = scrollEl.getBoundingClientRect();
-    const vpX = focalClientX !== undefined ? focalClientX - rect.left : rect.width / 2;
-    const vpY = focalClientY !== undefined ? focalClientY - rect.top  : rect.height / 2;
+      // Determine focal point in scroll-area-local coords
+      const rect = scrollEl.getBoundingClientRect();
+      const vpX =
+        focalClientX !== undefined ? focalClientX - rect.left : rect.width / 2;
+      const vpY =
+        focalClientY !== undefined ? focalClientY - rect.top : rect.height / 2;
 
-    // Content coordinate under focal point at OLD zoom
-    const contentX = (scrollEl.scrollLeft + vpX) / oldZoom;
-    const contentY = (scrollEl.scrollTop  + vpY) / oldZoom;
+      // Content coordinate under focal point at OLD zoom
+      const contentX = (scrollEl.scrollLeft + vpX) / oldZoom;
+      const contentY = (scrollEl.scrollTop + vpY) / oldZoom;
 
-    // Update display zoom immediately
-    setDisplayZoom(newZoom);
-    displayZoomRef.current = newZoom;
+      // Update display zoom immediately
+      setDisplayZoom(newZoom);
+      displayZoomRef.current = newZoom;
 
-    // Adjust scroll so focal content point stays fixed
-    // (content dimensions scale proportionally with zoom)
-    scrollEl.scrollLeft = contentX * newZoom - vpX;
-    scrollEl.scrollTop  = contentY * newZoom - vpY;
+      // Adjust scroll so focal content point stays fixed
+      // (content dimensions scale proportionally with zoom)
+      scrollEl.scrollLeft = contentX * newZoom - vpX;
+      scrollEl.scrollTop = contentY * newZoom - vpY;
 
-    // Debounce the actual PDF re-render
-    if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
-    zoomDebounceRef.current = setTimeout(() => {
-      pageSizesRef.current = [];
-      setPageSizesReady(0);
-      setRenderZoom(newZoom);
-      renderZoomRef.current = newZoom;
-    }, DEBOUNCE_MS);
-  }, [setRenderZoom]);
+      // Debounce the actual PDF re-render
+      if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
+      zoomDebounceRef.current = setTimeout(() => {
+        pageSizesRef.current = [];
+        setPageSizesReady(0);
+        setRenderZoom(newZoom);
+        renderZoomRef.current = newZoom;
+      }, DEBOUNCE_MS);
+    },
+    [setRenderZoom]
+  );
 
   const zoomIn = useCallback(() => {
     const cur = displayZoomRef.current;
-    const next = ZOOM_STEPS.find(s => s > cur + 0.01) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    const next =
+      ZOOM_STEPS.find(s => s > cur + 0.01) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
     applyZoom(next);
   }, [applyZoom]);
 
   const zoomOut = useCallback(() => {
     const cur = displayZoomRef.current;
-    const prev = [...ZOOM_STEPS].reverse().find(s => s < cur - 0.01) ?? ZOOM_STEPS[0];
+    const prev =
+      [...ZOOM_STEPS].reverse().find(s => s < cur - 0.01) ?? ZOOM_STEPS[0];
     applyZoom(prev);
   }, [applyZoom]);
 
@@ -388,14 +448,21 @@ export default function PlanViewer() {
     };
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        pinchRef.current = { startDist: getTouchDist(e), startZoom: displayZoomRef.current };
+        pinchRef.current = {
+          startDist: getTouchDist(e),
+          startZoom: displayZoomRef.current,
+        };
       }
     };
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length === 2 && pinchRef.current) {
         e.preventDefault();
         const ratio = getTouchDist(e) / pinchRef.current.startDist;
-        const newZoom = clamp(pinchRef.current.startZoom * ratio, MIN_ZOOM, MAX_ZOOM);
+        const newZoom = clamp(
+          pinchRef.current.startZoom * ratio,
+          MIN_ZOOM,
+          MAX_ZOOM
+        );
         const mid = {
           x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
           y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
@@ -403,7 +470,9 @@ export default function PlanViewer() {
         applyZoom(newZoom, mid.x, mid.y);
       }
     };
-    const onTouchEnd = () => { pinchRef.current = null; };
+    const onTouchEnd = () => {
+      pinchRef.current = null;
+    };
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
@@ -415,61 +484,81 @@ export default function PlanViewer() {
   }, [applyZoom]);
 
   // ── Canvas click handler ───────────────────────────────────────────────────
-  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    // Canvas is rendered at renderZoom; getBoundingClientRect gives display size
-    // which equals renderZoom * naturalSize. We need canvas pixel coords.
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const cx = (e.clientX - rect.left) * scaleX;
-    const cy = (e.clientY - rect.top)  * scaleY;
+  const handleCanvasClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      // Canvas is rendered at renderZoom; getBoundingClientRect gives display size
+      // which equals renderZoom * naturalSize. We need canvas pixel coords.
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * scaleX;
+      const cy = (e.clientY - rect.top) * scaleY;
 
-    const pt = canvasToNorm(cx, cy);
-    if (!pt) return;
+      const pt = canvasToNorm(cx, cy);
+      if (!pt) return;
 
-    const m = modeRef.current;
-    if (m === "set-scale-p1") {
-      setScalePoints([pt]);
-      setMode("set-scale-p2");
-      modeRef.current = "set-scale-p2";
-    } else if (m === "set-scale-p2") {
-      setScalePoints((prev) => [...prev.slice(0, 1), pt]);
-      setMode("set-scale-p2");
-    } else if (m === "measure") {
-      setMeasurePoints((prev) => [...prev, pt]);
-    }
-  }, [canvasToNorm, setScalePoints, setMeasurePoints]);
+      const m = modeRef.current;
+      if (m === "set-scale-p1") {
+        setScalePoints([pt]);
+        setMode("set-scale-p2");
+        modeRef.current = "set-scale-p2";
+      } else if (m === "set-scale-p2") {
+        setScalePoints(prev => [...prev.slice(0, 1), pt]);
+        setMode("set-scale-p2");
+      } else if (m === "measure") {
+        setMeasurePoints(prev => [...prev, pt]);
+      }
+    },
+    [canvasToNorm, setScalePoints, setMeasurePoints]
+  );
 
   // ── Canvas mouse move (crosshair) ──────────────────────────────────────────
-  const handleCanvasMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (modeRef.current === "none") { setCrosshair(null); return; }
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    setCrosshair({
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top)  * scaleY,
-    });
-  }, []);
+  const handleCanvasMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      if (modeRef.current === "none") {
+        setCrosshair(null);
+        return;
+      }
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      setCrosshair({
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY,
+      });
+    },
+    []
+  );
 
   // ── Confirm scale ──────────────────────────────────────────────────────────
   const confirmScale = useCallback(() => {
-    if (scalePoints.length < 2) { toast.error("Place both scale points first."); return; }
+    if (scalePoints.length < 2) {
+      toast.error("Place both scale points first.");
+      return;
+    }
     const d = parseFloat(knownDistance);
-    if (!d || d <= 0) { toast.error("Enter a valid distance in feet."); return; }
+    if (!d || d <= 0) {
+      toast.error("Enter a valid distance in feet.");
+      return;
+    }
     const pxDist = normDist(scalePoints[0], scalePoints[1]);
-    if (pxDist < 2) { toast.error("Points are too close together. Try again."); return; }
+    if (pxDist < 2) {
+      toast.error("Points are too close together. Try again.");
+      return;
+    }
     // Store as px/ft at zoom=1 (zoom-independent)
     const pxPerFtAtCurrentZoom = pxDist / d;
     const pxPerFtAtZoom1 = pxPerFtAtCurrentZoom / renderZoom;
     setScaleRatio(pxPerFtAtZoom1);
     setMode("none");
     modeRef.current = "none";
-    toast.success(`Scale set: 1 ft = ${(pxDist / d).toFixed(2)} px at current zoom.`);
+    toast.success(
+      `Scale set: 1 ft = ${(pxDist / d).toFixed(2)} px at current zoom.`
+    );
   }, [scalePoints, knownDistance, normDist, renderZoom, setScaleRatio]);
 
   // ── Undo ───────────────────────────────────────────────────────────────────
@@ -483,17 +572,26 @@ export default function PlanViewer() {
     } else if (measurePoints.length > 0) {
       const next = measurePoints.slice(0, -1);
       setMeasurePoints(next);
-      toast.info(next.length > 0 ? `Removed last point (${next.length} remaining).` : "All measure points cleared.");
+      toast.info(
+        next.length > 0
+          ? `Removed last point (${next.length} remaining).`
+          : "All measure points cleared."
+      );
     } else {
       toast.info("Nothing to undo.");
     }
   }, [scalePoints, measurePoints, setScalePoints, setMeasurePoints]);
 
-  const canUndo = (mode === "set-scale-p2" && scalePoints.length > 0) || measurePoints.length > 0;
+  const canUndo =
+    (mode === "set-scale-p2" && scalePoints.length > 0) ||
+    measurePoints.length > 0;
 
   // ── Push to Civil ──────────────────────────────────────────────────────────
   const handlePushToCivil = () => {
-    if (!measuredFeet || measuredFeet <= 0) { toast.error("No measurement yet."); return; }
+    if (!measuredFeet || measuredFeet <= 0) {
+      toast.error("No measurement yet.");
+      return;
+    }
     pushDistanceToCivil(measuredFeet);
     toast.success(`${measuredFeet} ft pushed to Civil Calculator.`);
   };
@@ -511,7 +609,12 @@ export default function PlanViewer() {
         <label className="flex items-center gap-2 px-3 py-2 rounded-md bg-secondary text-secondary-foreground text-sm font-medium cursor-pointer hover:bg-accent transition-colors">
           <Upload size={15} />
           <span>Load PDF</span>
-          <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
+          <input
+            type="file"
+            accept=".pdf"
+            className="hidden"
+            onChange={handleFileChange}
+          />
         </label>
 
         <div className="w-px h-6 bg-border" />
@@ -519,12 +622,18 @@ export default function PlanViewer() {
         {/* Set Scale */}
         <Button
           size="sm"
-          variant={mode === "set-scale-p1" || mode === "set-scale-p2" ? "default" : "outline"}
+          variant={
+            mode === "set-scale-p1" || mode === "set-scale-p2"
+              ? "default"
+              : "outline"
+          }
           onClick={() => {
             setScalePoints([]);
             setMode("set-scale-p1");
             modeRef.current = "set-scale-p1";
-            toast.info("Click the START of your known-distance reference line.");
+            toast.info(
+              "Click the START of your known-distance reference line."
+            );
           }}
           disabled={!pdfFile}
         >
@@ -545,11 +654,15 @@ export default function PlanViewer() {
               type="number"
               placeholder="Distance (ft)"
               value={knownDistance}
-              onChange={(e) => setKnownDistance(e.target.value)}
+              onChange={e => setKnownDistance(e.target.value)}
               className="w-32 h-8 text-sm"
-              onKeyDown={(e) => { if (e.key === "Enter") confirmScale(); }}
+              onKeyDown={e => {
+                if (e.key === "Enter") confirmScale();
+              }}
             />
-            <Button size="sm" onClick={confirmScale}>Confirm</Button>
+            <Button size="sm" onClick={confirmScale}>
+              Confirm
+            </Button>
           </div>
         )}
 
@@ -560,7 +673,10 @@ export default function PlanViewer() {
           size="sm"
           variant={mode === "measure" ? "default" : "outline"}
           onClick={() => {
-            if (!scaleRatio) { toast.error("Set scale first."); return; }
+            if (!scaleRatio) {
+              toast.error("Set scale first.");
+              return;
+            }
             setMode("measure");
             modeRef.current = "measure";
             toast.info("Click points along the path to measure.");
@@ -604,16 +720,34 @@ export default function PlanViewer() {
 
         {/* Zoom controls */}
         <div className="ml-auto flex items-center gap-1">
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={zoomOut} title="Zoom out">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={zoomOut}
+            title="Zoom out"
+          >
             <ZoomOut size={15} />
           </Button>
           <span className="text-xs font-mono w-12 text-center tabular-nums">
             {Math.round(displayZoom * 100)}%
           </span>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={zoomIn} title="Zoom in">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={zoomIn}
+            title="Zoom in"
+          >
             <ZoomIn size={15} />
           </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={zoomReset} title="Reset zoom">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={zoomReset}
+            title="Reset zoom"
+          >
             <RotateCcw size={14} />
           </Button>
         </div>
@@ -622,14 +756,25 @@ export default function PlanViewer() {
       {/* ── Hint bar ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-1.5 bg-muted/40 border-b border-border text-xs text-muted-foreground shrink-0">
         <span>
-          {mode === "set-scale-p1" && "Click the START of your known-distance reference line."}
-          {mode === "set-scale-p2" && scalePoints.length < 2 && "Click the END of the reference line."}
-          {mode === "set-scale-p2" && scalePoints.length >= 2 && "Enter the real-world distance and click Confirm."}
-          {mode === "measure" && "Click along the path. Each click adds a vertex. Undo removes the last."}
-          {mode === "none" && `${numPages} page${numPages !== 1 ? "s" : ""}${scaleRatio ? " · Scale ✓" : ""} · Scroll to zoom · Pinch on mobile`}
+          {mode === "set-scale-p1" &&
+            "Click the START of your known-distance reference line."}
+          {mode === "set-scale-p2" &&
+            scalePoints.length < 2 &&
+            "Click the END of the reference line."}
+          {mode === "set-scale-p2" &&
+            scalePoints.length >= 2 &&
+            "Enter the real-world distance and click Confirm."}
+          {mode === "measure" &&
+            "Click along the path. Each click adds a vertex. Undo removes the last."}
+          {mode === "none" &&
+            `${numPages} page${numPages !== 1 ? "s" : ""}${scaleRatio ? " · Scale ✓" : ""} · Scroll to zoom · Pinch on mobile`}
         </span>
         {measuredFeet !== null && measuredFeet > 0 && (
-          <Button size="sm" className="h-7 text-xs gap-1 bg-yellow-400 text-black hover:bg-yellow-300" onClick={handlePushToCivil}>
+          <Button
+            size="sm"
+            className="h-7 text-xs gap-1 bg-yellow-400 text-black hover:bg-yellow-300"
+            onClick={handlePushToCivil}
+          >
             <ArrowRight size={12} />
             Push {measuredFeet} ft to Civil
           </Button>
@@ -652,7 +797,12 @@ export default function PlanViewer() {
             <label className="flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-400 text-black font-semibold cursor-pointer hover:bg-yellow-300 transition-colors">
               <Upload size={16} />
               Load PDF Plan
-              <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
+              <input
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={handleFileChange}
+              />
             </label>
           </div>
         ) : (
@@ -662,12 +812,17 @@ export default function PlanViewer() {
             style={{
               display: "inline-block",
               transformOrigin: "top left",
-              transform: Math.abs(visualScale - 1) > 0.001 ? `scale(${visualScale})` : "none",
+              transform:
+                Math.abs(visualScale - 1) > 0.001
+                  ? `scale(${visualScale})`
+                  : "none",
               // When visual scale != 1, expand the wrapper so scroll area doesn't shrink
-              ...(Math.abs(visualScale - 1) > 0.001 ? {
-                width: `${100 / visualScale}%`,
-                height: `${100 / visualScale}%`,
-              } : {}),
+              ...(Math.abs(visualScale - 1) > 0.001
+                ? {
+                    width: `${100 / visualScale}%`,
+                    height: `${100 / visualScale}%`,
+                  }
+                : {}),
             }}
           >
             <div className="relative" style={{ padding: `${PAGE_GAP}px` }}>
@@ -678,7 +833,9 @@ export default function PlanViewer() {
                   pageSizesRef.current = [];
                   setPageSizesReady(0);
                 }}
-                onLoadError={(err) => toast.error(`PDF load error: ${err.message}`)}
+                onLoadError={err =>
+                  toast.error(`PDF load error: ${err.message}`)
+                }
                 loading={
                   <div className="flex items-center justify-center p-8 text-muted-foreground text-sm">
                     Loading PDF…
@@ -695,7 +852,12 @@ export default function PlanViewer() {
                       scale={BASE_DPI * renderZoom}
                       renderAnnotationLayer={false}
                       renderTextLayer={false}
-                      onRenderSuccess={(page) => onPageRenderSuccess(i, { width: page.width, height: page.height })}
+                      onRenderSuccess={page =>
+                        onPageRenderSuccess(i, {
+                          width: page.width,
+                          height: page.height,
+                        })
+                      }
                     />
                   </div>
                 ))}

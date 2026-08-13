@@ -10,6 +10,17 @@ import { projectAssembliesRouter } from "./routers/projectAssembliesRouter";
 import { projectItemsRouter } from "./routers/projectItemsRouter";
 import { bidSummaryRouter } from "./routers/bidSummaryRouter";
 import { featureFlagsRouter } from "./routers/featureFlagsRouter";
+import { materialsRouter } from "./routers/materialsRouter";
+import { laborRatesRouter } from "./routers/laborRatesRouter";
+import { modifiersRouter } from "./routers/modifiersRouter";
+import { assembliesRouter } from "./routers/assembliesRouter";
+import { bidsRouter } from "./routers/bidsRouter";
+import { bidPdfsRouter } from "./routers/bidPdfsRouter";
+import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
+import { takeoffStampsRouter } from "./routers/takeoffStampsRouter";
+import { kitsRouter } from "./routers/kitsRouter";
+import { onboardingRouter } from "./routers/onboardingRouter";
+import { navigationRouter } from "./routers/navigationRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -23,6 +34,17 @@ export const appRouter = router({
   projectItems: projectItemsRouter,
   bidSummary: bidSummaryRouter,
   featureFlags: featureFlagsRouter,
+  materials: materialsRouter,
+  laborRates: laborRatesRouter,
+  modifiers: modifiersRouter,
+  assemblies: assembliesRouter,
+  bids: bidsRouter,
+  bidPdfs: bidPdfsRouter,
+  takeoffRuns: takeoffRunsRouter,
+  takeoffStamps: takeoffStampsRouter,
+  kits: kitsRouter,
+  onboarding: onboardingRouter,
+  navigation: navigationRouter,
 });
 
 export type AppRouter = typeof appRouter;

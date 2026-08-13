@@ -12,24 +12,34 @@ export const masterItemsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const item = await db.getMasterItemById(input.id, ctx.user.id);
-      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Master item not found." });
+      if (!item)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Master item not found.",
+        });
       return item;
     }),
 
   create: protectedProcedure
-    .input(z.object({
-      itemCode: z.string().max(128).nullable().optional(),
-      category: z.string().max(128).nullable().optional(),
-      description: z.string().min(1).max(512),
-      unit: z.string().max(32).default("EA"),
-      masterMaterialCost: z.number().min(0).default(0),
-      masterLaborHours: z.number().min(0).default(0),
-      notes: z.string().max(2000).nullable().optional(),
-    }))
+    .input(
+      z.object({
+        itemCode: z.string().max(128).nullable().optional(),
+        category: z.string().max(128).nullable().optional(),
+        description: z.string().min(1).max(512),
+        unit: z.string().max(32).default("EA"),
+        masterMaterialCost: z.number().min(0).default(0),
+        masterLaborHours: z.number().min(0).default(0),
+        notes: z.string().max(2000).nullable().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       // Upsert: if an item with the same description already exists for this user, return it instead of creating a duplicate
       const items = await db.getMasterItems(ctx.user.id);
-      const existing = items.find(i => i.description.toLowerCase().trim() === input.description.toLowerCase().trim());
+      const existing = items.find(
+        i =>
+          i.description.toLowerCase().trim() ===
+          input.description.toLowerCase().trim()
+      );
       if (existing) return existing;
       await db.createMasterItem({
         userId: ctx.user.id,
@@ -43,27 +53,39 @@ export const masterItemsRouter = router({
       });
       // Re-fetch to get the full row with id
       const refreshed = await db.getMasterItems(ctx.user.id);
-      const created = refreshed.find(i => i.description.toLowerCase().trim() === input.description.toLowerCase().trim());
+      const created = refreshed.find(
+        i =>
+          i.description.toLowerCase().trim() ===
+          input.description.toLowerCase().trim()
+      );
       return created ?? { success: true };
     }),
 
   update: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      itemCode: z.string().max(128).nullable().optional(),
-      category: z.string().max(128).nullable().optional(),
-      description: z.string().min(1).max(512).optional(),
-      unit: z.string().max(32).optional(),
-      masterMaterialCost: z.number().min(0).optional(),
-      masterLaborHours: z.number().min(0).optional(),
-      notes: z.string().max(2000).nullable().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        itemCode: z.string().max(128).nullable().optional(),
+        category: z.string().max(128).nullable().optional(),
+        description: z.string().min(1).max(512).optional(),
+        unit: z.string().max(32).optional(),
+        masterMaterialCost: z.number().min(0).optional(),
+        masterLaborHours: z.number().min(0).optional(),
+        notes: z.string().max(2000).nullable().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const { id, masterMaterialCost, masterLaborHours, ...rest } = input;
       const data: Record<string, unknown> = { ...rest };
-      if (masterMaterialCost !== undefined) data.masterMaterialCost = String(masterMaterialCost);
-      if (masterLaborHours !== undefined) data.masterLaborHours = String(masterLaborHours);
-      await db.updateMasterItem(id, ctx.user.id, data as Parameters<typeof db.updateMasterItem>[2]);
+      if (masterMaterialCost !== undefined)
+        data.masterMaterialCost = String(masterMaterialCost);
+      if (masterLaborHours !== undefined)
+        data.masterLaborHours = String(masterLaborHours);
+      await db.updateMasterItem(
+        id,
+        ctx.user.id,
+        data as Parameters<typeof db.updateMasterItem>[2]
+      );
       return { success: true };
     }),
 
@@ -75,24 +97,32 @@ export const masterItemsRouter = router({
     }),
 
   bulkImport: protectedProcedure
-    .input(z.array(z.object({
-      itemCode: z.string().max(128).optional(),
-      category: z.string().max(128).optional(),
-      description: z.string().min(1).max(512),
-      unit: z.string().max(32).default("EA"),
-      masterMaterialCost: z.number().min(0).default(0),
-      masterLaborHours: z.number().min(0).default(0),
-    })).max(500))
+    .input(
+      z
+        .array(
+          z.object({
+            itemCode: z.string().max(128).optional(),
+            category: z.string().max(128).optional(),
+            description: z.string().min(1).max(512),
+            unit: z.string().max(32).default("EA"),
+            masterMaterialCost: z.number().min(0).default(0),
+            masterLaborHours: z.number().min(0).default(0),
+          })
+        )
+        .max(500)
+    )
     .mutation(async ({ input, ctx }) => {
-      await db.bulkInsertMasterItems(input.map(row => ({
-        userId: ctx.user.id,
-        itemCode: row.itemCode ?? null,
-        category: row.category ?? null,
-        description: row.description,
-        unit: row.unit,
-        masterMaterialCost: String(row.masterMaterialCost),
-        masterLaborHours: String(row.masterLaborHours),
-      })));
+      await db.bulkInsertMasterItems(
+        input.map(row => ({
+          userId: ctx.user.id,
+          itemCode: row.itemCode ?? null,
+          category: row.category ?? null,
+          description: row.description,
+          unit: row.unit,
+          masterMaterialCost: String(row.masterMaterialCost),
+          masterLaborHours: String(row.masterLaborHours),
+        }))
+      );
       return { success: true, count: input.length };
     }),
 });

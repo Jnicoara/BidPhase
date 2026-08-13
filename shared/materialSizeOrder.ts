@@ -1,0 +1,244 @@
+/**
+ * Ordering materials by physical size, smallest to largest.
+ *
+ * ── Why none of this can be a numeric sort ───────────────────────────────────
+ * American Wire Gauge runs BACKWARDS: a bigger number is a smaller wire, so 18
+ * is the thinnest and 1 is far thicker. Then at 1/0 the whole scheme inverts —
+ * 1/0 is bigger than 1, 4/0 is bigger than 1/0 — and above that it stops being
+ * a gauge at all and becomes kcmil, which finally does count upwards.
+ *
+ * Sort those as numbers and you get 1, 2, 3, 4, 10, 12, 14, 18 — exactly
+ * backwards. Sort them as text and "4/0" lands between "4" and "6", putting the
+ * heaviest conductor in the catalog in the middle of the thin ones. Neither
+ * failure looks like a bug on screen: the list is *sorted*, just wrongly, and an
+ * estimator scanning for the next size up finds the wrong row where they expect
+ * the right one.
+ *
+ * So the order is written out, once, as data.
+ *
+ * ── The marker decides the scale, never the bare number ──────────────────────
+ * A leading number on its own is ambiguous and reading it as a gauge is a trap
+ * that catches real rows: `1/2" EMT` starts with a 1, and `4 ft LED strip`
+ * starts with a 4, and neither is a #1 or a #4 conductor. Both were mis-sorted
+ * by an earlier version of this file that checked the number before the units.
+ * So a size is only recognised through its MARKER — a `#`, an aught, a `kcmil`,
+ * an inch mark, `ft`, an `A` — and a number with no marker is not a size.
+ *
+ * Different markers mean different scales, which are not comparable: AWG #4 and
+ * 4 inches and 4 amps share a digit and nothing else. So the key carries its
+ * scale, and rows sort by scale first. Within a category that is almost always
+ * a single scale; where a category genuinely mixes them (Lighting has fixtures
+ * sized in inches and tracks sized in feet) the effect is a sensible sub-group
+ * per kind rather than a meaningless interleave.
+ */
+
+/**
+ * Every conductor size the catalog carries, thinnest first.
+ *
+ * Read this as the physical sequence it is: #18 is bell wire, #14 and #12 are
+ * branch circuits, 4/0 is a 200A service, 500 kcmil is a feeder you need two
+ * people to pull. Add new sizes in position rather than at the end.
+ */
+export const CONDUCTOR_SIZES = [
+  "18",
+  "16",
+  "14",
+  "12",
+  "10",
+  "8",
+  "6",
+  "4",
+  "3",
+  "2",
+  "1",
+  "1/0",
+  "2/0",
+  "3/0",
+  "4/0",
+  "250",
+  "300",
+  "350",
+  "400",
+  "500",
+  "600",
+  "750",
+  "1000",
+] as const;
+
+const CONDUCTOR_RANK = new Map<string, number>(
+  CONDUCTOR_SIZES.map((size, index) => [size, index])
+);
+
+/**
+ * Trade sizes for raceway, smallest first.
+ *
+ * The same trap in a smaller way: "1/2" and "3/4" sort after "1" as text, and
+ * "1-1/4" sorts before "1/2".
+ */
+export const TRADE_SIZE_ORDER = [
+  '3/8"',
+  '1/2"',
+  '3/4"',
+  '1"',
+  '1-1/4"',
+  '1-1/2"',
+  '2"',
+  '2-1/2"',
+  '3"',
+  '3-1/2"',
+  '4"',
+  '5"',
+  '6"',
+] as const;
+
+const TRADE_SIZE_RANK = new Map<string, number>(
+  TRADE_SIZE_ORDER.map((size, index) => [size, index])
+);
+
+/**
+ * Which scale a row's size is measured on. Ordered so that when a category does
+ * mix them, the grouping reads sensibly: conductors, then raceway, then rated
+ * equipment, then physical lengths, then everything unsized.
+ */
+const SCALE = {
+  conductor: 0,
+  tradeSize: 1,
+  amps: 2,
+  length: 3,
+  none: 4,
+} as const;
+
+type SizeKey = {
+  scale: number;
+  /** Position on that scale. Meaningless across scales. */
+  value: number;
+  /** Conductor count in a cable spec — the 2 in "12-2 NM-B". 0 otherwise. */
+  count: number;
+};
+
+const conductor = (size: string): SizeKey | null => {
+  const rank = CONDUCTOR_RANK.get(size);
+  return rank === undefined
+    ? null
+    : { scale: SCALE.conductor, value: rank, count: 0 };
+};
+
+/** "1-1/4" -> 1.25, "3/4" -> 0.75, "6" -> 6. */
+function inchesOf(token: string): number | null {
+  const mixed = token.match(/^(\d+)-(\d+)\/(\d+)$/);
+  if (mixed) return Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
+  const fraction = token.match(/^(\d+)\/(\d+)$/);
+  if (fraction) return Number(fraction[1]) / Number(fraction[2]);
+  const whole = token.match(/^(\d+(?:\.\d+)?)$/);
+  return whole ? Number(whole[1]) : null;
+}
+
+/**
+ * Read the size out of a material name, or null when it states none.
+ *
+ * Ordered by how unambiguous the marker is, most first. Every branch requires
+ * evidence of its unit; none of them settles for a bare number.
+ */
+function readSize(name: string): SizeKey | null {
+  // A hashed gauge — "#12 THHN", "#4/0 XHHW aluminum". Unambiguous.
+  const hashed = name.match(/^#(\d{1,4}\/0|\d{1,4})(?![\d/])/);
+  if (hashed) return conductor(hashed[1]);
+
+  // kcmil, named as such — "250 kcmil THHN".
+  const kcmil = name.match(/^(\d{2,4})\s*kcmil\b/i);
+  if (kcmil) return conductor(kcmil[1]);
+
+  // An aught with no hash — "4/0-3 SER aluminum", "1/0-3 SER aluminum".
+  const aught = name.match(/^(\d\/0)(?![\d/])/);
+  if (aught) {
+    const key = conductor(aught[1]);
+    if (key) return { ...key, count: cableCount(name) };
+  }
+
+  // A cable spec — "12-2 NM-B", "14-3 MC cable". The leading element is the
+  // gauge; the element after the hyphen is how many conductors.
+  //
+  // The lookahead is what keeps `1-1/4" EMT` out of here: without it the "1-1"
+  // reads as a #1 conductor with one conductor in it, and every mixed trade
+  // size sorts among the wire.
+  const cable = name.match(/^(\d{1,4})-(\d)(?![\d/])/);
+  if (cable) {
+    const key = conductor(cable[1]);
+    if (key) return { ...key, count: Number(cable[2]) };
+  }
+
+  // A kcmil element list — "250-250-250 SER aluminum". Written as three sizes
+  // rather than a gauge and a count, so it needs its own branch; the leading
+  // element is still what determines how big the cable is.
+  const kcmilSet = name.match(/^(\d{3,4})-\d{3,4}\b/);
+  if (kcmilSet) return conductor(kcmilSet[1]);
+
+  // An inch mark — either a raceway trade size or a plain measurement.
+  const inch = name.match(/^(\d+(?:-\d+\/\d+)?(?:\/\d+)?)"/);
+  if (inch) {
+    const trade = TRADE_SIZE_RANK.get(`${inch[1]}"`);
+    if (trade !== undefined)
+      return { scale: SCALE.tradeSize, value: trade, count: 0 };
+    const inches = inchesOf(inch[1]);
+    if (inches !== null)
+      return { scale: SCALE.length, value: inches, count: 0 };
+  }
+
+  // Feet — "4 ft LED strip fixture", "8 ft ground rod". Normalised to inches so
+  // a fixture named in inches and one named in feet compare correctly.
+  const feet = name.match(/^([\d.]+)\s*ft\b/i);
+  if (feet)
+    return { scale: SCALE.length, value: Number(feet[1]) * 12, count: 0 };
+
+  // An amperage — "20A breaker", "100A main panel", "20/2 breaker". For a
+  // two-pole breaker the "/2" is poles, not size, so 20/2 sorts with 20A.
+  const amps = name.match(/^(\d{1,4})\s*(?:A\b|\/\d\b)/);
+  if (amps) return { scale: SCALE.amps, value: Number(amps[1]), count: 0 };
+
+  return null;
+}
+
+/** The conductor COUNT in a multi-element cable spec like "4/0-4/0-2/0". */
+function cableCount(name: string): number {
+  const match = name.match(/^(?:\d\/0)-(\d)\b/);
+  return match ? Number(match[1]) : 0;
+}
+
+/**
+ * A sortable key for one material, ordering by physical size within a category.
+ *
+ * The name is the final tiebreaker on purpose — two 3/4" fittings that differ
+ * only in kind should land in a stable, predictable order rather than shuffling
+ * between renders.
+ *
+ * Anything with no recognisable size sorts after everything that has one, by
+ * name: a category holding "Wire nuts" and "#12 THHN" should lead with the
+ * sized rows in size order rather than interleaving on alphabetical accident.
+ */
+export function materialSizeKey(
+  name: string
+): [number, number, number, string] {
+  const trimmed = name.trim();
+  const size = readSize(trimmed);
+  return [
+    size?.scale ?? SCALE.none,
+    size?.value ?? 0,
+    size?.count ?? 0,
+    trimmed.toLowerCase(),
+  ];
+}
+
+/** Compare two materials by size within a category. */
+export function compareBySize(a: string, b: string): number {
+  const [aScale, aValue, aCount, aName] = materialSizeKey(a);
+  const [bScale, bValue, bCount, bName] = materialSizeKey(b);
+  if (aScale !== bScale) return aScale - bScale;
+  if (aValue !== bValue) return aValue - bValue;
+  if (aCount !== bCount) return aCount - bCount;
+  return aName < bName ? -1 : aName > bName ? 1 : 0;
+}
+
+/** True when the name states a size this module understands. */
+export function hasSize(name: string): boolean {
+  return readSize(name.trim()) !== null;
+}
