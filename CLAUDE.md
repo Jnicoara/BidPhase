@@ -36,6 +36,44 @@ Whenever you commit a meaningful change, **also add a one-or-two-line plain-Engl
 - Write for a non-programmer reading it months later: what changed and why it matters, not which functions moved. "Fixed a security gap that let any logged-in user read another contractor's bid pricing" beats "added ownership checks to projectItemsRouter".
 - Skip it for trivial changes — typo fixes, formatting, comment-only edits.
 
+## Deploying — GitHub is the source of truth, Manus pulls from it
+
+**Pushing to GitHub does not deploy anything.** There is no pipeline between
+the two: no CI, no build hook, no deploy config, and GitHub is the only git
+remote. The live site is deployed from the **Manus project's own copy** of this
+repo, by a human clicking **Deploy** in the Manus UI.
+
+That gap is not theoretical — it has already caused one silent divergence. The
+project was originally built inside Manus (the `Checkpoint:` commits, up to
+`ff469cb` on 2026-08-10), and the work then moved to a local checkout driven by
+Claude Code. Every commit after `ff469cb` reached GitHub and nothing else, so
+the live site kept serving the old build while `main` moved 51 commits ahead.
+Nothing was broken; the two copies simply had no reason to meet.
+
+**The direction is fixed: GitHub → Manus, never the reverse.** The local
+checkout plus GitHub is where real work happens. Manus is a deployment target
+that pulls, not a place to edit. Editing in the Manus workspace re-opens the
+same divergence from the other side — if it happens anyway, push that work to
+GitHub before deploying, never merge GitHub into it.
+
+Before every deploy, in a Manus session:
+
+1. **Check for anything Manus has that GitHub does not** — `git status` and
+   `git log origin/main..HEAD` in the sandbox. Expect both to be empty. If they
+   are not, stop: that is unpushed work, and pulling will bury it.
+2. **`git pull origin main`** — this is the bridge that does not otherwise exist.
+3. **`pnpm db:push`** — apply pending migrations **before** deploying, not after.
+   A skipped migration does not crash the app; it starts, serves pages and shows
+   wrong data, which is the expensive way to find out (see § Commands).
+4. **Save a checkpoint**, then **Deploy**.
+5. **Verify a feature that needs the platform** — the navigation helper is the
+   cheapest probe, because it exercises `BUILT_IN_FORGE_API_KEY`, which only
+   exists on deployed infrastructure and never locally.
+
+`references/deploying.md` has the same sequence with the exact commands, the
+platform services the app depends on, and what to check when a deploy looks
+like it worked but didn't.
+
 ## Materials — always ship trade slang with a new material
 
 Every material added to the catalog gets `searchAliases` populated with the
