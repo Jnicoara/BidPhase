@@ -532,7 +532,12 @@ export const MATERIAL_CATEGORIES = [
   "Receptacles",
   "Switches",
   "Wall Plates & Misc",
-  "Panels & Breakers",
+  // Split apart in 0028. A panel is a box you hang and a breaker is a part you
+  // stock by the dozen — shelving them together meant scrolling past five panel
+  // sizes to reach the 20A breakers, on a shelf an estimator reads constantly.
+  // Panels first: you hang the panel, then you populate it.
+  "Panels",
+  "Breakers",
   "Lighting Hardware",
   "Grounding & Bonding",
   "Life Safety",

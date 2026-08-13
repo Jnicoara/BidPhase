@@ -41,6 +41,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineNumberField } from "@/components/InlineNumberField";
 import { smartSearch } from "@/lib/smartSearch";
+import { sortMaterialsForDisplay } from "@shared/materialOrder";
 import {
   PRICE_AGE_CLASSES,
   priceAgeDisplay,
@@ -125,8 +126,14 @@ export default function MaterialDatabasePage({
       list = list
         .filter(m => order.has(String(m.id)))
         .sort((a, b) => order.get(String(a.id))! - order.get(String(b.id))!);
+      // Search results stay relevance-ordered; imposing catalog order on them
+      // would bury the best match under whichever shelf it sits on.
+      return list;
     }
-    return list;
+    // Category → Type → Size, the same rule the Materials screen uses. This
+    // screen previously showed whatever order the server returned, so the two
+    // listed one catalog two ways.
+    return sortMaterialsForDisplay(list);
   }, [materials, query, ageFilter, now]);
 
   const rowVirtualizer = useVirtualizer({
