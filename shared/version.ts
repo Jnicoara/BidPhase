@@ -10,10 +10,10 @@
  * The number tracks the `vX.YY` checkpoint convention used in commit messages
  * (see CLAUDE.md § Conventions) — bump it here when a checkpoint ships.
  */
-export const APP_VERSION = "v5.95";
+export const APP_VERSION = "v5.96";
 
 /** Edition suffix — the app is field-first, and the tag has always said so. */
 export const APP_EDITION = "Field Edition";
 
-/** What the UI actually renders, e.g. "v5.95 · Field Edition". */
+/** What the UI actually renders, e.g. "v5.96 · Field Edition". */
 export const APP_VERSION_LABEL = `${APP_VERSION} · ${APP_EDITION}`;
