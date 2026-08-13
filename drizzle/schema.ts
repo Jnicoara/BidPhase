@@ -808,6 +808,39 @@ export const assemblies = mysqlTable(
       .notNull(),
 
     /**
+     * Time this assembly takes that no material line accounts for — laying out,
+     * testing, cleanup, the walk back to the van. Flat hours, added to
+     * `baseLaborHours` before anything else touches them.
+     *
+     * ── Per assembly, and flat, on purpose ───────────────────────────────────
+     * Not a company-wide number and not a percentage. Swapping a receptacle and
+     * changing out a panel carry completely different amounts of setup that has
+     * nothing to do with how many devices are in the recipe, so this is decided
+     * once per assembly by whoever knows that work.
+     *
+     * ── Not the productivity factor, and never mixed with it ─────────────────
+     * The two are unrelated layers and the only thing they share is the word
+     * "labor". This is ADDITIVE hours belonging to one assembly, applied first.
+     * The productivity factor is a company- or bid-level PERCENTAGE applied last
+     * to everything (see pricing_defaults.productivityPct). The order is
+     *
+     *   (material hours + overhead hours) × (1 + modifiers) × (1 + productivity)
+     *
+     * and shared/pricing.ts is the one place that knows it. Folding this into
+     * the modifier sum or the productivity step would make a fixed 20-minute
+     * trip charge scale with job conditions, which is exactly what it is not.
+     *
+     * Ships at 0 for every starter and every existing row, so nothing inflates
+     * until someone deliberately sets it.
+     */
+    overheadLaborHours: decimal("overheadLaborHours", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
+
+    /**
      * Which role does this work. Nullable, and "set null" on delete rather than
      * cascade: losing a labor rate must not silently delete the recipe that
      * referenced it. The UI shows such an assembly as needing a role picked.

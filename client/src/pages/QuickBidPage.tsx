@@ -34,6 +34,7 @@ import { InlineNumberField } from "@/components/InlineNumberField";
 import { DuplicateUnitPanel } from "@/components/DuplicateUnitPanel";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { smartSearch } from "@/lib/smartSearch";
+import { addAssemblyOverheadHours } from "@shared/pricing";
 
 const money = (value: number) =>
   value.toLocaleString("en-US", {
@@ -312,8 +313,17 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                     <span className="text-xs text-muted-foreground">
                       {assembly.category}
                     </span>
+                    {/* Work hours plus the assembly's own overhead — the same
+                        figure that gets snapshotted when this is added. */}
                     <span className="font-mono text-xs text-muted-foreground">
-                      {round(Number(assembly.baseLaborHours), 2)} h
+                      {round(
+                        addAssemblyOverheadHours(
+                          Number(assembly.baseLaborHours),
+                          Number(assembly.overheadLaborHours)
+                        ),
+                        2
+                      )}{" "}
+                      h
                     </span>
                     {index === highlight && (
                       <Badge

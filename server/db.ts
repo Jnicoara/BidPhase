@@ -107,6 +107,7 @@ import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
 import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
 import { BASELINE_KITS } from "./seed/baselineKits";
 import { hourlyCostFor } from "../shared/laborRateLookup";
+import { addAssemblyOverheadHours } from "../shared/pricing";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -3191,7 +3192,27 @@ export async function addAssemblyToBid(
     qty: qty.toFixed(4),
     unitLabel,
     snapshotMaterialCost: materialCost.toFixed(4),
-    snapshotLaborHours: Number(detail.baseLaborHours).toFixed(4),
+    /**
+     * Material-driven hours AND the assembly's overhead hours, as one figure.
+     *
+     * Rolled up here rather than frozen as two columns, for the same reason
+     * `snapshotMaterialCost` is one number rather than a copy of the recipe and
+     * `snapshotModifierPct` is one summed fraction rather than a list: the
+     * snapshot stores what the engine needs to re-price this line, not a replica
+     * of the library row it came from.
+     *
+     * It also removes a whole class of bug. Three places copy a line's snapshot
+     * — mass duplicate, unit generation and template push — and a second hours
+     * column is a column each of them could forget, which would silently
+     * under-price every generated room. One field cannot be half-copied.
+     *
+     * The split stays visible on the assembly itself, which is where an
+     * estimator would go to ask what the hours are made of.
+     */
+    snapshotLaborHours: addAssemblyOverheadHours(
+      Number(detail.baseLaborHours),
+      Number(detail.overheadLaborHours)
+    ).toFixed(4),
     snapshotModifierPct: modifierPct.toFixed(4),
     snapshotLaborRate: laborRate.toFixed(4),
     snapshotModifierNames: applied.map(m => m.name),
@@ -3743,6 +3764,8 @@ export type KitItemLine = {
   name: string;
   category: Assembly["category"];
   baseLaborHours: string;
+  /** Carried alongside the base hours so a kit's rollup counts them too. */
+  overheadLaborHours: string;
   laborRateId: number | null;
 };
 
@@ -3797,6 +3820,7 @@ export async function getKitItems(kitId: number): Promise<KitItemLine[]> {
       name: assemblies.name,
       category: assemblies.category,
       baseLaborHours: assemblies.baseLaborHours,
+      overheadLaborHours: assemblies.overheadLaborHours,
       laborRateId: assemblies.laborRateId,
     })
     .from(kitAssemblies)

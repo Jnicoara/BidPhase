@@ -69,6 +69,16 @@ export function priceLine(line: BidLineItem, productivityPct: number) {
     // assembly, so it enters as one material line at qty 1 and the bid
     // quantity scales the whole thing.
     materials: [{ costPerUnit: Number(line.snapshotMaterialCost), qty: 1 }],
+    /**
+     * Already includes the assembly's overhead hours — they were added into
+     * this figure when the line was snapshotted (see addAssemblyToBid).
+     *
+     * So `overheadLaborHours` is deliberately NOT passed below. Passing it
+     * would add the same setup time twice, and the result would look entirely
+     * plausible: a bid a few percent high with nothing on screen to explain it.
+     * server/assemblyOverhead.test.ts asserts a bid line prices to exactly the
+     * assembly it came from, which is what would catch that.
+     */
     baseLaborHours: Number(line.snapshotLaborHours),
     modifiers: [{ laborAdjustmentPct: Number(line.snapshotModifierPct) }],
     laborRate: Number(line.snapshotLaborRate),
