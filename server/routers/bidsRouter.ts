@@ -549,6 +549,133 @@ export const bidsRouter = router({
     }),
 
   /**
+   * Every unit with its link role — template, linked copy, forked copy, or a
+   * one-off label. Drives the badge on each unit and which actions it offers.
+   */
+  unitStates: protectedProcedure
+    .input(z.object({ bidId: z.number().int().positive() }))
+    .query(async ({ input, ctx }) => {
+      await requireBid(input.bidId, ctx.user.id);
+      return db.getBidUnitStates(input.bidId);
+    }),
+
+  /**
+   * Generate copies from one or more templates in a single action.
+   *
+   * Numbering is continuous ACROSS the groups, in the order given — 35 standard
+   * rooms then 5 ADA rooms produce Room 101–140, because a hotel numbers rooms
+   * by position, not by spec. Restarting per group would mint two Room 101s.
+   */
+  generateUnits: protectedProcedure
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        baseName: labelSchema,
+        startNumber: z.number().int().min(0).max(100000).default(101),
+        groups: z
+          .array(
+            z.object({
+              sourceUnitLabel: labelSchema,
+              // 200 of one type is a big hotel; beyond that it is a mistake.
+              count: z.number().int().min(1).max(200),
+            })
+          )
+          .min(1)
+          .max(20),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireBid(input.bidId, ctx.user.id);
+      try {
+        return await db.generateBidUnits(
+          input.bidId,
+          input.groups,
+          input.baseName,
+          input.startNumber
+        );
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Could not generate those units.",
+        });
+      }
+    }),
+
+  /**
+   * Push a template's current lines onto every copy still following it.
+   *
+   * Never called automatically. The client confirms first, because this
+   * overwrites whole units and the estimator is the only one who knows whether
+   * the edit they just made was meant for one room or forty.
+   */
+  pushToLinkedCopies: protectedProcedure
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        templateLabel: labelSchema,
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireBid(input.bidId, ctx.user.id);
+      try {
+        return await db.pushTemplateToLinkedCopies(
+          input.bidId,
+          input.templateLabel
+        );
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Could not update the linked copies.",
+        });
+      }
+    }),
+
+  /** Archive every copy still following a template. Forked copies are left. */
+  archiveLinkedCopies: protectedProcedure
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        templateLabel: labelSchema,
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireBid(input.bidId, ctx.user.id);
+      return db.archiveLinkedCopies(input.bidId, input.templateLabel);
+    }),
+
+  /** Undo a bulk archive — the copies come back still linked. */
+  restoreUnits: protectedProcedure
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        unitLabels: z.array(labelSchema).min(1).max(200),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireBid(input.bidId, ctx.user.id);
+      return db.restoreArchivedUnits(input.bidId, input.unitLabels);
+    }),
+
+  /** Break a copy's link by hand, without editing it first. */
+  forkUnit: protectedProcedure
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        unitLabel: labelSchema,
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireBid(input.bidId, ctx.user.id);
+      return { forked: await db.forkBidUnit(input.bidId, input.unitLabel) };
+    }),
+
+  /**
    * Generate N numbered copies of a repeating unit.
    *
    * Copies carry the SOURCE's snapshot, not a fresh read of the library, so

@@ -48,6 +48,8 @@ import { InlineNumberField } from "@/components/InlineNumberField";
 import { asPercent, fromPercent } from "@/lib/inlineEdit";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { DuplicateUnitPanel } from "@/components/DuplicateUnitPanel";
+import { UnitLinkBadge } from "@/components/UnitLinkBadge";
+import { UnitTemplateActions } from "@/components/UnitTemplateActions";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { RETENTION_DAYS } from "@shared/retention";
@@ -172,12 +174,26 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
   const detailQuery = trpc.bids.get.useQuery({ id: bidId });
   const { data: assemblies = [] } = trpc.assemblies.list.useQuery();
   const { data: units = [] } = trpc.bids.units.useQuery({ bidId });
+  const { data: unitStates = [] } = trpc.bids.unitStates.useQuery({ bidId });
   const { data: sheets = [] } = trpc.bidPdfs.list.useQuery({ bidId });
   const sheetCount = sheets.length;
+
+  /**
+   * Link state for a unit header. Looked up rather than joined onto the line
+   * groups because a unit's role depends on the OTHER units pointing at it,
+   * which the per-line data has no way to know.
+   */
+  const unitStateFor = useCallback(
+    (label: string) => unitStates.find(s => s.label === label),
+    [unitStates]
+  );
 
   const refresh = useCallback(() => {
     void utils.bids.get.invalidate({ id: bidId });
     void utils.bids.units.invalidate({ bidId });
+    // Pushing, forking and archiving all change roles rather than lines, so a
+    // refresh that skipped this would leave stale badges beside fresh totals.
+    void utils.bids.unitStates.invalidate({ bidId });
     void utils.bids.list.invalidate();
   }, [utils, bidId]);
 
@@ -424,6 +440,16 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {group.label}
                         </span>
+                        {unitStateFor(group.label) && (
+                          <>
+                            <UnitLinkBadge state={unitStateFor(group.label)!} />
+                            <UnitTemplateActions
+                              bidId={bidId}
+                              state={unitStateFor(group.label)!}
+                              onDone={refresh}
+                            />
+                          </>
+                        )}
                         <span className="text-xs text-muted-foreground/70 ml-auto font-mono">
                           {money(
                             group.lines.reduce(
