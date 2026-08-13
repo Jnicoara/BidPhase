@@ -766,3 +766,8 @@ left as written rather than rewritten to match the rename.
 - [x] Review the newer GitHub schema changes and identify the exact migrations required by the synchronized code
 - [x] Apply only verified, non-destructive schema migrations needed for the merged HelixBid release
 - [x] Verify the restarted application loads without server or client build errors
+
+## v5.93 — Publish Verification & Internal Project Rename
+- [x] Verify the saved checkpoint and GitHub `main` are aligned before publishing
+- [x] Rename the internal Manus project identity from BidPhase to HelixBid
+- [x] Validate the renamed project configuration and document the safe Publish behavior
