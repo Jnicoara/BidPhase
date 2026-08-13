@@ -524,11 +524,16 @@ describe.skipIf(!hasDb)("fork and revert", () => {
     expect(Number(theirs.baseLaborHours)).toBeCloseTo(0.6, 4);
   });
 
-  it("refuses to remove a starter but removes a custom one", async () => {
+  it("removes a starter by forking it, and a custom one in place", async () => {
     const original = await starter();
-    await expect(
-      caller().assemblies.archive({ id: original.id })
-    ).rejects.toThrow(/cannot be removed/i);
+    const { id: archivedId } = await caller().assemblies.archive({
+      id: original.id,
+    });
+    // Starters archive through a fork — the shared row is never touched.
+    expect(archivedId).not.toBe(original.id);
+    expect(
+      (await caller().assemblies.list()).some(a => a.name === original.name)
+    ).toBe(false);
 
     const created = await caller().assemblies.create({
       name: `Disposable ${Date.now()}`,

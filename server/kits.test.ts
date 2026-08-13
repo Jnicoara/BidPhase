@@ -337,12 +337,21 @@ describe.skipIf(!hasDb)("kit fork and revert", () => {
     expect(reverted?.items).toHaveLength(before.items.length);
   });
 
-  it("refuses to remove a starter kit", async () => {
+  it("removes a starter kit by forking it first", async () => {
     const list = await caller().kits.list();
     const starter = list.find(k => k.userId === null)!;
-    await expect(caller().kits.archive({ id: starter.id })).rejects.toThrow(
-      /cannot be removed/i
-    );
+
+    const { id: archivedId } = await caller().kits.archive({ id: starter.id });
+    // The shared row cannot be archived, so the fork takes its place.
+    expect(archivedId).not.toBe(starter.id);
+    expect(
+      (await caller().kits.list()).some(k => k.name === starter.name)
+    ).toBe(false);
+    expect(
+      (await caller().kits.list({ status: "archived" })).some(
+        k => k.name === starter.name
+      )
+    ).toBe(true);
   });
 });
 

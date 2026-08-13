@@ -294,8 +294,11 @@ export const materialsRouter = router({
    * softer name. Assemblies may already reference the material, so it keeps its
    * id either way.
    *
-   * Baseline rows cannot be archived — the user is expected to ignore what they
-   * do not use rather than curate the shipped library.
+   * Works on starters too: archiving one forks it first, so the shared row is
+   * never touched. The returned id may therefore differ from the input id —
+   * callers refetch rather than patching the row they sent. A starter the user
+   * never asked for is theirs to put away; expecting them to scroll past 600
+   * shipped materials forever was the odd position, not this.
    */
   archive: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
@@ -306,12 +309,6 @@ export const materialsRouter = router({
           code: "NOT_FOUND",
           message: "Material not found.",
         });
-      if (target.userId === null) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Materials from the starter library cannot be removed.",
-        });
-      }
       if (target.status === "archived")
         return { id: input.id, alreadyArchived: true };
 

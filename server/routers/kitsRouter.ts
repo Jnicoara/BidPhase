@@ -266,6 +266,10 @@ export const kitsRouter = router({
   /**
    * "Delete" from the working list — actually an archive, always recoverable.
    * The same lifecycle Modifiers has used since Foundation.
+   *
+   * Works on starters too: archiving one forks it first, so the shared row is
+   * never touched. The returned id may therefore differ from the input id —
+   * callers refetch rather than patching the row they sent.
    */
   archive: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
@@ -273,12 +277,6 @@ export const kitsRouter = router({
       const target = await db.getKitById(input.id, ctx.user.id);
       if (!target)
         throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
-      if (target.userId === null) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Starter kits cannot be removed.",
-        });
-      }
       if (target.status === "archived")
         return { id: input.id, alreadyArchived: true };
 
