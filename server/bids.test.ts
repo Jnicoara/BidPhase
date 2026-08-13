@@ -973,3 +973,348 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
     ).rejects.toThrow();
   });
 });
+
+/**
+ * Template links: the four behaviours that make mass-duplicate a template
+ * feature rather than a one-shot copy.
+ *
+ * What each guards:
+ *   â€¢ Continuous numbering across groups â€” restarting per group mints two
+ *     "Room 101"s, which is not a naming nit: every per-unit total downstream
+ *     merges them and the bid quietly prices one room twice.
+ *   â€¢ Push reaches linked copies only. If it reached forked ones it would
+ *     silently overwrite the room someone deliberately customised, and there is
+ *     no way for them to find out.
+ *   â€¢ Editing a copy forks it. If it did not, the next push would revert their
+ *     edit â€” the same failure seen from the other side.
+ *   â€¢ Bulk archive removes copies from the total without destroying the
+ *     snapshot, and leaves forked copies alone.
+ */
+describe.skipIf(!hasDb)("unit template links", () => {
+  /** A bid carrying two distinct template units, so groups have something to mix. */
+  async function bidWithTwoTemplates() {
+    const recep = await readyAssembly();
+    const switchAsm = await readyAssembly("Single-pole switch");
+    const bid = await newBid();
+    // "Standard Room" â€” two lines.
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: recep.id,
+      qty: 4,
+      unitLabel: "Standard Room",
+    });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: switchAsm.id,
+      qty: 2,
+      unitLabel: "Standard Room",
+    });
+    // "ADA Room" â€” one line, deliberately a different shape.
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: recep.id,
+      qty: 6,
+      unitLabel: "ADA Room",
+    });
+    return bid;
+  }
+
+  const labelsOf = (states: { label: string }[]) => states.map(s => s.label);
+
+  it("numbers continuously across groups rather than restarting", async () => {
+    const bid = await bidWithTwoTemplates();
+    const result = await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [
+        { sourceUnitLabel: "Standard Room", count: 3 },
+        { sourceUnitLabel: "ADA Room", count: 2 },
+      ],
+    });
+
+    // One unbroken run 101-105, not 101-103 then 101-102.
+    expect(result.created).toEqual([
+      "Room 101",
+      "Room 102",
+      "Room 103",
+      "Room 104",
+      "Room 105",
+    ]);
+    expect(result.byTemplate["Standard Room"]).toEqual([
+      "Room 101",
+      "Room 102",
+      "Room 103",
+    ]);
+    expect(result.byTemplate["ADA Room"]).toEqual(["Room 104", "Room 105"]);
+  });
+
+  it("gives each group its own template, so copies keep their own shape", async () => {
+    const bid = await bidWithTwoTemplates();
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [
+        { sourceUnitLabel: "Standard Room", count: 2 },
+        { sourceUnitLabel: "ADA Room", count: 2 },
+      ],
+    });
+
+    const detail = await caller().bids.get({ id: bid.id });
+    const linesIn = (label: string) =>
+      detail.lines.filter(l => l.unitLabel === label);
+    expect(linesIn("Room 101")).toHaveLength(2); // from Standard
+    expect(linesIn("Room 104")).toHaveLength(1); // from ADA
+
+    const states = await caller().bids.unitStates({ bidId: bid.id });
+    const byLabel = new Map(states.map(s => [s.label, s]));
+    expect(byLabel.get("Room 101")?.templateLabel).toBe("Standard Room");
+    expect(byLabel.get("Room 104")?.templateLabel).toBe("ADA Room");
+  });
+
+  it("marks templates, linked copies and one-off labels distinctly", async () => {
+    const bid = await bidWithTwoTemplates();
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [{ sourceUnitLabel: "Standard Room", count: 2 }],
+    });
+
+    const states = await caller().bids.unitStates({ bidId: bid.id });
+    const byLabel = new Map(states.map(s => [s.label, s]));
+    expect(byLabel.get("Standard Room")?.role).toBe("template");
+    expect(byLabel.get("Standard Room")?.linkedCount).toBe(2);
+    expect(byLabel.get("Room 101")?.role).toBe("linked");
+    // Never generated from, never generated â€” just a label someone typed.
+    expect(byLabel.get("ADA Room")?.role).toBe("standalone");
+  });
+
+  it("pushes a template edit to its linked copies", async () => {
+    const bid = await bidWithTwoTemplates();
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [{ sourceUnitLabel: "Standard Room", count: 3 }],
+    });
+
+    // Template gains a third line.
+    const extra = await readyAssembly("Single-pole switch");
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: extra.id,
+      qty: 9,
+      unitLabel: "Standard Room",
+    });
+
+    const pushed = await caller().bids.pushToLinkedCopies({
+      bidId: bid.id,
+      templateLabel: "Standard Room",
+    });
+    expect(pushed.updated).toEqual(["Room 101", "Room 102", "Room 103"]);
+
+    const detail = await caller().bids.get({ id: bid.id });
+    for (const label of ["Room 101", "Room 102", "Room 103"]) {
+      expect(detail.lines.filter(l => l.unitLabel === label)).toHaveLength(3);
+    }
+  });
+
+  it("only touches the pushed template's own group", async () => {
+    const bid = await bidWithTwoTemplates();
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [
+        { sourceUnitLabel: "Standard Room", count: 2 },
+        { sourceUnitLabel: "ADA Room", count: 2 },
+      ],
+    });
+
+    const extra = await readyAssembly("Single-pole switch");
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: extra.id,
+      qty: 1,
+      unitLabel: "ADA Room",
+    });
+    const pushed = await caller().bids.pushToLinkedCopies({
+      bidId: bid.id,
+      templateLabel: "ADA Room",
+    });
+
+    expect(pushed.updated).toEqual(["Room 103", "Room 104"]);
+    const detail = await caller().bids.get({ id: bid.id });
+    // The standard rooms are untouched at their original two lines.
+    expect(detail.lines.filter(l => l.unitLabel === "Room 101")).toHaveLength(
+      2
+    );
+    expect(detail.lines.filter(l => l.unitLabel === "Room 103")).toHaveLength(
+      2
+    );
+  });
+
+  it("forks a copy when one of its lines is edited directly", async () => {
+    const bid = await bidWithTwoTemplates();
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [{ sourceUnitLabel: "Standard Room", count: 3 }],
+    });
+
+    const before = await caller().bids.get({ id: bid.id });
+    const victim = before.lines.find(l => l.unitLabel === "Room 102")!;
+    await caller().bids.updateLine({
+      bidId: bid.id,
+      id: victim.id,
+      qty: 99,
+    });
+
+    const states = await caller().bids.unitStates({ bidId: bid.id });
+    const byLabel = new Map(states.map(s => [s.label, s]));
+    expect(byLabel.get("Room 102")?.role).toBe("forked");
+    expect(byLabel.get("Room 101")?.role).toBe("linked");
+    expect(byLabel.get("Standard Room")?.forkedCount).toBe(1);
+    expect(byLabel.get("Standard Room")?.linkedCount).toBe(2);
+  });
+
+  it("leaves a forked copy alone on the next push", async () => {
+    const bid = await bidWithTwoTemplates();
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [{ sourceUnitLabel: "Standard Room", count: 3 }],
+    });
+
+    const before = await caller().bids.get({ id: bid.id });
+    const victim = before.lines.find(l => l.unitLabel === "Room 102")!;
+    await caller().bids.updateLine({ bidId: bid.id, id: victim.id, qty: 99 });
+
+    const extra = await readyAssembly("Single-pole switch");
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: extra.id,
+      qty: 5,
+      unitLabel: "Standard Room",
+    });
+    const pushed = await caller().bids.pushToLinkedCopies({
+      bidId: bid.id,
+      templateLabel: "Standard Room",
+    });
+
+    expect(pushed.updated).toEqual(["Room 101", "Room 103"]);
+    expect(pushed.skippedForked).toEqual(["Room 102"]);
+
+    const detail = await caller().bids.get({ id: bid.id });
+    // The customised quantity survived the push that rebuilt its siblings.
+    const kept = detail.lines.find(l => l.unitLabel === "Room 102");
+    expect(Number(kept!.qty)).toBe(99);
+    expect(detail.lines.filter(l => l.unitLabel === "Room 102")).toHaveLength(
+      2
+    );
+    expect(detail.lines.filter(l => l.unitLabel === "Room 101")).toHaveLength(
+      3
+    );
+  });
+
+  it("forks a copy when one of its lines is deleted", async () => {
+    const bid = await bidWithTwoTemplates();
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [{ sourceUnitLabel: "Standard Room", count: 2 }],
+    });
+
+    const before = await caller().bids.get({ id: bid.id });
+    const victim = before.lines.find(l => l.unitLabel === "Room 101")!;
+    await caller().bids.removeLine({ bidId: bid.id, id: victim.id });
+
+    const states = await caller().bids.unitStates({ bidId: bid.id });
+    const byLabel = new Map(states.map(s => [s.label, s]));
+    expect(byLabel.get("Room 101")?.role).toBe("forked");
+  });
+
+  it("archives a template's linked copies and drops them from the total", async () => {
+    const bid = await bidWithTwoTemplates();
+    const bare = await caller().bids.get({ id: bid.id });
+
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [{ sourceUnitLabel: "Standard Room", count: 4 }],
+    });
+    const grown = await caller().bids.get({ id: bid.id });
+    expect(grown.totals.directCost).toBeGreaterThan(bare.totals.directCost);
+
+    const result = await caller().bids.archiveLinkedCopies({
+      bidId: bid.id,
+      templateLabel: "Standard Room",
+    });
+    expect(result.archived).toHaveLength(4);
+
+    const after = await caller().bids.get({ id: bid.id });
+    // Back to exactly the two templates it started with.
+    expect(after.totals.directCost).toBeCloseTo(bare.totals.directCost, 2);
+    expect(labelsOf(await caller().bids.unitStates({ bidId: bid.id }))).toEqual(
+      ["Standard Room", "ADA Room"]
+    );
+  });
+
+  it("leaves forked copies out of a bulk archive", async () => {
+    const bid = await bidWithTwoTemplates();
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [{ sourceUnitLabel: "Standard Room", count: 3 }],
+    });
+
+    const before = await caller().bids.get({ id: bid.id });
+    const victim = before.lines.find(l => l.unitLabel === "Room 103")!;
+    await caller().bids.updateLine({ bidId: bid.id, id: victim.id, qty: 7 });
+
+    const result = await caller().bids.archiveLinkedCopies({
+      bidId: bid.id,
+      templateLabel: "Standard Room",
+    });
+    expect(result.archived).toEqual(["Room 101", "Room 102"]);
+    expect(result.skippedForked).toEqual(["Room 103"]);
+
+    const labels = labelsOf(await caller().bids.unitStates({ bidId: bid.id }));
+    expect(labels).toContain("Room 103");
+    expect(labels).not.toContain("Room 101");
+  });
+
+  it("restores an archived bulk, still linked to its template", async () => {
+    const bid = await bidWithTwoTemplates();
+    await caller().bids.generateUnits({
+      bidId: bid.id,
+      baseName: "Room",
+      startNumber: 101,
+      groups: [{ sourceUnitLabel: "Standard Room", count: 3 }],
+    });
+    const full = await caller().bids.get({ id: bid.id });
+
+    const result = await caller().bids.archiveLinkedCopies({
+      bidId: bid.id,
+      templateLabel: "Standard Room",
+    });
+    await caller().bids.restoreUnits({
+      bidId: bid.id,
+      unitLabels: result.archived,
+    });
+
+    const back = await caller().bids.get({ id: bid.id });
+    expect(back.totals.directCost).toBeCloseTo(full.totals.directCost, 2);
+    const states = await caller().bids.unitStates({ bidId: bid.id });
+    expect(new Map(states.map(s => [s.label, s])).get("Room 101")?.role).toBe(
+      "linked"
+    );
+  });
+});

@@ -49,8 +49,11 @@ import {
   Bid,
   bids,
   InsertBidLineItem,
+  InsertBidUnitLink,
+  BidUnitLink,
   BidLineItem,
   bidLineItems,
+  bidUnitLinks,
   InsertBidPdf,
   BidPdf,
   bidPdfs,
@@ -2953,13 +2956,36 @@ export async function updateBidPdfSheet(
 
 // ─── Bid line items ───────────────────────────────────────────────────────────
 
+/**
+ * The bid's LIVE lines — archived ones are excluded here, once, deliberately.
+ *
+ * Every total on the bid is computed from this list, so filtering at the source
+ * is what makes an archived unit stop costing money without the rollup knowing
+ * archiving exists. The alternative — filtering at each call site — is one
+ * forgotten `.filter()` away from a bid that quotes rooms the estimator removed.
+ */
 export async function getBidLineItems(bidId: number): Promise<BidLineItem[]> {
   const db = await getDb();
   if (!db) return [];
   return db
     .select()
     .from(bidLineItems)
-    .where(eq(bidLineItems.bidId, bidId))
+    .where(and(eq(bidLineItems.bidId, bidId), isNull(bidLineItems.archivedAt)))
+    .orderBy(asc(bidLineItems.sortOrder), asc(bidLineItems.id));
+}
+
+/** Archived lines only — for showing what a bulk archive removed, and undoing it. */
+export async function getArchivedBidLineItems(
+  bidId: number
+): Promise<BidLineItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bidLineItems)
+    .where(
+      and(eq(bidLineItems.bidId, bidId), isNotNull(bidLineItems.archivedAt))
+    )
     .orderBy(asc(bidLineItems.sortOrder), asc(bidLineItems.id));
 }
 
@@ -3082,25 +3108,60 @@ export async function addAssemblyToBid(
   return { id: result.insertId, merged: false };
 }
 
+/**
+ * Editing a line inside a linked copy forks that copy — the same
+ * fork-not-multiply rule the material library uses for shipped rows.
+ *
+ * `breakLink` defaults to TRUE because that is the safe direction: a caller who
+ * forgets the option forks a copy that maybe did not need forking, which costs
+ * the user one relink. The opposite default would silently overwrite a room the
+ * estimator had deliberately customised the next time anyone pushed a template,
+ * and they would have no way to know it happened.
+ *
+ * `pushTemplateToLinkedCopies` is the one caller that passes false: it IS the
+ * template speaking, so its writes must not be mistaken for a hand edit.
+ */
 export async function updateBidLineItem(
   id: number,
   bidId: number,
-  data: Partial<InsertBidLineItem>
+  data: Partial<InsertBidLineItem>,
+  options: { breakLink?: boolean } = {}
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.bidId;
+
+  if (options.breakLink !== false) {
+    const line = await getBidLineItem(id, bidId);
+    if (line?.unitLabel) await forkBidUnit(bidId, line.unitLabel);
+  }
+
   await db
     .update(bidLineItems)
     .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(bidLineItems.id, id), eq(bidLineItems.bidId, bidId)));
 }
 
-export async function deleteBidLineItem(id: number, bidId: number) {
+/**
+ * Removing a line from a copy is an edit like any other, so it forks too.
+ * Without this, deleting the one assembly that made Room 107 different would
+ * leave it "linked", and the next template push would put it straight back.
+ */
+export async function deleteBidLineItem(
+  id: number,
+  bidId: number,
+  options: { breakLink?: boolean } = {}
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
+
+  if (options.breakLink !== false) {
+    const line = await getBidLineItem(id, bidId);
+    if (line?.unitLabel) await forkBidUnit(bidId, line.unitLabel);
+  }
+
   await db
     .delete(bidLineItems)
     .where(and(eq(bidLineItems.id, id), eq(bidLineItems.bidId, bidId)));
@@ -3117,16 +3178,124 @@ export async function getBidUnitLabels(bidId: number): Promise<string[]> {
   return seen;
 }
 
+/** One template and how many copies of it this generate action should make. */
+export type UnitGroupSpec = { sourceUnitLabel: string; count: number };
+
 /**
- * Copy a repeating unit N times, auto-numbering the copies.
+ * Generate numbered copies from one or more templates in a single action.
  *
- * The source is every line carrying `sourceUnitLabel` — a hotel room type, a
- * floor-plan spec. Copies are plain rows from the moment they exist: nothing
- * links them back to the source, so editing "Room 104" later touches only that
- * room, which is what the product asks for.
+ * ── Numbering runs across the groups, not within them ────────────────────────
+ * "Standard Room" ×35 and "ADA Room" ×5 produce Room 101–140, in the order the
+ * groups were given. That is the whole reason multi-group exists: a hotel's
+ * rooms are numbered by where they are in the building, not by which spec they
+ * were built from. Numbering each group from its own start would produce two
+ * Room 101s, which is not a naming inconvenience — it is two different rooms
+ * with one label, and every per-unit total downstream would merge them.
  *
- * Labels that would collide with one already on the bid are skipped rather than
- * silently duplicated, and the skipped list is returned so the caller can say so.
+ * ── Groups are not a relationship ────────────────────────────────────────────
+ * Each group writes ordinary link rows pointing at its own template. Nothing
+ * records that the groups were generated together, because nothing downstream
+ * asks. Pushing an edit from "ADA Room" finds its five copies and stops.
+ *
+ * Copies inherit the TEMPLATE's snapshot rather than re-reading the library, so
+ * 200 rooms from one template price identically even if a material moved
+ * between the first add and this call.
+ *
+ * Labels colliding with one already on the bid are skipped, not overwritten,
+ * and returned so the caller can say what it did not do.
+ */
+export async function generateBidUnits(
+  bidId: number,
+  groups: UnitGroupSpec[],
+  baseName: string,
+  startNumber: number
+): Promise<{
+  created: string[];
+  skipped: string[];
+  byTemplate: Record<string, string[]>;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  if (groups.length === 0) throw new Error("No unit groups given");
+
+  const all = await getBidLineItems(bidId);
+
+  // Resolve every template up front so a bad label fails before anything is
+  // written — a half-generated floor is worse than a rejected one.
+  const sources = new Map<string, BidLineItem[]>();
+  for (const group of groups) {
+    if (!sources.has(group.sourceUnitLabel)) {
+      const lines = all.filter(row => row.unitLabel === group.sourceUnitLabel);
+      if (lines.length === 0)
+        throw new Error(
+          `No line items found for unit "${group.sourceUnitLabel}"`
+        );
+      sources.set(group.sourceUnitLabel, lines);
+    }
+  }
+
+  const existingLabels = new Set(
+    all.map(row => row.unitLabel).filter(Boolean) as string[]
+  );
+  let sortOrder = await nextBidSortOrder(bidId);
+  let nextNumber = startNumber;
+
+  const created: string[] = [];
+  const skipped: string[] = [];
+  const byTemplate: Record<string, string[]> = {};
+  const rows: InsertBidLineItem[] = [];
+  const links: InsertBidUnitLink[] = [];
+
+  for (const group of groups) {
+    const source = sources.get(group.sourceUnitLabel)!;
+    byTemplate[group.sourceUnitLabel] ??= [];
+
+    for (let made = 0; made < group.count; made++) {
+      const label = `${baseName} ${nextNumber++}`;
+      if (existingLabels.has(label)) {
+        skipped.push(label);
+        continue;
+      }
+      existingLabels.add(label);
+      created.push(label);
+      byTemplate[group.sourceUnitLabel].push(label);
+
+      links.push({
+        bidId,
+        unitLabel: label,
+        templateLabel: group.sourceUnitLabel,
+      });
+
+      for (const line of source) {
+        rows.push({
+          bidId,
+          assemblyId: line.assemblyId,
+          name: line.name,
+          qty: line.qty,
+          unitLabel: label,
+          snapshotMaterialCost: line.snapshotMaterialCost,
+          snapshotLaborHours: line.snapshotLaborHours,
+          snapshotModifierPct: line.snapshotModifierPct,
+          snapshotLaborRate: line.snapshotLaborRate,
+          snapshotModifierNames: line.snapshotModifierNames,
+          snapshotAt: line.snapshotAt,
+          sortOrder: sortOrder++,
+        });
+      }
+    }
+  }
+
+  if (rows.length > 0) await db.insert(bidLineItems).values(rows);
+  if (links.length > 0) await db.insert(bidUnitLinks).values(links);
+  return { created, skipped, byTemplate };
+}
+
+/**
+ * Single-template generation — the original signature, now one group of one.
+ *
+ * Kept because the Quick-bid flow and the existing tests call it, and because
+ * the simple case should stay simple: a house with repeating bedrooms has no
+ * use for group syntax.
  */
 export async function duplicateBidUnit(
   bidId: number,
@@ -3135,32 +3304,181 @@ export async function duplicateBidUnit(
   startNumber: number,
   count: number
 ): Promise<{ created: string[]; skipped: string[] }> {
+  const { created, skipped } = await generateBidUnits(
+    bidId,
+    [{ sourceUnitLabel, count }],
+    baseName,
+    startNumber
+  );
+  return { created, skipped };
+}
+
+// ─── Unit template links ──────────────────────────────────────────────────────
+
+export async function getBidUnitLinks(bidId: number): Promise<BidUnitLink[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bidUnitLinks)
+    .where(eq(bidUnitLinks.bidId, bidId))
+    .orderBy(asc(bidUnitLinks.id));
+}
+
+/**
+ * Break one copy's link. Idempotent, and a no-op for a unit that was never
+ * generated — callers fork on any edit without first asking whether it matters.
+ */
+export async function forkBidUnit(
+  bidId: number,
+  unitLabel: string
+): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const [link] = await db
+    .select()
+    .from(bidUnitLinks)
+    .where(
+      and(
+        eq(bidUnitLinks.bidId, bidId),
+        eq(bidUnitLinks.unitLabel, unitLabel),
+        isNull(bidUnitLinks.forkedAt)
+      )
+    )
+    .limit(1);
+  if (!link) return false;
+
+  await db
+    .update(bidUnitLinks)
+    .set({ forkedAt: new Date(), updatedAt: new Date() })
+    .where(eq(bidUnitLinks.id, link.id));
+  return true;
+}
+
+/** What a unit is, for the badge on screen and the actions offered on it. */
+export type BidUnitState = {
+  label: string;
+  role: "template" | "linked" | "forked" | "standalone";
+  /** Where a linked or forked copy came from. */
+  templateLabel: string | null;
+  /** For a template: how many copies still follow it, and how many broke away. */
+  linkedCount: number;
+  forkedCount: number;
+};
+
+/**
+ * Every unit on the bid with its link role, derived rather than stored.
+ *
+ * "Template" is not a flag anyone sets — a unit is a template because copies
+ * point at it. That means a template cannot be wrong about being one, and a
+ * label typed by hand on a one-off line is simply `standalone`.
+ */
+export async function getBidUnitStates(bidId: number): Promise<BidUnitState[]> {
+  const [labels, links] = await Promise.all([
+    getBidUnitLabels(bidId),
+    getBidUnitLinks(bidId),
+  ]);
+
+  const byCopy = new Map(links.map(link => [link.unitLabel, link]));
+  const templates = new Map<string, { linked: number; forked: number }>();
+  for (const link of links) {
+    const tally = templates.get(link.templateLabel) ?? { linked: 0, forked: 0 };
+    if (link.forkedAt) tally.forked++;
+    else tally.linked++;
+    templates.set(link.templateLabel, tally);
+  }
+
+  return labels.map(label => {
+    const tally = templates.get(label);
+    if (tally) {
+      return {
+        label,
+        role: "template" as const,
+        templateLabel: null,
+        linkedCount: tally.linked,
+        forkedCount: tally.forked,
+      };
+    }
+    const link = byCopy.get(label);
+    if (link) {
+      return {
+        label,
+        role: link.forkedAt ? ("forked" as const) : ("linked" as const),
+        templateLabel: link.templateLabel,
+        linkedCount: 0,
+        forkedCount: 0,
+      };
+    }
+    return {
+      label,
+      role: "standalone" as const,
+      templateLabel: null,
+      linkedCount: 0,
+      forkedCount: 0,
+    };
+  });
+}
+
+/**
+ * Re-copy a template over every copy still following it.
+ *
+ * Replace rather than diff: the template's lines ARE the copy's lines, so
+ * rebuilding is both simpler and correct for adds, removes and quantity changes
+ * at once. A diff would need an identity for "the same line" across a copy, and
+ * bid lines have none — two "Duplex receptacle" rows in one unit are a normal
+ * thing to have.
+ *
+ * Forked copies are untouched, which is the entire point of forking. Archived
+ * copies are untouched too: they are not on the bid, and silently reviving one
+ * because its template moved would be a total changing for no visible reason.
+ */
+export async function pushTemplateToLinkedCopies(
+  bidId: number,
+  templateLabel: string
+): Promise<{ updated: string[]; skippedForked: string[] }> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
   const all = await getBidLineItems(bidId);
-  const source = all.filter(row => row.unitLabel === sourceUnitLabel);
+  const source = all.filter(row => row.unitLabel === templateLabel);
   if (source.length === 0)
-    throw new Error(`No line items found for unit "${sourceUnitLabel}"`);
+    throw new Error(`No line items found for unit "${templateLabel}"`);
 
-  const existingLabels = new Set(
+  const links = await getBidUnitLinks(bidId);
+  const mine = links.filter(link => link.templateLabel === templateLabel);
+  const live = new Set(
     all.map(row => row.unitLabel).filter(Boolean) as string[]
   );
-  let sortOrder = await nextBidSortOrder(bidId);
 
-  const created: string[] = [];
-  const skipped: string[] = [];
-  const rows: InsertBidLineItem[] = [];
+  const updated: string[] = [];
+  const skippedForked: string[] = [];
 
-  for (let index = 0; index < count; index++) {
-    const label = `${baseName} ${startNumber + index}`;
-    if (existingLabels.has(label)) {
-      skipped.push(label);
+  for (const link of mine) {
+    if (link.forkedAt) {
+      skippedForked.push(link.unitLabel);
       continue;
     }
-    existingLabels.add(label);
-    created.push(label);
+    if (!live.has(link.unitLabel)) continue; // archived — leave it alone
+    updated.push(link.unitLabel);
+  }
 
+  if (updated.length === 0) return { updated, skippedForked };
+
+  // Drop and rebuild in place. Deleting directly rather than through
+  // deleteBidLineItem is deliberate: that helper forks, and this write is the
+  // template speaking, not a hand edit.
+  await db
+    .delete(bidLineItems)
+    .where(
+      and(
+        eq(bidLineItems.bidId, bidId),
+        inArray(bidLineItems.unitLabel, updated)
+      )
+    );
+
+  let sortOrder = await nextBidSortOrder(bidId);
+  const rows: InsertBidLineItem[] = [];
+  for (const label of updated) {
     for (const line of source) {
       rows.push({
         bidId,
@@ -3168,9 +3486,6 @@ export async function duplicateBidUnit(
         name: line.name,
         qty: line.qty,
         unitLabel: label,
-        // Copies inherit the SOURCE's snapshot rather than re-reading the
-        // library: 200 hotel rooms generated from one template must all price
-        // identically, even if a material moved between add and duplicate.
         snapshotMaterialCost: line.snapshotMaterialCost,
         snapshotLaborHours: line.snapshotLaborHours,
         snapshotModifierPct: line.snapshotModifierPct,
@@ -3181,9 +3496,68 @@ export async function duplicateBidUnit(
       });
     }
   }
-
   if (rows.length > 0) await db.insert(bidLineItems).values(rows);
-  return { created, skipped };
+
+  return { updated, skippedForked };
+}
+
+/**
+ * Archive every copy still following a template — the "remove all 40 rooms"
+ * action, reached from the link relationship rather than a separate mechanism.
+ *
+ * Archive rather than delete because this is the most destructive thing the
+ * screen offers, and the snapshot that made every copy price alike would go
+ * with a hard delete. Forked copies are left alone: breaking the link is how a
+ * user says "this one is mine now", and a bulk action on the template must not
+ * override that.
+ */
+export async function archiveLinkedCopies(
+  bidId: number,
+  templateLabel: string
+): Promise<{ archived: string[]; skippedForked: string[] }> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const links = await getBidUnitLinks(bidId);
+  const mine = links.filter(link => link.templateLabel === templateLabel);
+  const archived = mine.filter(l => !l.forkedAt).map(l => l.unitLabel);
+  const skippedForked = mine.filter(l => l.forkedAt).map(l => l.unitLabel);
+
+  if (archived.length > 0) {
+    await db
+      .update(bidLineItems)
+      .set({ archivedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(bidLineItems.bidId, bidId),
+          inArray(bidLineItems.unitLabel, archived),
+          isNull(bidLineItems.archivedAt)
+        )
+      );
+  }
+  return { archived, skippedForked };
+}
+
+/** Undo a bulk archive. The link rows were never removed, so copies relink. */
+export async function restoreArchivedUnits(
+  bidId: number,
+  unitLabels: string[]
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  if (unitLabels.length === 0) return 0;
+
+  await db
+    .update(bidLineItems)
+    .set({ archivedAt: null, updatedAt: new Date() })
+    .where(
+      and(
+        eq(bidLineItems.bidId, bidId),
+        inArray(bidLineItems.unitLabel, unitLabels),
+        isNotNull(bidLineItems.archivedAt)
+      )
+    );
+  return unitLabels.length;
 }
 
 // ─── Recently used materials ──────────────────────────────────────────────────

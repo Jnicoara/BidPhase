@@ -11,6 +11,7 @@ import {
   index,
   decimal,
   date,
+  unique,
 } from "drizzle-orm/mysql-core";
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -1482,17 +1483,97 @@ export const bidLineItems = mysqlTable(
     snapshotAt: timestamp("snapshotAt").defaultNow().notNull(),
 
     sortOrder: int("sortOrder").default(0).notNull(),
+
+    /**
+     * When this line was archived, or NULL if it is live — same single-column
+     * shape as `bids.archivedAt`, and the same reason: a flag plus a date can
+     * disagree, one column cannot. `archivedAt IS NULL` is the live test.
+     *
+     * It exists because of ONE operation: archiving a template's linked copies
+     * in bulk. Removing 40 rooms in a single click is the most destructive
+     * thing this screen can do, and a hard delete there is unrecoverable — the
+     * snapshot that made every copy price identically would be gone with it.
+     *
+     * Deleting a SINGLE line stays a hard delete (`deleteBidLineItem`). One
+     * line is cheap to re-add and the estimator is looking straight at it;
+     * softening that would only leave hidden rows behind every ordinary edit.
+     */
+    archivedAt: timestamp("archivedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   t => [
     index("bid_line_items_bidId_idx").on(t.bidId),
     index("bid_line_items_unitLabel_idx").on(t.unitLabel),
+    index("bid_line_items_archivedAt_idx").on(t.archivedAt),
   ]
 );
 
 export type BidLineItem = typeof bidLineItems.$inferSelect;
 export type InsertBidLineItem = typeof bidLineItems.$inferInsert;
+
+// ─── Unit template links ──────────────────────────────────────────────────────
+/**
+ * One row per GENERATED unit, recording which template it came from and whether
+ * it is still following that template.
+ *
+ * ── Why a side table rather than columns on bid_line_items ───────────────────
+ * A "unit" is not an entity in this schema — it is every line sharing a
+ * `unitLabel`. Link state belongs to the unit, not the line, so putting it on
+ * the line would mean N copies of one fact that can drift apart: half of
+ * "Room 105" linked and half forked is a state with no meaning. One row per
+ * unit cannot express it.
+ *
+ * Templates get NO row. A unit is a template because other units point at it,
+ * which is derived rather than declared — so a template can never disagree
+ * about being one, and a one-off line with a label is simply absent from here.
+ *
+ * ── Groups are not a relationship type ───────────────────────────────────────
+ * Generating "Standard Room" ×35 and "ADA Room" ×5 in one action writes 40 rows
+ * pointing at two different `templateLabel`s. Nothing records that the two
+ * groups were created together, because nothing needs to: pushing an edit from
+ * "ADA Room" finds its 5 rows and stops. Grouping is a property of one generate
+ * ACTION, not of the data it leaves behind.
+ *
+ * ── forkedAt is the whole fork state ─────────────────────────────────────────
+ * NULL means still linked. Set means the copy was edited directly and now
+ * stands alone. Same single-column reasoning as every other timestamp here, and
+ * the same fork-not-multiply rule the material library uses: editing a shipped
+ * row gives you your own copy rather than changing everyone's.
+ *
+ * The link row is kept after forking rather than deleted, so the UI can still
+ * say where a forked copy CAME from. It just stops receiving pushes.
+ */
+export const bidUnitLinks = mysqlTable(
+  "bid_unit_links",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+
+    /** The generated copy's unit label, e.g. "Room 102". */
+    unitLabel: varchar("unitLabel", { length: 128 }).notNull(),
+    /** The unit it was generated from, e.g. "Room 101". */
+    templateLabel: varchar("templateLabel", { length: 128 }).notNull(),
+
+    /** NULL while the copy follows its template; set the moment it is edited. */
+    forkedAt: timestamp("forkedAt"),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("bid_unit_links_bidId_idx").on(t.bidId),
+    index("bid_unit_links_templateLabel_idx").on(t.bidId, t.templateLabel),
+    // One link row per unit per bid. Regenerating over an existing label must
+    // collide here rather than quietly create a second, contradictory link.
+    unique("bid_unit_links_bid_unit_uq").on(t.bidId, t.unitLabel),
+  ]
+);
+
+export type BidUnitLink = typeof bidUnitLinks.$inferSelect;
+export type InsertBidUnitLink = typeof bidUnitLinks.$inferInsert;
 
 // ─── Kits ─────────────────────────────────────────────────────────────────────
 /**
