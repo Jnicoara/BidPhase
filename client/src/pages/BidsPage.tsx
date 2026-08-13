@@ -419,15 +419,47 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Bid total
               </div>
-              {[
-                ["Materials", money(totals.materialCost)],
-                [`Labor (${round(totals.totalLaborHours, 2)} h)`, money(totals.laborCost)],
-              ].map(([label, value]) => (
-                <div key={label} className="flex items-baseline justify-between gap-3 py-1">
-                  <span className="text-xs text-muted-foreground">{label}</span>
-                  <span className="font-mono text-sm">{value}</span>
+              <div className="flex items-baseline justify-between gap-3 py-1">
+                <span className="text-xs text-muted-foreground">Materials</span>
+                <span className="font-mono text-sm">{money(totals.materialCost)}</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-3 py-1">
+                <span className="text-xs text-muted-foreground">
+                  Labor ({round(totals.totalLaborHours, 2)} h)
+                </span>
+                <span className="font-mono text-sm">{money(totals.laborCost)}</span>
+              </div>
+
+              {/*
+                The productivity step, shown only when it is doing something.
+                At 0% there is nothing to explain and a row saying so would be
+                noise on every bid forever.
+
+                It shows the arithmetic rather than the result: the hours an
+                estimator would recognise from their assemblies, the adjustment,
+                and what it came to. Without this the total silently disagrees
+                with the hours on the recipes and the only way to find out why
+                is to go looking in Settings.
+              */}
+              {settings.productivityPct !== 0 && (
+                <div className="flex items-baseline justify-between gap-3 pl-3 pb-1">
+                  <span className="text-[11px] text-muted-foreground/80">
+                    {round(totals.laborHoursBeforeProductivity, 2)} h
+                    {" "}after modifiers, {settings.productivityPct > 0 ? "+" : ""}
+                    {round(settings.productivityPct * 100, 2)}% productivity
+                  </span>
+                  <span
+                    className="font-mono text-[11px] text-muted-foreground/80"
+                    title={
+                      settings.productivitySource === "bid"
+                        ? "Set on this bid"
+                        : "Your company default"
+                    }
+                  >
+                    {settings.productivitySource === "bid" ? "this bid" : "company"}
+                  </span>
                 </div>
-              ))}
+              )}
               <div className="border-t border-border my-2" />
               <div className="flex items-baseline justify-between gap-3 py-1">
                 <span className="text-xs font-medium">Direct cost</span>

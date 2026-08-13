@@ -277,6 +277,47 @@ describe.skipIf(!hasDb)("changing a company default", () => {
     expect(detail.totals.totalLaborHours).toBeCloseTo(2, 4);
   });
 
+  it("reports the hours before and after the factor, so a breakdown can show both", async () => {
+    // The breakdown shows "18.55 h after modifiers, +10% productivity" rather
+    // than a total that silently disagrees with the hours on the assemblies.
+    // That needs both figures on the same footing — at quantity — or the two
+    // numbers on screen are not comparable.
+    const bid = await bidWithOneLine();
+    await caller().bids.setPricingDefaults({ productivityPct: 0.25 });
+
+    const detail = await caller().bids.get({ id: bid.id });
+    expect(detail.totals.laborHoursBeforeProductivity).toBeCloseTo(2, 4);
+    expect(detail.totals.totalLaborHours).toBeCloseTo(2.5, 4);
+    expect(detail.totals.totalLaborHours).toBeCloseTo(
+      detail.totals.laborHoursBeforeProductivity * 1.25, 4
+    );
+  });
+
+  it("reports identical before/after hours when the factor is off", async () => {
+    // So the UI can hide the extra row on the common case by comparing the
+    // factor to zero, and the two numbers never disagree when it does.
+    const bid = await bidWithOneLine();
+    const detail = await caller().bids.get({ id: bid.id });
+    expect(detail.settings.productivityPct).toBe(0);
+    expect(detail.totals.laborHoursBeforeProductivity).toBeCloseTo(
+      detail.totals.totalLaborHours, 6
+    );
+  });
+
+  it("scales the before-productivity hours by quantity, like the total does", async () => {
+    // hoursAfterModifiers is per-unit on the engine's breakdown; the total has
+    // to multiply it out or the comparison is wrong by the line quantity.
+    const bid = await caller().bids.create({
+      name: `Qty bid ${Date.now()}${Math.random()}`, trades: ["electrical"],
+    });
+    await caller().bids.addAssembly({ bidId: bid!.id, assemblyId, qty: 3 });
+    await caller().bids.setPricingDefaults({ productivityPct: 0.5 });
+
+    const detail = await caller().bids.get({ id: bid!.id });
+    expect(detail.totals.laborHoursBeforeProductivity).toBeCloseTo(6, 4); // 2 h × 3
+    expect(detail.totals.totalLaborHours).toBeCloseTo(9, 4); // × 1.5
+  });
+
   it("keeps overhead and profit changes off the snapshot too", async () => {
     const bid = await bidWithOneLine();
     const before = await caller().bids.get({ id: bid.id });

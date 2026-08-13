@@ -407,7 +407,20 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                 <div className="font-mono text-sm">{money(detail.totals.directCost)}</div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground">Labor</div>
+                <div className="text-xs text-muted-foreground">
+                  Labor
+                  {/* Same rule as the Bids rollup: shown only when the factor
+                      is actually moving the number, and phrased so the hours
+                      an estimator recognises from their assemblies are still
+                      visible next to the adjusted total. */}
+                  {detail.settings.productivityPct !== 0 && (
+                    <span className="ml-1 text-muted-foreground/70">
+                      ({round(detail.totals.laborHoursBeforeProductivity, 2)} h
+                      {detail.settings.productivityPct > 0 ? " +" : " "}
+                      {round(detail.settings.productivityPct * 100, 2)}% productivity)
+                    </span>
+                  )}
+                </div>
                 <div className="font-mono text-sm">
                   {round(detail.totals.totalLaborHours, 2)} h
                 </div>

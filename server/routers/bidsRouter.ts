@@ -346,6 +346,19 @@ export const bidsRouter = router({
           // engine) — spread it first so the authoritative one wins.
           ...bidPrice,
           totalLaborHours: priced.reduce((sum, p) => sum + p.breakdown.totalLaborHours, 0),
+          /**
+           * The same hours BEFORE the productivity factor, at quantity.
+           *
+           * Sent so the breakdown can show the adjustment as its own step
+           * rather than as a total that silently differs from the hours on the
+           * assemblies. hoursAfterModifiers is per-unit, so it scales by qty
+           * here exactly as totalLaborHours does — comparing one to the other
+           * is the whole point, and they have to be on the same footing.
+           */
+          laborHoursBeforeProductivity: priced.reduce(
+            (sum, p) => sum + p.breakdown.hoursAfterModifiers * Number(p.line.qty),
+            0
+          ),
           materialCost: priced.reduce((sum, p) => sum + p.breakdown.materialCost, 0),
           laborCost: priced.reduce((sum, p) => sum + p.breakdown.laborCost, 0),
         },
