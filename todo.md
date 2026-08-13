@@ -771,3 +771,8 @@ left as written rather than rewritten to match the rename.
 - [x] Verify the saved checkpoint and GitHub `main` are aligned before publishing
 - [x] Rename the internal Manus project identity from BidPhase to HelixBid
 - [x] Validate the renamed project configuration and document the safe Publish behavior
+
+## v5.94 — Archive Cleanup Activation
+- [ ] Inspect and apply the verified database migration 0026 required by the current HelixBid GitHub main branch
+- [ ] Register the documented 30-day archive-cleanup heartbeat for the deployed application
+- [ ] Validate the migration and active scheduled job, then save a checkpoint synchronized with GitHub main
