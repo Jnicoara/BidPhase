@@ -786,6 +786,6 @@ left as written rather than rewritten to match the rename.
   itself stands; only the test was removed.
 
 ## v5.94 — Archive Cleanup Activation
-- [ ] Inspect and apply the verified database migration 0026 required by the current HelixBid GitHub main branch
+- [x] Inspect and apply the verified database migration 0026 required by the current HelixBid GitHub main branch
 - [ ] Register the documented 30-day archive-cleanup heartbeat for the deployed application
 - [ ] Validate the migration and active scheduled job, then save a checkpoint synchronized with GitHub main
