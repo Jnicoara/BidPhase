@@ -142,16 +142,18 @@ const disconnects: BaselineMaterial[] = ["30", "60", "100", "200"].flatMap(
  * "every fused disconnect has a fuse" rather than a fixed list — and there is a
  * test asserting exactly that, because the two lists are far apart on screen.
  */
-const fuses: BaselineMaterial[] = ["30", "60", "100", "200", "400", "600"].map(amps => ({
-  ...gear("Panels & Breakers"),
-  name: `${amps}A cartridge fuse`,
-  searchAliases: aliases(
-    `${amps} amp`,
-    "class rk5 rk1 j t time delay dual element one time ferrule knife blade buss"
-  ),
-  // Fuses go in per pole, and nobody buys one.
-  defaultQty: 3,
-}));
+const fuses: BaselineMaterial[] = ["30", "60", "100", "200", "400", "600"].map(
+  amps => ({
+    ...gear("Panels & Breakers"),
+    name: `${amps}A cartridge fuse`,
+    searchAliases: aliases(
+      `${amps} amp`,
+      "class rk5 rk1 j t time delay dual element one time ferrule knife blade buss"
+    ),
+    // Fuses go in per pole, and nobody buys one.
+    defaultQty: 3,
+  })
+);
 
 const spaDisconnects: BaselineMaterial[] = ["50", "60"].map(amps => ({
   ...gear("Panels & Breakers"),

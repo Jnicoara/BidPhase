@@ -1,4 +1,16 @@
-import { and, desc, eq, asc, inArray, isNull, isNotNull, lte, or, like, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  asc,
+  inArray,
+  isNull,
+  isNotNull,
+  lte,
+  or,
+  like,
+  sql,
+} from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser,
@@ -77,7 +89,9 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import {
-  BASELINE_MATERIALS, RENAMED_BASELINE_MATERIALS, RETIRED_BASELINE_MATERIALS,
+  BASELINE_MATERIALS,
+  RENAMED_BASELINE_MATERIALS,
+  RETIRED_BASELINE_MATERIALS,
 } from "./seed/baselineMaterials";
 import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
 import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
@@ -104,7 +118,10 @@ export async function getDb() {
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
-  if (!db) { console.warn("[Database] Cannot upsert user: database not available"); return; }
+  if (!db) {
+    console.warn("[Database] Cannot upsert user: database not available");
+    return;
+  }
 
   const values: InsertUser = { openId: user.openId };
   const updateSet: Record<string, unknown> = {};
@@ -137,20 +154,31 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (!values.lastSignedIn) values.lastSignedIn = new Date();
   if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
 
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  await db
+    .insert(users)
+    .values(values)
+    .onDuplicateKeyUpdate({ set: updateSet });
 }
 
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
   return result[0];
 }
 
 export async function getUserByEmail(email: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
   return result[0];
 }
 
@@ -171,7 +199,8 @@ export async function getUserById(id: number) {
 export async function markOnboardingComplete(userId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.update(users)
+  await db
+    .update(users)
     .set({ onboardingCompletedAt: new Date() })
     .where(and(eq(users.id, userId), isNull(users.onboardingCompletedAt)));
 }
@@ -183,10 +212,16 @@ export async function markOnboardingComplete(userId: number): Promise<void> {
  * that is the difference between "dismissible" and "gone", and the reversal has
  * to be as easy as the dismissal or the promise is not kept.
  */
-export async function setChecklistDismissed(userId: number, at: Date | null): Promise<void> {
+export async function setChecklistDismissed(
+  userId: number,
+  at: Date | null
+): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.update(users).set({ checklistDismissedAt: at }).where(eq(users.id, userId));
+  await db
+    .update(users)
+    .set({ checklistDismissedAt: at })
+    .where(eq(users.id, userId));
 }
 
 /**
@@ -213,7 +248,10 @@ export async function countBidsWithLineItems(userId: number): Promise<number> {
 export async function updateUserPassword(userId: number, passwordHash: string) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+  await db
+    .update(users)
+    .set({ passwordHash, updatedAt: new Date() })
+    .where(eq(users.id, userId));
 }
 
 // ─── Projects ─────────────────────────────────────────────────────────────────
@@ -221,7 +259,9 @@ export async function updateUserPassword(userId: number, passwordHash: string) {
 export async function getProjectsByUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(projects)
+  return db
+    .select()
+    .from(projects)
     .where(and(eq(projects.userId, userId), eq(projects.isArchived, false)))
     .orderBy(desc(projects.updatedAt));
 }
@@ -230,23 +270,29 @@ export async function searchProjectsByUser(userId: number, query: string) {
   const db = await getDb();
   if (!db) return [];
   const q = `%${query}%`;
-  return db.select().from(projects)
-    .where(and(
-      eq(projects.userId, userId),
-      eq(projects.isArchived, false),
-      or(
-        like(projects.name, q),
-        like(projects.customerName, q),
-        like(projects.address, q),
+  return db
+    .select()
+    .from(projects)
+    .where(
+      and(
+        eq(projects.userId, userId),
+        eq(projects.isArchived, false),
+        or(
+          like(projects.name, q),
+          like(projects.customerName, q),
+          like(projects.address, q)
+        )
       )
-    ))
+    )
     .orderBy(desc(projects.updatedAt));
 }
 
 export async function getProjectById(id: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(projects)
+  const result = await db
+    .select()
+    .from(projects)
     .where(and(eq(projects.id, id), eq(projects.userId, userId)))
     .limit(1);
   return result[0];
@@ -259,24 +305,34 @@ export async function createProject(data: InsertProject) {
   return result[0];
 }
 
-export async function updateProject(id: number, userId: number, data: Partial<InsertProject>) {
+export async function updateProject(
+  id: number,
+  userId: number,
+  data: Partial<InsertProject>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(projects).set({ ...data, updatedAt: new Date() })
+  await db
+    .update(projects)
+    .set({ ...data, updatedAt: new Date() })
     .where(and(eq(projects.id, id), eq(projects.userId, userId)));
 }
 
 export async function archiveProject(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(projects).set({ isArchived: true, updatedAt: new Date() })
+  await db
+    .update(projects)
+    .set({ isArchived: true, updatedAt: new Date() })
     .where(and(eq(projects.id, id), eq(projects.userId, userId)));
 }
 
 export async function deleteProject(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(projects).where(and(eq(projects.id, id), eq(projects.userId, userId)));
+  await db
+    .delete(projects)
+    .where(and(eq(projects.id, id), eq(projects.userId, userId)));
 }
 
 // ─── User Materials Database ───────────────────────────────────────────────────
@@ -284,23 +340,40 @@ export async function deleteProject(id: number, userId: number) {
 export async function getUserMaterials(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(userMaterialsDb)
-    .where(and(eq(userMaterialsDb.userId, userId), eq(userMaterialsDb.isActive, true)))
+  return db
+    .select()
+    .from(userMaterialsDb)
+    .where(
+      and(
+        eq(userMaterialsDb.userId, userId),
+        eq(userMaterialsDb.isActive, true)
+      )
+    )
     .orderBy(asc(userMaterialsDb.category), asc(userMaterialsDb.description));
 }
 
-export async function updateMaterialPrice(id: number, userId: number, userPrice: number | null) {
+export async function updateMaterialPrice(
+  id: number,
+  userId: number,
+  userPrice: number | null
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(userMaterialsDb)
-    .set({ userPrice, lastUpdated: userPrice !== null ? new Date() : null, updatedAt: new Date() })
+  await db
+    .update(userMaterialsDb)
+    .set({
+      userPrice,
+      lastUpdated: userPrice !== null ? new Date() : null,
+      updatedAt: new Date(),
+    })
     .where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
 }
 
 export async function resetMaterialPrice(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(userMaterialsDb)
+  await db
+    .update(userMaterialsDb)
     .set({ userPrice: null, lastUpdated: null, updatedAt: new Date() })
     .where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
 }
@@ -315,11 +388,17 @@ export async function addSingleMaterial(row: InsertUserMaterialsDb) {
 export async function updateMaterialRow(
   id: number,
   userId: number,
-  patch: Partial<Pick<InsertUserMaterialsDb, "description" | "unit" | "category" | "defaultPrice" | "itemCode">>
+  patch: Partial<
+    Pick<
+      InsertUserMaterialsDb,
+      "description" | "unit" | "category" | "defaultPrice" | "itemCode"
+    >
+  >
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(userMaterialsDb)
+  await db
+    .update(userMaterialsDb)
     .set({ ...patch, updatedAt: new Date() })
     .where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
 }
@@ -334,7 +413,9 @@ export async function bulkInsertUserMaterials(rows: InsertUserMaterialsDb[]) {
 export async function deleteUserMaterial(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(userMaterialsDb).where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
+  await db
+    .delete(userMaterialsDb)
+    .where(and(eq(userMaterialsDb.id, id), eq(userMaterialsDb.userId, userId)));
 }
 
 export async function clearUserMaterials(userId: number) {
@@ -348,7 +429,9 @@ export async function clearUserMaterials(userId: number) {
 export async function getMasterItems(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(masterItems)
+  return db
+    .select()
+    .from(masterItems)
     .where(and(eq(masterItems.userId, userId), eq(masterItems.isActive, true)))
     .orderBy(asc(masterItems.category), asc(masterItems.description));
 }
@@ -356,7 +439,9 @@ export async function getMasterItems(userId: number) {
 export async function getMasterItemById(id: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(masterItems)
+  const result = await db
+    .select()
+    .from(masterItems)
     .where(and(eq(masterItems.id, id), eq(masterItems.userId, userId)))
     .limit(1);
   return result[0];
@@ -369,10 +454,16 @@ export async function createMasterItem(data: InsertMasterItem) {
   return result[0];
 }
 
-export async function updateMasterItem(id: number, userId: number, data: Partial<InsertMasterItem>) {
+export async function updateMasterItem(
+  id: number,
+  userId: number,
+  data: Partial<InsertMasterItem>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(masterItems).set({ ...data, updatedAt: new Date() })
+  await db
+    .update(masterItems)
+    .set({ ...data, updatedAt: new Date() })
     .where(and(eq(masterItems.id, id), eq(masterItems.userId, userId)));
 }
 
@@ -380,7 +471,9 @@ export async function deleteMasterItem(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   // Soft delete
-  await db.update(masterItems).set({ isActive: false, updatedAt: new Date() })
+  await db
+    .update(masterItems)
+    .set({ isActive: false, updatedAt: new Date() })
     .where(and(eq(masterItems.id, id), eq(masterItems.userId, userId)));
 }
 
@@ -396,34 +489,49 @@ export async function bulkInsertMasterItems(rows: InsertMasterItem[]) {
 export async function getMasterAssemblies(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(masterAssemblies)
-    .where(and(eq(masterAssemblies.userId, userId), eq(masterAssemblies.isActive, true)))
+  return db
+    .select()
+    .from(masterAssemblies)
+    .where(
+      and(
+        eq(masterAssemblies.userId, userId),
+        eq(masterAssemblies.isActive, true)
+      )
+    )
     .orderBy(asc(masterAssemblies.name));
 }
 
 export async function getMasterAssemblyWithItems(id: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const [assembly] = await db.select().from(masterAssemblies)
-    .where(and(eq(masterAssemblies.id, id), eq(masterAssemblies.userId, userId)))
+  const [assembly] = await db
+    .select()
+    .from(masterAssemblies)
+    .where(
+      and(eq(masterAssemblies.id, id), eq(masterAssemblies.userId, userId))
+    )
     .limit(1);
   if (!assembly) return undefined;
 
-  const items = await db.select({
-    id: masterAssemblyItems.id,
-    assemblyId: masterAssemblyItems.assemblyId,
-    masterItemId: masterAssemblyItems.masterItemId,
-    qty: masterAssemblyItems.qty,
-    sortOrder: masterAssemblyItems.sortOrder,
-    itemCode: masterItems.itemCode,
-    description: masterItems.description,
-    unit: masterItems.unit,
-    masterMaterialCost: masterItems.masterMaterialCost,
-    masterLaborHours: masterItems.masterLaborHours,
-    category: masterItems.category,
-  })
+  const items = await db
+    .select({
+      id: masterAssemblyItems.id,
+      assemblyId: masterAssemblyItems.assemblyId,
+      masterItemId: masterAssemblyItems.masterItemId,
+      qty: masterAssemblyItems.qty,
+      sortOrder: masterAssemblyItems.sortOrder,
+      itemCode: masterItems.itemCode,
+      description: masterItems.description,
+      unit: masterItems.unit,
+      masterMaterialCost: masterItems.masterMaterialCost,
+      masterLaborHours: masterItems.masterLaborHours,
+      category: masterItems.category,
+    })
     .from(masterAssemblyItems)
-    .innerJoin(masterItems, eq(masterAssemblyItems.masterItemId, masterItems.id))
+    .innerJoin(
+      masterItems,
+      eq(masterAssemblyItems.masterItemId, masterItems.id)
+    )
     .where(eq(masterAssemblyItems.assemblyId, id))
     .orderBy(asc(masterAssemblyItems.sortOrder));
 
@@ -437,18 +545,30 @@ export async function createMasterAssembly(data: InsertMasterAssembly) {
   return result[0];
 }
 
-export async function updateMasterAssembly(id: number, userId: number, data: Partial<InsertMasterAssembly>) {
+export async function updateMasterAssembly(
+  id: number,
+  userId: number,
+  data: Partial<InsertMasterAssembly>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(masterAssemblies).set({ ...data, updatedAt: new Date() })
-    .where(and(eq(masterAssemblies.id, id), eq(masterAssemblies.userId, userId)));
+  await db
+    .update(masterAssemblies)
+    .set({ ...data, updatedAt: new Date() })
+    .where(
+      and(eq(masterAssemblies.id, id), eq(masterAssemblies.userId, userId))
+    );
 }
 
 export async function deleteMasterAssembly(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(masterAssemblies).set({ isActive: false, updatedAt: new Date() })
-    .where(and(eq(masterAssemblies.id, id), eq(masterAssemblies.userId, userId)));
+  await db
+    .update(masterAssemblies)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(
+      and(eq(masterAssemblies.id, id), eq(masterAssemblies.userId, userId))
+    );
 }
 
 export async function addItemToMasterAssembly(data: InsertMasterAssemblyItem) {
@@ -457,10 +577,16 @@ export async function addItemToMasterAssembly(data: InsertMasterAssemblyItem) {
   await db.insert(masterAssemblyItems).values(data);
 }
 
-export async function updateMasterAssemblyItem(id: number, data: Partial<InsertMasterAssemblyItem>) {
+export async function updateMasterAssemblyItem(
+  id: number,
+  data: Partial<InsertMasterAssemblyItem>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(masterAssemblyItems).set(data).where(eq(masterAssemblyItems.id, id));
+  await db
+    .update(masterAssemblyItems)
+    .set(data)
+    .where(eq(masterAssemblyItems.id, id));
 }
 
 export async function removeItemFromMasterAssembly(id: number) {
@@ -474,7 +600,9 @@ export async function removeItemFromMasterAssembly(id: number) {
 export async function getMasterLaborRates(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(masterLaborRates)
+  return db
+    .select()
+    .from(masterLaborRates)
     .where(eq(masterLaborRates.userId, userId))
     .orderBy(asc(masterLaborRates.name));
 }
@@ -486,17 +614,29 @@ export async function createMasterLaborRate(data: InsertMasterLaborRate) {
   return result[0];
 }
 
-export async function updateMasterLaborRate(id: number, userId: number, data: Partial<InsertMasterLaborRate>) {
+export async function updateMasterLaborRate(
+  id: number,
+  userId: number,
+  data: Partial<InsertMasterLaborRate>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(masterLaborRates).set({ ...data, updatedAt: new Date() })
-    .where(and(eq(masterLaborRates.id, id), eq(masterLaborRates.userId, userId)));
+  await db
+    .update(masterLaborRates)
+    .set({ ...data, updatedAt: new Date() })
+    .where(
+      and(eq(masterLaborRates.id, id), eq(masterLaborRates.userId, userId))
+    );
 }
 
 export async function deleteMasterLaborRate(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(masterLaborRates).where(and(eq(masterLaborRates.id, id), eq(masterLaborRates.userId, userId)));
+  await db
+    .delete(masterLaborRates)
+    .where(
+      and(eq(masterLaborRates.id, id), eq(masterLaborRates.userId, userId))
+    );
 }
 
 // ─── Project Assemblies ───────────────────────────────────────────────────────
@@ -509,16 +649,24 @@ export async function getProjectAssemblies(projectId: number, userId: number) {
   if (!db) return [];
   const project = await getProjectById(projectId, userId);
   if (!project) return [];
-  return db.select().from(projectAssemblies)
+  return db
+    .select()
+    .from(projectAssemblies)
     .where(eq(projectAssemblies.projectId, projectId))
-    .orderBy(asc(projectAssemblies.sortOrder), asc(projectAssemblies.createdAt));
+    .orderBy(
+      asc(projectAssemblies.sortOrder),
+      asc(projectAssemblies.createdAt)
+    );
 }
 
 /** Resolve the owning userId for a project assembly, or undefined if it doesn't exist. */
-export async function getProjectAssemblyOwnerId(assemblyId: number): Promise<number | undefined> {
+export async function getProjectAssemblyOwnerId(
+  assemblyId: number
+): Promise<number | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select({ userId: projects.userId })
+  const [row] = await db
+    .select({ userId: projects.userId })
     .from(projectAssemblies)
     .innerJoin(projects, eq(projectAssemblies.projectId, projects.id))
     .where(eq(projectAssemblies.id, assemblyId))
@@ -527,12 +675,18 @@ export async function getProjectAssemblyOwnerId(assemblyId: number): Promise<num
 }
 
 /** Resolve the owning userId for a project assembly item, or undefined if it doesn't exist. */
-async function getProjectAssemblyItemOwnerId(id: number): Promise<number | undefined> {
+async function getProjectAssemblyItemOwnerId(
+  id: number
+): Promise<number | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select({ userId: projects.userId })
+  const [row] = await db
+    .select({ userId: projects.userId })
     .from(projectAssemblyItems)
-    .innerJoin(projectAssemblies, eq(projectAssemblyItems.projectAssemblyId, projectAssemblies.id))
+    .innerJoin(
+      projectAssemblies,
+      eq(projectAssemblyItems.projectAssemblyId, projectAssemblies.id)
+    )
     .innerJoin(projects, eq(projectAssemblies.projectId, projects.id))
     .where(eq(projectAssemblyItems.id, id))
     .limit(1);
@@ -542,19 +696,26 @@ async function getProjectAssemblyItemOwnerId(id: number): Promise<number | undef
 export async function getProjectAssemblyWithItems(assemblyId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const [assembly] = await db.select().from(projectAssemblies)
+  const [assembly] = await db
+    .select()
+    .from(projectAssemblies)
     .where(eq(projectAssemblies.id, assemblyId))
     .limit(1);
   if (!assembly) return undefined;
 
-  const items = await db.select().from(projectAssemblyItems)
+  const items = await db
+    .select()
+    .from(projectAssemblyItems)
     .where(eq(projectAssemblyItems.projectAssemblyId, assemblyId))
     .orderBy(asc(projectAssemblyItems.sortOrder));
 
   return { ...assembly, items };
 }
 
-export async function getProjectAssembliesWithItems(projectId: number, userId: number) {
+export async function getProjectAssembliesWithItems(
+  projectId: number,
+  userId: number
+) {
   const db = await getDb();
   if (!db) return [];
   const assemblies = await getProjectAssemblies(projectId, userId);
@@ -568,12 +729,18 @@ export async function createProjectAssembly(data: InsertProjectAssembly) {
   return result;
 }
 
-export async function updateProjectAssembly(id: number, userId: number, data: Partial<InsertProjectAssembly>) {
+export async function updateProjectAssembly(
+  id: number,
+  userId: number,
+  data: Partial<InsertProjectAssembly>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const ownerId = await getProjectAssemblyOwnerId(id);
   if (ownerId !== userId) return;
-  await db.update(projectAssemblies).set({ ...data, updatedAt: new Date() })
+  await db
+    .update(projectAssemblies)
+    .set({ ...data, updatedAt: new Date() })
     .where(eq(projectAssemblies.id, id));
 }
 
@@ -585,22 +752,33 @@ export async function deleteProjectAssembly(id: number, userId: number) {
   await db.delete(projectAssemblies).where(eq(projectAssemblies.id, id));
 }
 
-export async function createProjectAssemblyItem(data: InsertProjectAssemblyItem) {
+export async function createProjectAssemblyItem(
+  data: InsertProjectAssemblyItem
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   await db.insert(projectAssemblyItems).values(data);
 }
 
-export async function updateProjectAssemblyItem(id: number, userId: number, data: Partial<InsertProjectAssemblyItem>) {
+export async function updateProjectAssemblyItem(
+  id: number,
+  userId: number,
+  data: Partial<InsertProjectAssemblyItem>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const ownerId = await getProjectAssemblyItemOwnerId(id);
   if (ownerId !== userId) return;
-  await db.update(projectAssemblyItems).set({ ...data, updatedAt: new Date() })
+  await db
+    .update(projectAssemblyItems)
+    .set({ ...data, updatedAt: new Date() })
     .where(eq(projectAssemblyItems.id, id));
 }
 
-export async function resetProjectAssemblyItemToMaster(id: number, userId: number) {
+export async function resetProjectAssemblyItemToMaster(
+  id: number,
+  userId: number
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const ownerId = await getProjectAssemblyItemOwnerId(id);
@@ -632,7 +810,9 @@ export async function getProjectItems(projectId: number, userId: number) {
   if (!db) return [];
   const project = await getProjectById(projectId, userId);
   if (!project) return [];
-  return db.select().from(projectItems)
+  return db
+    .select()
+    .from(projectItems)
     .where(eq(projectItems.projectId, projectId))
     .orderBy(asc(projectItems.sortOrder), asc(projectItems.createdAt));
 }
@@ -641,7 +821,8 @@ export async function getProjectItems(projectId: number, userId: number) {
 async function getProjectItemOwnerId(id: number): Promise<number | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select({ userId: projects.userId })
+  const [row] = await db
+    .select({ userId: projects.userId })
     .from(projectItems)
     .innerJoin(projects, eq(projectItems.projectId, projects.id))
     .where(eq(projectItems.id, id))
@@ -655,12 +836,18 @@ export async function createProjectItem(data: InsertProjectItem) {
   await db.insert(projectItems).values(data);
 }
 
-export async function updateProjectItem(id: number, userId: number, data: Partial<InsertProjectItem>) {
+export async function updateProjectItem(
+  id: number,
+  userId: number,
+  data: Partial<InsertProjectItem>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const ownerId = await getProjectItemOwnerId(id);
   if (ownerId !== userId) return;
-  await db.update(projectItems).set({ ...data, updatedAt: new Date() })
+  await db
+    .update(projectItems)
+    .set({ ...data, updatedAt: new Date() })
     .where(eq(projectItems.id, id));
 }
 
@@ -694,7 +881,9 @@ export async function getBidSummary(projectId: number, userId: number) {
   if (!db) return undefined;
   const project = await getProjectById(projectId, userId);
   if (!project) return undefined;
-  const result = await db.select().from(bidSummary)
+  const result = await db
+    .select()
+    .from(bidSummary)
     .where(eq(bidSummary.projectId, projectId))
     .limit(1);
   return result[0];
@@ -705,15 +894,18 @@ export async function upsertBidSummary(data: InsertBidSummary, userId: number) {
   if (!db) throw new Error("DB unavailable");
   const project = await getProjectById(data.projectId, userId);
   if (!project) return;
-  await db.insert(bidSummary).values(data).onDuplicateKeyUpdate({
-    set: {
-      percentageLaborFactor: data.percentageLaborFactor,
-      lumpSumHours: data.lumpSumHours,
-      markupPct: data.markupPct,
-      defaultLaborRateId: data.defaultLaborRateId,
-      updatedAt: new Date(),
-    },
-  });
+  await db
+    .insert(bidSummary)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        percentageLaborFactor: data.percentageLaborFactor,
+        lumpSumHours: data.lumpSumHours,
+        markupPct: data.markupPct,
+        defaultLaborRateId: data.defaultLaborRateId,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 // ─── Feature Flags ────────────────────────────────────────────────────────────
@@ -726,25 +918,36 @@ export async function getAllFeatureFlags(): Promise<FeatureFlag[]> {
 }
 
 /** Return a single flag by key. */
-export async function getFeatureFlag(flagKey: string): Promise<FeatureFlag | undefined> {
+export async function getFeatureFlag(
+  flagKey: string
+): Promise<FeatureFlag | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(featureFlags).where(eq(featureFlags.flagKey, flagKey)).limit(1);
+  const result = await db
+    .select()
+    .from(featureFlags)
+    .where(eq(featureFlags.flagKey, flagKey))
+    .limit(1);
   return result[0];
 }
 
 /** Upsert a feature flag (insert or update). */
-export async function upsertFeatureFlag(data: InsertFeatureFlag): Promise<void> {
+export async function upsertFeatureFlag(
+  data: InsertFeatureFlag
+): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.insert(featureFlags).values(data).onDuplicateKeyUpdate({
-    set: {
-      label: data.label,
-      description: data.description,
-      enabledForContractors: data.enabledForContractors,
-      updatedAt: new Date(),
-    },
-  });
+  await db
+    .insert(featureFlags)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        label: data.label,
+        description: data.description,
+        enabledForContractors: data.enabledForContractors,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 /** Seed default flags if they don't exist yet. Called at server startup. */
@@ -818,16 +1021,24 @@ const LIBRARY_OWNERSHIP_FIELDS = [
  * UNIQUE index: baseline rows are keyed by `userId IS NULL`, and MySQL lets any
  * number of NULLs coexist in a unique index.
  */
-async function withSeedLock(name: string, run: () => Promise<void>): Promise<void> {
+async function withSeedLock(
+  name: string,
+  run: () => Promise<void>
+): Promise<void> {
   const db = await getDb();
   if (!db) return;
 
   // 10s is generous for a handful of inserts; on timeout we skip rather than
   // seed unguarded, and the next startup tries again.
-  const [rows] = await db.execute(sql`SELECT GET_LOCK(${name}, 10) AS acquired`);
-  const acquired = (rows as unknown as Array<{ acquired: number | null }>)[0]?.acquired;
+  const [rows] = await db.execute(
+    sql`SELECT GET_LOCK(${name}, 10) AS acquired`
+  );
+  const acquired = (rows as unknown as Array<{ acquired: number | null }>)[0]
+    ?.acquired;
   if (acquired !== 1) {
-    console.warn(`[Seed] Could not acquire lock "${name}" — skipping this pass.`);
+    console.warn(
+      `[Seed] Could not acquire lock "${name}" — skipping this pass.`
+    );
     return;
   }
 
@@ -860,23 +1071,27 @@ async function dedupeBaselineRows(
   const db = await getDb();
   if (!db) return;
   // Table name is a compile-time constant from the union above, never user input.
-  const result = await db.execute(sql.raw(
-    `SELECT 1 FROM \`${table}\` dupe
+  const result = await db.execute(
+    sql.raw(
+      `SELECT 1 FROM \`${table}\` dupe
      JOIN \`${table}\` keeper
        ON dupe.name = keeper.name AND dupe.id > keeper.id
      WHERE dupe.userId IS NULL AND keeper.userId IS NULL
      LIMIT 1`
-  ));
+    )
+  );
   // execute() is typed for writes; a SELECT comes back as [rows, fields].
   const [rows] = result as unknown as [unknown[], unknown];
   if (rows.length === 0) return;
 
-  await db.execute(sql.raw(
-    `DELETE dupe FROM \`${table}\` dupe
+  await db.execute(
+    sql.raw(
+      `DELETE dupe FROM \`${table}\` dupe
      JOIN \`${table}\` keeper
        ON dupe.name = keeper.name AND dupe.id > keeper.id
      WHERE dupe.userId IS NULL AND keeper.userId IS NULL`
-  ));
+    )
+  );
 }
 
 /**
@@ -885,14 +1100,17 @@ async function dedupeBaselineRows(
  * Shared by materials, labor rates and modifiers — all three have the identical
  * baseline/fork shape, so the copy rule is identical too.
  */
-function contentFields<TRow extends object, TInsert>(row: TRow): Partial<TInsert> {
+function contentFields<TRow extends object, TInsert>(
+  row: TRow
+): Partial<TInsert> {
   const copy: Record<string, unknown> = { ...(row as Record<string, unknown>) };
   for (const field of LIBRARY_OWNERSHIP_FIELDS) delete copy[field];
   return copy as Partial<TInsert>;
 }
 
 /** Back-compat alias — materials read better with the specific name. */
-const materialContentFields = (row: Material) => contentFields<Material, InsertMaterial>(row);
+const materialContentFields = (row: Material) =>
+  contentFields<Material, InsertMaterial>(row);
 
 /**
  * Collapse baseline + user rows into the one list a user should see.
@@ -901,15 +1119,17 @@ const materialContentFields = (row: Material) => contentFields<Material, InsertM
  * Exported and kept pure so it can be tested without a database, and reused for
  * labor rates / modifiers / assemblies, which have the same ownership shape.
  */
-export function mergeLibraryRows<T extends { id: number; userId: number | null; baselineId: number | null }>(
-  rows: T[],
-  userId: number
-): T[] {
+export function mergeLibraryRows<
+  T extends { id: number; userId: number | null; baselineId: number | null },
+>(rows: T[], userId: number): T[] {
   const supersededBaselineIds = new Set<number>();
   for (const row of rows) {
-    if (row.userId === userId && row.baselineId != null) supersededBaselineIds.add(row.baselineId);
+    if (row.userId === userId && row.baselineId != null)
+      supersededBaselineIds.add(row.baselineId);
   }
-  return rows.filter(row => !(row.userId === null && supersededBaselineIds.has(row.id)));
+  return rows.filter(
+    row => !(row.userId === null && supersededBaselineIds.has(row.id))
+  );
 }
 
 // ─── Library lifecycle (archive / restore / delete forever) ───────────────────
@@ -942,7 +1162,11 @@ const LIFECYCLE_TABLES = { materials, assemblies, kits, modifiers } as const;
 export type LibraryTableName = keyof typeof LIFECYCLE_TABLES;
 
 /** One row's lifecycle columns, whichever table it came from. */
-type LifecycleRow = { id: number; userId: number | null; baselineId: number | null };
+type LifecycleRow = {
+  id: number;
+  userId: number | null;
+  baselineId: number | null;
+};
 
 async function readLifecycleRow(
   table: LibraryTableName,
@@ -952,7 +1176,8 @@ async function readLifecycleRow(
   const db = await getDb();
   if (!db) return undefined;
   const t = LIFECYCLE_TABLES[table];
-  const [row] = await db.select({ id: t.id, userId: t.userId, baselineId: t.baselineId })
+  const [row] = await db
+    .select({ id: t.id, userId: t.userId, baselineId: t.baselineId })
     .from(t as never)
     .where(and(eq(t.id, id), eq(t.userId, userId)))
     .limit(1);
@@ -978,39 +1203,59 @@ async function setLifecycle(
 
   switch (table) {
     case "materials":
-      await db.update(materials).set(values)
+      await db
+        .update(materials)
+        .set(values)
         .where(and(eq(materials.id, id), eq(materials.userId, userId)));
       return;
     case "assemblies":
-      await db.update(assemblies).set(values)
+      await db
+        .update(assemblies)
+        .set(values)
         .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
       return;
     case "kits":
-      await db.update(kits).set(values)
+      await db
+        .update(kits)
+        .set(values)
         .where(and(eq(kits.id, id), eq(kits.userId, userId)));
       return;
     case "modifiers":
-      await db.update(modifiers).set(values)
+      await db
+        .update(modifiers)
+        .set(values)
         .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
       return;
   }
 }
 
-async function hardDeleteRow(table: LibraryTableName, id: number, userId: number): Promise<void> {
+async function hardDeleteRow(
+  table: LibraryTableName,
+  id: number,
+  userId: number
+): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   switch (table) {
     case "materials":
-      await db.delete(materials).where(and(eq(materials.id, id), eq(materials.userId, userId)));
+      await db
+        .delete(materials)
+        .where(and(eq(materials.id, id), eq(materials.userId, userId)));
       return;
     case "assemblies":
-      await db.delete(assemblies).where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
+      await db
+        .delete(assemblies)
+        .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
       return;
     case "kits":
-      await db.delete(kits).where(and(eq(kits.id, id), eq(kits.userId, userId)));
+      await db
+        .delete(kits)
+        .where(and(eq(kits.id, id), eq(kits.userId, userId)));
       return;
     case "modifiers":
-      await db.delete(modifiers).where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
+      await db
+        .delete(modifiers)
+        .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
       return;
   }
 }
@@ -1027,13 +1272,19 @@ export async function archiveLibraryRow(
   id: number,
   userId: number,
   fork: (baselineId: number, userId: number) => Promise<number>,
-  read: (id: number, userId: number) => Promise<{ userId: number | null } | undefined>
+  read: (
+    id: number,
+    userId: number
+  ) => Promise<{ userId: number | null } | undefined>
 ): Promise<number> {
   const target = await read(id, userId);
   if (!target) throw new Error("Not found");
 
   const ownId = target.userId === null ? await fork(id, userId) : id;
-  await setLifecycle(table, ownId, userId, { status: "archived", archivedAt: new Date() });
+  await setLifecycle(table, ownId, userId, {
+    status: "archived",
+    archivedAt: new Date(),
+  });
   return ownId;
 }
 
@@ -1064,7 +1315,10 @@ export async function deleteLibraryRowForever(
     await hardDeleteRow(table, id, userId);
     return;
   }
-  await setLifecycle(table, id, userId, { status: "deleted", archivedAt: null });
+  await setLifecycle(table, id, userId, {
+    status: "deleted",
+    archivedAt: null,
+  });
 }
 
 /** Baseline rows plus the user's own, forked baselines collapsed away. */
@@ -1074,11 +1328,15 @@ export async function getLibraryMaterials(
 ): Promise<Material[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select().from(materials)
-    .where(and(
-      or(isNull(materials.userId), eq(materials.userId, userId)),
-      eq(materials.isActive, true)
-    ))
+  const rows = await db
+    .select()
+    .from(materials)
+    .where(
+      and(
+        or(isNull(materials.userId), eq(materials.userId, userId)),
+        eq(materials.isActive, true)
+      )
+    )
     .orderBy(asc(materials.name));
   // Merge first, then filter by status: an archived FORK must still suppress
   // its starter, or archiving your edited copy would bring the shipped one
@@ -1087,14 +1345,21 @@ export async function getLibraryMaterials(
 }
 
 /** A single material the user is allowed to see — their own, or a baseline. */
-export async function getMaterialById(id: number, userId: number): Promise<Material | undefined> {
+export async function getMaterialById(
+  id: number,
+  userId: number
+): Promise<Material | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(materials)
-    .where(and(
-      eq(materials.id, id),
-      or(isNull(materials.userId), eq(materials.userId, userId))
-    ))
+  const result = await db
+    .select()
+    .from(materials)
+    .where(
+      and(
+        eq(materials.id, id),
+        or(isNull(materials.userId), eq(materials.userId, userId))
+      )
+    )
     .limit(1);
   return result[0];
 }
@@ -1114,12 +1379,18 @@ export async function createMaterial(data: InsertMaterial): Promise<number> {
  * keeps them read-only. Ownership columns in `data` are ignored rather than
  * trusted, so a caller cannot reassign a row to another user.
  */
-export async function updateMaterial(id: number, userId: number, data: Partial<InsertMaterial>) {
+export async function updateMaterial(
+  id: number,
+  userId: number,
+  data: Partial<InsertMaterial>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
-  await db.update(materials).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(materials)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(materials.id, id), eq(materials.userId, userId)));
 }
 
@@ -1129,8 +1400,17 @@ export async function updateMaterial(id: number, userId: number, data: Partial<I
  *
  * Forks a starter first; see archiveLibraryRow for why.
  */
-export async function archiveMaterial(id: number, userId: number): Promise<number> {
-  return archiveLibraryRow("materials", id, userId, forkMaterial, getMaterialById);
+export async function archiveMaterial(
+  id: number,
+  userId: number
+): Promise<number> {
+  return archiveLibraryRow(
+    "materials",
+    id,
+    userId,
+    forkMaterial,
+    getMaterialById
+  );
 }
 
 export async function restoreMaterial(id: number, userId: number) {
@@ -1145,16 +1425,25 @@ export async function deleteMaterialForever(id: number, userId: number) {
  * Give the user their own editable copy of a baseline material.
  * Idempotent — forking twice returns the existing copy instead of duplicating.
  */
-export async function forkMaterial(baselineId: number, userId: number): Promise<number> {
+export async function forkMaterial(
+  baselineId: number,
+  userId: number
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [existing] = await db.select().from(materials)
-    .where(and(eq(materials.userId, userId), eq(materials.baselineId, baselineId)))
+  const [existing] = await db
+    .select()
+    .from(materials)
+    .where(
+      and(eq(materials.userId, userId), eq(materials.baselineId, baselineId))
+    )
     .limit(1);
   if (existing) return existing.id;
 
-  const [baseline] = await db.select().from(materials)
+  const [baseline] = await db
+    .select()
+    .from(materials)
     .where(and(eq(materials.id, baselineId), isNull(materials.userId)))
     .limit(1);
   if (!baseline) throw new Error("Baseline material not found");
@@ -1180,18 +1469,26 @@ export async function revertMaterialToBaseline(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [fork] = await db.select().from(materials)
+  const [fork] = await db
+    .select()
+    .from(materials)
     .where(and(eq(materials.id, id), eq(materials.userId, userId)))
     .limit(1);
   if (!fork) throw new Error("Material not found");
-  if (fork.baselineId == null) throw new Error("Material is fully custom — there is no original to revert to");
+  if (fork.baselineId == null)
+    throw new Error(
+      "Material is fully custom — there is no original to revert to"
+    );
 
-  const [baseline] = await db.select().from(materials)
+  const [baseline] = await db
+    .select()
+    .from(materials)
     .where(and(eq(materials.id, fork.baselineId), isNull(materials.userId)))
     .limit(1);
   if (!baseline) throw new Error("Baseline material no longer exists");
 
-  await db.update(materials)
+  await db
+    .update(materials)
     .set({
       ...materialContentFields(baseline),
       // Re-stamp the version so any future "update available" check starts clean.
@@ -1231,8 +1528,12 @@ async function renameBaselineMaterials(): Promise<void> {
   if (entries.length === 0) return;
 
   const baselineNames = new Set(
-    (await db.select({ name: materials.name }).from(materials).where(isNull(materials.userId)))
-      .map(row => row.name)
+    (
+      await db
+        .select({ name: materials.name })
+        .from(materials)
+        .where(isNull(materials.userId))
+    ).map(row => row.name)
   );
 
   for (const [from, to] of entries) {
@@ -1248,7 +1549,9 @@ async function renameBaselineMaterials(): Promise<void> {
       );
       continue;
     }
-    await db.update(materials).set({ name: to })
+    await db
+      .update(materials)
+      .set({ name: to })
       .where(and(eq(materials.name, from), isNull(materials.userId)));
     baselineNames.delete(from);
     baselineNames.add(to);
@@ -1272,13 +1575,16 @@ async function retireBaselineMaterials(): Promise<void> {
   if (!db) return;
   if (RETIRED_BASELINE_MATERIALS.length === 0) return;
 
-  await db.update(materials)
+  await db
+    .update(materials)
     .set({ isActive: false })
-    .where(and(
-      isNull(materials.userId),
-      inArray(materials.name, RETIRED_BASELINE_MATERIALS),
-      eq(materials.isActive, true)
-    ));
+    .where(
+      and(
+        isNull(materials.userId),
+        inArray(materials.name, RETIRED_BASELINE_MATERIALS),
+        eq(materials.isActive, true)
+      )
+    );
 }
 
 async function seedBaselineMaterialsUnlocked(): Promise<void> {
@@ -1289,23 +1595,25 @@ async function seedBaselineMaterialsUnlocked(): Promise<void> {
   await renameBaselineMaterials();
   await retireBaselineMaterials();
 
-  const existing = await db.select({ name: materials.name }).from(materials)
+  const existing = await db
+    .select({ name: materials.name })
+    .from(materials)
     .where(isNull(materials.userId));
   const alreadySeeded = new Set(existing.map(row => row.name));
 
-  const missing = BASELINE_MATERIALS
-    .filter(m => !alreadySeeded.has(m.name))
-    .map(m => ({
-      name: m.name,
-      unitOfSale: m.unitOfSale,
-      costPerUnit: m.costPerUnit,
-      category: m.category,
-      searchAliases: m.searchAliases,
-      description: m.description ?? null,
-      trade: m.trade ?? "electrical",
-      defaultQty: m.defaultQty != null ? m.defaultQty.toFixed(4) : null,
-      userId: null,
-    }));
+  const missing = BASELINE_MATERIALS.filter(
+    m => !alreadySeeded.has(m.name)
+  ).map(m => ({
+    name: m.name,
+    unitOfSale: m.unitOfSale,
+    costPerUnit: m.costPerUnit,
+    category: m.category,
+    searchAliases: m.searchAliases,
+    description: m.description ?? null,
+    trade: m.trade ?? "electrical",
+    defaultQty: m.defaultQty != null ? m.defaultQty.toFixed(4) : null,
+    userId: null,
+  }));
 
   // Chunked: 600 rows of a dozen columns each overflows the default packet on
   // a single INSERT, and the whole seed failing would leave a half-built
@@ -1357,16 +1665,19 @@ async function backfillMaterialMetadata(): Promise<void> {
   const db = await getDb();
   if (!db) return;
 
-  const baselines = await db.select({
-    id: materials.id,
-    name: materials.name,
-    category: materials.category,
-    searchAliases: materials.searchAliases,
-    defaultQty: materials.defaultQty,
-    description: materials.description,
-    trade: materials.trade,
-    costPerUnit: materials.costPerUnit,
-  }).from(materials).where(isNull(materials.userId));
+  const baselines = await db
+    .select({
+      id: materials.id,
+      name: materials.name,
+      category: materials.category,
+      searchAliases: materials.searchAliases,
+      defaultQty: materials.defaultQty,
+      description: materials.description,
+      trade: materials.trade,
+      costPerUnit: materials.costPerUnit,
+    })
+    .from(materials)
+    .where(isNull(materials.userId));
 
   const seedByName = new Map(BASELINE_MATERIALS.map(m => [m.name, m]));
   const seedById = new Map<number, (typeof BASELINE_MATERIALS)[number]>();
@@ -1378,10 +1689,12 @@ async function backfillMaterialMetadata(): Promise<void> {
 
     const patch: Partial<InsertMaterial> = {};
     if (row.category !== intended.category) patch.category = intended.category;
-    if (row.searchAliases !== intended.searchAliases) patch.searchAliases = intended.searchAliases;
+    if (row.searchAliases !== intended.searchAliases)
+      patch.searchAliases = intended.searchAliases;
 
     const wantDescription = intended.description ?? null;
-    if (row.description !== wantDescription) patch.description = wantDescription;
+    if (row.description !== wantDescription)
+      patch.description = wantDescription;
 
     const wantTrade = intended.trade ?? "electrical";
     if (row.trade !== wantTrade) patch.trade = wantTrade;
@@ -1392,7 +1705,8 @@ async function backfillMaterialMetadata(): Promise<void> {
       patch.costPerUnit = intended.costPerUnit;
     }
 
-    const wantQty = intended.defaultQty != null ? intended.defaultQty.toFixed(4) : null;
+    const wantQty =
+      intended.defaultQty != null ? intended.defaultQty.toFixed(4) : null;
     if (row.defaultQty !== wantQty) patch.defaultQty = wantQty;
 
     if (Object.keys(patch).length > 0) {
@@ -1400,23 +1714,26 @@ async function backfillMaterialMetadata(): Promise<void> {
     }
   }
 
-  const staleForks = await db.select({
-    id: materials.id,
-    baselineId: materials.baselineId,
-    category: materials.category,
-    searchAliases: materials.searchAliases,
-    defaultQty: materials.defaultQty,
-  })
+  const staleForks = await db
+    .select({
+      id: materials.id,
+      baselineId: materials.baselineId,
+      category: materials.category,
+      searchAliases: materials.searchAliases,
+      defaultQty: materials.defaultQty,
+    })
     .from(materials)
-    .where(and(
-      isNotNull(materials.userId),
-      isNotNull(materials.baselineId),
-      or(
-        isNull(materials.category),
-        isNull(materials.searchAliases),
-        isNull(materials.defaultQty)
+    .where(
+      and(
+        isNotNull(materials.userId),
+        isNotNull(materials.baselineId),
+        or(
+          isNull(materials.category),
+          isNull(materials.searchAliases),
+          isNull(materials.defaultQty)
+        )
       )
-    ));
+    );
 
   // Note what is absent here: price, description and trade. Price is the
   // user's whole reason for forking and must never be reached into. The other
@@ -1424,7 +1741,8 @@ async function backfillMaterialMetadata(): Promise<void> {
   // — a fork that wants the baseline's copy of either gets it through revert,
   // which is the explicit action for that.
   for (const fork of staleForks) {
-    const source = fork.baselineId != null ? seedById.get(fork.baselineId) : undefined;
+    const source =
+      fork.baselineId != null ? seedById.get(fork.baselineId) : undefined;
     if (!source) continue;
 
     const patch: Partial<InsertMaterial> = {};
@@ -1451,27 +1769,40 @@ async function backfillMaterialMetadata(): Promise<void> {
 // rate — see effectiveHourlyRate in shared/pricing.ts for why.
 
 /** Starter rows plus the user's own, forked starters collapsed away. */
-export async function getLibraryLaborRates(userId: number): Promise<LaborRate[]> {
+export async function getLibraryLaborRates(
+  userId: number
+): Promise<LaborRate[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select().from(laborRates)
-    .where(and(
-      or(isNull(laborRates.userId), eq(laborRates.userId, userId)),
-      eq(laborRates.isActive, true)
-    ))
+  const rows = await db
+    .select()
+    .from(laborRates)
+    .where(
+      and(
+        or(isNull(laborRates.userId), eq(laborRates.userId, userId)),
+        eq(laborRates.isActive, true)
+      )
+    )
     .orderBy(asc(laborRates.name));
   return mergeLibraryRows(rows, userId);
 }
 
 /** A single labor rate the user may see — their own, or a starter. */
-export async function getLaborRateById(id: number, userId: number): Promise<LaborRate | undefined> {
+export async function getLaborRateById(
+  id: number,
+  userId: number
+): Promise<LaborRate | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(laborRates)
-    .where(and(
-      eq(laborRates.id, id),
-      or(isNull(laborRates.userId), eq(laborRates.userId, userId))
-    ))
+  const result = await db
+    .select()
+    .from(laborRates)
+    .where(
+      and(
+        eq(laborRates.id, id),
+        or(isNull(laborRates.userId), eq(laborRates.userId, userId))
+      )
+    )
     .limit(1);
   return result[0];
 }
@@ -1484,12 +1815,18 @@ export async function createLaborRate(data: InsertLaborRate): Promise<number> {
 }
 
 /** Update one of the user's own rates. Starter rows have userId NULL and never match. */
-export async function updateLaborRate(id: number, userId: number, data: Partial<InsertLaborRate>) {
+export async function updateLaborRate(
+  id: number,
+  userId: number,
+  data: Partial<InsertLaborRate>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
-  await db.update(laborRates).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(laborRates)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(laborRates.id, id), eq(laborRates.userId, userId)));
 }
 
@@ -1497,7 +1834,9 @@ export async function updateLaborRate(id: number, userId: number, data: Partial<
 export async function deactivateLaborRate(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(laborRates).set({ isActive: false, updatedAt: new Date() })
+  await db
+    .update(laborRates)
+    .set({ isActive: false, updatedAt: new Date() })
     .where(and(eq(laborRates.id, id), eq(laborRates.userId, userId)));
 }
 
@@ -1522,20 +1861,31 @@ export async function setLaborRateHourlyCost(
   const isBaseline = target.userId === null;
   const editableId = isBaseline ? await forkLaborRate(id, userId) : id;
 
-  await updateLaborRate(editableId, userId, { hourlyCost: hourlyCost.toFixed(4) });
+  await updateLaborRate(editableId, userId, {
+    hourlyCost: hourlyCost.toFixed(4),
+  });
   return { id: editableId, forked: isBaseline };
 }
 
-export async function forkLaborRate(baselineId: number, userId: number): Promise<number> {
+export async function forkLaborRate(
+  baselineId: number,
+  userId: number
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [existing] = await db.select().from(laborRates)
-    .where(and(eq(laborRates.userId, userId), eq(laborRates.baselineId, baselineId)))
+  const [existing] = await db
+    .select()
+    .from(laborRates)
+    .where(
+      and(eq(laborRates.userId, userId), eq(laborRates.baselineId, baselineId))
+    )
     .limit(1);
   if (existing) return existing.id;
 
-  const [baseline] = await db.select().from(laborRates)
+  const [baseline] = await db
+    .select()
+    .from(laborRates)
     .where(and(eq(laborRates.id, baselineId), isNull(laborRates.userId)))
     .limit(1);
   if (!baseline) throw new Error("Baseline labor rate not found");
@@ -1554,20 +1904,27 @@ export async function revertLaborRateToBaseline(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [fork] = await db.select().from(laborRates)
+  const [fork] = await db
+    .select()
+    .from(laborRates)
     .where(and(eq(laborRates.id, id), eq(laborRates.userId, userId)))
     .limit(1);
   if (!fork) throw new Error("Labor rate not found");
   if (fork.baselineId == null) {
-    throw new Error("Labor rate was created from scratch — there is no original to revert to");
+    throw new Error(
+      "Labor rate was created from scratch — there is no original to revert to"
+    );
   }
 
-  const [baseline] = await db.select().from(laborRates)
+  const [baseline] = await db
+    .select()
+    .from(laborRates)
     .where(and(eq(laborRates.id, fork.baselineId), isNull(laborRates.userId)))
     .limit(1);
   if (!baseline) throw new Error("Baseline labor rate no longer exists");
 
-  await db.update(laborRates)
+  await db
+    .update(laborRates)
     .set({
       ...contentFields<LaborRate, InsertLaborRate>(baseline),
       baselineVersion: baseline.version,
@@ -1584,13 +1941,15 @@ export async function seedBaselineLaborRates(): Promise<void> {
 
     await dedupeBaselineRows("labor_rates");
 
-    const existing = await db.select({ name: laborRates.name }).from(laborRates)
+    const existing = await db
+      .select({ name: laborRates.name })
+      .from(laborRates)
       .where(isNull(laborRates.userId));
     const alreadySeeded = new Set(existing.map(row => row.name));
 
-    const missing = BASELINE_LABOR_RATES
-      .filter(r => !alreadySeeded.has(r.name))
-      .map(r => ({ ...r, userId: null }));
+    const missing = BASELINE_LABOR_RATES.filter(
+      r => !alreadySeeded.has(r.name)
+    ).map(r => ({ ...r, userId: null }));
 
     if (missing.length > 0) await db.insert(laborRates).values(missing);
 
@@ -1613,13 +1972,16 @@ async function backfillLaborRateAmounts(): Promise<void> {
   const db = await getDb();
   if (!db) return;
 
-  const rows = await db.select({
-    id: laborRates.id,
-    name: laborRates.name,
-    hourlyCost: laborRates.hourlyCost,
-    annualSalary: laborRates.annualSalary,
-    annualHours: laborRates.annualHours,
-  }).from(laborRates).where(isNull(laborRates.userId));
+  const rows = await db
+    .select({
+      id: laborRates.id,
+      name: laborRates.name,
+      hourlyCost: laborRates.hourlyCost,
+      annualSalary: laborRates.annualSalary,
+      annualHours: laborRates.annualHours,
+    })
+    .from(laborRates)
+    .where(isNull(laborRates.userId));
 
   const intended = new Map(BASELINE_LABOR_RATES.map(r => [r.name, r]));
 
@@ -1671,21 +2033,30 @@ export async function getLibraryModifiers(
 ): Promise<Modifier[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select().from(modifiers)
+  const rows = await db
+    .select()
+    .from(modifiers)
     .where(or(isNull(modifiers.userId), eq(modifiers.userId, userId)))
     .orderBy(asc(modifiers.name));
 
   return mergeLibraryRows(rows, userId).filter(row => row.status === status);
 }
 
-export async function getModifierById(id: number, userId: number): Promise<Modifier | undefined> {
+export async function getModifierById(
+  id: number,
+  userId: number
+): Promise<Modifier | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(modifiers)
-    .where(and(
-      eq(modifiers.id, id),
-      or(isNull(modifiers.userId), eq(modifiers.userId, userId))
-    ))
+  const result = await db
+    .select()
+    .from(modifiers)
+    .where(
+      and(
+        eq(modifiers.id, id),
+        or(isNull(modifiers.userId), eq(modifiers.userId, userId))
+      )
+    )
     .limit(1);
   return result[0];
 }
@@ -1697,25 +2068,40 @@ export async function createModifier(data: InsertModifier): Promise<number> {
   return result.insertId;
 }
 
-export async function updateModifier(id: number, userId: number, data: Partial<InsertModifier>) {
+export async function updateModifier(
+  id: number,
+  userId: number,
+  data: Partial<InsertModifier>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
-  await db.update(modifiers).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(modifiers)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
 }
 
-export async function forkModifier(baselineId: number, userId: number): Promise<number> {
+export async function forkModifier(
+  baselineId: number,
+  userId: number
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [existing] = await db.select().from(modifiers)
-    .where(and(eq(modifiers.userId, userId), eq(modifiers.baselineId, baselineId)))
+  const [existing] = await db
+    .select()
+    .from(modifiers)
+    .where(
+      and(eq(modifiers.userId, userId), eq(modifiers.baselineId, baselineId))
+    )
     .limit(1);
   if (existing) return existing.id;
 
-  const [baseline] = await db.select().from(modifiers)
+  const [baseline] = await db
+    .select()
+    .from(modifiers)
     .where(and(eq(modifiers.id, baselineId), isNull(modifiers.userId)))
     .limit(1);
   if (!baseline) throw new Error("Baseline modifier not found");
@@ -1733,20 +2119,27 @@ export async function revertModifierToBaseline(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [fork] = await db.select().from(modifiers)
+  const [fork] = await db
+    .select()
+    .from(modifiers)
     .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)))
     .limit(1);
   if (!fork) throw new Error("Modifier not found");
   if (fork.baselineId == null) {
-    throw new Error("Modifier was created from scratch — there is no original to revert to");
+    throw new Error(
+      "Modifier was created from scratch — there is no original to revert to"
+    );
   }
 
-  const [baseline] = await db.select().from(modifiers)
+  const [baseline] = await db
+    .select()
+    .from(modifiers)
     .where(and(eq(modifiers.id, fork.baselineId), isNull(modifiers.userId)))
     .limit(1);
   if (!baseline) throw new Error("Baseline modifier no longer exists");
 
-  await db.update(modifiers)
+  await db
+    .update(modifiers)
     .set({
       ...contentFields<Modifier, InsertModifier>(baseline),
       baselineVersion: baseline.version,
@@ -1759,7 +2152,10 @@ export async function revertModifierToBaseline(id: number, userId: number) {
  * Move a modifier out of the working list. Returns the row that holds the
  * archived state — for a starter that is a NEW fork id, not the id passed in.
  */
-export async function archiveModifier(id: number, userId: number): Promise<number> {
+export async function archiveModifier(
+  id: number,
+  userId: number
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
@@ -1770,7 +2166,8 @@ export async function archiveModifier(id: number, userId: number): Promise<numbe
   // archived. Fork first; the fork then hides the starter from the list.
   const ownId = target.userId === null ? await forkModifier(id, userId) : id;
 
-  await db.update(modifiers)
+  await db
+    .update(modifiers)
     .set({ status: "archived", archivedAt: new Date(), updatedAt: new Date() })
     .where(and(eq(modifiers.id, ownId), eq(modifiers.userId, userId)));
   return ownId;
@@ -1780,7 +2177,8 @@ export async function archiveModifier(id: number, userId: number): Promise<numbe
 export async function restoreModifier(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(modifiers)
+  await db
+    .update(modifiers)
     .set({ status: "active", archivedAt: null, updatedAt: new Date() })
     .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
 }
@@ -1793,21 +2191,29 @@ export async function restoreModifier(id: number, userId: number) {
  * starter row, so dropping it would resurrect the very modifier the user just
  * said to remove forever. Either way it is gone from every view, permanently.
  */
-export async function deleteModifierForever(id: number, userId: number): Promise<void> {
+export async function deleteModifierForever(
+  id: number,
+  userId: number
+): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [row] = await db.select().from(modifiers)
+  const [row] = await db
+    .select()
+    .from(modifiers)
     .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)))
     .limit(1);
   if (!row) throw new Error("Modifier not found");
 
   if (row.baselineId == null) {
-    await db.delete(modifiers).where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
+    await db
+      .delete(modifiers)
+      .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
     return;
   }
 
-  await db.update(modifiers)
+  await db
+    .update(modifiers)
     .set({ status: "deleted", updatedAt: new Date() })
     .where(and(eq(modifiers.id, id), eq(modifiers.userId, userId)));
 }
@@ -1820,13 +2226,15 @@ export async function seedBaselineModifiers(): Promise<void> {
 
     await dedupeBaselineRows("modifiers");
 
-    const existing = await db.select({ name: modifiers.name }).from(modifiers)
+    const existing = await db
+      .select({ name: modifiers.name })
+      .from(modifiers)
       .where(isNull(modifiers.userId));
     const alreadySeeded = new Set(existing.map(row => row.name));
 
-    const missing = BASELINE_MODIFIERS
-      .filter(m => !alreadySeeded.has(m.name))
-      .map(m => ({ ...m, userId: null }));
+    const missing = BASELINE_MODIFIERS.filter(
+      m => !alreadySeeded.has(m.name)
+    ).map(m => ({ ...m, userId: null }));
 
     if (missing.length > 0) await db.insert(modifiers).values(missing);
   });
@@ -1868,30 +2276,43 @@ export async function getLibraryAssemblies(
 ): Promise<Assembly[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select().from(assemblies)
-    .where(and(
-      or(isNull(assemblies.userId), eq(assemblies.userId, userId)),
-      eq(assemblies.isActive, true)
-    ))
+  const rows = await db
+    .select()
+    .from(assemblies)
+    .where(
+      and(
+        or(isNull(assemblies.userId), eq(assemblies.userId, userId)),
+        eq(assemblies.isActive, true)
+      )
+    )
     .orderBy(asc(assemblies.name));
   // See getLibraryMaterials on why the merge happens before the filter.
   return mergeLibraryRows(rows, userId).filter(row => row.status === status);
 }
 
-export async function getAssemblyById(id: number, userId: number): Promise<Assembly | undefined> {
+export async function getAssemblyById(
+  id: number,
+  userId: number
+): Promise<Assembly | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(assemblies)
-    .where(and(
-      eq(assemblies.id, id),
-      or(isNull(assemblies.userId), eq(assemblies.userId, userId))
-    ))
+  const result = await db
+    .select()
+    .from(assemblies)
+    .where(
+      and(
+        eq(assemblies.id, id),
+        or(isNull(assemblies.userId), eq(assemblies.userId, userId))
+      )
+    )
     .limit(1);
   return result[0];
 }
 
 /** Material lines for an assembly, with each material's current cost joined in. */
-export async function getAssemblyMaterialLines(assemblyId: number): Promise<AssemblyMaterialLine[]> {
+export async function getAssemblyMaterialLines(
+  assemblyId: number
+): Promise<AssemblyMaterialLine[]> {
   const db = await getDb();
   if (!db) return [];
   const rows = await db
@@ -1912,10 +2333,13 @@ export async function getAssemblyMaterialLines(assemblyId: number): Promise<Asse
   return rows;
 }
 
-export async function getAssemblyModifierIds(assemblyId: number): Promise<number[]> {
+export async function getAssemblyModifierIds(
+  assemblyId: number
+): Promise<number[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select({ modifierId: assemblyModifiers.modifierId })
+  const rows = await db
+    .select({ modifierId: assemblyModifiers.modifierId })
     .from(assemblyModifiers)
     .where(eq(assemblyModifiers.assemblyId, assemblyId))
     .orderBy(asc(assemblyModifiers.sortOrder), asc(assemblyModifiers.id));
@@ -1923,7 +2347,10 @@ export async function getAssemblyModifierIds(assemblyId: number): Promise<number
 }
 
 /** An assembly and everything it is made of. */
-export async function getAssemblyDetail(id: number, userId: number): Promise<AssemblyDetail | undefined> {
+export async function getAssemblyDetail(
+  id: number,
+  userId: number
+): Promise<AssemblyDetail | undefined> {
   const assembly = await getAssemblyById(id, userId);
   if (!assembly) return undefined;
   const [materialLines, modifierIds] = await Promise.all([
@@ -1940,19 +2367,34 @@ export async function createAssembly(data: InsertAssembly): Promise<number> {
   return result.insertId;
 }
 
-export async function updateAssembly(id: number, userId: number, data: Partial<InsertAssembly>) {
+export async function updateAssembly(
+  id: number,
+  userId: number,
+  data: Partial<InsertAssembly>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
-  await db.update(assemblies).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(assemblies)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)));
 }
 
 /** Soft-delete — projects may already reference this assembly. */
 /** Archive an assembly — recoverable. See archiveLibraryRow. */
-export async function archiveAssembly(id: number, userId: number): Promise<number> {
-  return archiveLibraryRow("assemblies", id, userId, forkAssembly, getAssemblyById);
+export async function archiveAssembly(
+  id: number,
+  userId: number
+): Promise<number> {
+  return archiveLibraryRow(
+    "assemblies",
+    id,
+    userId,
+    forkAssembly,
+    getAssemblyById
+  );
 }
 
 export async function restoreAssembly(id: number, userId: number) {
@@ -1970,7 +2412,9 @@ export async function setAssemblyMaterials(
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(assemblyMaterials).where(eq(assemblyMaterials.assemblyId, assemblyId));
+  await db
+    .delete(assemblyMaterials)
+    .where(eq(assemblyMaterials.assemblyId, assemblyId));
   if (lines.length === 0) return;
   await db.insert(assemblyMaterials).values(
     lines.map((line, index) => ({
@@ -1983,13 +2427,22 @@ export async function setAssemblyMaterials(
 }
 
 /** Replace which modifiers apply to an assembly. */
-export async function setAssemblyModifiers(assemblyId: number, modifierIds: number[]) {
+export async function setAssemblyModifiers(
+  assemblyId: number,
+  modifierIds: number[]
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(assemblyModifiers).where(eq(assemblyModifiers.assemblyId, assemblyId));
+  await db
+    .delete(assemblyModifiers)
+    .where(eq(assemblyModifiers.assemblyId, assemblyId));
   if (modifierIds.length === 0) return;
   await db.insert(assemblyModifiers).values(
-    modifierIds.map((modifierId, index) => ({ assemblyId, modifierId, sortOrder: index }))
+    modifierIds.map((modifierId, index) => ({
+      assemblyId,
+      modifierId,
+      sortOrder: index,
+    }))
   );
 }
 
@@ -1997,16 +2450,25 @@ export async function setAssemblyModifiers(assemblyId: number, modifierIds: numb
  * Give the user their own editable copy of a starter assembly, children and all.
  * Idempotent — forking twice returns the existing copy.
  */
-export async function forkAssembly(baselineId: number, userId: number): Promise<number> {
+export async function forkAssembly(
+  baselineId: number,
+  userId: number
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [existing] = await db.select().from(assemblies)
-    .where(and(eq(assemblies.userId, userId), eq(assemblies.baselineId, baselineId)))
+  const [existing] = await db
+    .select()
+    .from(assemblies)
+    .where(
+      and(eq(assemblies.userId, userId), eq(assemblies.baselineId, baselineId))
+    )
     .limit(1);
   if (existing) return existing.id;
 
-  const [baseline] = await db.select().from(assemblies)
+  const [baseline] = await db
+    .select()
+    .from(assemblies)
     .where(and(eq(assemblies.id, baselineId), isNull(assemblies.userId)))
     .limit(1);
   if (!baseline) throw new Error("Baseline assembly not found");
@@ -2025,7 +2487,10 @@ export async function forkAssembly(baselineId: number, userId: number): Promise<
 }
 
 /** Copy material lines and modifier links from one assembly onto another. */
-async function copyAssemblyChildren(fromAssemblyId: number, toAssemblyId: number) {
+async function copyAssemblyChildren(
+  fromAssemblyId: number,
+  toAssemblyId: number
+) {
   const [lines, modifierIds] = await Promise.all([
     getAssemblyMaterialLines(fromAssemblyId),
     getAssemblyModifierIds(fromAssemblyId),
@@ -2045,20 +2510,27 @@ export async function revertAssemblyToBaseline(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [fork] = await db.select().from(assemblies)
+  const [fork] = await db
+    .select()
+    .from(assemblies)
     .where(and(eq(assemblies.id, id), eq(assemblies.userId, userId)))
     .limit(1);
   if (!fork) throw new Error("Assembly not found");
   if (fork.baselineId == null) {
-    throw new Error("Assembly was created from scratch — there is no original to revert to");
+    throw new Error(
+      "Assembly was created from scratch — there is no original to revert to"
+    );
   }
 
-  const [baseline] = await db.select().from(assemblies)
+  const [baseline] = await db
+    .select()
+    .from(assemblies)
     .where(and(eq(assemblies.id, fork.baselineId), isNull(assemblies.userId)))
     .limit(1);
   if (!baseline) throw new Error("Baseline assembly no longer exists");
 
-  await db.update(assemblies)
+  await db
+    .update(assemblies)
     .set({
       ...contentFields<Assembly, InsertAssembly>(baseline),
       baselineVersion: baseline.version,
@@ -2086,20 +2558,30 @@ export async function seedBaselineAssemblies(): Promise<void> {
 
     await dedupeBaselineRows("assemblies");
 
-    const existingRows = await db.select({ name: assemblies.name }).from(assemblies)
+    const existingRows = await db
+      .select({ name: assemblies.name })
+      .from(assemblies)
       .where(isNull(assemblies.userId));
     const alreadySeeded = new Set(existingRows.map(row => row.name));
 
     const pending = BASELINE_ASSEMBLIES.filter(a => !alreadySeeded.has(a.name));
     if (pending.length === 0) return;
 
-    const baselineMaterialRows = await db.select({ id: materials.id, name: materials.name })
-      .from(materials).where(isNull(materials.userId));
-    const materialIdByName = new Map(baselineMaterialRows.map(row => [row.name, row.id]));
+    const baselineMaterialRows = await db
+      .select({ id: materials.id, name: materials.name })
+      .from(materials)
+      .where(isNull(materials.userId));
+    const materialIdByName = new Map(
+      baselineMaterialRows.map(row => [row.name, row.id])
+    );
 
-    const baselineModifierRows = await db.select({ id: modifiers.id, name: modifiers.name })
-      .from(modifiers).where(isNull(modifiers.userId));
-    const modifierIdByName = new Map(baselineModifierRows.map(row => [row.name, row.id]));
+    const baselineModifierRows = await db
+      .select({ id: modifiers.id, name: modifiers.name })
+      .from(modifiers)
+      .where(isNull(modifiers.userId));
+    const modifierIdByName = new Map(
+      baselineModifierRows.map(row => [row.name, row.id])
+    );
 
     for (const spec of pending) {
       const lines = spec.materials.map(line => ({
@@ -2150,17 +2632,27 @@ const FALLBACK_PRICING_DEFAULTS = {
 };
 
 /** A user's company-level pricing defaults, creating the row on first read. */
-export async function getPricingDefaults(userId: number): Promise<PricingDefaults | undefined> {
+export async function getPricingDefaults(
+  userId: number
+): Promise<PricingDefaults | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const [existing] = await db.select().from(pricingDefaults)
-    .where(eq(pricingDefaults.userId, userId)).limit(1);
+  const [existing] = await db
+    .select()
+    .from(pricingDefaults)
+    .where(eq(pricingDefaults.userId, userId))
+    .limit(1);
   if (existing) return existing;
 
-  await db.insert(pricingDefaults).values({ userId, ...FALLBACK_PRICING_DEFAULTS });
-  const [created] = await db.select().from(pricingDefaults)
-    .where(eq(pricingDefaults.userId, userId)).limit(1);
+  await db
+    .insert(pricingDefaults)
+    .values({ userId, ...FALLBACK_PRICING_DEFAULTS });
+  const [created] = await db
+    .select()
+    .from(pricingDefaults)
+    .where(eq(pricingDefaults.userId, userId))
+    .limit(1);
   return created;
 }
 
@@ -2174,7 +2666,9 @@ export async function updatePricingDefaults(
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
-  await db.update(pricingDefaults).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(pricingDefaults)
+    .set({ ...safe, updatedAt: new Date() })
     .where(eq(pricingDefaults.userId, userId));
 }
 
@@ -2184,16 +2678,24 @@ export async function updatePricingDefaults(
 export async function getBidsByUser(userId: number): Promise<Bid[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(bids)
+  return db
+    .select()
+    .from(bids)
     .where(and(eq(bids.userId, userId), isNull(bids.archivedAt)))
     .orderBy(desc(bids.updatedAt));
 }
 
-export async function getBidById(id: number, userId: number): Promise<Bid | undefined> {
+export async function getBidById(
+  id: number,
+  userId: number
+): Promise<Bid | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select().from(bids)
-    .where(and(eq(bids.id, id), eq(bids.userId, userId))).limit(1);
+  const [row] = await db
+    .select()
+    .from(bids)
+    .where(and(eq(bids.id, id), eq(bids.userId, userId)))
+    .limit(1);
   return row;
 }
 
@@ -2204,13 +2706,19 @@ export async function createBid(data: InsertBid): Promise<number> {
   return result.insertId;
 }
 
-export async function updateBid(id: number, userId: number, data: Partial<InsertBid>) {
+export async function updateBid(
+  id: number,
+  userId: number,
+  data: Partial<InsertBid>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
-  await db.update(bids).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(bids)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(bids.id, id), eq(bids.userId, userId)));
 }
 
@@ -2225,11 +2733,19 @@ export async function updateBid(id: number, userId: number, data: Partial<Insert
  * `archivedAt IS NULL` means a stray second call cannot quietly buy another 30
  * days, which would let something sit in the archive forever.
  */
-export async function archiveBid(id: number, userId: number, now: Date = new Date()) {
+export async function archiveBid(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(bids).set({ archivedAt: now, updatedAt: now })
-    .where(and(eq(bids.id, id), eq(bids.userId, userId), isNull(bids.archivedAt)));
+  await db
+    .update(bids)
+    .set({ archivedAt: now, updatedAt: now })
+    .where(
+      and(eq(bids.id, id), eq(bids.userId, userId), isNull(bids.archivedAt))
+    );
 }
 
 /**
@@ -2241,18 +2757,28 @@ export async function archiveBid(id: number, userId: number, now: Date = new Dat
  * bid's status, pricing or line items was touched on the way in, so there is
  * nothing to put back.
  */
-export async function restoreBid(id: number, userId: number, now: Date = new Date()) {
+export async function restoreBid(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(bids).set({ archivedAt: null, updatedAt: now })
-    .where(and(eq(bids.id, id), eq(bids.userId, userId), isNotNull(bids.archivedAt)));
+  await db
+    .update(bids)
+    .set({ archivedAt: null, updatedAt: now })
+    .where(
+      and(eq(bids.id, id), eq(bids.userId, userId), isNotNull(bids.archivedAt))
+    );
 }
 
 /** The archive, soonest-to-expire first — the order the user needs to act in. */
 export async function getArchivedBids(userId: number): Promise<Bid[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(bids)
+  return db
+    .select()
+    .from(bids)
     .where(and(eq(bids.userId, userId), isNotNull(bids.archivedAt)))
     .orderBy(asc(bids.archivedAt));
 }
@@ -2278,11 +2804,16 @@ export async function deleteBidForever(id: number, userId: number) {
  * against stored instants, so the boundary is exact rather than rounded to a
  * day — see shared/retention.ts on why the display rounds and this does not.
  */
-export async function getExpiredArchivedBids(now: Date, retentionDays: number): Promise<Bid[]> {
+export async function getExpiredArchivedBids(
+  now: Date,
+  retentionDays: number
+): Promise<Bid[]> {
   const db = await getDb();
   if (!db) return [];
   const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
-  return db.select().from(bids)
+  return db
+    .select()
+    .from(bids)
     .where(and(isNotNull(bids.archivedAt), lte(bids.archivedAt, cutoff)))
     .orderBy(asc(bids.archivedAt));
 }
@@ -2290,19 +2821,30 @@ export async function getExpiredArchivedBids(now: Date, retentionDays: number): 
 // ─── Bid PDFs (plan sheets) ───────────────────────────────────────────────────
 
 /** Sheets attached to a bid, in the order the user put them. */
-export async function getBidPdfs(bidId: number, userId: number): Promise<BidPdf[]> {
+export async function getBidPdfs(
+  bidId: number,
+  userId: number
+): Promise<BidPdf[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(bidPdfs)
+  return db
+    .select()
+    .from(bidPdfs)
     .where(and(eq(bidPdfs.bidId, bidId), eq(bidPdfs.userId, userId)))
     .orderBy(asc(bidPdfs.sortOrder), asc(bidPdfs.id));
 }
 
-export async function getBidPdf(id: number, userId: number): Promise<BidPdf | undefined> {
+export async function getBidPdf(
+  id: number,
+  userId: number
+): Promise<BidPdf | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select().from(bidPdfs)
-    .where(and(eq(bidPdfs.id, id), eq(bidPdfs.userId, userId))).limit(1);
+  const [row] = await db
+    .select()
+    .from(bidPdfs)
+    .where(and(eq(bidPdfs.id, id), eq(bidPdfs.userId, userId)))
+    .limit(1);
   return row;
 }
 
@@ -2314,7 +2856,10 @@ export async function createBidPdf(data: InsertBidPdf): Promise<number> {
 }
 
 /** Next free slot, so a newly attached sheet lands at the bottom of the list. */
-export async function nextBidPdfSortOrder(bidId: number, userId: number): Promise<number> {
+export async function nextBidPdfSortOrder(
+  bidId: number,
+  userId: number
+): Promise<number> {
   const rows = await getBidPdfs(bidId, userId);
   return rows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
 }
@@ -2325,17 +2870,25 @@ export async function nextBidPdfSortOrder(bidId: number, userId: number): Promis
  * Written by the viewer after the document opens, because parsing a PDF to
  * count pages needs a PDF parser and the server has none.
  */
-export async function setBidPdfPageCount(id: number, userId: number, pageCount: number) {
+export async function setBidPdfPageCount(
+  id: number,
+  userId: number,
+  pageCount: number
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.update(bidPdfs).set({ pageCount, updatedAt: new Date() })
+  await db
+    .update(bidPdfs)
+    .set({ pageCount, updatedAt: new Date() })
     .where(and(eq(bidPdfs.id, id), eq(bidPdfs.userId, userId)));
 }
 
 export async function deleteBidPdf(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(bidPdfs).where(and(eq(bidPdfs.id, id), eq(bidPdfs.userId, userId)));
+  await db
+    .delete(bidPdfs)
+    .where(and(eq(bidPdfs.id, id), eq(bidPdfs.userId, userId)));
 }
 
 // ─── Plan sheets ──────────────────────────────────────────────────────────────
@@ -2344,19 +2897,32 @@ export async function deleteBidPdf(id: number, userId: number) {
 export type BidPdfSheetRow = BidPdfSheet;
 
 /** Every sheet of one document, in page order. */
-export async function getBidPdfSheets(bidPdfId: number, userId: number): Promise<BidPdfSheet[]> {
+export async function getBidPdfSheets(
+  bidPdfId: number,
+  userId: number
+): Promise<BidPdfSheet[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(bidPdfSheets)
-    .where(and(eq(bidPdfSheets.bidPdfId, bidPdfId), eq(bidPdfSheets.userId, userId)))
+  return db
+    .select()
+    .from(bidPdfSheets)
+    .where(
+      and(eq(bidPdfSheets.bidPdfId, bidPdfId), eq(bidPdfSheets.userId, userId))
+    )
     .orderBy(asc(bidPdfSheets.pageNumber));
 }
 
-export async function getBidPdfSheet(id: number, userId: number): Promise<BidPdfSheet | undefined> {
+export async function getBidPdfSheet(
+  id: number,
+  userId: number
+): Promise<BidPdfSheet | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select().from(bidPdfSheets)
-    .where(and(eq(bidPdfSheets.id, id), eq(bidPdfSheets.userId, userId))).limit(1);
+  const [row] = await db
+    .select()
+    .from(bidPdfSheets)
+    .where(and(eq(bidPdfSheets.id, id), eq(bidPdfSheets.userId, userId)))
+    .limit(1);
   return row;
 }
 
@@ -2379,7 +2945,9 @@ export async function updateBidPdfSheet(
   delete safe.userId;
   delete safe.bidPdfId;
   delete safe.pageNumber;
-  await db.update(bidPdfSheets).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(bidPdfSheets)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(bidPdfSheets.id, id), eq(bidPdfSheets.userId, userId)));
 }
 
@@ -2388,16 +2956,24 @@ export async function updateBidPdfSheet(
 export async function getBidLineItems(bidId: number): Promise<BidLineItem[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(bidLineItems)
+  return db
+    .select()
+    .from(bidLineItems)
     .where(eq(bidLineItems.bidId, bidId))
     .orderBy(asc(bidLineItems.sortOrder), asc(bidLineItems.id));
 }
 
-export async function getBidLineItem(id: number, bidId: number): Promise<BidLineItem | undefined> {
+export async function getBidLineItem(
+  id: number,
+  bidId: number
+): Promise<BidLineItem | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select().from(bidLineItems)
-    .where(and(eq(bidLineItems.id, id), eq(bidLineItems.bidId, bidId))).limit(1);
+  const [row] = await db
+    .select()
+    .from(bidLineItems)
+    .where(and(eq(bidLineItems.id, id), eq(bidLineItems.bidId, bidId)))
+    .limit(1);
   return row;
 }
 
@@ -2444,17 +3020,24 @@ export async function addAssemblyToBid(
    * default — and get a new line, which is what the Bids screen does.
    */
   if (options.merge) {
-    const existing = await db.select().from(bidLineItems)
-      .where(and(
-        eq(bidLineItems.bidId, bidId),
-        eq(bidLineItems.assemblyId, detail.id),
-        unitLabel === null ? isNull(bidLineItems.unitLabel) : eq(bidLineItems.unitLabel, unitLabel)
-      ))
+    const existing = await db
+      .select()
+      .from(bidLineItems)
+      .where(
+        and(
+          eq(bidLineItems.bidId, bidId),
+          eq(bidLineItems.assemblyId, detail.id),
+          unitLabel === null
+            ? isNull(bidLineItems.unitLabel)
+            : eq(bidLineItems.unitLabel, unitLabel)
+        )
+      )
       .limit(1);
 
     if (existing[0]) {
       const merged = Number(existing[0].qty) + qty;
-      await db.update(bidLineItems)
+      await db
+        .update(bidLineItems)
         .set({ qty: merged.toFixed(4), updatedAt: new Date() })
         .where(eq(bidLineItems.id, existing[0].id));
       return { id: existing[0].id, merged: true };
@@ -2466,8 +3049,13 @@ export async function addAssemblyToBid(
     getLibraryLaborRates(userId),
   ]);
 
-  const applied = activeModifiers.filter(m => detail.modifierIds.includes(m.id));
-  const modifierPct = applied.reduce((sum, m) => sum + Number(m.laborAdjustmentPct), 0);
+  const applied = activeModifiers.filter(m =>
+    detail.modifierIds.includes(m.id)
+  );
+  const modifierPct = applied.reduce(
+    (sum, m) => sum + Number(m.laborAdjustmentPct),
+    0
+  );
 
   // Resolved through the shared lookup so a forked role still prices — the
   // snapshot must freeze the rate the assembly ACTUALLY means, not zero.
@@ -2504,14 +3092,17 @@ export async function updateBidLineItem(
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.bidId;
-  await db.update(bidLineItems).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(bidLineItems)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(bidLineItems.id, id), eq(bidLineItems.bidId, bidId)));
 }
 
 export async function deleteBidLineItem(id: number, bidId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(bidLineItems)
+  await db
+    .delete(bidLineItems)
     .where(and(eq(bidLineItems.id, id), eq(bidLineItems.bidId, bidId)));
 }
 
@@ -2520,7 +3111,8 @@ export async function getBidUnitLabels(bidId: number): Promise<string[]> {
   const rows = await getBidLineItems(bidId);
   const seen: string[] = [];
   for (const row of rows) {
-    if (row.unitLabel && !seen.includes(row.unitLabel)) seen.push(row.unitLabel);
+    if (row.unitLabel && !seen.includes(row.unitLabel))
+      seen.push(row.unitLabel);
   }
   return seen;
 }
@@ -2548,9 +3140,12 @@ export async function duplicateBidUnit(
 
   const all = await getBidLineItems(bidId);
   const source = all.filter(row => row.unitLabel === sourceUnitLabel);
-  if (source.length === 0) throw new Error(`No line items found for unit "${sourceUnitLabel}"`);
+  if (source.length === 0)
+    throw new Error(`No line items found for unit "${sourceUnitLabel}"`);
 
-  const existingLabels = new Set(all.map(row => row.unitLabel).filter(Boolean) as string[]);
+  const existingLabels = new Set(
+    all.map(row => row.unitLabel).filter(Boolean) as string[]
+  );
   let sortOrder = await nextBidSortOrder(bidId);
 
   const created: string[] = [];
@@ -2559,7 +3154,10 @@ export async function duplicateBidUnit(
 
   for (let index = 0; index < count; index++) {
     const label = `${baseName} ${startNumber + index}`;
-    if (existingLabels.has(label)) { skipped.push(label); continue; }
+    if (existingLabels.has(label)) {
+      skipped.push(label);
+      continue;
+    }
     existingLabels.add(label);
     created.push(label);
 
@@ -2602,12 +3200,18 @@ export async function duplicateBidUnit(
  * something this user reached for, so counting them would put the same handful
  * of materials at the top for everybody, forever.
  */
-export async function getRecentMaterialsForUser(userId: number, limit = 8): Promise<Material[]> {
+export async function getRecentMaterialsForUser(
+  userId: number,
+  limit = 8
+): Promise<Material[]> {
   const db = await getDb();
   if (!db) return [];
 
   const rows = await db
-    .select({ materialId: assemblyMaterials.materialId, at: assemblyMaterials.id })
+    .select({
+      materialId: assemblyMaterials.materialId,
+      at: assemblyMaterials.id,
+    })
     .from(assemblyMaterials)
     .innerJoin(assemblies, eq(assemblyMaterials.assemblyId, assemblies.id))
     .where(and(eq(assemblies.userId, userId), eq(assemblies.isActive, true)))
@@ -2685,21 +3289,32 @@ export async function getLibraryKits(
 ): Promise<Kit[]> {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select().from(kits)
-    .where(and(
-      or(isNull(kits.userId), eq(kits.userId, userId)),
-      eq(kits.isActive, true)
-    ))
+  const rows = await db
+    .select()
+    .from(kits)
+    .where(
+      and(
+        or(isNull(kits.userId), eq(kits.userId, userId)),
+        eq(kits.isActive, true)
+      )
+    )
     .orderBy(asc(kits.name));
   // See getLibraryMaterials on why the merge happens before the filter.
   return mergeLibraryRows(rows, userId).filter(row => row.status === status);
 }
 
-export async function getKitById(id: number, userId: number): Promise<Kit | undefined> {
+export async function getKitById(
+  id: number,
+  userId: number
+): Promise<Kit | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select().from(kits)
-    .where(and(eq(kits.id, id), or(isNull(kits.userId), eq(kits.userId, userId))))
+  const [row] = await db
+    .select()
+    .from(kits)
+    .where(
+      and(eq(kits.id, id), or(isNull(kits.userId), eq(kits.userId, userId)))
+    )
     .limit(1);
   return row;
 }
@@ -2724,7 +3339,10 @@ export async function getKitItems(kitId: number): Promise<KitItemLine[]> {
     .orderBy(asc(kitAssemblies.sortOrder), asc(kitAssemblies.id));
 }
 
-export async function getKitDetail(id: number, userId: number): Promise<KitDetail | undefined> {
+export async function getKitDetail(
+  id: number,
+  userId: number
+): Promise<KitDetail | undefined> {
   const kit = await getKitById(id, userId);
   if (!kit) return undefined;
   return { ...kit, items: await getKitItems(id) };
@@ -2737,12 +3355,18 @@ export async function createKit(data: InsertKit): Promise<number> {
   return result.insertId;
 }
 
-export async function updateKit(id: number, userId: number, data: Partial<InsertKit>) {
+export async function updateKit(
+  id: number,
+  userId: number,
+  data: Partial<InsertKit>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   for (const field of LIBRARY_OWNERSHIP_FIELDS) delete safe[field];
-  await db.update(kits).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(kits)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(kits.id, id), eq(kits.userId, userId)));
 }
 
@@ -2778,16 +3402,23 @@ export async function setKitItems(
   );
 }
 
-export async function forkKit(baselineId: number, userId: number): Promise<number> {
+export async function forkKit(
+  baselineId: number,
+  userId: number
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [existing] = await db.select().from(kits)
+  const [existing] = await db
+    .select()
+    .from(kits)
     .where(and(eq(kits.userId, userId), eq(kits.baselineId, baselineId)))
     .limit(1);
   if (existing) return existing.id;
 
-  const [baseline] = await db.select().from(kits)
+  const [baseline] = await db
+    .select()
+    .from(kits)
     .where(and(eq(kits.id, baselineId), isNull(kits.userId)))
     .limit(1);
   if (!baseline) throw new Error("Baseline kit not found");
@@ -2801,7 +3432,10 @@ export async function forkKit(baselineId: number, userId: number): Promise<numbe
   const forkId = result.insertId;
 
   const items = await getKitItems(baseline.id);
-  await setKitItems(forkId, items.map(i => ({ assemblyId: i.assemblyId, qty: i.qty })));
+  await setKitItems(
+    forkId,
+    items.map(i => ({ assemblyId: i.assemblyId, qty: i.qty }))
+  );
   return forkId;
 }
 
@@ -2809,18 +3443,27 @@ export async function revertKitToBaseline(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const [fork] = await db.select().from(kits)
-    .where(and(eq(kits.id, id), eq(kits.userId, userId))).limit(1);
+  const [fork] = await db
+    .select()
+    .from(kits)
+    .where(and(eq(kits.id, id), eq(kits.userId, userId)))
+    .limit(1);
   if (!fork) throw new Error("Kit not found");
   if (fork.baselineId == null) {
-    throw new Error("Kit was created from scratch — there is no original to revert to");
+    throw new Error(
+      "Kit was created from scratch — there is no original to revert to"
+    );
   }
 
-  const [baseline] = await db.select().from(kits)
-    .where(and(eq(kits.id, fork.baselineId), isNull(kits.userId))).limit(1);
+  const [baseline] = await db
+    .select()
+    .from(kits)
+    .where(and(eq(kits.id, fork.baselineId), isNull(kits.userId)))
+    .limit(1);
   if (!baseline) throw new Error("Baseline kit no longer exists");
 
-  await db.update(kits)
+  await db
+    .update(kits)
     .set({
       ...contentFields<Kit, InsertKit>(baseline),
       baselineVersion: baseline.version,
@@ -2829,7 +3472,10 @@ export async function revertKitToBaseline(id: number, userId: number) {
     .where(and(eq(kits.id, id), eq(kits.userId, userId)));
 
   const items = await getKitItems(baseline.id);
-  await setKitItems(id, items.map(i => ({ assemblyId: i.assemblyId, qty: i.qty })));
+  await setKitItems(
+    id,
+    items.map(i => ({ assemblyId: i.assemblyId, qty: i.qty }))
+  );
 }
 
 /** Copy a kit into a new, independent one. Same distinction as duplicateAssembly. */
@@ -2854,7 +3500,10 @@ export async function duplicateKit(
   const newId = result.insertId;
 
   const items = await getKitItems(source.id);
-  await setKitItems(newId, items.map(i => ({ assemblyId: i.assemblyId, qty: i.qty })));
+  await setKitItems(
+    newId,
+    items.map(i => ({ assemblyId: i.assemblyId, qty: i.qty }))
+  );
   return newId;
 }
 
@@ -2890,9 +3539,14 @@ export async function addKitToBid(
   for (const item of kit.items) {
     try {
       const { id } = await addAssemblyToBid(
-        bidId, userId, item.assemblyId, Number(item.qty) * qty, unitLabel
+        bidId,
+        userId,
+        item.assemblyId,
+        Number(item.qty) * qty,
+        unitLabel
       );
-      await db.update(bidLineItems)
+      await db
+        .update(bidLineItems)
         .set({ sourceKitName: kit.name })
         .where(eq(bidLineItems.id, id));
       lineIds.push(id);
@@ -2914,15 +3568,19 @@ export async function seedBaselineKits(): Promise<void> {
 
     await dedupeBaselineRows("kits");
 
-    const existingRows = await db.select({ name: kits.name }).from(kits)
+    const existingRows = await db
+      .select({ name: kits.name })
+      .from(kits)
       .where(isNull(kits.userId));
     const alreadySeeded = new Set(existingRows.map(row => row.name));
 
     const pending = BASELINE_KITS.filter(k => !alreadySeeded.has(k.name));
     if (pending.length === 0) return;
 
-    const baselineAssemblies = await db.select({ id: assemblies.id, name: assemblies.name })
-      .from(assemblies).where(isNull(assemblies.userId));
+    const baselineAssemblies = await db
+      .select({ id: assemblies.id, name: assemblies.name })
+      .from(assemblies)
+      .where(isNull(assemblies.userId));
     const idByName = new Map(baselineAssemblies.map(row => [row.name, row.id]));
 
     for (const spec of pending) {
@@ -2934,7 +3592,9 @@ export async function seedBaselineKits(): Promise<void> {
         const missing = spec.items
           .filter(item => !idByName.has(item.assembly))
           .map(item => item.assembly);
-        console.warn(`[BaselineKits] Skipping "${spec.name}" — missing assemblies: ${missing.join(", ")}`);
+        console.warn(
+          `[BaselineKits] Skipping "${spec.name}" — missing assemblies: ${missing.join(", ")}`
+        );
         continue;
       }
 
@@ -2943,7 +3603,10 @@ export async function seedBaselineKits(): Promise<void> {
         name: spec.name,
         description: spec.description,
       });
-      await setKitItems(result.insertId, items as Array<{ assemblyId: number; qty: string }>);
+      await setKitItems(
+        result.insertId,
+        items as Array<{ assemblyId: number; qty: string }>
+      );
     }
   });
 }
@@ -2951,28 +3614,46 @@ export async function seedBaselineKits(): Promise<void> {
 // ─── Traced runs (takeoff phase 2b) ───────────────────────────────────────────
 
 /** Every run on one sheet, oldest first — the order they were traced. */
-export async function getRunsForSheet(sheetId: number, userId: number): Promise<TakeoffRun[]> {
+export async function getRunsForSheet(
+  sheetId: number,
+  userId: number
+): Promise<TakeoffRun[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(takeoffRuns)
-    .where(and(eq(takeoffRuns.sheetId, sheetId), eq(takeoffRuns.userId, userId)))
+  return db
+    .select()
+    .from(takeoffRuns)
+    .where(
+      and(eq(takeoffRuns.sheetId, sheetId), eq(takeoffRuns.userId, userId))
+    )
     .orderBy(asc(takeoffRuns.id));
 }
 
 /** Every run on a whole bid, for the bill of materials rollup. */
-export async function getRunsForBid(bidId: number, userId: number): Promise<TakeoffRun[]> {
+export async function getRunsForBid(
+  bidId: number,
+  userId: number
+): Promise<TakeoffRun[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(takeoffRuns)
+  return db
+    .select()
+    .from(takeoffRuns)
     .where(and(eq(takeoffRuns.bidId, bidId), eq(takeoffRuns.userId, userId)))
     .orderBy(asc(takeoffRuns.id));
 }
 
-export async function getRunById(id: number, userId: number): Promise<TakeoffRun | undefined> {
+export async function getRunById(
+  id: number,
+  userId: number
+): Promise<TakeoffRun | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select().from(takeoffRuns)
-    .where(and(eq(takeoffRuns.id, id), eq(takeoffRuns.userId, userId))).limit(1);
+  const [row] = await db
+    .select()
+    .from(takeoffRuns)
+    .where(and(eq(takeoffRuns.id, id), eq(takeoffRuns.userId, userId)))
+    .limit(1);
   return row;
 }
 
@@ -2983,29 +3664,47 @@ export async function createRun(data: InsertTakeoffRun): Promise<number> {
   return result.insertId;
 }
 
-export async function updateRun(id: number, userId: number, data: Partial<InsertTakeoffRun>) {
+export async function updateRun(
+  id: number,
+  userId: number,
+  data: Partial<InsertTakeoffRun>
+) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
   delete safe.bidId;
-  await db.update(takeoffRuns).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(takeoffRuns)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(takeoffRuns.id, id), eq(takeoffRuns.userId, userId)));
 }
 
 export async function deleteRun(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(takeoffRuns).where(and(eq(takeoffRuns.id, id), eq(takeoffRuns.userId, userId)));
+  await db
+    .delete(takeoffRuns)
+    .where(and(eq(takeoffRuns.id, id), eq(takeoffRuns.userId, userId)));
 }
 
 /** Circuits pulled through one run. */
-export async function getRunCircuits(runId: number, userId: number): Promise<TakeoffRunCircuit[]> {
+export async function getRunCircuits(
+  runId: number,
+  userId: number
+): Promise<TakeoffRunCircuit[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(takeoffRunCircuits)
-    .where(and(eq(takeoffRunCircuits.runId, runId), eq(takeoffRunCircuits.userId, userId)))
+  return db
+    .select()
+    .from(takeoffRunCircuits)
+    .where(
+      and(
+        eq(takeoffRunCircuits.runId, runId),
+        eq(takeoffRunCircuits.userId, userId)
+      )
+    )
     .orderBy(asc(takeoffRunCircuits.id));
 }
 
@@ -3017,12 +3716,21 @@ export async function getCircuitsForRuns(
   if (runIds.length === 0) return [];
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(takeoffRunCircuits)
-    .where(and(inArray(takeoffRunCircuits.runId, runIds), eq(takeoffRunCircuits.userId, userId)))
+  return db
+    .select()
+    .from(takeoffRunCircuits)
+    .where(
+      and(
+        inArray(takeoffRunCircuits.runId, runIds),
+        eq(takeoffRunCircuits.userId, userId)
+      )
+    )
     .orderBy(asc(takeoffRunCircuits.id));
 }
 
-export async function createRunCircuit(data: InsertTakeoffRunCircuit): Promise<number> {
+export async function createRunCircuit(
+  data: InsertTakeoffRunCircuit
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const [result] = await db.insert(takeoffRunCircuits).values(data);
@@ -3040,32 +3748,53 @@ export async function updateRunCircuit(
   delete safe.id;
   delete safe.userId;
   delete safe.runId;
-  await db.update(takeoffRunCircuits).set({ ...safe, updatedAt: new Date() })
-    .where(and(eq(takeoffRunCircuits.id, id), eq(takeoffRunCircuits.userId, userId)));
+  await db
+    .update(takeoffRunCircuits)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(
+      and(eq(takeoffRunCircuits.id, id), eq(takeoffRunCircuits.userId, userId))
+    );
 }
 
 export async function deleteRunCircuit(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(takeoffRunCircuits)
-    .where(and(eq(takeoffRunCircuits.id, id), eq(takeoffRunCircuits.userId, userId)));
+  await db
+    .delete(takeoffRunCircuits)
+    .where(
+      and(eq(takeoffRunCircuits.id, id), eq(takeoffRunCircuits.userId, userId))
+    );
 }
 
 // ─── Stamps and symbol links (takeoff phase 2c) ───────────────────────────────
 
-export async function getStampsForSheet(sheetId: number, userId: number): Promise<TakeoffStamp[]> {
+export async function getStampsForSheet(
+  sheetId: number,
+  userId: number
+): Promise<TakeoffStamp[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(takeoffStamps)
-    .where(and(eq(takeoffStamps.sheetId, sheetId), eq(takeoffStamps.userId, userId)))
+  return db
+    .select()
+    .from(takeoffStamps)
+    .where(
+      and(eq(takeoffStamps.sheetId, sheetId), eq(takeoffStamps.userId, userId))
+    )
     .orderBy(asc(takeoffStamps.id));
 }
 
-export async function getStampsForBid(bidId: number, userId: number): Promise<TakeoffStamp[]> {
+export async function getStampsForBid(
+  bidId: number,
+  userId: number
+): Promise<TakeoffStamp[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(takeoffStamps)
-    .where(and(eq(takeoffStamps.bidId, bidId), eq(takeoffStamps.userId, userId)))
+  return db
+    .select()
+    .from(takeoffStamps)
+    .where(
+      and(eq(takeoffStamps.bidId, bidId), eq(takeoffStamps.userId, userId))
+    )
     .orderBy(asc(takeoffStamps.id));
 }
 
@@ -3085,7 +3814,9 @@ export async function setStampLocation(
 ) {
   const database = await getDb();
   if (!database) throw new Error("DB unavailable");
-  await database.update(takeoffStamps).set({ location, updatedAt: new Date() })
+  await database
+    .update(takeoffStamps)
+    .set({ location, updatedAt: new Date() })
     .where(and(eq(takeoffStamps.id, id), eq(takeoffStamps.userId, userId)));
 }
 
@@ -3098,18 +3829,23 @@ export async function setStampLocationForAssembly(
 ) {
   const database = await getDb();
   if (!database) throw new Error("DB unavailable");
-  await database.update(takeoffStamps).set({ location, updatedAt: new Date() })
-    .where(and(
-      eq(takeoffStamps.sheetId, sheetId),
-      eq(takeoffStamps.userId, userId),
-      eq(takeoffStamps.assemblyName, assemblyName)
-    ));
+  await database
+    .update(takeoffStamps)
+    .set({ location, updatedAt: new Date() })
+    .where(
+      and(
+        eq(takeoffStamps.sheetId, sheetId),
+        eq(takeoffStamps.userId, userId),
+        eq(takeoffStamps.assemblyName, assemblyName)
+      )
+    );
 }
 
 export async function deleteStamp(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(takeoffStamps)
+  await db
+    .delete(takeoffStamps)
     .where(and(eq(takeoffStamps.id, id), eq(takeoffStamps.userId, userId)));
 }
 
@@ -3117,7 +3853,9 @@ export async function deleteStamp(id: number, userId: number) {
 export async function getSymbolLinks(userId: number): Promise<SymbolLink[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(symbolLinks)
+  return db
+    .select()
+    .from(symbolLinks)
     .where(eq(symbolLinks.userId, userId))
     .orderBy(asc(symbolLinks.label));
 }
@@ -3128,8 +3866,12 @@ export async function getSymbolLinkByKey(
 ): Promise<SymbolLink | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select().from(symbolLinks)
-    .where(and(eq(symbolLinks.userId, userId), eq(symbolLinks.lookupKey, lookupKey)))
+  const [row] = await db
+    .select()
+    .from(symbolLinks)
+    .where(
+      and(eq(symbolLinks.userId, userId), eq(symbolLinks.lookupKey, lookupKey))
+    )
     .limit(1);
   return row;
 }
@@ -3140,12 +3882,17 @@ export async function getSymbolLinkById(
 ): Promise<SymbolLink | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const [row] = await db.select().from(symbolLinks)
-    .where(and(eq(symbolLinks.id, id), eq(symbolLinks.userId, userId))).limit(1);
+  const [row] = await db
+    .select()
+    .from(symbolLinks)
+    .where(and(eq(symbolLinks.id, id), eq(symbolLinks.userId, userId)))
+    .limit(1);
   return row;
 }
 
-export async function createSymbolLink(data: InsertSymbolLink): Promise<number> {
+export async function createSymbolLink(
+  data: InsertSymbolLink
+): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
   const [result] = await db.insert(symbolLinks).values(data);
@@ -3162,13 +3909,16 @@ export async function updateSymbolLink(
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
-  await db.update(symbolLinks).set({ ...safe, updatedAt: new Date() })
+  await db
+    .update(symbolLinks)
+    .set({ ...safe, updatedAt: new Date() })
     .where(and(eq(symbolLinks.id, id), eq(symbolLinks.userId, userId)));
 }
 
 export async function deleteSymbolLink(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await db.delete(symbolLinks)
+  await db
+    .delete(symbolLinks)
     .where(and(eq(symbolLinks.id, id), eq(symbolLinks.userId, userId)));
 }

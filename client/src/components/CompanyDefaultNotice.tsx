@@ -26,7 +26,10 @@ export function CompanyDefaultNotice({
 }) {
   return (
     <div
-      className={cn("flex items-start gap-1.5 text-xs text-[#F5C518]", className)}
+      className={cn(
+        "flex items-start gap-1.5 text-xs text-[#F5C518]",
+        className
+      )}
       // Announced with the field rather than as an alert: it is a standing fact
       // about the control, not an error that just happened.
       role="note"

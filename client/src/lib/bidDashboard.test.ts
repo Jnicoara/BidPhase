@@ -58,7 +58,9 @@ describe("byDueDate", () => {
   });
 
   it("orders undated bids among themselves by name, so the list is stable", () => {
-    const sorted = [bid({ name: "Zeta" }), bid({ name: "Alpha" })].sort(byDueDate);
+    const sorted = [bid({ name: "Zeta" }), bid({ name: "Alpha" })].sort(
+      byDueDate
+    );
     expect(sorted.map(b => b.name)).toEqual(["Alpha", "Zeta"]);
   });
 
@@ -107,10 +109,17 @@ describe("byRecentlyUpdated", () => {
 
   it("ignores the due date entirely", () => {
     const sorted = [
-      bid({ name: "urgent-but-old", dueDate: "2026-01-01", updatedAt: "2026-01-01T00:00:00Z" }),
+      bid({
+        name: "urgent-but-old",
+        dueDate: "2026-01-01",
+        updatedAt: "2026-01-01T00:00:00Z",
+      }),
       bid({ name: "undated-but-recent", updatedAt: "2026-08-01T00:00:00Z" }),
     ].sort(byRecentlyUpdated);
-    expect(sorted.map(b => b.name)).toEqual(["undated-but-recent", "urgent-but-old"]);
+    expect(sorted.map(b => b.name)).toEqual([
+      "undated-but-recent",
+      "urgent-but-old",
+    ]);
   });
 });
 
@@ -140,17 +149,40 @@ describe("groupBidsByStatus", () => {
       bid({ name: "w", status: "Won" }),
       bid({ name: "l", status: "Lost" }),
     ]);
-    expect(groups.map(g => g.bids.map(b => b.name))).toEqual([["d"], ["a"], ["w"], ["l"]]);
+    expect(groups.map(g => g.bids.map(b => b.name))).toEqual([
+      ["d"],
+      ["a"],
+      ["w"],
+      ["l"],
+    ]);
   });
 
   it("sorts each column by its own rule, not one rule for all", () => {
     const groups = groupBidsByStatus([
       // Draft sorts by deadline...
-      bid({ name: "draft-undated", status: "Draft", updatedAt: "2026-09-01T00:00:00Z" }),
-      bid({ name: "draft-due", status: "Draft", dueDate: "2026-09-10", updatedAt: "2026-01-01T00:00:00Z" }),
+      bid({
+        name: "draft-undated",
+        status: "Draft",
+        updatedAt: "2026-09-01T00:00:00Z",
+      }),
+      bid({
+        name: "draft-due",
+        status: "Draft",
+        dueDate: "2026-09-10",
+        updatedAt: "2026-01-01T00:00:00Z",
+      }),
       // ...while Won sorts by recency, ignoring deadlines entirely.
-      bid({ name: "won-old", status: "Won", dueDate: "2026-01-01", updatedAt: "2026-01-01T00:00:00Z" }),
-      bid({ name: "won-new", status: "Won", updatedAt: "2026-09-01T00:00:00Z" }),
+      bid({
+        name: "won-old",
+        status: "Won",
+        dueDate: "2026-01-01",
+        updatedAt: "2026-01-01T00:00:00Z",
+      }),
+      bid({
+        name: "won-new",
+        status: "Won",
+        updatedAt: "2026-09-01T00:00:00Z",
+      }),
     ]);
 
     const draft = groups.find(g => g.status === "Draft")!;
@@ -161,7 +193,9 @@ describe("groupBidsByStatus", () => {
 
   it("drops a bid with an unrecognised status rather than misfiling it", () => {
     // Landing in the wrong column is worse than being visibly absent.
-    const groups = groupBidsByStatus([bid({ name: "weird", status: "Archived" })]);
+    const groups = groupBidsByStatus([
+      bid({ name: "weird", status: "Archived" }),
+    ]);
     expect(groups.flatMap(g => g.bids)).toHaveLength(0);
   });
 
@@ -188,7 +222,8 @@ describe("calendarDate", () => {
 
   it("survives a round trip through toLocaleDateString", () => {
     const rendered = calendarDate("2026-01-01")!.toLocaleDateString("en-US", {
-      month: "short", day: "numeric",
+      month: "short",
+      day: "numeric",
     });
     expect(rendered).toBe("Jan 1");
   });

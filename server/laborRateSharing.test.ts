@@ -16,8 +16,11 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { appRouter } from "./routers";
 import {
-  getDb, seedBaselineAssemblies, seedBaselineLaborRates,
-  seedBaselineMaterials, seedBaselineModifiers,
+  getDb,
+  seedBaselineAssemblies,
+  seedBaselineLaborRates,
+  seedBaselineMaterials,
+  seedBaselineModifiers,
 } from "./db";
 import { assemblies, bids, laborRates, users } from "../drizzle/schema";
 import { hourlyCostFor, resolveLaborRate } from "../shared/laborRateLookup";
@@ -41,9 +44,13 @@ async function assemblyUsing(roleName: string, hours = 2) {
   const role = rates.find(r => r.name === roleName)!;
   const created = await caller().assemblies.create({
     name: `Uses ${roleName} ${Date.now()}${Math.random()}`,
-    category: "Devices", trade: "electrical", projectType: null,
-    baseLaborHours: hours, laborRateId: role.id,
-    materials: [], modifierIds: [],
+    category: "Devices",
+    trade: "electrical",
+    projectType: null,
+    baseLaborHours: hours,
+    laborRateId: role.id,
+    materials: [],
+    modifierIds: [],
   });
   return { assembly: created!, roleId: role.id };
 }
@@ -54,10 +61,16 @@ beforeAll(async () => {
   if (!db) return;
 
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await db.insert(users).values({
-        id, openId: `test-rate-share-${id}`, name: `Rate sharing test user ${id}`,
+        id,
+        openId: `test-rate-share-${id}`,
+        name: `Rate sharing test user ${id}`,
       });
     }
   }
@@ -85,8 +98,13 @@ beforeAll(async () => {
 async function rateTheStarters() {
   const db = await getDb();
   if (!db) return;
-  for (const [name, hourlyCost] of [["Journeyman", "38.0000"], ["Apprentice", "22.0000"]]) {
-    await db.update(laborRates).set({ hourlyCost })
+  for (const [name, hourlyCost] of [
+    ["Journeyman", "38.0000"],
+    ["Apprentice", "22.0000"],
+  ]) {
+    await db
+      .update(laborRates)
+      .set({ hourlyCost })
       .where(and(isNull(laborRates.userId), eq(laborRates.name, name)));
   }
 }
@@ -96,15 +114,25 @@ beforeEach(async () => {
   const db = await getDb();
   if (!db) return;
   await db.delete(bids).where(inArray(bids.userId, [USER, OTHER_USER]));
-  await db.delete(assemblies).where(inArray(assemblies.userId, [USER, OTHER_USER]));
-  await db.delete(laborRates).where(inArray(laborRates.userId, [USER, OTHER_USER]));
+  await db
+    .delete(assemblies)
+    .where(inArray(assemblies.userId, [USER, OTHER_USER]));
+  await db
+    .delete(laborRates)
+    .where(inArray(laborRates.userId, [USER, OTHER_USER]));
   await rateTheStarters();
 });
 
 describe("resolveLaborRate", () => {
-  const hourly = (over: Partial<Parameters<typeof hourlyCostFor>[0][number]> & { id: number }) => ({
-    baselineId: null, rateType: "hourly" as const, hourlyCost: "38",
-    annualSalary: null, annualHours: null, ...over,
+  const hourly = (
+    over: Partial<Parameters<typeof hourlyCostFor>[0][number]> & { id: number }
+  ) => ({
+    baselineId: null,
+    rateType: "hourly" as const,
+    hourlyCost: "38",
+    annualSalary: null,
+    annualHours: null,
+    ...over,
   });
 
   it("finds a rate by its own id", () => {
@@ -120,7 +148,10 @@ describe("resolveLaborRate", () => {
   });
 
   it("prefers the direct id over a fork of something else", () => {
-    const rates = [hourly({ id: 1, hourlyCost: "38" }), hourly({ id: 42, baselineId: 1, hourlyCost: "50" })];
+    const rates = [
+      hourly({ id: 1, hourlyCost: "38" }),
+      hourly({ id: 42, baselineId: 1, hourlyCost: "50" }),
+    ];
     expect(resolveLaborRate(rates, 1)?.id).toBe(1);
   });
 
@@ -131,18 +162,30 @@ describe("resolveLaborRate", () => {
   });
 
   it("derives a salaried role's hourly cost", () => {
-    const rates = [{
-      id: 7, baselineId: null, rateType: "salary" as const, hourlyCost: "0",
-      annualSalary: "60000", annualHours: "2080",
-    }];
+    const rates = [
+      {
+        id: 7,
+        baselineId: null,
+        rateType: "salary" as const,
+        hourlyCost: "0",
+        annualSalary: "60000",
+        annualHours: "2080",
+      },
+    ];
     expect(hourlyCostFor(rates, 7)).toBeCloseTo(28.85, 2);
   });
 
   it("prices a salary with unusable hours at zero rather than throwing", () => {
-    const rates = [{
-      id: 7, baselineId: null, rateType: "salary" as const, hourlyCost: "0",
-      annualSalary: "60000", annualHours: "0",
-    }];
+    const rates = [
+      {
+        id: 7,
+        baselineId: null,
+        rateType: "salary" as const,
+        hourlyCost: "0",
+        annualSalary: "60000",
+        annualHours: "0",
+      },
+    ];
     expect(hourlyCostFor(rates, 7)).toBe(0);
   });
 });
@@ -155,7 +198,10 @@ describe.skipIf(!hasDb)("editing a rate moves every assembly using it", () => {
     expect(before.line.laborCost).toBeCloseTo(76, 2); // 2 h x $38
 
     const edited = await caller().laborRates.update({
-      id: before.line ? (await caller().laborRates.list()).find(r => r.name === "Journeyman")!.id : 0,
+      id: before.line
+        ? (await caller().laborRates.list()).find(r => r.name === "Journeyman")!
+            .id
+        : 0,
       hourlyCost: 50,
     });
     expect(edited.forked).toBe(true); // a starter edit always forks
@@ -171,7 +217,8 @@ describe.skipIf(!hasDb)("editing a rate moves every assembly using it", () => {
 
     const rates = await caller().laborRates.list();
     await caller().laborRates.update({
-      id: rates.find(r => r.name === "Journeyman")!.id, hourlyCost: 40,
+      id: rates.find(r => r.name === "Journeyman")!.id,
+      hourlyCost: 40,
     });
 
     const pricedA = await caller().assemblies.price({ id: a.assembly.id });
@@ -186,13 +233,18 @@ describe.skipIf(!hasDb)("editing a rate moves every assembly using it", () => {
 
     const rates = await caller().laborRates.list();
     await caller().laborRates.update({
-      id: rates.find(r => r.name === "Journeyman")!.id, hourlyCost: 99,
+      id: rates.find(r => r.name === "Journeyman")!.id,
+      hourlyCost: 99,
     });
 
-    expect((await caller().assemblies.price({ id: apprentice.assembly.id })).line.laborCost)
-      .toBeCloseTo(22, 2);
-    expect((await caller().assemblies.price({ id: journeyman.assembly.id })).line.laborCost)
-      .toBeCloseTo(99, 2);
+    expect(
+      (await caller().assemblies.price({ id: apprentice.assembly.id })).line
+        .laborCost
+    ).toBeCloseTo(22, 2);
+    expect(
+      (await caller().assemblies.price({ id: journeyman.assembly.id })).line
+        .laborCost
+    ).toBeCloseTo(99, 2);
   });
 
   it("carries through a kit's cost too", async () => {
@@ -205,7 +257,8 @@ describe.skipIf(!hasDb)("editing a rate moves every assembly using it", () => {
 
     const rates = await caller().laborRates.list();
     await caller().laborRates.update({
-      id: rates.find(r => r.name === "Journeyman")!.id, hourlyCost: 76,
+      id: rates.find(r => r.name === "Journeyman")!.id,
+      hourlyCost: 76,
     });
 
     const after = await caller().kits.price({ id: kit!.id });
@@ -216,12 +269,17 @@ describe.skipIf(!hasDb)("editing a rate moves every assembly using it", () => {
     const { assembly } = await assemblyUsing("Journeyman", 1);
     const rates = await caller().laborRates.list();
     await caller().laborRates.update({
-      id: rates.find(r => r.name === "Journeyman")!.id, hourlyCost: 90,
+      id: rates.find(r => r.name === "Journeyman")!.id,
+      hourlyCost: 90,
     });
 
     const theirRates = await callerFor(OTHER_USER).laborRates.list();
-    expect(theirRates.find(r => r.name === "Journeyman")?.effectiveHourlyRate).toBeCloseTo(38, 2);
-    expect((await caller().assemblies.price({ id: assembly.id })).line.laborCost).toBeCloseTo(90, 2);
+    expect(
+      theirRates.find(r => r.name === "Journeyman")?.effectiveHourlyRate
+    ).toBeCloseTo(38, 2);
+    expect(
+      (await caller().assemblies.price({ id: assembly.id })).line.laborCost
+    ).toBeCloseTo(90, 2);
   });
 });
 
@@ -233,7 +291,9 @@ describe.skipIf(!hasDb)("there is no per-assembly rate override", () => {
     expect(detail.laborRateId).toBe(roleId);
     // If a rate ever gets copied onto the assembly, this catches it.
     const keys = Object.keys(detail);
-    expect(keys.filter(k => /rate|hourly|wage/i.test(k))).toEqual(["laborRateId"]);
+    expect(keys.filter(k => /rate|hourly|wage/i.test(k))).toEqual([
+      "laborRateId",
+    ]);
   });
 
   it("the update endpoint offers no way to set a rate on the assembly", async () => {
@@ -259,13 +319,20 @@ describe.skipIf(!hasDb)("there is no per-assembly rate override", () => {
 describe.skipIf(!hasDb)("already-snapshotted bids are untouched", () => {
   it("a bid line keeps the rate it was priced at when the role changes", async () => {
     const { assembly } = await assemblyUsing("Journeyman", 2);
-    const bid = (await caller().bids.create({ name: `Frozen ${Date.now()}${Math.random()}` }))!;
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+    const bid = (await caller().bids.create({
+      name: `Frozen ${Date.now()}${Math.random()}`,
+    }))!;
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+    });
     const before = await caller().bids.get({ id: bid.id });
 
     const rates = await caller().laborRates.list();
     await caller().laborRates.update({
-      id: rates.find(r => r.name === "Journeyman")!.id, hourlyCost: 500,
+      id: rates.find(r => r.name === "Journeyman")!.id,
+      hourlyCost: 500,
     });
 
     const after = await caller().bids.get({ id: bid.id });
@@ -275,17 +342,30 @@ describe.skipIf(!hasDb)("already-snapshotted bids are untouched", () => {
 
   it("but a line added AFTER the edit snapshots the new rate", async () => {
     const { assembly } = await assemblyUsing("Journeyman", 2);
-    const bid = (await caller().bids.create({ name: `Mixed ${Date.now()}${Math.random()}` }))!;
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+    const bid = (await caller().bids.create({
+      name: `Mixed ${Date.now()}${Math.random()}`,
+    }))!;
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+    });
 
     const rates = await caller().laborRates.list();
     await caller().laborRates.update({
-      id: rates.find(r => r.name === "Journeyman")!.id, hourlyCost: 60,
+      id: rates.find(r => r.name === "Journeyman")!.id,
+      hourlyCost: 60,
     });
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
-    const snapshots = detail.lines.map(l => Number(l.snapshotLaborRate)).sort((x, y) => x - y);
+    const snapshots = detail.lines
+      .map(l => Number(l.snapshotLaborRate))
+      .sort((x, y) => x - y);
     expect(snapshots[0]).toBeCloseTo(38, 2);
     expect(snapshots[1]).toBeCloseTo(60, 2);
   });

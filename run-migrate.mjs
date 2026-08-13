@@ -2,7 +2,10 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
 
 const url = process.env.DATABASE_URL;
-if (!url) { console.error("No DATABASE_URL"); process.exit(1); }
+if (!url) {
+  console.error("No DATABASE_URL");
+  process.exit(1);
+}
 
 const db = drizzle(url);
 try {

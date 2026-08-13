@@ -24,7 +24,12 @@
  * `cableFootage` exists and `conduitFootage` refuses a cable run rather than
  * returning zero — zero would flow into a total as if it had been considered.
  */
-import { isUsableScaleRatio, pathRealInches, toBillableFeet, type PagePoint } from "./takeoffGeometry";
+import {
+  isUsableScaleRatio,
+  pathRealInches,
+  toBillableFeet,
+  type PagePoint,
+} from "./takeoffGeometry";
 
 /** What kind of raceway a traced run represents. */
 export const RUN_PATH_TYPES = ["conduit", "cable"] as const;
@@ -88,7 +93,8 @@ export function measurabilityOf(sheet: {
     return {
       ok: false,
       reason: "no-scale",
-      message: "This sheet has no scale set. Set one before tracing — nothing can be measured without it.",
+      message:
+        "This sheet has no scale set. Set one before tracing — nothing can be measured without it.",
     };
   }
 
@@ -105,7 +111,10 @@ export type TracedRun = {
  * The measured length of a run in billable feet, or null if it cannot be
  * measured. Shared by both raceway types — the length is the length.
  */
-export function runFeet(run: TracedRun, ratio: number | null | undefined): number | null {
+export function runFeet(
+  run: TracedRun,
+  ratio: number | null | undefined
+): number | null {
   const inches = pathRealInches(run.points, ratio);
   if (inches === null) return null;
   return toBillableFeet(inches);
@@ -122,7 +131,10 @@ export function runFeet(run: TracedRun, ratio: number | null | undefined): numbe
  * phantom conduit line reach a bid as a considered zero rather than as the
  * "not applicable" it actually is.
  */
-export function conduitFeet(run: TracedRun, ratio: number | null | undefined): number | null {
+export function conduitFeet(
+  run: TracedRun,
+  ratio: number | null | undefined
+): number | null {
   if (run.pathType !== "conduit") return null;
   return runFeet(run, ratio);
 }
@@ -132,13 +144,20 @@ export function conduitFeet(run: TracedRun, ratio: number | null | undefined): n
  *
  * Refuses a conduit run for the mirror-image reason.
  */
-export function cableFeet(run: TracedRun, ratio: number | null | undefined): number | null {
+export function cableFeet(
+  run: TracedRun,
+  ratio: number | null | undefined
+): number | null {
   if (run.pathType !== "cable") return null;
   return runFeet(run, ratio);
 }
 
 /** Wire for one circuit: the full run length once per conductor. */
-export type CircuitWire = { name: string; conductorCount: number; feet: number };
+export type CircuitWire = {
+  name: string;
+  conductorCount: number;
+  feet: number;
+};
 
 /**
  * Wire footage per circuit, and the total, for a conduit run.
@@ -163,9 +182,10 @@ export function wireFeetByCircuit(
   const perCircuit = circuits.map(circuit => {
     // A non-positive or non-finite conductor count contributes nothing rather
     // than NaN — one bad row must not poison the whole total.
-    const conductors = Number.isFinite(circuit.conductorCount) && circuit.conductorCount > 0
-      ? Math.floor(circuit.conductorCount)
-      : 0;
+    const conductors =
+      Number.isFinite(circuit.conductorCount) && circuit.conductorCount > 0
+        ? Math.floor(circuit.conductorCount)
+        : 0;
     return {
       name: circuit.name,
       conductorCount: conductors,
@@ -173,7 +193,8 @@ export function wireFeetByCircuit(
     };
   });
 
-  const totalFeet = Math.round(perCircuit.reduce((sum, c) => sum + c.feet, 0) * 100) / 100;
+  const totalFeet =
+    Math.round(perCircuit.reduce((sum, c) => sum + c.feet, 0) * 100) / 100;
   return { perCircuit, totalFeet };
 }
 
@@ -237,7 +258,11 @@ export function quantitiesForRun(
  * silently excludes an unmeasurable run reads as complete when it is not.
  */
 export function totalQuantities(
-  runs: { run: TracedRun; circuits: RunCircuit[]; ratio: number | null | undefined }[]
+  runs: {
+    run: TracedRun;
+    circuits: RunCircuit[];
+    ratio: number | null | undefined;
+  }[]
 ): {
   conduitFeet: number;
   cableFeet: number;
@@ -252,7 +277,10 @@ export function totalQuantities(
 
   for (const entry of runs) {
     const quantities = quantitiesForRun(entry.run, entry.circuits, entry.ratio);
-    if (!quantities) { unmeasurable++; continue; }
+    if (!quantities) {
+      unmeasurable++;
+      continue;
+    }
     conduit += quantities.conduitFeet ?? 0;
     cable += quantities.cableFeet ?? 0;
     wire += quantities.totalWireFeet;

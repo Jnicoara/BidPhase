@@ -71,12 +71,12 @@ export const COMMON_SCALES: { text: string; ratio: number }[] = [
   { text: '1" = 1\'-0"', ratio: 12 },
   { text: '1-1/2" = 1\'-0"', ratio: 8 },
   { text: '3" = 1\'-0"', ratio: 4 },
-  { text: '1" = 10\'', ratio: 120 },
-  { text: '1" = 20\'', ratio: 240 },
-  { text: '1" = 30\'', ratio: 360 },
-  { text: '1" = 40\'', ratio: 480 },
-  { text: '1" = 50\'', ratio: 600 },
-  { text: '1" = 100\'', ratio: 1200 },
+  { text: "1\" = 10'", ratio: 120 },
+  { text: "1\" = 20'", ratio: 240 },
+  { text: "1\" = 30'", ratio: 360 },
+  { text: "1\" = 40'", ratio: 480 },
+  { text: "1\" = 50'", ratio: 600 },
+  { text: "1\" = 100'", ratio: 1200 },
 ];
 
 /** Normalise the quote characters a PDF or a keyboard might produce. */
@@ -90,10 +90,15 @@ function normalizeQuotes(input: string): string {
 }
 
 /** "1-1/2" → 1.5, "3/4" → 0.75, "2" → 2. Returns null on anything else. */
-function parseMixedNumber(whole: string | undefined, num: string | undefined, den: string | undefined): number | null {
+function parseMixedNumber(
+  whole: string | undefined,
+  num: string | undefined,
+  den: string | undefined
+): number | null {
   const w = whole ? Number(whole) : 0;
   if (!Number.isFinite(w)) return null;
-  if (num === undefined || den === undefined) return w === 0 && !whole ? null : w;
+  if (num === undefined || den === undefined)
+    return w === 0 && !whole ? null : w;
   const n = Number(num);
   const d = Number(den);
   if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return null;
@@ -135,12 +140,16 @@ export function parseScaleText(input: string): ParsedScale | null {
   );
   if (arch) {
     const [, mixedWhole, num, den, plain, feet, inches] = arch;
-    const paper = num !== undefined
-      ? parseMixedNumber(mixedWhole, num, den)
-      : Number(plain);
+    const paper =
+      num !== undefined
+        ? parseMixedNumber(mixedWhole, num, den)
+        : Number(plain);
     const real = Number(feet) * INCHES_PER_FOOT + (inches ? Number(inches) : 0);
     if (paper && paper > 0 && real > 0) {
-      return { ratio: real / paper, text: `${formatInches(paper)} = ${formatFeetInches(real)}` };
+      return {
+        ratio: real / paper,
+        text: `${formatInches(paper)} = ${formatFeetInches(real)}`,
+      };
     }
   }
 
@@ -186,7 +195,12 @@ const NTS = /\b(N\.?\s?T\.?\s?S\.?|NOT\s+TO\s+SCALE)\b/i;
  * Only `high` should be applied without asking. See the module header.
  */
 export function detectScaleFromText(sheetText: string): ScaleDetection {
-  const empty: ScaleDetection = { best: null, confidence: "low", candidates: [], notToScale: false };
+  const empty: ScaleDetection = {
+    best: null,
+    confidence: "low",
+    candidates: [],
+    notToScale: false,
+  };
   if (!sheetText) return empty;
 
   const text = normalizeQuotes(sheetText);
@@ -196,7 +210,8 @@ export function detectScaleFromText(sheetText: string): ScaleDetection {
   // Walk every plausible fragment rather than one global match, so a sheet
   // carrying two scales is SEEN to carry two rather than silently taking the
   // first — that ambiguity is exactly what must lower confidence.
-  const fragmentRe = /(?:(?:\d+\s*[-\s]\s*)?(?:\d+\s*\/\s*\d+|\d+(?:\.\d+)?)\s*"?\s*=\s*\d+(?:\.\d+)?\s*'(?:\s*-?\s*\d+(?:\.\d+)?\s*"?)?)|(?:\b1\s*:\s*\d+(?:\.\d+)?\b)/g;
+  const fragmentRe =
+    /(?:(?:\d+\s*[-\s]\s*)?(?:\d+\s*\/\s*\d+|\d+(?:\.\d+)?)\s*"?\s*=\s*\d+(?:\.\d+)?\s*'(?:\s*-?\s*\d+(?:\.\d+)?\s*"?)?)|(?:\b1\s*:\s*\d+(?:\.\d+)?\b)/g;
 
   const seen = new Map<number, ScaleCandidate>();
   // Array.from rather than for..of over the iterator: this file is shared with
@@ -208,18 +223,24 @@ export function detectScaleFromText(sheetText: string): ScaleDetection {
     // "Labelled" = the word scale appears just before it. 24 characters is
     // enough for "SCALE: " and a little punctuation, and short enough that an
     // unrelated earlier mention does not count.
-    const before = text.slice(Math.max(0, (match.index ?? 0) - 24), match.index ?? 0);
+    const before = text.slice(
+      Math.max(0, (match.index ?? 0) - 24),
+      match.index ?? 0
+    );
     const labelled = /scale\s*[:\-]?\s*$/i.test(before);
     const existing = seen.get(parsed.ratio);
     if (existing) {
       // Keep the labelled sighting if any sighting was labelled.
-      if (labelled && !existing.labelled) seen.set(parsed.ratio, { ...existing, labelled: true, raw });
+      if (labelled && !existing.labelled)
+        seen.set(parsed.ratio, { ...existing, labelled: true, raw });
       continue;
     }
     seen.set(parsed.ratio, { ...parsed, raw, labelled });
   }
 
-  const candidates = Array.from(seen.values()).sort((a, b) => Number(b.labelled) - Number(a.labelled));
+  const candidates = Array.from(seen.values()).sort(
+    (a, b) => Number(b.labelled) - Number(a.labelled)
+  );
   if (candidates.length === 0) {
     return { best: null, confidence: "low", candidates: [], notToScale };
   }

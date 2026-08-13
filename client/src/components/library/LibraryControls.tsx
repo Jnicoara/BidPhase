@@ -13,7 +13,11 @@ import type { LibraryScope } from "@/lib/libraryScope";
 export type LibraryView = "active" | "archived";
 
 /** Working list / Archived. Only shown once there is something archived. */
-export function ViewTabs({ view, onChange, archivedCount }: {
+export function ViewTabs({
+  view,
+  onChange,
+  archivedCount,
+}: {
   view: LibraryView;
   onChange: (view: LibraryView) => void;
   archivedCount: number;
@@ -35,9 +39,15 @@ export function ViewTabs({ view, onChange, archivedCount }: {
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          {value === "active"
-            ? <><Layers className="w-3 h-3" /> Working list</>
-            : <><Archive className="w-3 h-3" /> Archived</>}
+          {value === "active" ? (
+            <>
+              <Layers className="w-3 h-3" /> Working list
+            </>
+          ) : (
+            <>
+              <Archive className="w-3 h-3" /> Archived
+            </>
+          )}
           {value === "archived" && archivedCount > 0 && (
             <span className="text-muted-foreground">{archivedCount}</span>
           )}
@@ -54,7 +64,11 @@ export function ViewTabs({ view, onChange, archivedCount }: {
  * see @/lib/libraryScope. The count sits on the control so it is obvious
  * whether switching will show anything at all.
  */
-export function ScopeFilter({ scope, onChange, counts }: {
+export function ScopeFilter({
+  scope,
+  onChange,
+  counts,
+}: {
   scope: LibraryScope;
   onChange: (scope: LibraryScope) => void;
   counts: { all: number; mine: number };
@@ -65,9 +79,11 @@ export function ScopeFilter({ scope, onChange, counts }: {
         <button
           key={value}
           onClick={() => onChange(value)}
-          title={value === "all"
-            ? "Everything — the starter library and your own"
-            : "Only what you have created or customised"}
+          title={
+            value === "all"
+              ? "Everything — the starter library and your own"
+              : "Only what you have created or customised"
+          }
           className={cn(
             "px-2.5 py-1 rounded-md text-xs transition-colors flex items-center gap-1.5",
             scope === value
@@ -75,9 +91,13 @@ export function ScopeFilter({ scope, onChange, counts }: {
               : "text-muted-foreground hover:text-foreground"
           )}
         >
-          {value === "all"
-            ? <>All</>
-            : <><User className="w-3 h-3" /> Mine</>}
+          {value === "all" ? (
+            <>All</>
+          ) : (
+            <>
+              <User className="w-3 h-3" /> Mine
+            </>
+          )}
           <span className="text-muted-foreground">
             {value === "all" ? counts.all : counts.mine}
           </span>
@@ -88,19 +108,34 @@ export function ScopeFilter({ scope, onChange, counts }: {
 }
 
 /** "Starter" / "Your copy" / "Yours", styled consistently across all screens. */
-export function OriginBadge({ row }: { row: { userId: number | null; baselineId: number | null } }) {
+export function OriginBadge({
+  row,
+}: {
+  row: { userId: number | null; baselineId: number | null };
+}) {
   if (row.userId === null) {
-    return <Badge variant="outline" className="text-xs text-muted-foreground">Starter</Badge>;
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        Starter
+      </Badge>
+    );
   }
   if (row.baselineId != null) {
     // "Your copy" rather than "Edited": after a revert the row is still the
     // user's own fork, just holding starter content again. Labelling by
     // ownership stays true; labelling by edited-ness would go stale.
     return (
-      <Badge variant="outline" className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30">
+      <Badge
+        variant="outline"
+        className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30"
+      >
         Your copy
       </Badge>
     );
   }
-  return <Badge variant="outline" className="text-xs">Yours</Badge>;
+  return (
+    <Badge variant="outline" className="text-xs">
+      Yours
+    </Badge>
+  );
 }

@@ -23,7 +23,13 @@ import {
   seedBaselineMaterials,
   seedBaselineModifiers,
 } from "./db";
-import { assemblies, bids, materials, pricingDefaults, users } from "../drizzle/schema";
+import {
+  assemblies,
+  bids,
+  materials,
+  pricingDefaults,
+  users,
+} from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
 
 const USER = 7171;
@@ -70,7 +76,8 @@ async function readyAssembly(name = "Duplex receptacle standard") {
   // line below prices its labor at nothing and the arithmetic proves nothing.
   const allRates = await caller().laborRates.list();
   const priced = await caller().laborRates.update({
-    id: allRates.find(r => r.name === "Journeyman")!.id, hourlyCost: 38,
+    id: allRates.find(r => r.name === "Journeyman")!.id,
+    hourlyCost: 38,
   });
   const journeyman = priced.laborRate!;
   // Setting the role forks the starter; the fork is what we add to bids. The
@@ -95,9 +102,15 @@ beforeAll(async () => {
   if (!db) return;
 
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
-      await db.insert(users).values({ id, openId: `test-bids-${id}`, name: `Bid test user ${id}` });
+      await db
+        .insert(users)
+        .values({ id, openId: `test-bids-${id}`, name: `Bid test user ${id}` });
     }
   }
 
@@ -112,13 +125,20 @@ beforeEach(async () => {
   const db = await getDb();
   if (!db) return;
   await db.delete(bids).where(inArray(bids.userId, [USER, OTHER_USER]));
-  await db.delete(assemblies).where(inArray(assemblies.userId, [USER, OTHER_USER]));
-  await db.delete(pricingDefaults).where(inArray(pricingDefaults.userId, [USER, OTHER_USER]));
+  await db
+    .delete(assemblies)
+    .where(inArray(assemblies.userId, [USER, OTHER_USER]));
+  await db
+    .delete(pricingDefaults)
+    .where(inArray(pricingDefaults.userId, [USER, OTHER_USER]));
 });
 
 describe.skipIf(!hasDb)("bid basics", () => {
   it("creates a Draft bid carrying its unlocked trades", async () => {
-    const bid = await caller().bids.create({ name: "Hotel job", trades: ["electrical", "low-voltage"] });
+    const bid = await caller().bids.create({
+      name: "Hotel job",
+      trades: ["electrical", "low-voltage"],
+    });
     expect(bid?.status).toBe("Draft");
     expect(bid?.trades).toEqual(["electrical", "low-voltage"]);
     expect(bid?.createdAt).toBeInstanceOf(Date);
@@ -134,12 +154,16 @@ describe.skipIf(!hasDb)("bid basics", () => {
 
   it("does not show one user's bids to another", async () => {
     await newBid("Private");
-    expect((await callerFor(OTHER_USER).bids.list()).some(b => b.name === "Private")).toBe(false);
+    expect(
+      (await callerFor(OTHER_USER).bids.list()).some(b => b.name === "Private")
+    ).toBe(false);
   });
 
   it("refuses to touch a bid belonging to someone else", async () => {
     const bid = await newBid();
-    await expect(callerFor(OTHER_USER).bids.get({ id: bid.id })).rejects.toThrow(/not found/i);
+    await expect(
+      callerFor(OTHER_USER).bids.get({ id: bid.id })
+    ).rejects.toThrow(/not found/i);
   });
 
   it("archiving hides it from the list", async () => {
@@ -154,7 +178,9 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
     const { line } = await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 1,
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
     });
 
     // One probe material at 26.74 × 1 — see pricedMaterial().
@@ -167,7 +193,11 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
   it("does NOT re-price when the source assembly changes afterwards", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+    });
     const before = await caller().bids.get({ id: bid.id });
 
     // Triple the hours on the library assembly.
@@ -181,7 +211,11 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
   it("does NOT re-price when a material price changes afterwards", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+    });
     const before = await caller().bids.get({ id: bid.id });
 
     const list = await caller().materials.list();
@@ -195,7 +229,11 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
   it("survives the source assembly being deleted outright", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 2 });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 2,
+    });
     const before = await caller().bids.get({ id: bid.id });
 
     const db = await getDb();
@@ -203,7 +241,7 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
 
     const after = await caller().bids.get({ id: bid.id });
     expect(after.lines).toHaveLength(1);
-    expect(after.lines[0].assemblyId).toBeNull();       // provenance gone
+    expect(after.lines[0].assemblyId).toBeNull(); // provenance gone
     expect(after.lines[0].name).toBe(before.lines[0].name); // the bid still reads right
     expect(after.totals.directCost).toBeCloseTo(before.totals.directCost, 6);
   });
@@ -211,11 +249,17 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
   it("takes a FRESH snapshot when the same assembly is added again", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+    });
 
     await caller().assemblies.update({ id: assembly.id, baseLaborHours: 3 });
     const { line: second } = await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 1,
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
     });
 
     expect(Number(second!.snapshotLaborHours)).toBeCloseTo(3, 4);
@@ -226,7 +270,11 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
   it("prices a line as (materials + hours × rate) × quantity", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 3 });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 3,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     // (26.74 + 0.75 × 38) × 3 = 55.24 × 3 = 165.72
@@ -239,12 +287,15 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
     const fan = list.find(a => a.name === "Ceiling fan standard")!; // +12% height
     const rates = await caller().laborRates.list();
     const forked = await caller().assemblies.update({
-      id: fan.id, laborRateId: rates.find(r => r.name === "Journeyman")!.id,
+      id: fan.id,
+      laborRateId: rates.find(r => r.name === "Journeyman")!.id,
     });
 
     const bid = await newBid();
     const { line } = await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: forked.assembly!.id, qty: 1,
+      bidId: bid.id,
+      assemblyId: forked.assembly!.id,
+      qty: 1,
     });
     expect(Number(line!.snapshotModifierPct)).toBeCloseTo(0.12, 4);
     expect(line!.snapshotModifierNames).toEqual(["Working at height"]);
@@ -258,20 +309,27 @@ describe.skipIf(!hasDb)("snapshot at add time", () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
     const { line } = await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 1,
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
     });
     const before = await caller().bids.get({ id: bid.id });
 
     await caller().bids.updateLine({ bidId: bid.id, id: line!.id, qty: 4 });
     const after = await caller().bids.get({ id: bid.id });
-    expect(after.totals.directCost).toBeCloseTo(before.totals.directCost * 4, 4);
+    expect(after.totals.directCost).toBeCloseTo(
+      before.totals.directCost * 4,
+      4
+    );
   });
 
   it("removing a line drops it out of the total", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
     const { line } = await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 1,
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
     });
     await caller().bids.removeLine({ bidId: bid.id, id: line!.id });
     const detail = await caller().bids.get({ id: bid.id });
@@ -285,9 +343,17 @@ describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
 
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 6, merge: true });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 6,
+      merge: true,
+    });
     const second = await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 4, merge: true,
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 4,
+      merge: true,
     });
 
     expect(second.merged).toBe(true);
@@ -301,9 +367,23 @@ describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
     const merged = await newBid("merged");
     const single = await newBid("single");
 
-    await caller().bids.addAssembly({ bidId: merged.id, assemblyId: assembly.id, qty: 6, merge: true });
-    await caller().bids.addAssembly({ bidId: merged.id, assemblyId: assembly.id, qty: 4, merge: true });
-    await caller().bids.addAssembly({ bidId: single.id, assemblyId: assembly.id, qty: 10 });
+    await caller().bids.addAssembly({
+      bidId: merged.id,
+      assemblyId: assembly.id,
+      qty: 6,
+      merge: true,
+    });
+    await caller().bids.addAssembly({
+      bidId: merged.id,
+      assemblyId: assembly.id,
+      qty: 4,
+      merge: true,
+    });
+    await caller().bids.addAssembly({
+      bidId: single.id,
+      assemblyId: assembly.id,
+      qty: 10,
+    });
 
     const a = await caller().bids.get({ id: merged.id });
     const b = await caller().bids.get({ id: single.id });
@@ -315,10 +395,20 @@ describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
     // the same assembly would cost two different amounts within one bid.
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 2, merge: true });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 2,
+      merge: true,
+    });
 
     await caller().assemblies.update({ id: assembly.id, baseLaborHours: 5 });
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 3, merge: true });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 3,
+      merge: true,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.lines).toHaveLength(1);
@@ -330,10 +420,16 @@ describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
     // The Bids screen relies on this; merge must not become the global default.
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+    });
     await caller().assemblies.update({ id: assembly.id, baseLaborHours: 5 });
     const second = await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 1,
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
     });
 
     expect(second.merged).toBe(false);
@@ -347,26 +443,51 @@ describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
     await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 2, unitLabel: "Room 101", merge: true,
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 2,
+      unitLabel: "Room 101",
+      merge: true,
     });
     const other = await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 2, unitLabel: "Room 102", merge: true,
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 2,
+      unitLabel: "Room 102",
+      merge: true,
     });
 
     expect(other.merged).toBe(false);
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.lines).toHaveLength(2);
-    expect(detail.units.map(u => u.label).sort()).toEqual(["Room 101", "Room 102"]);
+    expect(detail.units.map(u => u.label).sort()).toEqual([
+      "Room 101",
+      "Room 102",
+    ]);
   });
 
   it("merges within a unit but not across unlabelled lines", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1, merge: true });
     await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 1, unitLabel: "Room 101", merge: true,
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+      merge: true,
     });
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1, merge: true });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+      unitLabel: "Room 101",
+      merge: true,
+    });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+      merge: true,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.lines).toHaveLength(2);
@@ -379,21 +500,50 @@ describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
     const switchAsm = await readyAssembly("Single-pole switch");
     const bid = await newBid();
 
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: receptacle.id, qty: 6, merge: true });
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: switchAsm.id, qty: 3, merge: true });
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: receptacle.id, qty: 2, merge: true });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: receptacle.id,
+      qty: 6,
+      merge: true,
+    });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: switchAsm.id,
+      qty: 3,
+      merge: true,
+    });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: receptacle.id,
+      qty: 2,
+      merge: true,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.lines).toHaveLength(2);
-    expect(Number(detail.lines.find(l => l.assemblyId === receptacle.id)!.qty)).toBeCloseTo(8, 4);
-    expect(Number(detail.lines.find(l => l.assemblyId === switchAsm.id)!.qty)).toBeCloseTo(3, 4);
+    expect(
+      Number(detail.lines.find(l => l.assemblyId === receptacle.id)!.qty)
+    ).toBeCloseTo(8, 4);
+    expect(
+      Number(detail.lines.find(l => l.assemblyId === switchAsm.id)!.qty)
+    ).toBeCloseTo(3, 4);
   });
 
   it("accepts a fractional count, for footage-style assemblies", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 2.5, merge: true });
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 0.25, merge: true });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 2.5,
+      merge: true,
+    });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 0.25,
+      merge: true,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     expect(Number(detail.lines[0].qty)).toBeCloseTo(2.75, 4);
@@ -402,9 +552,14 @@ describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
   it("refuses a negative quantity rather than subtracting from a line", async () => {
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await expect(caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: -3, merge: true,
-    })).rejects.toThrow();
+    await expect(
+      caller().bids.addAssembly({
+        bidId: bid.id,
+        assemblyId: assembly.id,
+        qty: -3,
+        merge: true,
+      })
+    ).rejects.toThrow();
   });
 
   it("rolls a counting session straight into the bid total", async () => {
@@ -413,16 +568,28 @@ describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
     const bid = await newBid();
 
     // A small job, counted the way the screen does it.
-    for (const [assemblyId, qty] of [[receptacle.id, 6], [switchAsm.id, 3], [receptacle.id, 4]] as const) {
-      await caller().bids.addAssembly({ bidId: bid.id, assemblyId, qty, merge: true });
+    for (const [assemblyId, qty] of [
+      [receptacle.id, 6],
+      [switchAsm.id, 3],
+      [receptacle.id, 4],
+    ] as const) {
+      await caller().bids.addAssembly({
+        bidId: bid.id,
+        assemblyId,
+        qty,
+        merge: true,
+      });
     }
 
     const detail = await caller().bids.get({ id: bid.id });
     // 10 receptacles at 55.24 + 3 switches at (their own snapshot)
-    const receptacleLine = detail.lines.find(l => l.assemblyId === receptacle.id)!;
+    const receptacleLine = detail.lines.find(
+      l => l.assemblyId === receptacle.id
+    )!;
     expect(Number(receptacleLine.qty)).toBeCloseTo(10, 4);
     expect(detail.totals.directCost).toBeCloseTo(
-      detail.lines.reduce((sum, l) => sum + l.breakdown.directCost, 0), 2
+      detail.lines.reduce((sum, l) => sum + l.breakdown.directCost, 0),
+      2
     );
     expect(detail.totals.finalPrice).toBeGreaterThan(0);
   });
@@ -431,8 +598,11 @@ describe.skipIf(!hasDb)("quick-bid add flow (merge)", () => {
 describe.skipIf(!hasDb)("company defaults vs per-bid overrides", () => {
   it("a new bid inherits the company settings", async () => {
     await caller().bids.setPricingDefaults({
-      overheadEnabled: true, overheadMode: "percentage", overheadValue: 0.1,
-      profitMethod: "markup", profitValue: 0.2,
+      overheadEnabled: true,
+      overheadMode: "percentage",
+      overheadValue: 0.1,
+      profitMethod: "markup",
+      profitValue: 0.2,
     });
     const bid = await newBid();
     const detail = await caller().bids.get({ id: bid.id });
@@ -444,12 +614,19 @@ describe.skipIf(!hasDb)("company defaults vs per-bid overrides", () => {
 
   it("applies inherited overhead before profit", async () => {
     await caller().bids.setPricingDefaults({
-      overheadEnabled: true, overheadMode: "percentage", overheadValue: 0.1,
-      profitMethod: "markup", profitValue: 0.2,
+      overheadEnabled: true,
+      overheadMode: "percentage",
+      overheadValue: 0.1,
+      profitMethod: "markup",
+      profitValue: 0.2,
     });
     const assembly = await readyAssembly();
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 1,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     // 55.24 → +10% = 60.76 → +20% = 72.91
@@ -459,9 +636,16 @@ describe.skipIf(!hasDb)("company defaults vs per-bid overrides", () => {
   });
 
   it("a per-bid profit override wins over the company default", async () => {
-    await caller().bids.setPricingDefaults({ profitMethod: "markup", profitValue: 0.2 });
+    await caller().bids.setPricingDefaults({
+      profitMethod: "markup",
+      profitValue: 0.2,
+    });
     const bid = await newBid();
-    await caller().bids.update({ id: bid.id, profitMethod: "margin", profitValue: 0.3 });
+    await caller().bids.update({
+      id: bid.id,
+      profitMethod: "margin",
+      profitValue: 0.3,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.settings.profitSource).toBe("bid");
@@ -470,21 +654,34 @@ describe.skipIf(!hasDb)("company defaults vs per-bid overrides", () => {
 
   it("overriding profit does not drag overhead along with it", async () => {
     await caller().bids.setPricingDefaults({
-      overheadEnabled: true, overheadMode: "flat", overheadValue: 500,
-      profitMethod: "markup", profitValue: 0.2,
+      overheadEnabled: true,
+      overheadMode: "flat",
+      overheadValue: 500,
+      profitMethod: "markup",
+      profitValue: 0.2,
     });
     const bid = await newBid();
-    await caller().bids.update({ id: bid.id, profitMethod: "margin", profitValue: 0.25 });
+    await caller().bids.update({
+      id: bid.id,
+      profitMethod: "margin",
+      profitValue: 0.25,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.settings.profitSource).toBe("bid");
     expect(detail.settings.overheadSource).toBe("company");
-    expect(detail.settings.overhead).toEqual({ enabled: true, mode: "flat", value: 500 });
+    expect(detail.settings.overhead).toEqual({
+      enabled: true,
+      mode: "flat",
+      value: 500,
+    });
   });
 
   it("a bid can turn overhead off while the company has it on", async () => {
     await caller().bids.setPricingDefaults({
-      overheadEnabled: true, overheadMode: "percentage", overheadValue: 0.15,
+      overheadEnabled: true,
+      overheadMode: "percentage",
+      overheadValue: 0.15,
     });
     const bid = await newBid();
     await caller().bids.update({ id: bid.id, overheadEnabled: false });
@@ -495,10 +692,21 @@ describe.skipIf(!hasDb)("company defaults vs per-bid overrides", () => {
   });
 
   it("clearing an override returns the bid to the company default", async () => {
-    await caller().bids.setPricingDefaults({ profitMethod: "markup", profitValue: 0.2 });
+    await caller().bids.setPricingDefaults({
+      profitMethod: "markup",
+      profitValue: 0.2,
+    });
     const bid = await newBid();
-    await caller().bids.update({ id: bid.id, profitMethod: "margin", profitValue: 0.4 });
-    await caller().bids.update({ id: bid.id, profitMethod: null, profitValue: null });
+    await caller().bids.update({
+      id: bid.id,
+      profitMethod: "margin",
+      profitValue: 0.4,
+    });
+    await caller().bids.update({
+      id: bid.id,
+      profitMethod: null,
+      profitValue: null,
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.settings.profitSource).toBe("company");
@@ -506,26 +714,41 @@ describe.skipIf(!hasDb)("company defaults vs per-bid overrides", () => {
   });
 
   it("changing the company default moves an inheriting bid but not an overriding one", async () => {
-    await caller().bids.setPricingDefaults({ profitMethod: "markup", profitValue: 0.1 });
+    await caller().bids.setPricingDefaults({
+      profitMethod: "markup",
+      profitValue: 0.1,
+    });
     const assembly = await readyAssembly();
 
     const inheriting = await newBid("Inheriting");
     const overriding = await newBid("Overriding");
     for (const bid of [inheriting, overriding]) {
-      await caller().bids.addAssembly({ bidId: bid.id, assemblyId: assembly.id, qty: 1 });
+      await caller().bids.addAssembly({
+        bidId: bid.id,
+        assemblyId: assembly.id,
+        qty: 1,
+      });
     }
-    await caller().bids.update({ id: overriding.id, profitMethod: "markup", profitValue: 0.1 });
+    await caller().bids.update({
+      id: overriding.id,
+      profitMethod: "markup",
+      profitValue: 0.1,
+    });
 
     const before = {
-      inheriting: (await caller().bids.get({ id: inheriting.id })).totals.finalPrice,
-      overriding: (await caller().bids.get({ id: overriding.id })).totals.finalPrice,
+      inheriting: (await caller().bids.get({ id: inheriting.id })).totals
+        .finalPrice,
+      overriding: (await caller().bids.get({ id: overriding.id })).totals
+        .finalPrice,
     };
 
     await caller().bids.setPricingDefaults({ profitValue: 0.5 });
 
     const after = {
-      inheriting: (await caller().bids.get({ id: inheriting.id })).totals.finalPrice,
-      overriding: (await caller().bids.get({ id: overriding.id })).totals.finalPrice,
+      inheriting: (await caller().bids.get({ id: inheriting.id })).totals
+        .finalPrice,
+      overriding: (await caller().bids.get({ id: overriding.id })).totals
+        .finalPrice,
     };
 
     expect(after.inheriting).toBeGreaterThan(before.inheriting);
@@ -533,7 +756,10 @@ describe.skipIf(!hasDb)("company defaults vs per-bid overrides", () => {
   });
 
   it("keeps each user's company defaults separate", async () => {
-    await caller().bids.setPricingDefaults({ profitMethod: "margin", profitValue: 0.35 });
+    await caller().bids.setPricingDefaults({
+      profitMethod: "margin",
+      profitValue: 0.35,
+    });
     const theirs = await callerFor(OTHER_USER).bids.pricingDefaults();
     expect(theirs?.profitMethod).toBe("markup");
   });
@@ -546,10 +772,16 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
     const switchAsm = await readyAssembly("Single-pole switch");
     const bid = await newBid();
     await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: assembly.id, qty: 4, unitLabel: "Room 101",
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 4,
+      unitLabel: "Room 101",
     });
     await caller().bids.addAssembly({
-      bidId: bid.id, assemblyId: switchAsm.id, qty: 2, unitLabel: "Room 101",
+      bidId: bid.id,
+      assemblyId: switchAsm.id,
+      qty: 2,
+      unitLabel: "Room 101",
     });
     return bid;
   }
@@ -557,10 +789,20 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
   it("generates N auto-numbered copies of a unit", async () => {
     const bid = await bidWithTemplate();
     const result = await caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 102, count: 5,
+      bidId: bid.id,
+      sourceUnitLabel: "Room 101",
+      baseName: "Room",
+      startNumber: 102,
+      count: 5,
     });
 
-    expect(result.created).toEqual(["Room 102", "Room 103", "Room 104", "Room 105", "Room 106"]);
+    expect(result.created).toEqual([
+      "Room 102",
+      "Room 103",
+      "Room 104",
+      "Room 105",
+      "Room 106",
+    ]);
     const units = await caller().bids.units({ bidId: bid.id });
     expect(units).toHaveLength(6); // the template plus five copies
   });
@@ -568,12 +810,18 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
   it("copies every line of the unit, not just the first", async () => {
     const bid = await bidWithTemplate();
     await caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 102, count: 3,
+      bidId: bid.id,
+      sourceUnitLabel: "Room 101",
+      baseName: "Room",
+      startNumber: 102,
+      count: 3,
     });
 
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.lines).toHaveLength(8); // 2 template + 3 × 2
-    expect(detail.lines.filter(l => l.unitLabel === "Room 104")).toHaveLength(2);
+    expect(detail.lines.filter(l => l.unitLabel === "Room 104")).toHaveLength(
+      2
+    );
   });
 
   it("rolls the copies into the total", async () => {
@@ -581,19 +829,33 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
     const before = await caller().bids.get({ id: bid.id });
 
     await caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 102, count: 9,
+      bidId: bid.id,
+      sourceUnitLabel: "Room 101",
+      baseName: "Room",
+      startNumber: 102,
+      count: 9,
     });
 
     const after = await caller().bids.get({ id: bid.id });
     // Ten identical rooms cost ten times one room.
-    expect(after.totals.directCost).toBeCloseTo(before.totals.directCost * 10, 2);
-    expect(after.totals.totalLaborHours).toBeCloseTo(before.totals.totalLaborHours * 10, 4);
+    expect(after.totals.directCost).toBeCloseTo(
+      before.totals.directCost * 10,
+      2
+    );
+    expect(after.totals.totalLaborHours).toBeCloseTo(
+      before.totals.totalLaborHours * 10,
+      4
+    );
   });
 
   it("gives every copy the same price as the template", async () => {
     const bid = await bidWithTemplate();
     await caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 102, count: 4,
+      bidId: bid.id,
+      sourceUnitLabel: "Room 101",
+      baseName: "Room",
+      startNumber: 102,
+      count: 4,
     });
 
     const detail = await caller().bids.get({ id: bid.id });
@@ -604,7 +866,11 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
   it("makes each copy independently editable", async () => {
     const bid = await bidWithTemplate();
     await caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 102, count: 3,
+      bidId: bid.id,
+      sourceUnitLabel: "Room 101",
+      baseName: "Room",
+      startNumber: 102,
+      count: 3,
     });
 
     const detail = await caller().bids.get({ id: bid.id });
@@ -620,7 +886,11 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
   it("keeps the total in sync after a copy is edited", async () => {
     const bid = await bidWithTemplate();
     await caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 102, count: 2,
+      bidId: bid.id,
+      sourceUnitLabel: "Room 101",
+      baseName: "Room",
+      startNumber: 102,
+      count: 2,
     });
     const before = await caller().bids.get({ id: bid.id });
 
@@ -629,7 +899,10 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
     await caller().bids.removeLine({ bidId: bid.id, id: target.id });
 
     const after = await caller().bids.get({ id: bid.id });
-    expect(after.totals.directCost).toBeCloseTo(before.totals.directCost - lineCost, 2);
+    expect(after.totals.directCost).toBeCloseTo(
+      before.totals.directCost - lineCost,
+      2
+    );
   });
 
   it("copies carry the template's snapshot, not a fresh library read", async () => {
@@ -641,7 +914,11 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
     await caller().materials.update({ id: romex.id, costPerUnit: 99 });
 
     await caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 102, count: 2,
+      bidId: bid.id,
+      sourceUnitLabel: "Room 101",
+      baseName: "Room",
+      startNumber: 102,
+      count: 2,
     });
 
     const detail = await caller().bids.get({ id: bid.id });
@@ -652,10 +929,18 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
   it("skips labels that would collide instead of duplicating them", async () => {
     const bid = await bidWithTemplate();
     await caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 102, count: 2,
+      bidId: bid.id,
+      sourceUnitLabel: "Room 101",
+      baseName: "Room",
+      startNumber: 102,
+      count: 2,
     });
     const second = await caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 101, count: 4,
+      bidId: bid.id,
+      sourceUnitLabel: "Room 101",
+      baseName: "Room",
+      startNumber: 101,
+      count: 4,
     });
 
     expect(second.skipped).toEqual(["Room 101", "Room 102", "Room 103"]);
@@ -664,15 +949,27 @@ describe.skipIf(!hasDb)("mass duplicate", () => {
 
   it("refuses to duplicate a unit that does not exist", async () => {
     const bid = await bidWithTemplate();
-    await expect(caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Nope", baseName: "Room", startNumber: 1, count: 1,
-    })).rejects.toThrow(/no line items/i);
+    await expect(
+      caller().bids.duplicateUnit({
+        bidId: bid.id,
+        sourceUnitLabel: "Nope",
+        baseName: "Room",
+        startNumber: 1,
+        count: 1,
+      })
+    ).rejects.toThrow(/no line items/i);
   });
 
   it("refuses an absurd copy count rather than generating it", async () => {
     const bid = await bidWithTemplate();
-    await expect(caller().bids.duplicateUnit({
-      bidId: bid.id, sourceUnitLabel: "Room 101", baseName: "Room", startNumber: 1, count: 5000,
-    })).rejects.toThrow();
+    await expect(
+      caller().bids.duplicateUnit({
+        bidId: bid.id,
+        sourceUnitLabel: "Room 101",
+        baseName: "Room",
+        startNumber: 1,
+        count: 5000,
+      })
+    ).rejects.toThrow();
   });
 });

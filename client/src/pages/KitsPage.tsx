@@ -24,28 +24,55 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  Archive as ArchiveIcon, ArrowLeft, Check, Copy as CopyIcon, Package, Pencil, Plus,
-  RotateCcw, Search, Trash2, X,
+  Archive as ArchiveIcon,
+  ArrowLeft,
+  Check,
+  Copy as CopyIcon,
+  Package,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  X,
 } from "lucide-react";
-import { ScopeFilter, ViewTabs, type LibraryView } from "@/components/library/LibraryControls";
 import {
-  ArchiveItemDialog, DeleteForeverDialog, type PendingItem,
+  ScopeFilter,
+  ViewTabs,
+  type LibraryView,
+} from "@/components/library/LibraryControls";
+import {
+  ArchiveItemDialog,
+  DeleteForeverDialog,
+  type PendingItem,
 } from "@/components/library/LibraryRemovalDialogs";
-import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
+import {
+  filterByScope,
+  scopeCounts,
+  type LibraryScope,
+} from "@/lib/libraryScope";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { smartSearch } from "@/lib/smartSearch";
 
 const money = (value: number) =>
   value.toLocaleString("en-US", {
-    style: "currency", currency: "USD",
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 
 const round = (value: number, places = 2) => {
@@ -53,26 +80,47 @@ const round = (value: number, places = 2) => {
   return Math.round(value * factor) / factor;
 };
 
-type KitItem = { assemblyId: number; qty: number; name: string; category: string };
+type KitItem = {
+  assemblyId: number;
+  qty: number;
+  name: string;
+  category: string;
+};
 
-function OriginBadge({ kit }: { kit: { userId: number | null; baselineId: number | null } }) {
+function OriginBadge({
+  kit,
+}: {
+  kit: { userId: number | null; baselineId: number | null };
+}) {
   if (kit.userId === null) {
-    return <Badge variant="outline" className="text-xs text-muted-foreground">Starter</Badge>;
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        Starter
+      </Badge>
+    );
   }
   if (kit.baselineId != null) {
     return (
-      <Badge variant="outline" className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30">
+      <Badge
+        variant="outline"
+        className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30"
+      >
         Your copy
       </Badge>
     );
   }
-  return <Badge variant="outline" className="text-xs">Yours</Badge>;
+  return (
+    <Badge variant="outline" className="text-xs">
+      Yours
+    </Badge>
+  );
 }
 
 // ─── Kit builder ──────────────────────────────────────────────────────────────
 
 function KitBuilder({
-  kitId, onBack,
+  kitId,
+  onBack,
 }: {
   kitId: number | null;
   onBack: () => void;
@@ -80,8 +128,14 @@ function KitBuilder({
   const isNew = kitId === null;
   const utils = trpc.useUtils();
 
-  const detailQuery = trpc.kits.get.useQuery({ id: kitId ?? 0 }, { enabled: !isNew });
-  const priceQuery = trpc.kits.price.useQuery({ id: kitId ?? 0 }, { enabled: !isNew });
+  const detailQuery = trpc.kits.get.useQuery(
+    { id: kitId ?? 0 },
+    { enabled: !isNew }
+  );
+  const priceQuery = trpc.kits.price.useQuery(
+    { id: kitId ?? 0 },
+    { enabled: !isNew }
+  );
   const { data: assemblies = [] } = trpc.assemblies.list.useQuery();
 
   const [name, setName] = useState("");
@@ -95,9 +149,14 @@ function KitBuilder({
   if (!isNew && loaded && items === null) {
     setName(loaded.name);
     setDescription(loaded.description ?? "");
-    setItems(loaded.items.map(i => ({
-      assemblyId: i.assemblyId, qty: Number(i.qty), name: i.name, category: i.category,
-    })));
+    setItems(
+      loaded.items.map(i => ({
+        assemblyId: i.assemblyId,
+        qty: Number(i.qty),
+        name: i.name,
+        category: i.category,
+      }))
+    );
   }
   const draftItems = items ?? [];
 
@@ -111,23 +170,33 @@ function KitBuilder({
 
   const createKit = trpc.kits.create.useMutation({
     onError: error => toast.error(error.message),
-    onSuccess: () => { toast.success("Kit created"); onBack(); },
+    onSuccess: () => {
+      toast.success("Kit created");
+      onBack();
+    },
     onSettled: refresh,
   });
 
   const updateKit = trpc.kits.update.useMutation({
     onError: error => toast.error(error.message),
     onSuccess: result => {
-      toast.success(result?.forked
-        ? "Saved as your own copy — the starter is unchanged."
-        : "Kit saved");
+      toast.success(
+        result?.forked
+          ? "Saved as your own copy — the starter is unchanged."
+          : "Kit saved"
+      );
       onBack();
     },
     onSettled: refresh,
   });
 
   const searchable = useMemo(
-    () => assemblies.map(a => ({ id: String(a.id), description: a.name, category: a.category })),
+    () =>
+      assemblies.map(a => ({
+        id: String(a.id),
+        description: a.name,
+        category: a.category,
+      })),
     [assemblies]
   );
 
@@ -138,21 +207,37 @@ function KitBuilder({
     const byId = new Map(assemblies.map(a => [a.id, a]));
     return hits
       .map(hit => byId.get(Number(hit.id)))
-      .filter((a): a is NonNullable<typeof a> => Boolean(a) && !chosen.has(a!.id));
+      .filter(
+        (a): a is NonNullable<typeof a> => Boolean(a) && !chosen.has(a!.id)
+      );
   }, [query, searchable, assemblies, draftItems]);
 
-  const addAssembly = (assembly: { id: number; name: string; category: string }) => {
-    setItems(current => [...(current ?? []), {
-      assemblyId: assembly.id, qty: 1, name: assembly.name, category: assembly.category,
-    }]);
+  const addAssembly = (assembly: {
+    id: number;
+    name: string;
+    category: string;
+  }) => {
+    setItems(current => [
+      ...(current ?? []),
+      {
+        assemblyId: assembly.id,
+        qty: 1,
+        name: assembly.name,
+        category: assembly.category,
+      },
+    ]);
     setQuery("");
     setHighlight(0);
   };
 
   const save = () => {
-    if (!name.trim()) { toast.error("Give the kit a name."); return; }
+    if (!name.trim()) {
+      toast.error("Give the kit a name.");
+      return;
+    }
     if (draftItems.some(i => !(i.qty >= 0))) {
-      toast.error("Every item needs a quantity of 0 or more."); return;
+      toast.error("Every item needs a quantity of 0 or more.");
+      return;
     }
     const payload = {
       name: name.trim(),
@@ -169,14 +254,22 @@ function KitBuilder({
     <div className="flex flex-col h-full bg-background">
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-center gap-3">
-          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={onBack}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 text-xs"
+            onClick={onBack}
+          >
             <ArrowLeft className="w-3.5 h-3.5" /> Kits
           </Button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold truncate">{isNew ? "New kit" : name || "Kit"}</h1>
+            <h1 className="text-lg font-semibold truncate">
+              {isNew ? "New kit" : name || "Kit"}
+            </h1>
             {isStarter && (
               <p className="text-xs text-muted-foreground">
-                Starter kit — saving gives you your own copy and leaves the original alone.
+                Starter kit — saving gives you your own copy and leaves the
+                original alone.
               </p>
             )}
           </div>
@@ -211,18 +304,24 @@ function KitBuilder({
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                   <Input
                     value={query}
-                    onChange={e => { setQuery(e.target.value); setHighlight(0); }}
+                    onChange={e => {
+                      setQuery(e.target.value);
+                      setHighlight(0);
+                    }}
                     onKeyDown={e => {
                       if (e.key === "ArrowDown") {
-                        e.preventDefault(); setHighlight(h => Math.min(h + 1, results.length - 1));
+                        e.preventDefault();
+                        setHighlight(h => Math.min(h + 1, results.length - 1));
                       } else if (e.key === "ArrowUp") {
-                        e.preventDefault(); setHighlight(h => Math.max(h - 1, 0));
+                        e.preventDefault();
+                        setHighlight(h => Math.max(h - 1, 0));
                       } else if (e.key === "Enter") {
                         e.preventDefault();
                         const chosen = results[highlight];
                         if (chosen) addAssembly(chosen);
                       } else if (e.key === "Escape") {
-                        e.preventDefault(); setQuery("");
+                        e.preventDefault();
+                        setQuery("");
                       }
                     }}
                     placeholder="Add an assembly to this kit…"
@@ -239,12 +338,16 @@ function KitBuilder({
                         onClick={() => addAssembly(assembly)}
                         className={cn(
                           "w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors border-b border-border last:border-0",
-                          index === highlight ? "bg-[#F5C518]/10" : "hover:bg-muted/40"
+                          index === highlight
+                            ? "bg-[#F5C518]/10"
+                            : "hover:bg-muted/40"
                         )}
                       >
                         <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         <span className="flex-1 truncate">{assembly.name}</span>
-                        <span className="text-xs text-muted-foreground">{assembly.category}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {assembly.category}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -261,15 +364,23 @@ function KitBuilder({
                     key={item.assemblyId}
                     className="flex items-center gap-3 px-4 py-2.5 border-b border-border last:border-0 hover:bg-muted/20 transition-colors group"
                   >
-                    <span className="flex-1 min-w-0 text-sm truncate">{item.name}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">{item.category}</span>
+                    <span className="flex-1 min-w-0 text-sm truncate">
+                      {item.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {item.category}
+                    </span>
                     <Input
                       value={String(item.qty)}
                       onChange={e => {
                         const qty = Number(e.target.value);
-                        setItems(current => (current ?? []).map((it, i) =>
-                          i === index ? { ...it, qty: Number.isNaN(qty) ? 0 : qty } : it
-                        ));
+                        setItems(current =>
+                          (current ?? []).map((it, i) =>
+                            i === index
+                              ? { ...it, qty: Number.isNaN(qty) ? 0 : qty }
+                              : it
+                          )
+                        );
                       }}
                       className="h-7 w-20 text-sm text-right"
                       inputMode="decimal"
@@ -277,9 +388,14 @@ function KitBuilder({
                       aria-label={`Quantity of ${item.name}`}
                     />
                     <Button
-                      size="sm" variant="ghost"
+                      size="sm"
+                      variant="ghost"
                       className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                      onClick={() => setItems(current => (current ?? []).filter((_, i) => i !== index))}
+                      onClick={() =>
+                        setItems(current =>
+                          (current ?? []).filter((_, i) => i !== index)
+                        )
+                      }
                       aria-label={`Remove ${item.name}`}
                     >
                       <X className="w-3.5 h-3.5" />
@@ -290,8 +406,8 @@ function KitBuilder({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Quantities are yours to set from experience — nothing here works them out from room
-              size or spacing rules.
+              Quantities are yours to set from experience — nothing here works
+              them out from room size or spacing rules.
             </p>
           </div>
 
@@ -307,14 +423,17 @@ function KitBuilder({
               ) : priceQuery.data ? (
                 <>
                   <div className="flex items-baseline justify-between gap-3 py-1">
-                    <span className="text-xs text-muted-foreground">Materials</span>
+                    <span className="text-xs text-muted-foreground">
+                      Materials
+                    </span>
                     <span className="font-mono text-sm">
                       {money(priceQuery.data.totals.materialCost)}
                     </span>
                   </div>
                   <div className="flex items-baseline justify-between gap-3 py-1">
                     <span className="text-xs text-muted-foreground">
-                      Labor ({round(priceQuery.data.totals.totalLaborHours, 2)} h)
+                      Labor ({round(priceQuery.data.totals.totalLaborHours, 2)}{" "}
+                      h)
                     </span>
                     <span className="font-mono text-sm">
                       {money(priceQuery.data.totals.laborCost)}
@@ -328,7 +447,8 @@ function KitBuilder({
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground pt-2">
-                    Live from today's library. Costs freeze only when the kit is added to a bid.
+                    Live from today's library. Costs freeze only when the kit is
+                    added to a bid.
                   </p>
                 </>
               ) : (
@@ -347,17 +467,28 @@ function KitBuilder({
 export default function KitsPage() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
-  const [duplicating, setDuplicating] = useState<{ id: number; name: string } | null>(null);
+  const [duplicating, setDuplicating] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
   const [view, setView] = useState<LibraryView>("active");
   const [scope, setScope] = useState<LibraryScope>("all");
-  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(null);
+  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(
+    null
+  );
   const [pendingDelete, setPendingDelete] = useState<PendingItem | null>(null);
 
   const utils = trpc.useUtils();
-  const { data: kits = [], isLoading } = trpc.kits.list.useQuery({ status: view });
-  const { data: archivedRows = [] } = trpc.kits.list.useQuery({ status: "archived" });
+  const { data: kits = [], isLoading } = trpc.kits.list.useQuery({
+    status: view,
+  });
+  const { data: archivedRows = [] } = trpc.kits.list.useQuery({
+    status: "archived",
+  });
 
-  const refresh = useCallback(() => { void utils.kits.list.invalidate(); }, [utils]);
+  const refresh = useCallback(() => {
+    void utils.kits.list.invalidate();
+  }, [utils]);
 
   // Scope before anything else, so the count on the filter matches what shows.
   const visibleKits = useMemo(() => filterByScope(kits, scope), [kits, scope]);
@@ -380,7 +511,8 @@ export default function KitsPage() {
 
   const archiveKit = trpc.kits.archive.useMutation({
     onError: error => toast.error(error.message),
-    onSuccess: () => toast.success("Archived — restore it any time from the Archived tab."),
+    onSuccess: () =>
+      toast.success("Archived — restore it any time from the Archived tab."),
     onSettled: refresh,
   });
 
@@ -396,8 +528,10 @@ export default function KitsPage() {
     onSettled: refresh,
   });
 
-  if (creating) return <KitBuilder kitId={null} onBack={() => setCreating(false)} />;
-  if (openId !== null) return <KitBuilder kitId={openId} onBack={() => setOpenId(null)} />;
+  if (creating)
+    return <KitBuilder kitId={null} onBack={() => setCreating(false)} />;
+  if (openId !== null)
+    return <KitBuilder kitId={openId} onBack={() => setOpenId(null)} />;
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -407,10 +541,15 @@ export default function KitsPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold">Kits</h1>
             <p className="text-xs text-muted-foreground">
-              Bundles of assemblies at set quantities — add a whole room to a bid in one go.
+              Bundles of assemblies at set quantities — add a whole room to a
+              bid in one go.
             </p>
           </div>
-          <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setCreating(true)}>
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setCreating(true)}
+          >
             <Plus className="w-3.5 h-3.5" /> New kit
           </Button>
         </div>
@@ -418,8 +557,16 @@ export default function KitsPage() {
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <ViewTabs view={view} onChange={setView} archivedCount={archivedRows.length} />
-          <ScopeFilter scope={scope} onChange={setScope} counts={scopeCounts(kits)} />
+          <ViewTabs
+            view={view}
+            onChange={setView}
+            archivedCount={archivedRows.length}
+          />
+          <ScopeFilter
+            scope={scope}
+            onChange={setScope}
+            counts={scopeCounts(kits)}
+          />
         </div>
 
         <div className="rounded-xl border border-border bg-card overflow-hidden max-w-4xl">
@@ -429,7 +576,9 @@ export default function KitsPage() {
           </div>
 
           {isLoading ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading kits…</div>
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              Loading kits…
+            </div>
           ) : visibleKits.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
               {view === "archived"
@@ -444,19 +593,27 @@ export default function KitsPage() {
                 key={kit.id}
                 className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors group"
               >
-                <button onClick={() => setOpenId(kit.id)} className="flex-1 min-w-0 text-left">
+                <button
+                  onClick={() => setOpenId(kit.id)}
+                  className="flex-1 min-w-0 text-left"
+                >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate">{kit.name}</span>
+                    <span className="text-sm font-medium truncate">
+                      {kit.name}
+                    </span>
                     <OriginBadge kit={kit} />
                   </div>
                   {kit.description && (
-                    <div className="text-xs text-muted-foreground truncate">{kit.description}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {kit.description}
+                    </div>
                   )}
                 </button>
 
                 <div className="flex items-center gap-0.5 w-24 justify-end shrink-0">
                   <Button
-                    size="sm" variant="ghost"
+                    size="sm"
+                    variant="ghost"
                     className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                     onClick={() => setOpenId(kit.id)}
                     aria-label={`Edit ${kit.name}`}
@@ -464,9 +621,12 @@ export default function KitsPage() {
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
                   <Button
-                    size="sm" variant="ghost"
+                    size="sm"
+                    variant="ghost"
                     className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                    onClick={() => setDuplicating({ id: kit.id, name: `${kit.name} (copy)` })}
+                    onClick={() =>
+                      setDuplicating({ id: kit.id, name: `${kit.name} (copy)` })
+                    }
                     title="Duplicate — a separate kit, not linked to this one"
                     aria-label={`Duplicate ${kit.name}`}
                   >
@@ -474,7 +634,8 @@ export default function KitsPage() {
                   </Button>
                   {kit.baselineId != null && (
                     <Button
-                      size="sm" variant="ghost"
+                      size="sm"
+                      variant="ghost"
                       className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                       onClick={() => revertKit.mutate({ id: kit.id })}
                       title="Undo your changes and restore the starter"
@@ -486,32 +647,42 @@ export default function KitsPage() {
                   {view === "archived" ? (
                     <>
                       <Button
-                        size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 gap-1.5 text-xs"
                         onClick={() => restoreKit.mutate({ id: kit.id })}
                         aria-label={`Restore ${kit.name}`}
                       >
                         <RotateCcw className="w-3 h-3" /> Restore
                       </Button>
                       <Button
-                        size="sm" variant="ghost"
+                        size="sm"
+                        variant="ghost"
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => setPendingDelete({ id: kit.id, name: kit.name })}
+                        onClick={() =>
+                          setPendingDelete({ id: kit.id, name: kit.name })
+                        }
                         title="Delete permanently — cannot be undone"
                         aria-label={`Delete ${kit.name} forever`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </>
-                  ) : kit.userId !== null && (
-                    <Button
-                      size="sm" variant="ghost"
-                      className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                      onClick={() => setPendingArchive({ id: kit.id, name: kit.name })}
-                      title="Archive — out of the working list, restorable any time"
-                      aria-label={`Archive ${kit.name}`}
-                    >
-                      <ArchiveIcon className="w-3.5 h-3.5" />
-                    </Button>
+                  ) : (
+                    kit.userId !== null && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                        onClick={() =>
+                          setPendingArchive({ id: kit.id, name: kit.name })
+                        }
+                        title="Archive — out of the working list, restorable any time"
+                        aria-label={`Archive ${kit.name}`}
+                      >
+                        <ArchiveIcon className="w-3.5 h-3.5" />
+                      </Button>
+                    )
                   )}
                 </div>
               </div>
@@ -520,29 +691,37 @@ export default function KitsPage() {
         </div>
 
         <p className="text-xs text-muted-foreground mt-2 max-w-4xl">
-          Adding a kit to a bid drops in its assemblies as ordinary line items, each with its costs
-          frozen at that moment and each editable afterwards — so one room being different is just
-          an edit to that line.
+          Adding a kit to a bid drops in its assemblies as ordinary line items,
+          each with its costs frozen at that moment and each editable afterwards
+          — so one room being different is just an edit to that line.
         </p>
       </div>
 
-      <AlertDialog open={duplicating !== null} onOpenChange={open => !open && setDuplicating(null)}>
+      <AlertDialog
+        open={duplicating !== null}
+        onOpenChange={open => !open && setDuplicating(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Duplicate kit</AlertDialogTitle>
             <AlertDialogDescription>
-              This makes a separate kit with the same contents. It is not linked to the original —
-              editing either one leaves the other alone.
+              This makes a separate kit with the same contents. It is not linked
+              to the original — editing either one leaves the other alone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Input
             value={duplicating?.name ?? ""}
-            onChange={e => setDuplicating(d => d && { ...d, name: e.target.value })}
+            onChange={e =>
+              setDuplicating(d => d && { ...d, name: e.target.value })
+            }
             onFocus={selectOnFocus}
             onKeyDown={e => {
               if (e.key !== "Enter" || !duplicating?.name.trim()) return;
               e.preventDefault();
-              duplicateKit.mutate({ id: duplicating.id, name: duplicating.name.trim() });
+              duplicateKit.mutate({
+                id: duplicating.id,
+                name: duplicating.name.trim(),
+              });
               setDuplicating(null);
             }}
             className="h-9 text-sm"
@@ -553,8 +732,14 @@ export default function KitsPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (!duplicating?.name.trim()) { toast.error("Give the copy a name."); return; }
-                duplicateKit.mutate({ id: duplicating.id, name: duplicating.name.trim() });
+                if (!duplicating?.name.trim()) {
+                  toast.error("Give the copy a name.");
+                  return;
+                }
+                duplicateKit.mutate({
+                  id: duplicating.id,
+                  name: duplicating.name.trim(),
+                });
                 setDuplicating(null);
               }}
             >

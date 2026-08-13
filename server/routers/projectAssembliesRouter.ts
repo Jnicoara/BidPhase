@@ -13,19 +13,32 @@ export const projectAssembliesRouter = router({
 
   /** Add a master assembly as a project assembly (snapshot all items) */
   addFromMaster: protectedProcedure
-    .input(z.object({
-      projectId: z.number().int().positive(),
-      masterAssemblyId: z.number().int().positive(),
-      phase: z.string().max(128).optional(),
-    }))
+    .input(
+      z.object({
+        projectId: z.number().int().positive(),
+        masterAssemblyId: z.number().int().positive(),
+        phase: z.string().max(128).optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       // Verify the project belongs to the user
       const project = await db.getProjectById(input.projectId, ctx.user.id);
-      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found." });
+      if (!project)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Project not found.",
+        });
 
       // Verify master assembly belongs to user
-      const masterAssembly = await db.getMasterAssemblyWithItems(input.masterAssemblyId, ctx.user.id);
-      if (!masterAssembly) throw new TRPCError({ code: "NOT_FOUND", message: "Master assembly not found." });
+      const masterAssembly = await db.getMasterAssemblyWithItems(
+        input.masterAssemblyId,
+        ctx.user.id
+      );
+      if (!masterAssembly)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Master assembly not found.",
+        });
 
       // Create project assembly
       await db.createProjectAssembly({
@@ -37,7 +50,10 @@ export const projectAssembliesRouter = router({
       });
 
       // Get the newly created assembly
-      const assemblies = await db.getProjectAssemblies(input.projectId, ctx.user.id);
+      const assemblies = await db.getProjectAssemblies(
+        input.projectId,
+        ctx.user.id
+      );
       const newAssembly = assemblies[assemblies.length - 1];
       if (!newAssembly) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
@@ -54,7 +70,7 @@ export const projectAssembliesRouter = router({
           masterMaterialCost: item.masterMaterialCost,
           masterLaborHours: item.masterLaborHours,
           overrideMaterialCost: item.masterMaterialCost, // default to master
-          overrideLaborHours: item.masterLaborHours,     // default to master
+          overrideLaborHours: item.masterLaborHours, // default to master
           sortOrder: i,
         });
       }
@@ -64,14 +80,20 @@ export const projectAssembliesRouter = router({
 
   /** Create a blank project assembly (manual, no master) */
   createBlank: protectedProcedure
-    .input(z.object({
-      projectId: z.number().int().positive(),
-      name: z.string().min(1).max(255),
-      phase: z.string().max(128).optional(),
-    }))
+    .input(
+      z.object({
+        projectId: z.number().int().positive(),
+        name: z.string().min(1).max(255),
+        phase: z.string().max(128).optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const project = await db.getProjectById(input.projectId, ctx.user.id);
-      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found." });
+      if (!project)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Project not found.",
+        });
       await db.createProjectAssembly({
         projectId: input.projectId,
         masterAssemblyId: null,
@@ -83,12 +105,14 @@ export const projectAssembliesRouter = router({
     }),
 
   update: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      name: z.string().min(1).max(255).optional(),
-      phase: z.string().max(128).nullable().optional(),
-      sortOrder: z.number().int().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        name: z.string().min(1).max(255).optional(),
+        phase: z.string().max(128).nullable().optional(),
+        sortOrder: z.number().int().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
       await db.updateProjectAssembly(id, ctx.user.id, data);
@@ -104,21 +128,29 @@ export const projectAssembliesRouter = router({
 
   /** Add a single item to an existing project assembly */
   addItem: protectedProcedure
-    .input(z.object({
-      projectAssemblyId: z.number().int().positive(),
-      masterItemId: z.number().int().positive().optional(),
-      itemCode: z.string().max(128).optional(),
-      description: z.string().min(1).max(512),
-      unit: z.string().max(32).default("EA"),
-      qty: z.number().min(0).default(1),
-      masterMaterialCost: z.number().min(0).default(0),
-      masterLaborHours: z.number().min(0).default(0),
-      overrideMaterialCost: z.number().min(0).optional(),
-      overrideLaborHours: z.number().min(0).optional(),
-    }))
+    .input(
+      z.object({
+        projectAssemblyId: z.number().int().positive(),
+        masterItemId: z.number().int().positive().optional(),
+        itemCode: z.string().max(128).optional(),
+        description: z.string().min(1).max(512),
+        unit: z.string().max(32).default("EA"),
+        qty: z.number().min(0).default(1),
+        masterMaterialCost: z.number().min(0).default(0),
+        masterLaborHours: z.number().min(0).default(0),
+        overrideMaterialCost: z.number().min(0).optional(),
+        overrideLaborHours: z.number().min(0).optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
-      const ownerId = await db.getProjectAssemblyOwnerId(input.projectAssemblyId);
-      if (ownerId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND", message: "Project assembly not found." });
+      const ownerId = await db.getProjectAssemblyOwnerId(
+        input.projectAssemblyId
+      );
+      if (ownerId !== ctx.user.id)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Project assembly not found.",
+        });
       const matCost = String(input.masterMaterialCost);
       const labHours = String(input.masterLaborHours);
       await db.createProjectAssemblyItem({
@@ -130,8 +162,12 @@ export const projectAssembliesRouter = router({
         qty: String(input.qty),
         masterMaterialCost: matCost,
         masterLaborHours: labHours,
-        overrideMaterialCost: String(input.overrideMaterialCost ?? input.masterMaterialCost),
-        overrideLaborHours: String(input.overrideLaborHours ?? input.masterLaborHours),
+        overrideMaterialCost: String(
+          input.overrideMaterialCost ?? input.masterMaterialCost
+        ),
+        overrideLaborHours: String(
+          input.overrideLaborHours ?? input.masterLaborHours
+        ),
         sortOrder: 0,
       });
       return { success: true };
@@ -139,19 +175,27 @@ export const projectAssembliesRouter = router({
 
   /** Update qty or override values for an item in a project assembly */
   updateItem: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      qty: z.number().min(0).optional(),
-      overrideMaterialCost: z.number().min(0).optional(),
-      overrideLaborHours: z.number().min(0).optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        qty: z.number().min(0).optional(),
+        overrideMaterialCost: z.number().min(0).optional(),
+        overrideLaborHours: z.number().min(0).optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const { id, qty, overrideMaterialCost, overrideLaborHours } = input;
       const data: Record<string, unknown> = {};
       if (qty !== undefined) data.qty = String(qty);
-      if (overrideMaterialCost !== undefined) data.overrideMaterialCost = String(overrideMaterialCost);
-      if (overrideLaborHours !== undefined) data.overrideLaborHours = String(overrideLaborHours);
-      await db.updateProjectAssemblyItem(id, ctx.user.id, data as Parameters<typeof db.updateProjectAssemblyItem>[2]);
+      if (overrideMaterialCost !== undefined)
+        data.overrideMaterialCost = String(overrideMaterialCost);
+      if (overrideLaborHours !== undefined)
+        data.overrideLaborHours = String(overrideLaborHours);
+      await db.updateProjectAssemblyItem(
+        id,
+        ctx.user.id,
+        data as Parameters<typeof db.updateProjectAssemblyItem>[2]
+      );
       return { success: true };
     }),
 

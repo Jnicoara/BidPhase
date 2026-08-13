@@ -8,14 +8,26 @@
  * is tested. This file is the wiring.
  */
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  archiveConfirmCopy, resolveArchiveAnswer, type PendingArchive,
+  archiveConfirmCopy,
+  resolveArchiveAnswer,
+  type PendingArchive,
 } from "@/lib/archiveBid";
 
-export function ArchiveBidDialog({ pending, onClose, onArchive }: {
+export function ArchiveBidDialog({
+  pending,
+  onClose,
+  onArchive,
+}: {
   /** The bid awaiting an answer, or null when the dialog is closed. */
   pending: PendingArchive | null;
   onClose: () => void;
@@ -33,7 +45,9 @@ export function ArchiveBidDialog({ pending, onClose, onArchive }: {
     <AlertDialog
       open={pending !== null}
       // Escape and a click outside both land here, and both mean "no".
-      onOpenChange={open => { if (!open) answer("dismiss"); }}
+      onOpenChange={open => {
+        if (!open) answer("dismiss");
+      }}
     >
       <AlertDialogContent>
         <AlertDialogHeader>
@@ -43,8 +57,12 @@ export function ArchiveBidDialog({ pending, onClose, onArchive }: {
         <AlertDialogFooter>
           {/* Cancel is the default focus, so Enter on a dialog someone did not
               mean to open keeps the bid rather than archiving it. */}
-          <AlertDialogCancel onClick={() => answer("cancel")}>Keep it</AlertDialogCancel>
-          <AlertDialogAction onClick={() => answer("confirm")}>Archive bid</AlertDialogAction>
+          <AlertDialogCancel onClick={() => answer("cancel")}>
+            Keep it
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={() => answer("confirm")}>
+            Archive bid
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

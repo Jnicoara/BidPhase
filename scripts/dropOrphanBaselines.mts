@@ -25,7 +25,8 @@ import { eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb } from "../server/db";
 import { assemblyMaterials, materials } from "../drizzle/schema";
 import {
-  BASELINE_MATERIALS, RETIRED_BASELINE_MATERIALS,
+  BASELINE_MATERIALS,
+  RETIRED_BASELINE_MATERIALS,
 } from "../server/seed/baselineMaterials";
 
 const db = await getDb();

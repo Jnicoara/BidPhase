@@ -41,9 +41,21 @@ const toView = (row: Modifier): ModifierView => ({
 export const modifiersRouter = router({
   /** The working list, or the archive. Never returns `deleted` tombstones. */
   list: protectedProcedure
-    .input(z.object({ status: z.enum(MODIFIER_STATUSES).exclude(["deleted"]).default("active") }).optional())
+    .input(
+      z
+        .object({
+          status: z
+            .enum(MODIFIER_STATUSES)
+            .exclude(["deleted"])
+            .default("active"),
+        })
+        .optional()
+    )
     .query(async ({ input, ctx }) => {
-      const rows = await db.getLibraryModifiers(ctx.user.id, input?.status ?? "active");
+      const rows = await db.getLibraryModifiers(
+        ctx.user.id,
+        input?.status ?? "active"
+      );
       return rows.map(toView);
     }),
 
@@ -53,7 +65,9 @@ export const modifiersRouter = router({
       // Check against the working list only. A name sitting in the archive
       // should not block reusing it — the user removed that one deliberately.
       const existing = await db.getLibraryModifiers(ctx.user.id, "active");
-      const clash = existing.find(m => m.name.toLowerCase() === input.name.toLowerCase());
+      const clash = existing.find(
+        m => m.name.toLowerCase() === input.name.toLowerCase()
+      );
       if (clash) {
         throw new TRPCError({
           code: "CONFLICT",
@@ -72,19 +86,27 @@ export const modifiersRouter = router({
 
   /** Edit a modifier, forking a starter first if that is what was targeted. */
   update: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      name: nameSchema.optional(),
-      laborAdjustmentPct: pctSchema.optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        name: nameSchema.optional(),
+        laborAdjustmentPct: pctSchema.optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const { id, name, laborAdjustmentPct } = input;
 
       const target = await db.getModifierById(id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Modifier not found." });
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Modifier not found.",
+        });
 
       const isBaseline = target.userId === null;
-      const editableId = isBaseline ? await db.forkModifier(id, ctx.user.id) : id;
+      const editableId = isBaseline
+        ? await db.forkModifier(id, ctx.user.id)
+        : id;
 
       await db.updateModifier(editableId, ctx.user.id, {
         ...(name !== undefined ? { name } : {}),
@@ -103,12 +125,16 @@ export const modifiersRouter = router({
     .mutation(async ({ input, ctx }) => {
       const target = await db.getModifierById(input.id, ctx.user.id);
       if (!target || target.userId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Modifier not found." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Modifier not found.",
+        });
       }
       if (target.baselineId == null) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "This modifier was created from scratch, so there is no original to restore.",
+          message:
+            "This modifier was created from scratch, so there is no original to restore.",
         });
       }
 
@@ -126,8 +152,13 @@ export const modifiersRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getModifierById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Modifier not found." });
-      if (target.status === "archived") return { id: input.id, alreadyArchived: true };
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Modifier not found.",
+        });
+      if (target.status === "archived")
+        return { id: input.id, alreadyArchived: true };
 
       const archivedId = await db.archiveModifier(input.id, ctx.user.id);
       return { id: archivedId, alreadyArchived: false };
@@ -138,10 +169,16 @@ export const modifiersRouter = router({
     .mutation(async ({ input, ctx }) => {
       const target = await db.getModifierById(input.id, ctx.user.id);
       if (!target || target.userId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Modifier not found." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Modifier not found.",
+        });
       }
       if (target.status !== "archived") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "That modifier is not archived." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That modifier is not archived.",
+        });
       }
 
       await db.restoreModifier(input.id, ctx.user.id);
@@ -159,12 +196,16 @@ export const modifiersRouter = router({
     .mutation(async ({ input, ctx }) => {
       const target = await db.getModifierById(input.id, ctx.user.id);
       if (!target || target.userId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Modifier not found." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Modifier not found.",
+        });
       }
       if (target.status !== "archived") {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Only archived modifiers can be deleted permanently. Archive it first.",
+          message:
+            "Only archived modifiers can be deleted permanently. Archive it first.",
         });
       }
 

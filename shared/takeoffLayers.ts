@@ -116,7 +116,10 @@ export function isVisible(item: LayeredItem, state: LayerState): boolean {
 }
 
 /** Filter any collection of placed things by the current layer state. */
-export function filterByLayers<T extends LayeredItem>(items: T[], state: LayerState): T[] {
+export function filterByLayers<T extends LayeredItem>(
+  items: T[],
+  state: LayerState
+): T[] {
   return items.filter(item => isVisible(item, state));
 }
 
@@ -166,8 +169,14 @@ export function isFiltered(items: LayeredItem[], state: LayerState): boolean {
  * when a new system shows up teaches the user not to rely on them.
  */
 const LAYER_COLORS = [
-  "#F5C518", "#4ADE80", "#60A5FA", "#F472B6",
-  "#FB923C", "#A78BFA", "#2DD4BF", "#FACC15",
+  "#F5C518",
+  "#4ADE80",
+  "#60A5FA",
+  "#F472B6",
+  "#FB923C",
+  "#A78BFA",
+  "#2DD4BF",
+  "#FACC15",
 ];
 
 export function layerColor(key: LayerKey): string {

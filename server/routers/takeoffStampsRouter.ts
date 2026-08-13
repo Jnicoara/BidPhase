@@ -34,20 +34,26 @@ const coordSchema = z.number().finite().min(-100000).max(100000);
  * generous ceiling here would let a full-page screenshot into a text column
  * and quietly bloat every list query that reads it.
  */
-const thumbnailSchema = z.string()
+const thumbnailSchema = z
+  .string()
   .max(200_000)
-  .refine(v => v.startsWith("data:image/"), "Thumbnail must be an image data URL")
+  .refine(
+    v => v.startsWith("data:image/"),
+    "Thumbnail must be an image data URL"
+  )
   .nullable();
 
 async function requireSheet(sheetId: number, userId: number) {
   const sheet = await db.getBidPdfSheet(sheetId, userId);
-  if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
+  if (!sheet)
+    throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
   return sheet;
 }
 
 async function requireBid(bidId: number, userId: number) {
   const bid = await db.getBidById(bidId, userId);
-  if (!bid) throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
+  if (!bid)
+    throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
   return bid;
 }
 
@@ -65,16 +71,21 @@ export const takeoffStampsRouter = router({
    * does not depend on one.
    */
   drop: protectedProcedure
-    .input(z.object({
-      bidId: z.number().int().positive(),
-      sheetId: z.number().int().positive(),
-      assemblyId: z.number().int().positive().nullable(),
-      assemblyName: nameSchema,
-      /** Where these ones sit. Optional — tagging can happen after placing. */
-      location: z.enum(TAKEOFF_LOCATIONS).nullable().default(null),
-      /** One entry per click. Bounded so a runaway loop cannot flood a sheet. */
-      at: z.array(z.object({ x: coordSchema, y: coordSchema })).min(1).max(500),
-    }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        sheetId: z.number().int().positive(),
+        assemblyId: z.number().int().positive().nullable(),
+        assemblyName: nameSchema,
+        /** Where these ones sit. Optional — tagging can happen after placing. */
+        location: z.enum(TAKEOFF_LOCATIONS).nullable().default(null),
+        /** One entry per click. Bounded so a runaway loop cannot flood a sheet. */
+        at: z
+          .array(z.object({ x: coordSchema, y: coordSchema }))
+          .min(1)
+          .max(500),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
       await requireSheet(input.sheetId, ctx.user.id);
@@ -83,21 +94,26 @@ export const takeoffStampsRouter = router({
       // layer keeps working after the library assembly is archived or renamed.
       let assemblyCategory: string | null = null;
       if (input.assemblyId !== null) {
-        const assembly = await db.getAssemblyById(input.assemblyId, ctx.user.id);
+        const assembly = await db.getAssemblyById(
+          input.assemblyId,
+          ctx.user.id
+        );
         assemblyCategory = assembly?.category ?? null;
       }
 
-      await db.createStamps(input.at.map(point => ({
-        bidId: input.bidId,
-        sheetId: input.sheetId,
-        userId: ctx.user.id,
-        assemblyId: input.assemblyId,
-        assemblyName: input.assemblyName,
-        assemblyCategory,
-        location: input.location,
-        x: point.x.toFixed(4),
-        y: point.y.toFixed(4),
-      })));
+      await db.createStamps(
+        input.at.map(point => ({
+          bidId: input.bidId,
+          sheetId: input.sheetId,
+          userId: ctx.user.id,
+          assemblyId: input.assemblyId,
+          assemblyName: input.assemblyName,
+          assemblyCategory,
+          location: input.location,
+          x: point.x.toFixed(4),
+          y: point.y.toFixed(4),
+        }))
+      );
 
       return { dropped: input.at.length };
     }),
@@ -130,10 +146,12 @@ export const takeoffStampsRouter = router({
 
   /** Tag one stamp's Location. */
   setLocation: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      location: z.enum(TAKEOFF_LOCATIONS).nullable(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        location: z.enum(TAKEOFF_LOCATIONS).nullable(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await db.setStampLocation(input.id, ctx.user.id, input.location);
       return { success: true };
@@ -146,15 +164,20 @@ export const takeoffStampsRouter = router({
    * all in the ceiling, rather than tagging each of twenty marks.
    */
   setLocationForAssembly: protectedProcedure
-    .input(z.object({
-      sheetId: z.number().int().positive(),
-      assemblyName: nameSchema,
-      location: z.enum(TAKEOFF_LOCATIONS).nullable(),
-    }))
+    .input(
+      z.object({
+        sheetId: z.number().int().positive(),
+        assemblyName: nameSchema,
+        location: z.enum(TAKEOFF_LOCATIONS).nullable(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireSheet(input.sheetId, ctx.user.id);
       await db.setStampLocationForAssembly(
-        input.sheetId, ctx.user.id, input.assemblyName, input.location
+        input.sheetId,
+        ctx.user.id,
+        input.assemblyName,
+        input.location
       );
       return { success: true };
     }),
@@ -197,7 +220,8 @@ export const takeoffStampsRouter = router({
           .filter(run => !run.isSuggestion)
           .map(run => {
             const points = run.points ?? [];
-            const inches = ratio === null ? null : pathRealInches(points, ratio);
+            const inches =
+              ratio === null ? null : pathRealInches(points, ratio);
             return {
               id: run.id,
               sheetId: run.sheetId,
@@ -234,13 +258,15 @@ export const takeoffStampsRouter = router({
    * reuse across sheets and jobs is the feature.
    */
   captureSymbol: protectedProcedure
-    .input(z.object({
-      label: nameSchema,
-      thumbnail: thumbnailSchema.default(null),
-      capturedFromSheetId: z.number().int().positive().optional(),
-      /** Supplied when the user links at capture time rather than later. */
-      assemblyId: z.number().int().positive().nullable().default(null),
-    }))
+    .input(
+      z.object({
+        label: nameSchema,
+        thumbnail: thumbnailSchema.default(null),
+        capturedFromSheetId: z.number().int().positive().optional(),
+        /** Supplied when the user links at capture time rather than later. */
+        assemblyId: z.number().int().positive().nullable().default(null),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const lookupKey = symbolLookupKey(input.label);
       const existing = await db.getSymbolLinkByKey(ctx.user.id, lookupKey);
@@ -249,7 +275,8 @@ export const takeoffStampsRouter = router({
         // Fill in a thumbnail or a link if this capture supplies one the
         // stored row lacks, but never overwrite a link the user already made.
         const patch: Record<string, unknown> = {};
-        if (!existing.thumbnail && input.thumbnail) patch.thumbnail = input.thumbnail;
+        if (!existing.thumbnail && input.thumbnail)
+          patch.thumbnail = input.thumbnail;
         if (existing.assemblyId === null && input.assemblyId !== null) {
           patch.assemblyId = input.assemblyId;
         }
@@ -283,19 +310,35 @@ export const takeoffStampsRouter = router({
 
   /** Answer the one-time "which assembly does this match?" prompt. */
   linkSymbol: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      assemblyId: z.number().int().positive(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        assemblyId: z.number().int().positive(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const link = await db.getSymbolLinkById(input.id, ctx.user.id);
-      if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Symbol not found." });
+      if (!link)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Symbol not found.",
+        });
 
       const assembly = await db.getAssemblyById(input.assemblyId, ctx.user.id);
-      if (!assembly) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      if (!assembly)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
 
-      await db.updateSymbolLink(input.id, ctx.user.id, { assemblyId: input.assemblyId });
-      return { id: input.id, assemblyId: input.assemblyId, assemblyName: assembly.name };
+      await db.updateSymbolLink(input.id, ctx.user.id, {
+        assemblyId: input.assemblyId,
+      });
+      return {
+        id: input.id,
+        assemblyId: input.assemblyId,
+        assemblyName: assembly.name,
+      };
     }),
 
   /** Break a link, leaving the captured symbol in place to be re-linked. */
@@ -303,7 +346,11 @@ export const takeoffStampsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const link = await db.getSymbolLinkById(input.id, ctx.user.id);
-      if (!link) throw new TRPCError({ code: "NOT_FOUND", message: "Symbol not found." });
+      if (!link)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Symbol not found.",
+        });
       await db.updateSymbolLink(input.id, ctx.user.id, { assemblyId: null });
       return { success: true };
     }),

@@ -43,7 +43,12 @@ export type BaselineAssemblyMaterial = {
 
 export type BaselineAssembly = {
   name: string;
-  category: "Devices" | "Lighting" | "Panels" | "Equipment Connections" | "Low Voltage/EMS";
+  category:
+    | "Devices"
+    | "Lighting"
+    | "Panels"
+    | "Equipment Connections"
+    | "Low Voltage/EMS";
   projectType: ProjectType;
   /** Placeholder — see the file header. */
   baseLaborHours: number;

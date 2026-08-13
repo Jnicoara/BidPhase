@@ -24,13 +24,30 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { ScopeFilter } from "@/components/library/LibraryControls";
-import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
-import { Check, HardHat, Pencil, Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
+import {
+  filterByScope,
+  scopeCounts,
+  type LibraryScope,
+} from "@/lib/libraryScope";
+import {
+  Check,
+  HardHat,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_ANNUAL_HOURS, effectiveHourlyRate } from "@shared/pricing";
 import { countNeedingRate, needsRate } from "@shared/laborRatePricing";
@@ -59,8 +76,10 @@ const MAX_ANNUAL_HOURS = 8760;
 
 const money = (value: number, digits = 2) =>
   value.toLocaleString("en-US", {
-    style: "currency", currency: "USD",
-    minimumFractionDigits: digits, maximumFractionDigits: digits,
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
 
 const hours = (value: number) =>
@@ -86,10 +105,12 @@ const draftFrom = (rate: LaborRate): Draft => ({
   name: rate.name,
   rateType: rate.rateType,
   hourlyCost: String(Number(rate.hourlyCost)),
-  annualSalary: rate.annualSalary != null ? String(Number(rate.annualSalary)) : "",
-  annualHours: rate.annualHours != null
-    ? String(Number(rate.annualHours))
-    : String(DEFAULT_ANNUAL_HOURS),
+  annualSalary:
+    rate.annualSalary != null ? String(Number(rate.annualSalary)) : "",
+  annualHours:
+    rate.annualHours != null
+      ? String(Number(rate.annualHours))
+      : String(DEFAULT_ANNUAL_HOURS),
 });
 
 /** Shared validation for the add form and inline edits. */
@@ -98,22 +119,26 @@ function validateDraft(draft: Draft): string | null {
 
   if (draft.rateType === "hourly") {
     const rate = Number(draft.hourlyCost);
-    if (draft.hourlyCost.trim() === "" || Number.isNaN(rate)) return "Enter an hourly rate.";
+    if (draft.hourlyCost.trim() === "" || Number.isNaN(rate))
+      return "Enter an hourly rate.";
     if (rate < 0) return "An hourly rate cannot be negative.";
     if (rate > MAX_HOURLY) return "That hourly rate is too large.";
     return null;
   }
 
   const salary = Number(draft.annualSalary);
-  if (draft.annualSalary.trim() === "" || Number.isNaN(salary)) return "Enter an annual salary.";
+  if (draft.annualSalary.trim() === "" || Number.isNaN(salary))
+    return "Enter an annual salary.";
   if (salary < 0) return "A salary cannot be negative.";
   if (salary > MAX_SALARY) return "That salary is too large.";
 
   const working = Number(draft.annualHours);
-  if (draft.annualHours.trim() === "" || Number.isNaN(working)) return "Enter the working hours per year.";
+  if (draft.annualHours.trim() === "" || Number.isNaN(working))
+    return "Enter the working hours per year.";
   // Zero hours is a division by zero, not a free employee.
   if (working <= 0) return "Working hours per year must be greater than zero.";
-  if (working > MAX_ANNUAL_HOURS) return `There are only ${MAX_ANNUAL_HOURS} hours in a year.`;
+  if (working > MAX_ANNUAL_HOURS)
+    return `There are only ${MAX_ANNUAL_HOURS} hours in a year.`;
   return null;
 }
 
@@ -124,7 +149,10 @@ function draftHourlyRate(draft: Draft): number | null {
       const rate = Number(draft.hourlyCost);
       return Number.isFinite(rate) ? rate : null;
     }
-    return effectiveHourlyRate(Number(draft.annualSalary), Number(draft.annualHours));
+    return effectiveHourlyRate(
+      Number(draft.annualSalary),
+      Number(draft.annualHours)
+    );
   } catch {
     return null;
   }
@@ -134,22 +162,35 @@ function draftHourlyRate(draft: Draft): number | null {
 
 function OriginBadge({ rate }: { rate: LaborRate }) {
   if (rate.userId === null) {
-    return <Badge variant="outline" className="text-xs text-muted-foreground">Starter</Badge>;
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        Starter
+      </Badge>
+    );
   }
   if (rate.baselineId != null) {
     return (
-      <Badge variant="outline" className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30">
+      <Badge
+        variant="outline"
+        className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30"
+      >
         Your copy
       </Badge>
     );
   }
-  return <Badge variant="outline" className="text-xs">Yours</Badge>;
+  return (
+    <Badge variant="outline" className="text-xs">
+      Yours
+    </Badge>
+  );
 }
 
 // ─── Rate editor (shared by add form and inline edit) ─────────────────────────
 
 function RateFields({
-  draft, onChange, autoFocusName,
+  draft,
+  onChange,
+  autoFocusName,
 }: {
   draft: Draft;
   onChange: (next: Draft) => void;
@@ -169,9 +210,13 @@ function RateFields({
 
       <Select
         value={draft.rateType}
-        onValueChange={value => onChange({ ...draft, rateType: value as RateType })}
+        onValueChange={value =>
+          onChange({ ...draft, rateType: value as RateType })
+        }
       >
-        <SelectTrigger className="h-8 w-28 text-sm" aria-label="Rate type"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-8 w-28 text-sm" aria-label="Rate type">
+          <SelectValue />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem value="hourly">Hourly</SelectItem>
           <SelectItem value="salary">Salary</SelectItem>
@@ -227,7 +272,10 @@ function RateFields({
 // ─── Row ──────────────────────────────────────────────────────────────────────
 
 function LaborRateRow({
-  rate, onSave, onRevert, onRemove,
+  rate,
+  onSave,
+  onRevert,
+  onRemove,
 }: {
   rate: LaborRate;
   onSave: (id: number, draft: Draft) => void;
@@ -257,7 +305,12 @@ function LaborRateRow({
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={save}>
             <Check className="w-3 h-3" /> Save
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => setEditing(false)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setEditing(false)}
+          >
             <X className="w-3 h-3" /> Cancel
           </Button>
         </div>
@@ -274,13 +327,18 @@ function LaborRateRow({
         </div>
         {rate.rateType === "salary" && (
           <div className="text-xs text-muted-foreground mt-0.5">
-            {rate.annualSalary != null && money(Number(rate.annualSalary), 0)}/yr
-            {rate.annualHours != null && <> ÷ {hours(Number(rate.annualHours))} h</>}
+            {rate.annualSalary != null && money(Number(rate.annualSalary), 0)}
+            /yr
+            {rate.annualHours != null && (
+              <> ÷ {hours(Number(rate.annualHours))} h</>
+            )}
           </div>
         )}
       </div>
 
-      <span className="text-xs text-muted-foreground w-14 shrink-0 capitalize">{rate.rateType}</span>
+      <span className="text-xs text-muted-foreground w-14 shrink-0 capitalize">
+        {rate.rateType}
+      </span>
 
       {/* The rate column doubles as the prompt, exactly as the Materials cost
           column does — and with more riding on it. A starter role ships at $0
@@ -298,15 +356,22 @@ function LaborRateRow({
             Needs rate
           </span>
         ) : (
-          <>{money(rate.effectiveHourlyRate)}<span className="text-muted-foreground">/hr</span></>
+          <>
+            {money(rate.effectiveHourlyRate)}
+            <span className="text-muted-foreground">/hr</span>
+          </>
         )}
       </span>
 
       <div className="flex items-center gap-0.5 w-28 justify-end shrink-0">
         <Button
-          size="sm" variant="ghost"
+          size="sm"
+          variant="ghost"
           className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-          onClick={() => { setDraft(draftFrom(rate)); setEditing(true); }}
+          onClick={() => {
+            setDraft(draftFrom(rate));
+            setEditing(true);
+          }}
           title={rate.userId === null ? "Edit — creates your own copy" : "Edit"}
           aria-label={`Edit ${rate.name}`}
         >
@@ -315,7 +380,8 @@ function LaborRateRow({
 
         {rate.baselineId != null && (
           <Button
-            size="sm" variant="ghost"
+            size="sm"
+            variant="ghost"
             className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
             onClick={() => onRevert(rate)}
             title="Undo your changes and restore the starter values"
@@ -325,18 +391,23 @@ function LaborRateRow({
           </Button>
         )}
 
-        {rate.userId !== null && (
-          confirmRemove ? (
+        {rate.userId !== null &&
+          (confirmRemove ? (
             <Button
-              size="sm" variant="ghost"
+              size="sm"
+              variant="ghost"
               className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-              onClick={() => { setConfirmRemove(false); onRemove(rate); }}
+              onClick={() => {
+                setConfirmRemove(false);
+                onRemove(rate);
+              }}
             >
               Sure?
             </Button>
           ) : (
             <Button
-              size="sm" variant="ghost"
+              size="sm"
+              variant="ghost"
               className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
               onClick={() => {
                 setConfirmRemove(true);
@@ -347,8 +418,7 @@ function LaborRateRow({
             >
               <Trash2 className="w-3.5 h-3.5" />
             </Button>
-          )
-        )}
+          ))}
       </div>
     </div>
   );
@@ -376,8 +446,9 @@ export default function LaborRatesPage() {
     async (apply: (rows: LaborRate[]) => LaborRate[]) => {
       await utils.laborRates.list.cancel();
       const previous = utils.laborRates.list.getData();
-      utils.laborRates.list.setData(undefined, old =>
-        (apply((old ?? []) as LaborRate[]) as typeof old)
+      utils.laborRates.list.setData(
+        undefined,
+        old => apply((old ?? []) as LaborRate[]) as typeof old
       );
       return { previous };
     },
@@ -385,7 +456,10 @@ export default function LaborRatesPage() {
   );
 
   const rollback = useCallback(
-    (context: { previous?: unknown } | undefined, error: { message: string }) => {
+    (
+      context: { previous?: unknown } | undefined,
+      error: { message: string }
+    ) => {
       if (context?.previous !== undefined) {
         utils.laborRates.list.setData(undefined, context.previous as never);
       }
@@ -394,33 +468,54 @@ export default function LaborRatesPage() {
     [utils]
   );
 
-  const settle = useCallback(() => { void utils.laborRates.list.invalidate(); }, [utils]);
+  const settle = useCallback(() => {
+    void utils.laborRates.list.invalidate();
+  }, [utils]);
 
   const updateRate = trpc.laborRates.update.useMutation({
-    onMutate: async vars => optimistic(rows => rows.map(row => {
-      if (row.id !== vars.id) return row;
-      const next: LaborRate = {
-        ...row,
-        name: vars.name ?? row.name,
-        rateType: (vars.rateType ?? row.rateType) as RateType,
-        hourlyCost: vars.hourlyCost != null ? String(vars.hourlyCost) : row.hourlyCost,
-        annualSalary: vars.annualSalary != null ? String(vars.annualSalary) : row.annualSalary,
-        annualHours: vars.annualHours != null ? String(vars.annualHours) : row.annualHours,
-      };
-      // Recompute the derived rate locally so the row never shows a stale
-      // number for the instant before the server answers.
-      next.effectiveHourlyRate = next.rateType === "hourly"
-        ? Number(next.hourlyCost)
-        : (() => {
-            try {
-              return effectiveHourlyRate(Number(next.annualSalary ?? 0), Number(next.annualHours ?? 0));
-            } catch { return 0; }
-          })();
-      return next;
-    })),
+    onMutate: async vars =>
+      optimistic(rows =>
+        rows.map(row => {
+          if (row.id !== vars.id) return row;
+          const next: LaborRate = {
+            ...row,
+            name: vars.name ?? row.name,
+            rateType: (vars.rateType ?? row.rateType) as RateType,
+            hourlyCost:
+              vars.hourlyCost != null
+                ? String(vars.hourlyCost)
+                : row.hourlyCost,
+            annualSalary:
+              vars.annualSalary != null
+                ? String(vars.annualSalary)
+                : row.annualSalary,
+            annualHours:
+              vars.annualHours != null
+                ? String(vars.annualHours)
+                : row.annualHours,
+          };
+          // Recompute the derived rate locally so the row never shows a stale
+          // number for the instant before the server answers.
+          next.effectiveHourlyRate =
+            next.rateType === "hourly"
+              ? Number(next.hourlyCost)
+              : (() => {
+                  try {
+                    return effectiveHourlyRate(
+                      Number(next.annualSalary ?? 0),
+                      Number(next.annualHours ?? 0)
+                    );
+                  } catch {
+                    return 0;
+                  }
+                })();
+          return next;
+        })
+      ),
     onError: (error, _vars, context) => rollback(context, error),
     onSuccess: result => {
-      if (result?.forked) toast.success("Saved as your own copy — the starter is unchanged.");
+      if (result?.forked)
+        toast.success("Saved as your own copy — the starter is unchanged.");
     },
     onSettled: settle,
   });
@@ -432,7 +527,8 @@ export default function LaborRatesPage() {
   });
 
   const removeRate = trpc.laborRates.remove.useMutation({
-    onMutate: async vars => optimistic(rows => rows.filter(row => row.id !== vars.id)),
+    onMutate: async vars =>
+      optimistic(rows => rows.filter(row => row.id !== vars.id)),
     onError: (error, _vars, context) => rollback(context, error),
     onSettled: settle,
   });
@@ -450,16 +546,22 @@ export default function LaborRatesPage() {
     return inScope.filter(r => r.name.toLowerCase().includes(q));
   }, [rates, query, scope]);
 
-  const handleSave = useCallback((id: number, draft: Draft) => {
-    updateRate.mutate({
-      id,
-      name: draft.name.trim(),
-      rateType: draft.rateType,
-      ...(draft.rateType === "hourly"
-        ? { hourlyCost: Number(draft.hourlyCost) }
-        : { annualSalary: Number(draft.annualSalary), annualHours: Number(draft.annualHours) }),
-    });
-  }, [updateRate]);
+  const handleSave = useCallback(
+    (id: number, draft: Draft) => {
+      updateRate.mutate({
+        id,
+        name: draft.name.trim(),
+        rateType: draft.rateType,
+        ...(draft.rateType === "hourly"
+          ? { hourlyCost: Number(draft.hourlyCost) }
+          : {
+              annualSalary: Number(draft.annualSalary),
+              annualHours: Number(draft.annualHours),
+            }),
+      });
+    },
+    [updateRate]
+  );
 
   const handleCreate = useCallback(() => {
     const problem = validateDraft(newDraft);
@@ -472,7 +574,10 @@ export default function LaborRatesPage() {
       rateType: newDraft.rateType,
       ...(newDraft.rateType === "hourly"
         ? { hourlyCost: Number(newDraft.hourlyCost) }
-        : { annualSalary: Number(newDraft.annualSalary), annualHours: Number(newDraft.annualHours) }),
+        : {
+            annualSalary: Number(newDraft.annualSalary),
+            annualHours: Number(newDraft.annualHours),
+          }),
     });
     toast.success(`Added "${newDraft.name.trim()}"`);
     setNewDraft(emptyDraft);
@@ -488,11 +593,15 @@ export default function LaborRatesPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold">Labor Rates</h1>
             <p className="text-xs text-muted-foreground">
-              What each role costs you per hour. Starter rates are placeholders, not market data — replace them with
-              your own.
+              What each role costs you per hour. Starter rates are placeholders,
+              not market data — replace them with your own.
             </p>
           </div>
-          <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setAdding(v => !v)}>
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setAdding(v => !v)}
+          >
             <Plus className="w-3.5 h-3.5" /> Add role
           </Button>
         </div>
@@ -522,14 +631,27 @@ export default function LaborRatesPage() {
         {adding && (
           <div className="rounded-xl border border-border bg-card px-4 py-3 mb-3">
             <div className="flex flex-wrap items-center gap-2">
-              <RateFields draft={newDraft} onChange={setNewDraft} autoFocusName />
+              <RateFields
+                draft={newDraft}
+                onChange={setNewDraft}
+                autoFocusName
+              />
               <div className="flex items-center gap-1 ml-auto">
-                <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={handleCreate}>
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={handleCreate}
+                >
                   <Check className="w-3 h-3" /> Add
                 </Button>
                 <Button
-                  size="sm" variant="ghost" className="h-8 gap-1.5 text-xs"
-                  onClick={() => { setAdding(false); setNewDraft(emptyDraft); }}
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={() => {
+                    setAdding(false);
+                    setNewDraft(emptyDraft);
+                  }}
                 >
                   <X className="w-3 h-3" /> Cancel
                 </Button>
@@ -547,10 +669,16 @@ export default function LaborRatesPage() {
           </div>
 
           {isLoading ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading roles…</div>
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              Loading roles…
+            </div>
           ) : visible.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              {query ? <>No roles match “{query}”.</> : <>No roles yet. Add your first one to get started.</>}
+              {query ? (
+                <>No roles match “{query}”.</>
+              ) : (
+                <>No roles yet. Add your first one to get started.</>
+              )}
             </div>
           ) : (
             visible.map(rate => (
@@ -566,9 +694,10 @@ export default function LaborRatesPage() {
         </div>
 
         <p className={cn("text-xs text-muted-foreground mt-2")}>
-          Salaried roles are converted to an hourly cost using the working hours you enter — the default 2,080 is a
-          full payroll year, but billable hours are usually lower. Editing a starter role gives you your own copy;
-          the original stays untouched and can be restored any time.
+          Salaried roles are converted to an hourly cost using the working hours
+          you enter — the default 2,080 is a full payroll year, but billable
+          hours are usually lower. Editing a starter role gives you your own
+          copy; the original stays untouched and can be restored any time.
         </p>
       </div>
     </div>

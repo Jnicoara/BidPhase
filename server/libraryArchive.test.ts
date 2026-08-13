@@ -53,10 +53,16 @@ beforeAll(async () => {
   if (!database) return;
 
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await database.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await database
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await database.insert(users).values({
-        id, openId: `test-lib-archive-${id}`, name: `Library archive user ${id}`,
+        id,
+        openId: `test-lib-archive-${id}`,
+        name: `Library archive user ${id}`,
       });
     }
   }
@@ -74,8 +80,12 @@ beforeEach(async () => {
   if (!database) return;
   // Only the fixture users' own rows; the shared baseline stays put.
   await database.delete(kits).where(inArray(kits.userId, [USER, OTHER_USER]));
-  await database.delete(assemblies).where(inArray(assemblies.userId, [USER, OTHER_USER]));
-  await database.delete(materials).where(inArray(materials.userId, [USER, OTHER_USER]));
+  await database
+    .delete(assemblies)
+    .where(inArray(assemblies.userId, [USER, OTHER_USER]));
+  await database
+    .delete(materials)
+    .where(inArray(materials.userId, [USER, OTHER_USER]));
 });
 
 // ── Materials ────────────────────────────────────────────────────────────────
@@ -105,7 +115,9 @@ describe.skipIf(!hasDb)("removing a material archives it", () => {
 
     const working = await caller().materials.list();
     expect(working.find(m => m.id === material.id)).toBeDefined();
-    expect(await caller().materials.list({ status: "archived" })).toHaveLength(0);
+    expect(await caller().materials.list({ status: "archived" })).toHaveLength(
+      0
+    );
   });
 
   it("keeps its cost and name across the round trip", async () => {
@@ -146,7 +158,8 @@ describe.skipIf(!hasDb)("removing a material archives it", () => {
 describe.skipIf(!hasDb)("deleting a material forever", () => {
   async function archivedMaterial() {
     const created = await caller().materials.create({
-      name: `Doomed material ${unique()}`, costPerUnit: 2,
+      name: `Doomed material ${unique()}`,
+      costPerUnit: 2,
     });
     await caller().materials.archive({ id: created!.id });
     return created!;
@@ -156,7 +169,8 @@ describe.skipIf(!hasDb)("deleting a material forever", () => {
     // No path from a list straight to destruction — archive first, confirm
     // again from the archive.
     const created = await caller().materials.create({
-      name: `Live material ${unique()}`, costPerUnit: 2,
+      name: `Live material ${unique()}`,
+      costPerUnit: 2,
     });
     await expect(
       caller().materials.deleteForever({ id: created!.id })
@@ -169,8 +183,12 @@ describe.skipIf(!hasDb)("deleting a material forever", () => {
     const material = await archivedMaterial();
     await caller().materials.deleteForever({ id: material.id });
 
-    expect(await caller().materials.list({ status: "archived" })).toHaveLength(0);
-    await expect(caller().materials.get({ id: material.id })).rejects.toThrow(/not found/i);
+    expect(await caller().materials.list({ status: "archived" })).toHaveLength(
+      0
+    );
+    await expect(caller().materials.get({ id: material.id })).rejects.toThrow(
+      /not found/i
+    );
   });
 
   it("does NOT resurrect the starter when a fork is deleted forever", async () => {
@@ -180,7 +198,10 @@ describe.skipIf(!hasDb)("deleting a material forever", () => {
     const starter = starters.find(m => m.userId === null)!;
     const starterName = starter.name;
 
-    const forked = await caller().materials.update({ id: starter.id, costPerUnit: 99 });
+    const forked = await caller().materials.update({
+      id: starter.id,
+      costPerUnit: 99,
+    });
     const forkId = forked.material!.id;
     expect(forked.forked).toBe(true);
 
@@ -189,7 +210,9 @@ describe.skipIf(!hasDb)("deleting a material forever", () => {
 
     const working = await caller().materials.list();
     expect(working.find(m => m.name === starterName)).toBeUndefined();
-    expect(await caller().materials.list({ status: "archived" })).toHaveLength(0);
+    expect(await caller().materials.list({ status: "archived" })).toHaveLength(
+      0
+    );
   });
 
   it("refuses another user's archived material", async () => {
@@ -205,7 +228,9 @@ describe.skipIf(!hasDb)("deleting a material forever", () => {
 describe.skipIf(!hasDb)("removing an assembly archives it", () => {
   async function ownAssembly() {
     const created = await caller().assemblies.create({
-      name: `Test assembly ${unique()}`, category: "Devices", baseLaborHours: 0.5,
+      name: `Test assembly ${unique()}`,
+      category: "Devices",
+      baseLaborHours: 0.5,
     });
     return created!;
   }
@@ -214,13 +239,19 @@ describe.skipIf(!hasDb)("removing an assembly archives it", () => {
     const assembly = await ownAssembly();
     await caller().assemblies.archive({ id: assembly.id });
 
-    expect((await caller().assemblies.list()).find(a => a.id === assembly.id)).toBeUndefined();
     expect(
-      (await caller().assemblies.list({ status: "archived" })).find(a => a.id === assembly.id)
+      (await caller().assemblies.list()).find(a => a.id === assembly.id)
+    ).toBeUndefined();
+    expect(
+      (await caller().assemblies.list({ status: "archived" })).find(
+        a => a.id === assembly.id
+      )
     ).toBeDefined();
 
     await caller().assemblies.restore({ id: assembly.id });
-    expect((await caller().assemblies.list()).find(a => a.id === assembly.id)).toBeDefined();
+    expect(
+      (await caller().assemblies.list()).find(a => a.id === assembly.id)
+    ).toBeDefined();
   });
 
   it("keeps its recipe across the round trip", async () => {
@@ -244,11 +275,15 @@ describe.skipIf(!hasDb)("removing an assembly archives it", () => {
     const assembly = await ownAssembly();
     await caller().assemblies.archive({ id: assembly.id });
     await caller().assemblies.deleteForever({ id: assembly.id });
-    await expect(caller().assemblies.get({ id: assembly.id })).rejects.toThrow(/not found/i);
+    await expect(caller().assemblies.get({ id: assembly.id })).rejects.toThrow(
+      /not found/i
+    );
   });
 
   it("refuses to archive a starter", async () => {
-    const starter = (await caller().assemblies.list()).find(a => a.userId === null)!;
+    const starter = (await caller().assemblies.list()).find(
+      a => a.userId === null
+    )!;
     await expect(
       caller().assemblies.archive({ id: starter.id })
     ).rejects.toThrow(/starter/i);
@@ -259,7 +294,9 @@ describe.skipIf(!hasDb)("removing an assembly archives it", () => {
 
 describe.skipIf(!hasDb)("removing a kit archives it", () => {
   async function ownKit() {
-    const created = await caller().kits.create({ name: `Test kit ${unique()}` });
+    const created = await caller().kits.create({
+      name: `Test kit ${unique()}`,
+    });
     return created!;
   }
 
@@ -267,30 +304,42 @@ describe.skipIf(!hasDb)("removing a kit archives it", () => {
     const kit = await ownKit();
     await caller().kits.archive({ id: kit.id });
 
-    expect((await caller().kits.list()).find(k => k.id === kit.id)).toBeUndefined();
     expect(
-      (await caller().kits.list({ status: "archived" })).find(k => k.id === kit.id)
+      (await caller().kits.list()).find(k => k.id === kit.id)
+    ).toBeUndefined();
+    expect(
+      (await caller().kits.list({ status: "archived" })).find(
+        k => k.id === kit.id
+      )
     ).toBeDefined();
 
     await caller().kits.restore({ id: kit.id });
-    expect((await caller().kits.list()).find(k => k.id === kit.id)).toBeDefined();
+    expect(
+      (await caller().kits.list()).find(k => k.id === kit.id)
+    ).toBeDefined();
   });
 
   it("refuses permanent deletion of a live kit", async () => {
     const kit = await ownKit();
-    await expect(caller().kits.deleteForever({ id: kit.id })).rejects.toThrow(/archived/i);
+    await expect(caller().kits.deleteForever({ id: kit.id })).rejects.toThrow(
+      /archived/i
+    );
   });
 
   it("deletes an archived one for good", async () => {
     const kit = await ownKit();
     await caller().kits.archive({ id: kit.id });
     await caller().kits.deleteForever({ id: kit.id });
-    await expect(caller().kits.get({ id: kit.id })).rejects.toThrow(/not found/i);
+    await expect(caller().kits.get({ id: kit.id })).rejects.toThrow(
+      /not found/i
+    );
   });
 
   it("refuses to archive a starter", async () => {
     const starter = (await caller().kits.list()).find(k => k.userId === null)!;
-    await expect(caller().kits.archive({ id: starter.id })).rejects.toThrow(/starter/i);
+    await expect(caller().kits.archive({ id: starter.id })).rejects.toThrow(
+      /starter/i
+    );
   });
 });
 
@@ -299,19 +348,28 @@ describe.skipIf(!hasDb)("removing a kit archives it", () => {
 describe.skipIf(!hasDb)("every library table behaves the same way", () => {
   it("archives out of the working list and into the archive, everywhere", async () => {
     const material = (await caller().materials.create({
-      name: `Uniform material ${unique()}`, costPerUnit: 1,
+      name: `Uniform material ${unique()}`,
+      costPerUnit: 1,
     }))!;
     const assembly = (await caller().assemblies.create({
-      name: `Uniform assembly ${unique()}`, category: "Devices", baseLaborHours: 1,
+      name: `Uniform assembly ${unique()}`,
+      category: "Devices",
+      baseLaborHours: 1,
     }))!;
-    const kit = (await caller().kits.create({ name: `Uniform kit ${unique()}` }))!;
+    const kit = (await caller().kits.create({
+      name: `Uniform kit ${unique()}`,
+    }))!;
 
     await caller().materials.archive({ id: material.id });
     await caller().assemblies.archive({ id: assembly.id });
     await caller().kits.archive({ id: kit.id });
 
-    expect(await caller().materials.list({ status: "archived" })).toHaveLength(1);
-    expect(await caller().assemblies.list({ status: "archived" })).toHaveLength(1);
+    expect(await caller().materials.list({ status: "archived" })).toHaveLength(
+      1
+    );
+    expect(await caller().assemblies.list({ status: "archived" })).toHaveLength(
+      1
+    );
     expect(await caller().kits.list({ status: "archived" })).toHaveLength(1);
 
     for (const list of [
@@ -325,15 +383,26 @@ describe.skipIf(!hasDb)("every library table behaves the same way", () => {
 
   it("refuses permanent deletion from the working list on all three", async () => {
     const material = (await caller().materials.create({
-      name: `Guarded material ${unique()}`, costPerUnit: 1,
+      name: `Guarded material ${unique()}`,
+      costPerUnit: 1,
     }))!;
     const assembly = (await caller().assemblies.create({
-      name: `Guarded assembly ${unique()}`, category: "Devices", baseLaborHours: 1,
+      name: `Guarded assembly ${unique()}`,
+      category: "Devices",
+      baseLaborHours: 1,
     }))!;
-    const kit = (await caller().kits.create({ name: `Guarded kit ${unique()}` }))!;
+    const kit = (await caller().kits.create({
+      name: `Guarded kit ${unique()}`,
+    }))!;
 
-    await expect(caller().materials.deleteForever({ id: material.id })).rejects.toThrow(/archived/i);
-    await expect(caller().assemblies.deleteForever({ id: assembly.id })).rejects.toThrow(/archived/i);
-    await expect(caller().kits.deleteForever({ id: kit.id })).rejects.toThrow(/archived/i);
+    await expect(
+      caller().materials.deleteForever({ id: material.id })
+    ).rejects.toThrow(/archived/i);
+    await expect(
+      caller().assemblies.deleteForever({ id: assembly.id })
+    ).rejects.toThrow(/archived/i);
+    await expect(caller().kits.deleteForever({ id: kit.id })).rejects.toThrow(
+      /archived/i
+    );
   });
 });

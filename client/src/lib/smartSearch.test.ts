@@ -13,20 +13,42 @@ import { smartSearch } from "./smartSearch";
 
 /** The starter material names, which is where the original bug was seen. */
 const MATERIALS = [
-  "#14 THHN", "#12 THHN", "#10 THHN", "#8 THHN", "14-2 NM-B", "12-2 NM-B",
-  '1/2" EMT', '3/4" EMT', '1" EMT', '1/2" PVC',
-  'EMT connector 1/2"', 'EMT connector 3/4"', "EMT strap",
-  "Single-gang box", '4" square box', "Fan-rated ceiling box",
-  "Duplex receptacle", "GFCI receptacle",
-  "Single-pole switch", "3-way switch", "Dimmer",
-  "Wall plate", "Wire nuts",
-  "20A breaker", "20/2 breaker", "200A main panel",
-  "6ft MC whip", "Fixture mounting bracket",
+  "#14 THHN",
+  "#12 THHN",
+  "#10 THHN",
+  "#8 THHN",
+  "14-2 NM-B",
+  "12-2 NM-B",
+  '1/2" EMT',
+  '3/4" EMT',
+  '1" EMT',
+  '1/2" PVC',
+  'EMT connector 1/2"',
+  'EMT connector 3/4"',
+  "EMT strap",
+  "Single-gang box",
+  '4" square box',
+  "Fan-rated ceiling box",
+  "Duplex receptacle",
+  "GFCI receptacle",
+  "Single-pole switch",
+  "3-way switch",
+  "Dimmer",
+  "Wall plate",
+  "Wire nuts",
+  "20A breaker",
+  "20/2 breaker",
+  "200A main panel",
+  "6ft MC whip",
+  "Fixture mounting bracket",
 ];
 
 const search = (query: string, names = MATERIALS) =>
-  smartSearch(names.map((description, i) => ({ id: String(i + 1), description })), query, 50)
-    .map(r => r.description);
+  smartSearch(
+    names.map((description, i) => ({ id: String(i + 1), description })),
+    query,
+    50
+  ).map(r => r.description);
 
 /** Position in the result list, or Infinity when absent. */
 const rankOf = (results: string[], name: string) => {
@@ -40,18 +62,26 @@ describe("typed words outrank aliases", () => {
     // "wall plate", so typing "recep" dragged in "wall plate" and it won the
     // exact-match tier over the item that genuinely matched.
     const results = search("recep");
-    expect(rankOf(results, "Duplex receptacle")).toBeLessThan(rankOf(results, "Wall plate"));
+    expect(rankOf(results, "Duplex receptacle")).toBeLessThan(
+      rankOf(results, "Wall plate")
+    );
   });
 
-  it("puts both receptacles above every alias-only match for \"recep\"", () => {
+  it('puts both receptacles above every alias-only match for "recep"', () => {
     const results = search("recep");
     const worstReceptacle = Math.max(
       rankOf(results, "Duplex receptacle"),
       rankOf(results, "GFCI receptacle")
     );
-    for (const aliasOnly of ["Wall plate", "Single-pole switch", "3-way switch"]) {
+    for (const aliasOnly of [
+      "Wall plate",
+      "Single-pole switch",
+      "3-way switch",
+    ]) {
       if (rankOf(results, aliasOnly) === Infinity) continue;
-      expect(rankOf(results, aliasOnly), aliasOnly).toBeGreaterThan(worstReceptacle);
+      expect(rankOf(results, aliasOnly), aliasOnly).toBeGreaterThan(
+        worstReceptacle
+      );
     }
   });
 
@@ -105,12 +135,25 @@ describe("per-item search aliases", () => {
   // Mirrors how MaterialsLibraryPage feeds the index: slang lives on the item,
   // not in the global ALIAS_MAP, because it is a fact about one material.
   const withAliases = [
-    { id: "1", description: "Duplex receptacle", searchAliases: "outlet plug recep wall outlet" },
-    { id: "2", description: '4" square box', searchAliases: "1900 box nineteen hundred j box" },
-    { id: "3", description: "Wall plate", searchAliases: "cover plate faceplate switch plate" },
+    {
+      id: "1",
+      description: "Duplex receptacle",
+      searchAliases: "outlet plug recep wall outlet",
+    },
+    {
+      id: "2",
+      description: '4" square box',
+      searchAliases: "1900 box nineteen hundred j box",
+    },
+    {
+      id: "3",
+      description: "Wall plate",
+      searchAliases: "cover plate faceplate switch plate",
+    },
     { id: "4", description: "Plug gauge", searchAliases: "" },
   ];
-  const find = (q: string) => smartSearch(withAliases, q, 10).map(r => r.description);
+  const find = (q: string) =>
+    smartSearch(withAliases, q, 10).map(r => r.description);
 
   it("finds a material by slang that appears nowhere in its name", () => {
     expect(find("1900")).toContain('4" square box');
@@ -119,7 +162,9 @@ describe("per-item search aliases", () => {
   it("ranks a real name match above an alias-only match for the same word", () => {
     // "Plug gauge" has "plug" in its NAME; "Duplex receptacle" only in aliases.
     const results = find("plug");
-    expect(results.indexOf("Plug gauge")).toBeLessThan(results.indexOf("Duplex receptacle"));
+    expect(results.indexOf("Plug gauge")).toBeLessThan(
+      results.indexOf("Duplex receptacle")
+    );
     expect(results).toContain("Duplex receptacle");
   });
 
@@ -131,8 +176,16 @@ describe("per-item search aliases", () => {
     // ALIAS_MAP holds two-letter maker codes; "breaker" reaches "ch" via the
     // "eaton" entry, and an unanchored substring test found it inside "switch".
     const boxes = [
-      { id: "1", description: "Single-gang box", searchAliases: "gem switch device" },
-      { id: "2", description: "200A main panel", searchAliases: "load center breaker box" },
+      {
+        id: "1",
+        description: "Single-gang box",
+        searchAliases: "gem switch device",
+      },
+      {
+        id: "2",
+        description: "200A main panel",
+        searchAliases: "load center breaker box",
+      },
     ];
     const results = smartSearch(boxes, "breaker", 5).map(r => r.description);
     expect(results).toContain("200A main panel");
@@ -142,19 +195,33 @@ describe("per-item search aliases", () => {
   it("ignores two-letter maker codes reached by association", () => {
     // "breaker" inherits "br" from the "eaton" entry, which starts "brace".
     const boxes = [
-      { id: "1", description: "Fan-rated ceiling box", searchAliases: "brace octagon round" },
-      { id: "2", description: "200A main panel", searchAliases: "load center breaker box" },
+      {
+        id: "1",
+        description: "Fan-rated ceiling box",
+        searchAliases: "brace octagon round",
+      },
+      {
+        id: "2",
+        description: "200A main panel",
+        searchAliases: "load center breaker box",
+      },
     ];
-    expect(smartSearch(boxes, "breaker box", 5).map(r => r.description)).toEqual(["200A main panel"]);
+    expect(
+      smartSearch(boxes, "breaker box", 5).map(r => r.description)
+    ).toEqual(["200A main panel"]);
   });
 
   it("still searches a two-letter code when it is typed directly", () => {
-    const items = [{ id: "1", description: "CH 20A breaker", searchAliases: "" }];
+    const items = [
+      { id: "1", description: "CH 20A breaker", searchAliases: "" },
+    ];
     expect(smartSearch(items, "ch", 5)).toHaveLength(1);
   });
 
   it("still allows prefix typing against alias text", () => {
-    const nuts = [{ id: "1", description: "Wire nuts", searchAliases: "marrette twist on" }];
+    const nuts = [
+      { id: "1", description: "Wire nuts", searchAliases: "marrette twist on" },
+    ];
     expect(smartSearch(nuts, "marret", 5)).toHaveLength(1);
   });
 });

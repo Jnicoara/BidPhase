@@ -84,9 +84,10 @@ export function groupStamps(stamps: StampRecord[]): CountedAssembly[] {
   const groups = new Map<string, CountedAssembly>();
 
   for (const stamp of stamps) {
-    const key = stamp.assemblyId !== null
-      ? `id:${stamp.assemblyId}`
-      : `name:${stamp.assemblyName.trim().toLowerCase()}`;
+    const key =
+      stamp.assemblyId !== null
+        ? `id:${stamp.assemblyId}`
+        : `name:${stamp.assemblyName.trim().toLowerCase()}`;
 
     const existing = groups.get(key);
     if (existing) {
@@ -145,7 +146,10 @@ export function totalStampCount(stamps: StampRecord[]): number {
  * coordinates arrive from the database as decimal strings, and a `+` on one of
  * those concatenates rather than adds.
  */
-export function stampPoint(stamp: { x: number | string; y: number | string }): PagePoint {
+export function stampPoint(stamp: {
+  x: number | string;
+  y: number | string;
+}): PagePoint {
   return { x: Number(stamp.x), y: Number(stamp.y) };
 }
 
@@ -165,7 +169,9 @@ export function stampsInRegion(
   const top = Math.min(region.y, region.y + region.height);
   const bottom = Math.max(region.y, region.y + region.height);
 
-  return stamps.filter(s => s.x >= left && s.x <= right && s.y >= top && s.y <= bottom);
+  return stamps.filter(
+    s => s.x >= left && s.x <= right && s.y >= top && s.y <= bottom
+  );
 }
 
 /** Normalise a symbol label into the key its uniqueness is judged on. */

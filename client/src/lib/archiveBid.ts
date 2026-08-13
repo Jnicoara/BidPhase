@@ -32,7 +32,10 @@ export type PendingArchive = { id: number; name: string };
  * in that order, because the first question is "where does it go" and the
  * second is "can I get it back".
  */
-export function archiveConfirmCopy(bidName: string): { title: string; body: string } {
+export function archiveConfirmCopy(bidName: string): {
+  title: string;
+  body: string;
+} {
   return {
     title: `Archive “${bidName}”?`,
     body:

@@ -89,7 +89,9 @@ export function pathLengthInPoints(points: PagePoint[]): number | null {
 }
 
 /** Whether a scale ratio can be measured against at all. */
-export function isUsableScaleRatio(ratio: number | null | undefined): ratio is number {
+export function isUsableScaleRatio(
+  ratio: number | null | undefined
+): ratio is number {
   return typeof ratio === "number" && Number.isFinite(ratio) && ratio > 0;
 }
 

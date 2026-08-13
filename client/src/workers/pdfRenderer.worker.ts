@@ -48,13 +48,24 @@ self.onmessage = async (e: MessageEvent) => {
     // Load the PDF document from ArrayBuffer
     try {
       const t0 = performance.now();
-      const loadingTask = pdfjs.getDocument({ data: new Uint8Array(msg.pdfData) });
+      const loadingTask = pdfjs.getDocument({
+        data: new Uint8Array(msg.pdfData),
+      });
       pdfDoc = await loadingTask.promise;
       loadedHash = msg.hash;
       const elapsed = (performance.now() - t0).toFixed(0);
-      self.postMessage({ type: "loaded", hash: msg.hash, numPages: pdfDoc.numPages, elapsed });
+      self.postMessage({
+        type: "loaded",
+        hash: msg.hash,
+        numPages: pdfDoc.numPages,
+        elapsed,
+      });
     } catch (err) {
-      self.postMessage({ type: "error", reqId: msg.reqId, message: String(err) });
+      self.postMessage({
+        type: "error",
+        reqId: msg.reqId,
+        message: String(err),
+      });
     }
     return;
   }
@@ -62,7 +73,11 @@ self.onmessage = async (e: MessageEvent) => {
   if (msg.type === "render") {
     const { pageNum, scale, hash, reqId } = msg;
     if (!pdfDoc || loadedHash !== hash) {
-      self.postMessage({ type: "error", reqId, message: "PDF not loaded for this hash" });
+      self.postMessage({
+        type: "error",
+        reqId,
+        message: "PDF not loaded for this hash",
+      });
       return;
     }
     try {
@@ -120,9 +135,10 @@ self.onmessage = async (e: MessageEvent) => {
         if (!items) return;
         for (const item of items) {
           try {
-            const dest = typeof item.dest === "string"
-              ? await pdfDoc!.getDestination(item.dest)
-              : item.dest;
+            const dest =
+              typeof item.dest === "string"
+                ? await pdfDoc!.getDestination(item.dest)
+                : item.dest;
             if (Array.isArray(dest) && dest[0]) {
               const pageIndex = await pdfDoc!.getPageIndex(dest[0]);
               const title = String(item.title ?? "").trim();
@@ -154,7 +170,11 @@ self.onmessage = async (e: MessageEvent) => {
   if (msg.type === "text") {
     const { pageNum, hash, reqId } = msg;
     if (!pdfDoc || loadedHash !== hash) {
-      self.postMessage({ type: "error", reqId, message: "PDF not loaded for this hash" });
+      self.postMessage({
+        type: "error",
+        reqId,
+        message: "PDF not loaded for this hash",
+      });
       return;
     }
     try {

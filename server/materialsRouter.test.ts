@@ -52,10 +52,13 @@ const BASELINE_NAME = "GFCI receptacle";
 async function baselineRow() {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  const [row] = await db.select().from(materials)
+  const [row] = await db
+    .select()
+    .from(materials)
     .where(and(isNull(materials.userId), eq(materials.name, BASELINE_NAME)))
     .limit(1);
-  if (!row) throw new Error(`baseline "${BASELINE_NAME}" missing — seeding failed`);
+  if (!row)
+    throw new Error(`baseline "${BASELINE_NAME}" missing — seeding failed`);
   return row;
 }
 
@@ -81,7 +84,9 @@ beforeEach(async () => {
   if (!hasDb) return;
   const db = await getDb();
   if (!db) return;
-  await db.delete(materials).where(inArray(materials.userId, [USER, OTHER_USER]));
+  await db
+    .delete(materials)
+    .where(inArray(materials.userId, [USER, OTHER_USER]));
 });
 
 beforeAll(async () => {
@@ -90,7 +95,11 @@ beforeAll(async () => {
   if (!db) return;
 
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await db.insert(users).values({
         id,
@@ -100,7 +109,9 @@ beforeAll(async () => {
     }
   }
 
-  await db.delete(materials).where(inArray(materials.userId, [USER, OTHER_USER]));
+  await db
+    .delete(materials)
+    .where(inArray(materials.userId, [USER, OTHER_USER]));
   await seedBaselineMaterials();
 });
 
@@ -108,7 +119,9 @@ describe.skipIf(!hasDb)("materials.list / get", () => {
   it("lists the shipped baseline library", async () => {
     const rows = await caller().materials.list();
     expect(rows.length).toBeGreaterThanOrEqual(28);
-    expect(rows.some(r => r.name === BASELINE_NAME && r.userId === null)).toBe(true);
+    expect(rows.some(r => r.name === BASELINE_NAME && r.userId === null)).toBe(
+      true
+    );
   });
 
   it("gets a single material by id", async () => {
@@ -118,7 +131,9 @@ describe.skipIf(!hasDb)("materials.list / get", () => {
   });
 
   it("returns NOT_FOUND for a material that does not exist", async () => {
-    await expect(caller().materials.get({ id: 99_999_999 })).rejects.toThrow(/not found/i);
+    await expect(caller().materials.get({ id: 99_999_999 })).rejects.toThrow(
+      /not found/i
+    );
   });
 });
 
@@ -136,82 +151,115 @@ describe.skipIf(!hasDb)("materials.create", () => {
 
   it("rejects a duplicate name, including against baseline rows", async () => {
     await expect(
-      caller().materials.create({ name: BASELINE_NAME, unitOfSale: "each", costPerUnit: 1 })
+      caller().materials.create({
+        name: BASELINE_NAME,
+        unitOfSale: "each",
+        costPerUnit: 1,
+      })
     ).rejects.toThrow(/already exists/i);
   });
 
   it("rejects a duplicate name case-insensitively", async () => {
-    await caller().materials.create({ name: "Casing Test Widget", unitOfSale: "each", costPerUnit: 1 });
+    await caller().materials.create({
+      name: "Casing Test Widget",
+      unitOfSale: "each",
+      costPerUnit: 1,
+    });
     await expect(
-      caller().materials.create({ name: "casing test widget", unitOfSale: "each", costPerUnit: 1 })
+      caller().materials.create({
+        name: "casing test widget",
+        unitOfSale: "each",
+        costPerUnit: 1,
+      })
     ).rejects.toThrow(/already exists/i);
   });
 
   it("rejects a blank name", async () => {
     await expect(
-      caller().materials.create({ name: "   ", unitOfSale: "each", costPerUnit: 1 })
+      caller().materials.create({
+        name: "   ",
+        unitOfSale: "each",
+        costPerUnit: 1,
+      })
     ).rejects.toThrow();
   });
 
   it("rejects a negative cost", async () => {
     await expect(
-      caller().materials.create({ name: "Negative cost widget", unitOfSale: "each", costPerUnit: -1 })
+      caller().materials.create({
+        name: "Negative cost widget",
+        unitOfSale: "each",
+        costPerUnit: -1,
+      })
     ).rejects.toThrow();
   });
 
   it("rejects a cost too large for the column", async () => {
     await expect(
-      caller().materials.create({ name: "Huge cost widget", unitOfSale: "each", costPerUnit: 1_000_000 })
+      caller().materials.create({
+        name: "Huge cost widget",
+        unitOfSale: "each",
+        costPerUnit: 1_000_000,
+      })
     ).rejects.toThrow();
   });
 });
 
-describe.skipIf(!hasDb)("materials.update forks baseline rows transparently", () => {
-  it("editing a baseline creates the user's own copy and leaves the shipped row alone", async () => {
-    const id = await baselineId();
-    const result = await caller().materials.update({ id, costPerUnit: 19.5 });
+describe.skipIf(!hasDb)(
+  "materials.update forks baseline rows transparently",
+  () => {
+    it("editing a baseline creates the user's own copy and leaves the shipped row alone", async () => {
+      const id = await baselineId();
+      const result = await caller().materials.update({ id, costPerUnit: 19.5 });
 
-    expect(result.forked).toBe(true);
-    expect(result.material?.id).not.toBe(id);
-    expect(result.material?.userId).toBe(USER);
-    expect(result.material?.baselineId).toBe(id);
-    expect(Number(result.material?.costPerUnit)).toBeCloseTo(19.5, 4);
+      expect(result.forked).toBe(true);
+      expect(result.material?.id).not.toBe(id);
+      expect(result.material?.userId).toBe(USER);
+      expect(result.material?.baselineId).toBe(id);
+      expect(Number(result.material?.costPerUnit)).toBeCloseTo(19.5, 4);
 
-    // The shipped row is untouched for everyone else.
-    const otherView = await otherCaller().materials.get({ id });
-    expect(Number(otherView.costPerUnit)).toBeCloseTo(await baselineCost(), 4);
-  });
-
-  it("the fork replaces the baseline in the user's list", async () => {
-    const id = await baselineId();
-    await caller().materials.update({ id, costPerUnit: 19.5 });
-
-    const rows = await caller().materials.list();
-    expect(rows.some(r => r.id === id)).toBe(false);
-    expect(rows.filter(r => r.name === BASELINE_NAME)).toHaveLength(1);
-  });
-
-  it("editing an already-forked material does not fork again", async () => {
-    const id = await baselineId();
-    const first = await caller().materials.update({ id, costPerUnit: 19.5 });
-    const second = await caller().materials.update({ id: first.material!.id, costPerUnit: 21 });
-
-    expect(second.forked).toBe(false);
-    expect(second.material?.id).toBe(first.material?.id);
-    expect(Number(second.material?.costPerUnit)).toBeCloseTo(21, 4);
-  });
-
-  it("cannot edit another user's material", async () => {
-    const mine = await caller().materials.create({
-      name: "Not for the other user",
-      unitOfSale: "each",
-      costPerUnit: 5,
+      // The shipped row is untouched for everyone else.
+      const otherView = await otherCaller().materials.get({ id });
+      expect(Number(otherView.costPerUnit)).toBeCloseTo(
+        await baselineCost(),
+        4
+      );
     });
-    await expect(
-      otherCaller().materials.update({ id: mine!.id, costPerUnit: 999 })
-    ).rejects.toThrow(/not found/i);
-  });
-});
+
+    it("the fork replaces the baseline in the user's list", async () => {
+      const id = await baselineId();
+      await caller().materials.update({ id, costPerUnit: 19.5 });
+
+      const rows = await caller().materials.list();
+      expect(rows.some(r => r.id === id)).toBe(false);
+      expect(rows.filter(r => r.name === BASELINE_NAME)).toHaveLength(1);
+    });
+
+    it("editing an already-forked material does not fork again", async () => {
+      const id = await baselineId();
+      const first = await caller().materials.update({ id, costPerUnit: 19.5 });
+      const second = await caller().materials.update({
+        id: first.material!.id,
+        costPerUnit: 21,
+      });
+
+      expect(second.forked).toBe(false);
+      expect(second.material?.id).toBe(first.material?.id);
+      expect(Number(second.material?.costPerUnit)).toBeCloseTo(21, 4);
+    });
+
+    it("cannot edit another user's material", async () => {
+      const mine = await caller().materials.create({
+        name: "Not for the other user",
+        unitOfSale: "each",
+        costPerUnit: 5,
+      });
+      await expect(
+        otherCaller().materials.update({ id: mine!.id, costPerUnit: 999 })
+      ).rejects.toThrow(/not found/i);
+    });
+  }
+);
 
 describe.skipIf(!hasDb)("materials.fork / revert", () => {
   it("fork takes a copy without changing anything", async () => {
@@ -235,7 +283,11 @@ describe.skipIf(!hasDb)("materials.fork / revert", () => {
 
   it("revert restores the shipped values and keeps the row id", async () => {
     const id = await baselineId();
-    const edited = await caller().materials.update({ id, costPerUnit: 99, name: "My renamed GFCI" });
+    const edited = await caller().materials.update({
+      id,
+      costPerUnit: 99,
+      name: "My renamed GFCI",
+    });
     const forkId = edited.material!.id;
 
     const reverted = await caller().materials.revert({ id: forkId });
@@ -250,7 +302,9 @@ describe.skipIf(!hasDb)("materials.fork / revert", () => {
       unitOfSale: "each",
       costPerUnit: 3,
     });
-    await expect(caller().materials.revert({ id: mine!.id })).rejects.toThrow(/no original/i);
+    await expect(caller().materials.revert({ id: mine!.id })).rejects.toThrow(
+      /no original/i
+    );
   });
 
   it("cannot revert another user's material", async () => {
@@ -259,7 +313,9 @@ describe.skipIf(!hasDb)("materials.fork / revert", () => {
       unitOfSale: "each",
       costPerUnit: 4,
     });
-    await expect(otherCaller().materials.revert({ id: mine!.id })).rejects.toThrow(/not found/i);
+    await expect(
+      otherCaller().materials.revert({ id: mine!.id })
+    ).rejects.toThrow(/not found/i);
   });
 });
 
@@ -278,7 +334,9 @@ describe.skipIf(!hasDb)("materials.archive", () => {
 
   it("refuses to remove a baseline material", async () => {
     const id = await baselineId();
-    await expect(caller().materials.archive({ id })).rejects.toThrow(/cannot be removed/i);
+    await expect(caller().materials.archive({ id })).rejects.toThrow(
+      /cannot be removed/i
+    );
   });
 
   it("cannot archive another user's material", async () => {
@@ -287,7 +345,9 @@ describe.skipIf(!hasDb)("materials.archive", () => {
       unitOfSale: "each",
       costPerUnit: 1,
     });
-    await expect(otherCaller().materials.archive({ id: mine!.id })).rejects.toThrow(/not found/i);
+    await expect(
+      otherCaller().materials.archive({ id: mine!.id })
+    ).rejects.toThrow(/not found/i);
   });
 });
 

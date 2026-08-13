@@ -122,7 +122,9 @@ export function GettingStartedChecklist() {
               {!step.done && (
                 <ArrowRight className="w-3.5 h-3.5 mt-1 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               )}
-              <span className="sr-only">{step.done ? "Done" : "Not done yet"}</span>
+              <span className="sr-only">
+                {step.done ? "Done" : "Not done yet"}
+              </span>
             </a>
           </li>
         ))}

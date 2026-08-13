@@ -33,9 +33,13 @@ import { SignJWT } from "jose";
 // Minimal .env reader — avoids depending on dotenv being installed.
 function loadEnvFile() {
   try {
-    for (const line of readFileSync(new URL("../../../.env", import.meta.url), "utf8").split("\n")) {
+    for (const line of readFileSync(
+      new URL("../../../.env", import.meta.url),
+      "utf8"
+    ).split("\n")) {
       const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      if (m && !process.env[m[1]])
+        process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
     }
   } catch {
     // no .env — fine, caller may have exported vars directly
@@ -62,15 +66,22 @@ async function listUsers() {
   }
   const mysql = (await import("mysql2/promise")).default;
   const conn = await mysql.createConnection(process.env.DATABASE_URL);
-  const [rows] = await conn.query("SELECT id, openId, role, email FROM users ORDER BY id");
+  const [rows] = await conn.query(
+    "SELECT id, openId, role, email FROM users ORDER BY id"
+  );
   await conn.end();
   if (!rows.length) {
     console.log("No users in the database. Any openId will fail auth.");
-    console.log("Create one, or run `pnpm test` once — the test suites insert fixture users.");
+    console.log(
+      "Create one, or run `pnpm test` once — the test suites insert fixture users."
+    );
     return;
   }
   console.log("Usable openIds:\n");
-  for (const r of rows) console.log(`  ${String(r.id).padEnd(6)} ${r.openId.padEnd(34)} ${r.role ?? ""}  ${r.email ?? ""}`);
+  for (const r of rows)
+    console.log(
+      `  ${String(r.id).padEnd(6)} ${r.openId.padEnd(34)} ${r.role ?? ""}  ${r.email ?? ""}`
+    );
 }
 
 async function mint(openId) {
@@ -78,15 +89,24 @@ async function mint(openId) {
 
   console.log(token);
   console.error("");
-  console.error("--- paste into the browser devtools console, then HARD RELOAD ---");
-  console.error(`sessionStorage.setItem(${JSON.stringify("manus-cookie")}, ${JSON.stringify(`${COOKIE_NAME}=${token}`)}); location.reload();`);
+  console.error(
+    "--- paste into the browser devtools console, then HARD RELOAD ---"
+  );
+  console.error(
+    `sessionStorage.setItem(${JSON.stringify("manus-cookie")}, ${JSON.stringify(`${COOKIE_NAME}=${token}`)}); location.reload();`
+  );
   console.error("");
   console.error("--- or use it directly against the API ---");
-  console.error(`curl -H "Authorization: Bearer <token>" http://localhost:3000/api/trpc/auth.me`);
+  console.error(
+    `curl -H "Authorization: Bearer <token>" http://localhost:3000/api/trpc/auth.me`
+  );
 }
 
 // Only act as a CLI when invoked directly, not when imported by smoke.mjs.
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop())) {
+if (
+  process.argv[1] &&
+  import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop())
+) {
   const arg = process.argv[2];
   if (arg === "--list-users") {
     await listUsers();

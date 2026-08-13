@@ -93,10 +93,12 @@ export const onboardingRouter = router({
 
   /** Used by the first-run screen to price the starter roles in place. */
   setStarterRate: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      hourlyCost: z.number().min(0).max(10000),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        hourlyCost: z.number().min(0).max(10000),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       // Goes through the same fork-on-edit path as the Labor Rates screen, so
       // a starter role edited here behaves exactly as it would there.

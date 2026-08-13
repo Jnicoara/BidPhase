@@ -7,10 +7,10 @@ Planning document. Captures the strategic case for the product direction laid ou
 ### Market research (2026)
 
 - Manual electrical estimating takes **6–12 hours per commercial bid** vs **2–3 hours** with purpose-built software.
-- **73% of buyers** in this software category are **solo operators or 2–5 person shops** — not enterprise. *(Source: Capterra 2026 market analysis.)*
+- **73% of buyers** in this software category are **solo operators or 2–5 person shops** — not enterprise. _(Source: Capterra 2026 market analysis.)_
 - Named competitor pain points:
   - **Duplicate entry** between separate takeoff and estimating tools.
-  - **Tool fragmentation** — contractors stacking 3 separate tools (field service + commercial estimating + takeoff), costing **$100K+/year** combined, with poor data sharing between them. *(Source: 2026 electrical estimating software buyer's guide.)*
+  - **Tool fragmentation** — contractors stacking 3 separate tools (field service + commercial estimating + takeoff), costing **$100K+/year** combined, with poor data sharing between them. _(Source: 2026 electrical estimating software buyer's guide.)_
 
 ### Case for
 

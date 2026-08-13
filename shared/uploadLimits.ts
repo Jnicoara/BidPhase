@@ -42,11 +42,18 @@ export type UploadCheck = UploadRejection | UploadAcceptance;
  * an estimator who has just waited on a large file needs to know whether to
  * split the set or convert the file, not that validation failed.
  */
-export function checkPdfUpload(
-  { filename, byteSize }: { filename: string; byteSize: number }
-): UploadCheck {
+export function checkPdfUpload({
+  filename,
+  byteSize,
+}: {
+  filename: string;
+  byteSize: number;
+}): UploadCheck {
   if (byteSize <= 0) {
-    return { ok: false, message: `${filename} is empty — there is nothing to attach.` };
+    return {
+      ok: false,
+      message: `${filename} is empty — there is nothing to attach.`,
+    };
   }
 
   if (byteSize > MAX_PDF_BYTES) {

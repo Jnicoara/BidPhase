@@ -69,9 +69,12 @@ export function commitNumericEdit(
   }
 
   const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed)) return { action: "revert", reason: "not a number" };
-  if (min !== undefined && parsed < min) return { action: "revert", reason: `below ${min}` };
-  if (max !== undefined && parsed > max) return { action: "revert", reason: `above ${max}` };
+  if (!Number.isFinite(parsed))
+    return { action: "revert", reason: "not a number" };
+  if (min !== undefined && parsed < min)
+    return { action: "revert", reason: `below ${min}` };
+  if (max !== undefined && parsed > max)
+    return { action: "revert", reason: `above ${max}` };
 
   // No write when nothing moved: a pointless round trip, and a confirmation
   // flash for a save that did not happen would be a lie.

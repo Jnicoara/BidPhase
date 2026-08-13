@@ -40,7 +40,11 @@ beforeAll(async () => {
   if (!db) return;
 
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await db.insert(users).values({
         id,
@@ -57,15 +61,23 @@ beforeEach(async () => {
   if (!hasDb) return;
   const db = await getDb();
   if (!db) return;
-  await db.delete(modifiers).where(inArray(modifiers.userId, [USER, OTHER_USER]));
+  await db
+    .delete(modifiers)
+    .where(inArray(modifiers.userId, [USER, OTHER_USER]));
 });
 
 describe.skipIf(!hasDb)("starter modifiers", () => {
   it("seeds exactly the five starters, deliberately not more", async () => {
     const db = await getDb();
-    const baselines = await db!.select().from(modifiers).where(isNull(modifiers.userId));
+    const baselines = await db!
+      .select()
+      .from(modifiers)
+      .where(isNull(modifiers.userId));
     for (const seeded of BASELINE_MODIFIERS) {
-      expect(baselines.some(b => b.name === seeded.name), `missing ${seeded.name}`).toBe(true);
+      expect(
+        baselines.some(b => b.name === seeded.name),
+        `missing ${seeded.name}`
+      ).toBe(true);
     }
     expect(BASELINE_MODIFIERS).toHaveLength(5);
   });
@@ -77,8 +89,12 @@ describe.skipIf(!hasDb)("starter modifiers", () => {
   });
 
   it("shows every starter in the working list and nothing archived", async () => {
-    expect((await caller().modifiers.list({ status: "active" })).length).toBeGreaterThanOrEqual(5);
-    expect(await caller().modifiers.list({ status: "archived" })).toHaveLength(0);
+    expect(
+      (await caller().modifiers.list({ status: "active" })).length
+    ).toBeGreaterThanOrEqual(5);
+    expect(await caller().modifiers.list({ status: "archived" })).toHaveLength(
+      0
+    );
   });
 });
 
@@ -98,11 +114,16 @@ describe.skipIf(!hasDb)("archive and restore", () => {
     const starter = before.find(r => r.name === "Weekend work")!;
     expect(starter.userId).toBeNull();
 
-    const { id: archivedId } = await caller().modifiers.archive({ id: starter.id });
+    const { id: archivedId } = await caller().modifiers.archive({
+      id: starter.id,
+    });
     expect(archivedId).not.toBe(starter.id);
 
     const db = await getDb();
-    const [sharedRow] = await db!.select().from(modifiers).where(eq(modifiers.id, starter.id));
+    const [sharedRow] = await db!
+      .select()
+      .from(modifiers)
+      .where(eq(modifiers.id, starter.id));
     expect(sharedRow.userId).toBeNull();
     expect(sharedRow.status).toBe("active");
   });
@@ -114,7 +135,9 @@ describe.skipIf(!hasDb)("archive and restore", () => {
 
     const archived = await caller().modifiers.list({ status: "archived" });
     expect(archived.some(r => r.name === "Scheduled overtime")).toBe(true);
-    expect(archived.find(r => r.name === "Scheduled overtime")?.archivedAt).toBeTruthy();
+    expect(
+      archived.find(r => r.name === "Scheduled overtime")?.archivedAt
+    ).toBeTruthy();
   });
 
   it("restoring returns it to the working list", async () => {
@@ -126,7 +149,9 @@ describe.skipIf(!hasDb)("archive and restore", () => {
 
     const active = await caller().modifiers.list({ status: "active" });
     expect(active.some(r => r.name === "Working at height")).toBe(true);
-    expect(await caller().modifiers.list({ status: "archived" })).toHaveLength(0);
+    expect(await caller().modifiers.list({ status: "archived" })).toHaveLength(
+      0
+    );
   });
 
   it("restoring clears the archived timestamp", async () => {
@@ -141,36 +166,49 @@ describe.skipIf(!hasDb)("archive and restore", () => {
     const target = before.find(r => r.name === "Weekend work")!;
     await caller().modifiers.archive({ id: target.id });
 
-    const otherActive = await callerFor(OTHER_USER).modifiers.list({ status: "active" });
+    const otherActive = await callerFor(OTHER_USER).modifiers.list({
+      status: "active",
+    });
     expect(otherActive.some(r => r.name === "Weekend work")).toBe(true);
   });
 
   it("refuses to restore something that is not archived", async () => {
     const active = await caller().modifiers.list({ status: "active" });
-    const custom = await caller().modifiers.create({ name: `Custom ${Date.now()}`, laborAdjustmentPct: 0.05 });
+    const custom = await caller().modifiers.create({
+      name: `Custom ${Date.now()}`,
+      laborAdjustmentPct: 0.05,
+    });
     expect(active.length).toBeGreaterThan(0);
-    await expect(caller().modifiers.restore({ id: custom!.id })).rejects.toThrow(/not archived/i);
+    await expect(
+      caller().modifiers.restore({ id: custom!.id })
+    ).rejects.toThrow(/not archived/i);
   });
 });
 
 describe.skipIf(!hasDb)("delete forever", () => {
   it("refuses to delete straight from the working list", async () => {
     const created = await caller().modifiers.create({
-      name: `Straight delete ${Date.now()}`, laborAdjustmentPct: 0.05,
+      name: `Straight delete ${Date.now()}`,
+      laborAdjustmentPct: 0.05,
     });
-    await expect(caller().modifiers.deleteForever({ id: created!.id }))
-      .rejects.toThrow(/archived/i);
+    await expect(
+      caller().modifiers.deleteForever({ id: created!.id })
+    ).rejects.toThrow(/archived/i);
   });
 
   it("hard-deletes a fully custom modifier once archived", async () => {
     const created = await caller().modifiers.create({
-      name: `Custom gone ${Date.now()}`, laborAdjustmentPct: 0.3,
+      name: `Custom gone ${Date.now()}`,
+      laborAdjustmentPct: 0.3,
     });
     await caller().modifiers.archive({ id: created!.id });
     await caller().modifiers.deleteForever({ id: created!.id });
 
     const db = await getDb();
-    const rows = await db!.select().from(modifiers).where(eq(modifiers.id, created!.id));
+    const rows = await db!
+      .select()
+      .from(modifiers)
+      .where(eq(modifiers.id, created!.id));
     expect(rows).toHaveLength(0);
   });
 
@@ -178,15 +216,21 @@ describe.skipIf(!hasDb)("delete forever", () => {
     // The whole reason the tombstone exists. Deleting the fork outright would
     // stop it hiding the shared starter row, and the modifier would reappear.
     const before = await caller().modifiers.list({ status: "active" });
-    const starter = before.find(r => r.name === "Occupied building / renovation")!;
+    const starter = before.find(
+      r => r.name === "Occupied building / renovation"
+    )!;
 
     const { id } = await caller().modifiers.archive({ id: starter.id });
     await caller().modifiers.deleteForever({ id });
 
     const active = await caller().modifiers.list({ status: "active" });
     const archived = await caller().modifiers.list({ status: "archived" });
-    expect(active.some(r => r.name === "Occupied building / renovation")).toBe(false);
-    expect(archived.some(r => r.name === "Occupied building / renovation")).toBe(false);
+    expect(active.some(r => r.name === "Occupied building / renovation")).toBe(
+      false
+    );
+    expect(
+      archived.some(r => r.name === "Occupied building / renovation")
+    ).toBe(false);
   });
 
   it("leaves the shared starter row intact for everyone else", async () => {
@@ -195,7 +239,9 @@ describe.skipIf(!hasDb)("delete forever", () => {
     const { id } = await caller().modifiers.archive({ id: starter.id });
     await caller().modifiers.deleteForever({ id });
 
-    const otherActive = await callerFor(OTHER_USER).modifiers.list({ status: "active" });
+    const otherActive = await callerFor(OTHER_USER).modifiers.list({
+      status: "active",
+    });
     expect(otherActive.some(r => r.name === "Night shift work")).toBe(true);
   });
 
@@ -215,21 +261,31 @@ describe.skipIf(!hasDb)("editing", () => {
     const before = await caller().modifiers.list({ status: "active" });
     const starter = before.find(r => r.name === "Weekend work")!;
 
-    const result = await caller().modifiers.update({ id: starter.id, laborAdjustmentPct: 0.25 });
+    const result = await caller().modifiers.update({
+      id: starter.id,
+      laborAdjustmentPct: 0.25,
+    });
     expect(result.forked).toBe(true);
     expect(result.modifier?.laborAdjustmentPctValue).toBeCloseTo(0.25, 10);
 
     const db = await getDb();
-    const [shared] = await db!.select().from(modifiers).where(eq(modifiers.id, starter.id));
+    const [shared] = await db!
+      .select()
+      .from(modifiers)
+      .where(eq(modifiers.id, starter.id));
     expect(Number(shared.laborAdjustmentPct)).toBeCloseTo(0.1, 10);
   });
 
   it("a second edit does not fork again", async () => {
     const before = await caller().modifiers.list({ status: "active" });
     const starter = before.find(r => r.name === "Weekend work")!;
-    const first = await caller().modifiers.update({ id: starter.id, laborAdjustmentPct: 0.25 });
+    const first = await caller().modifiers.update({
+      id: starter.id,
+      laborAdjustmentPct: 0.25,
+    });
     const second = await caller().modifiers.update({
-      id: first.modifier!.id, laborAdjustmentPct: 0.3,
+      id: first.modifier!.id,
+      laborAdjustmentPct: 0.3,
     });
     expect(second.forked).toBe(false);
   });
@@ -237,9 +293,14 @@ describe.skipIf(!hasDb)("editing", () => {
   it("reverting restores the starter percentage", async () => {
     const before = await caller().modifiers.list({ status: "active" });
     const starter = before.find(r => r.name === "Working at height")!;
-    const forked = await caller().modifiers.update({ id: starter.id, laborAdjustmentPct: 0.9 });
+    const forked = await caller().modifiers.update({
+      id: starter.id,
+      laborAdjustmentPct: 0.9,
+    });
 
-    const reverted = await caller().modifiers.revert({ id: forked.modifier!.id });
+    const reverted = await caller().modifiers.revert({
+      id: forked.modifier!.id,
+    });
     expect(reverted?.laborAdjustmentPctValue).toBeCloseTo(0.12, 10);
   });
 
@@ -251,28 +312,47 @@ describe.skipIf(!hasDb)("editing", () => {
 
     await caller().modifiers.revert({ id });
 
-    expect((await caller().modifiers.list({ status: "archived" })).some(r => r.id === id)).toBe(true);
-    expect((await caller().modifiers.list({ status: "active" })).some(r => r.id === id)).toBe(false);
+    expect(
+      (await caller().modifiers.list({ status: "archived" })).some(
+        r => r.id === id
+      )
+    ).toBe(true);
+    expect(
+      (await caller().modifiers.list({ status: "active" })).some(
+        r => r.id === id
+      )
+    ).toBe(false);
   });
 
   it("refuses a duplicate name in the working list", async () => {
     const name = `Dupe ${Date.now()}`;
     await caller().modifiers.create({ name, laborAdjustmentPct: 0.1 });
-    await expect(caller().modifiers.create({ name, laborAdjustmentPct: 0.2 }))
-      .rejects.toThrow(/already exists/i);
+    await expect(
+      caller().modifiers.create({ name, laborAdjustmentPct: 0.2 })
+    ).rejects.toThrow(/already exists/i);
   });
 
   it("allows reusing a name that is only sitting in the archive", async () => {
     const name = `Reusable ${Date.now()}`;
-    const created = await caller().modifiers.create({ name, laborAdjustmentPct: 0.1 });
+    const created = await caller().modifiers.create({
+      name,
+      laborAdjustmentPct: 0.1,
+    });
     await caller().modifiers.archive({ id: created!.id });
 
-    const again = await caller().modifiers.create({ name, laborAdjustmentPct: 0.2 });
+    const again = await caller().modifiers.create({
+      name,
+      laborAdjustmentPct: 0.2,
+    });
     expect(again?.name).toBe(name);
   });
 
   it("refuses a modifier that would remove more than all the labor", async () => {
-    await expect(caller().modifiers.create({ name: `Bad ${Date.now()}`, laborAdjustmentPct: -1.5 }))
-      .rejects.toThrow();
+    await expect(
+      caller().modifiers.create({
+        name: `Bad ${Date.now()}`,
+        laborAdjustmentPct: -1.5,
+      })
+    ).rejects.toThrow();
   });
 });

@@ -41,11 +41,11 @@ import {
 } from "../shared/takeoffQuantities";
 
 /** Scale ratios by their drawing notation, for readable tests. */
-const QUARTER_INCH = 48;      // 1/4" = 1'-0"
-const EIGHTH_INCH = 96;       // 1/8" = 1'-0"
-const HALF_INCH = 24;         // 1/2" = 1'-0"
-const ENG_20 = 240;           // 1"  = 20'
-const ENG_100 = 1200;         // 1"  = 100'
+const QUARTER_INCH = 48; // 1/4" = 1'-0"
+const EIGHTH_INCH = 96; // 1/8" = 1'-0"
+const HALF_INCH = 24; // 1/2" = 1'-0"
+const ENG_20 = 240; // 1"  = 20'
+const ENG_100 = 1200; // 1"  = 100'
 
 const p = (x: number, y: number): PagePoint => ({ x, y });
 
@@ -58,7 +58,10 @@ describe("units", () => {
 
   it("converts a rendered click back to page points", () => {
     // The viewer rasterises at 1.5, so 150 device pixels is 100 page points.
-    expect(screenToPagePoints({ x: 150, y: 300 }, 1.5)).toEqual({ x: 100, y: 200 });
+    expect(screenToPagePoints({ x: 150, y: 300 }, 1.5)).toEqual({
+      x: 100,
+      y: 200,
+    });
   });
 
   it("makes a measurement independent of zoom", () => {
@@ -103,7 +106,11 @@ describe("path length in page points", () => {
     // traced around obstructions actually takes.
     const points: PagePoint[] = [p(0, 0)];
     for (let i = 1; i <= 20; i++) {
-      points.push(i % 2 === 1 ? p(points[i - 1].x + 10, points[i - 1].y) : p(points[i - 1].x, points[i - 1].y + 10));
+      points.push(
+        i % 2 === 1
+          ? p(points[i - 1].x + 10, points[i - 1].y)
+          : p(points[i - 1].x, points[i - 1].y + 10)
+      );
     }
     expect(pathLengthInPoints(points)).toBe(200);
   });
@@ -126,11 +133,15 @@ describe("path length in page points", () => {
   it("refuses a path containing an unusable point rather than skipping it", () => {
     // Skipping would silently shorten the run, and nothing would say so.
     expect(pathLengthInPoints([p(0, 0), p(Number.NaN, 10)])).toBeNull();
-    expect(pathLengthInPoints([p(0, 0), p(10, Number.POSITIVE_INFINITY)])).toBeNull();
+    expect(
+      pathLengthInPoints([p(0, 0), p(10, Number.POSITIVE_INFINITY)])
+    ).toBeNull();
   });
 
   it("agrees with segmentLength on a two-point path", () => {
-    expect(pathLengthInPoints([p(1, 2), p(4, 6)])).toBe(segmentLength(p(1, 2), p(4, 6)));
+    expect(pathLengthInPoints([p(1, 2), p(4, 6)])).toBe(
+      segmentLength(p(1, 2), p(4, 6))
+    );
   });
 });
 
@@ -155,13 +166,20 @@ describe("converting paper to real world", () => {
   });
 
   it("handles engineering scales", () => {
-    expect(pointsToRealInches(72, ENG_20)).toBe(240);   // 1" = 20' → 20 feet
+    expect(pointsToRealInches(72, ENG_20)).toBe(240); // 1" = 20' → 20 feet
     expect(pointsToRealInches(72, ENG_100)).toBe(1200); // 1" = 100' → 100 feet
   });
 
   it("returns null for every unusable ratio, never zero", () => {
     // Zero would flow into a total as a considered measurement of nothing.
-    for (const bad of [null, undefined, 0, -48, Number.NaN, Number.POSITIVE_INFINITY]) {
+    for (const bad of [
+      null,
+      undefined,
+      0,
+      -48,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+    ]) {
       expect(pointsToRealInches(72, bad as number)).toBeNull();
     }
   });
@@ -221,7 +239,9 @@ describe("traced path to real length", () => {
   });
 
   it("returns null when the path is unusable, for any scale", () => {
-    expect(pathRealInches([p(0, 0), p(Number.NaN, 0)], QUARTER_INCH)).toBeNull();
+    expect(
+      pathRealInches([p(0, 0), p(Number.NaN, 0)], QUARTER_INCH)
+    ).toBeNull();
   });
 
   it("is zero — not null — for a path not yet drawn on a scaled sheet", () => {
@@ -261,17 +281,31 @@ describe("presenting a measurement", () => {
 
 describe("blocking measurement when the scale is not trustworthy", () => {
   it("allows a sheet with a scale set", () => {
-    const result = measurabilityOf({ scaleRatio: 48, scaleSource: "manual", notToScale: false });
+    const result = measurabilityOf({
+      scaleRatio: 48,
+      scaleSource: "manual",
+      notToScale: false,
+    });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.ratio).toBe(48);
   });
 
   it("allows a detected scale on an ordinary sheet", () => {
-    expect(measurabilityOf({ scaleRatio: 96, scaleSource: "detected", notToScale: false }).ok).toBe(true);
+    expect(
+      measurabilityOf({
+        scaleRatio: 96,
+        scaleSource: "detected",
+        notToScale: false,
+      }).ok
+    ).toBe(true);
   });
 
   it("blocks a sheet with no scale at all", () => {
-    const result = measurabilityOf({ scaleRatio: null, scaleSource: "none", notToScale: false });
+    const result = measurabilityOf({
+      scaleRatio: null,
+      scaleSource: "none",
+      notToScale: false,
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("no-scale");
@@ -282,19 +316,31 @@ describe("blocking measurement when the scale is not trustworthy", () => {
   it("blocks a NOT-TO-SCALE sheet even when a scale was detected on it", () => {
     // The drawing is saying its geometry is not trustworthy. A number read off
     // it is not evidence — only a person can decide to measure anyway.
-    const result = measurabilityOf({ scaleRatio: 48, scaleSource: "detected", notToScale: true });
+    const result = measurabilityOf({
+      scaleRatio: 48,
+      scaleSource: "detected",
+      notToScale: true,
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("not-to-scale");
   });
 
   it("blocks a NOT-TO-SCALE sheet with no scale", () => {
-    const result = measurabilityOf({ scaleRatio: null, scaleSource: "none", notToScale: true });
+    const result = measurabilityOf({
+      scaleRatio: null,
+      scaleSource: "none",
+      notToScale: true,
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("not-to-scale");
   });
 
   it("allows a NOT-TO-SCALE sheet ONLY once a human overrides it by hand", () => {
-    const result = measurabilityOf({ scaleRatio: 48, scaleSource: "manual", notToScale: true });
+    const result = measurabilityOf({
+      scaleRatio: 48,
+      scaleSource: "manual",
+      notToScale: true,
+    });
     expect(result.ok).toBe(true);
   });
 
@@ -302,15 +348,27 @@ describe("blocking measurement when the scale is not trustworthy", () => {
     // A corrupt or zero ratio must not measure just because someone set it by
     // hand — "manual" says who chose it, not that it is arithmetically sound.
     for (const scaleRatio of [0, -48, Number.NaN]) {
-      const result = measurabilityOf({ scaleRatio, scaleSource: "manual", notToScale: false });
+      const result = measurabilityOf({
+        scaleRatio,
+        scaleSource: "manual",
+        notToScale: false,
+      });
       expect(result.ok, `ratio ${scaleRatio} should block`).toBe(false);
       if (!result.ok) expect(result.reason).toBe("no-scale");
     }
   });
 
   it("explains itself differently for the two blocks", () => {
-    const noScale = measurabilityOf({ scaleRatio: null, scaleSource: "none", notToScale: false });
-    const nts = measurabilityOf({ scaleRatio: null, scaleSource: "none", notToScale: true });
+    const noScale = measurabilityOf({
+      scaleRatio: null,
+      scaleSource: "none",
+      notToScale: false,
+    });
+    const nts = measurabilityOf({
+      scaleRatio: null,
+      scaleSource: "none",
+      notToScale: true,
+    });
     if (noScale.ok || nts.ok) throw new Error("expected both to block");
     expect(noScale.message).not.toBe(nts.message);
     expect(nts.message).toMatch(/not to scale/i);
@@ -339,7 +397,9 @@ describe("conduit footage is counted once", () => {
 
   it("refuses a cable run rather than returning zero", () => {
     // Zero would reach a bid as a considered "no pipe needed" line.
-    expect(conduitFeet({ pathType: "cable", points: RUN_100FT.points }, QUARTER_INCH)).toBeNull();
+    expect(
+      conduitFeet({ pathType: "cable", points: RUN_100FT.points }, QUARTER_INCH)
+    ).toBeNull();
   });
 
   it("returns null with no scale", () => {
@@ -349,7 +409,11 @@ describe("conduit footage is counted once", () => {
 
 describe("wire footage is counted per circuit, per conductor", () => {
   it("gives one circuit its conductors' worth", () => {
-    const result = wireFeetByCircuit(RUN_100FT, [{ name: "Ckt 1", conductorCount: 3 }], QUARTER_INCH);
+    const result = wireFeetByCircuit(
+      RUN_100FT,
+      [{ name: "Ckt 1", conductorCount: 3 }],
+      QUARTER_INCH
+    );
     expect(result!.perCircuit[0].feet).toBe(300);
     expect(result!.totalFeet).toBe(300);
   });
@@ -400,12 +464,18 @@ describe("wire footage is counted per circuit, per conductor", () => {
 
   it("refuses a cable run — a cable has no separate pulled wire", () => {
     expect(
-      wireFeetByCircuit({ pathType: "cable", points: RUN_100FT.points }, [{ name: "x", conductorCount: 2 }], QUARTER_INCH)
+      wireFeetByCircuit(
+        { pathType: "cable", points: RUN_100FT.points },
+        [{ name: "x", conductorCount: 2 }],
+        QUARTER_INCH
+      )
     ).toBeNull();
   });
 
   it("returns null with no scale", () => {
-    expect(wireFeetByCircuit(RUN_100FT, [{ name: "Ckt 1", conductorCount: 3 }], null)).toBeNull();
+    expect(
+      wireFeetByCircuit(RUN_100FT, [{ name: "Ckt 1", conductorCount: 3 }], null)
+    ).toBeNull();
   });
 });
 
@@ -423,7 +493,11 @@ describe("cable runs", () => {
   });
 
   it("produce no separate wire footage", () => {
-    const quantities = quantitiesForRun(CABLE_100FT, [{ name: "Ckt 1", conductorCount: 3 }], QUARTER_INCH)!;
+    const quantities = quantitiesForRun(
+      CABLE_100FT,
+      [{ name: "Ckt 1", conductorCount: 3 }],
+      QUARTER_INCH
+    )!;
     expect(quantities.totalWireFeet).toBe(0);
     expect(quantities.wireByCircuit).toEqual([]);
   });
@@ -452,10 +526,21 @@ describe("a shared run across a whole takeoff", () => {
   });
 
   it("keeps two separate runs separate", () => {
-    const shortRun = { pathType: "conduit" as const, points: [p(0, 0), p(12.5 * 72, 0)] }; // 50ft
+    const shortRun = {
+      pathType: "conduit" as const,
+      points: [p(0, 0), p(12.5 * 72, 0)],
+    }; // 50ft
     const totals = totalQuantities([
-      { run: RUN_100FT, circuits: [{ name: "A", conductorCount: 2 }], ratio: QUARTER_INCH },
-      { run: shortRun, circuits: [{ name: "B", conductorCount: 3 }], ratio: QUARTER_INCH },
+      {
+        run: RUN_100FT,
+        circuits: [{ name: "A", conductorCount: 2 }],
+        ratio: QUARTER_INCH,
+      },
+      {
+        run: shortRun,
+        circuits: [{ name: "B", conductorCount: 3 }],
+        ratio: QUARTER_INCH,
+      },
     ]);
     expect(totals.conduitFeet).toBe(150);
     expect(totals.wireFeet).toBe(200 + 150);
@@ -464,7 +549,11 @@ describe("a shared run across a whole takeoff", () => {
   it("keeps conduit and cable in separate totals", () => {
     const cableRun = { pathType: "cable" as const, points: RUN_100FT.points };
     const totals = totalQuantities([
-      { run: RUN_100FT, circuits: [{ name: "A", conductorCount: 3 }], ratio: QUARTER_INCH },
+      {
+        run: RUN_100FT,
+        circuits: [{ name: "A", conductorCount: 3 }],
+        ratio: QUARTER_INCH,
+      },
       { run: cableRun, circuits: [], ratio: QUARTER_INCH },
     ]);
     expect(totals.conduitFeet).toBe(100);
@@ -475,8 +564,16 @@ describe("a shared run across a whole takeoff", () => {
   it("reports unmeasurable runs rather than counting them as zero", () => {
     // A total that silently drops a run reads as complete when it is not.
     const totals = totalQuantities([
-      { run: RUN_100FT, circuits: [{ name: "A", conductorCount: 2 }], ratio: QUARTER_INCH },
-      { run: RUN_100FT, circuits: [{ name: "B", conductorCount: 2 }], ratio: null },
+      {
+        run: RUN_100FT,
+        circuits: [{ name: "A", conductorCount: 2 }],
+        ratio: QUARTER_INCH,
+      },
+      {
+        run: RUN_100FT,
+        circuits: [{ name: "B", conductorCount: 2 }],
+        ratio: null,
+      },
     ]);
     expect(totals.conduitFeet).toBe(100);
     expect(totals.wireFeet).toBe(200);
@@ -485,7 +582,10 @@ describe("a shared run across a whole takeoff", () => {
 
   it("totals nothing, and flags nothing, for an empty takeoff", () => {
     expect(totalQuantities([])).toEqual({
-      conduitFeet: 0, cableFeet: 0, wireFeet: 0, unmeasurableCount: 0,
+      conduitFeet: 0,
+      cableFeet: 0,
+      wireFeet: 0,
+      unmeasurableCount: 0,
     });
   });
 
@@ -505,13 +605,18 @@ describe("a shared run across a whole takeoff", () => {
 describe("the full breakdown for one run", () => {
   it("returns null when the run cannot be measured", () => {
     // Not a partial answer a caller could show as a total.
-    expect(quantitiesForRun(RUN_100FT, [{ name: "A", conductorCount: 3 }], null)).toBeNull();
+    expect(
+      quantitiesForRun(RUN_100FT, [{ name: "A", conductorCount: 3 }], null)
+    ).toBeNull();
   });
 
   it("reports conduit and wire as distinct numbers", () => {
     const quantities = quantitiesForRun(
       RUN_100FT,
-      [{ name: "A", conductorCount: 3 }, { name: "B", conductorCount: 3 }],
+      [
+        { name: "A", conductorCount: 3 },
+        { name: "B", conductorCount: 3 },
+      ],
       QUARTER_INCH
     )!;
     expect(quantities.runFeet).toBe(100);
@@ -523,10 +628,14 @@ describe("the full breakdown for one run", () => {
 
   it("names each circuit in the breakdown", () => {
     const quantities = quantitiesForRun(
-      RUN_100FT, [{ name: "Panel A-12", conductorCount: 4 }], QUARTER_INCH
+      RUN_100FT,
+      [{ name: "Panel A-12", conductorCount: 4 }],
+      QUARTER_INCH
     )!;
     expect(quantities.wireByCircuit[0]).toEqual({
-      name: "Panel A-12", conductorCount: 4, feet: 400,
+      name: "Panel A-12",
+      conductorCount: 4,
+      feet: 400,
     });
   });
 });
@@ -540,14 +649,24 @@ describe("a realistic takeoff, checked by hand", () => {
     // Feeder:  traced 10 paper inches  → 80 ft of 2" EMT
     //          3 circuits × 4 conductors → 12 × 80 = 960 ft of wire
     // Branch:  traced 5 paper inches   → 40 ft of MC cable, no conduit
-    const feeder = { pathType: "conduit" as const, points: [p(0, 0), p(10 * 72, 0)] };
-    const branch = { pathType: "cable" as const, points: [p(0, 0), p(5 * 72, 0)] };
+    const feeder = {
+      pathType: "conduit" as const,
+      points: [p(0, 0), p(10 * 72, 0)],
+    };
+    const branch = {
+      pathType: "cable" as const,
+      points: [p(0, 0), p(5 * 72, 0)],
+    };
 
-    const feederQuantities = quantitiesForRun(feeder, [
-      { name: "Ckt 1", conductorCount: 4 },
-      { name: "Ckt 2", conductorCount: 4 },
-      { name: "Ckt 3", conductorCount: 4 },
-    ], EIGHTH_INCH)!;
+    const feederQuantities = quantitiesForRun(
+      feeder,
+      [
+        { name: "Ckt 1", conductorCount: 4 },
+        { name: "Ckt 2", conductorCount: 4 },
+        { name: "Ckt 3", conductorCount: 4 },
+      ],
+      EIGHTH_INCH
+    )!;
 
     expect(feederQuantities.conduitFeet).toBe(80);
     expect(feederQuantities.totalWireFeet).toBe(960);
@@ -557,11 +676,15 @@ describe("a realistic takeoff, checked by hand", () => {
     expect(branchQuantities.conduitFeet).toBeNull();
 
     const totals = totalQuantities([
-      { run: feeder, circuits: [
-        { name: "Ckt 1", conductorCount: 4 },
-        { name: "Ckt 2", conductorCount: 4 },
-        { name: "Ckt 3", conductorCount: 4 },
-      ], ratio: EIGHTH_INCH },
+      {
+        run: feeder,
+        circuits: [
+          { name: "Ckt 1", conductorCount: 4 },
+          { name: "Ckt 2", conductorCount: 4 },
+          { name: "Ckt 3", conductorCount: 4 },
+        ],
+        ratio: EIGHTH_INCH,
+      },
       { run: branch, circuits: [], ratio: EIGHTH_INCH },
     ]);
 
@@ -574,6 +697,8 @@ describe("a realistic takeoff, checked by hand", () => {
   });
 
   it("gives runFeet consistently whichever function asks for it", () => {
-    expect(runFeet(RUN_100FT, QUARTER_INCH)).toBe(conduitFeet(RUN_100FT, QUARTER_INCH));
+    expect(runFeet(RUN_100FT, QUARTER_INCH)).toBe(
+      conduitFeet(RUN_100FT, QUARTER_INCH)
+    );
   });
 });

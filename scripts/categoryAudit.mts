@@ -17,7 +17,9 @@ for (const m of BASELINE_MATERIALS) {
 
 console.log(`Curated categories (${MATERIAL_CATEGORIES.length}):\n`);
 for (const category of MATERIAL_CATEGORIES) {
-  console.log(`  ${String(counts.get(category) ?? 0).padStart(4)}  ${category}`);
+  console.log(
+    `  ${String(counts.get(category) ?? 0).padStart(4)}  ${category}`
+  );
 }
 
 const empty = MATERIAL_CATEGORIES.filter(c => !counts.get(c));

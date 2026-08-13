@@ -28,7 +28,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { CompanyDefaultNotice } from "@/components/CompanyDefaultNotice";
@@ -46,7 +50,9 @@ export function BidPricingDefaultsSection() {
 
   const save = trpc.bids.setPricingDefaults.useMutation({
     onSuccess: () => {
-      toast.success("Company default saved — every new bid uses it from now on.");
+      toast.success(
+        "Company default saved — every new bid uses it from now on."
+      );
       // Bids inherit rather than copy, so anything on screen showing a price
       // needs re-reading, not just this form.
       void utils.bids.pricingDefaults.invalidate();
@@ -66,7 +72,9 @@ export function BidPricingDefaultsSection() {
     if (!defaults) return;
     const isPercentage = defaults.overheadMode === "percentage";
     setOverheadPct(isPercentage ? toPercent(defaults.overheadValue) : "0");
-    setOverheadFlat(isPercentage ? "0" : String(Number(defaults.overheadValue)));
+    setOverheadFlat(
+      isPercentage ? "0" : String(Number(defaults.overheadValue))
+    );
     setProfitPct(toPercent(defaults.profitValue));
     setProductivityPct(toPercent(defaults.productivityPct));
   }, [defaults]);
@@ -78,7 +86,9 @@ export function BidPricingDefaultsSection() {
   return (
     <section className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold text-foreground">Bid pricing defaults</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          Bid pricing defaults
+        </h3>
         <p className="text-xs text-muted-foreground mt-1">
           What every bid is priced with unless that bid says otherwise. Changing
           one here moves every bid still set to follow it — finished bids keep
@@ -97,7 +107,9 @@ export function BidPricingDefaultsSection() {
           </div>
           <Switch
             checked={defaults.overheadEnabled}
-            onCheckedChange={enabled => save.mutate({ overheadEnabled: enabled })}
+            onCheckedChange={enabled =>
+              save.mutate({ overheadEnabled: enabled })
+            }
             aria-label="Apply overhead by default"
           />
         </div>
@@ -107,10 +119,16 @@ export function BidPricingDefaultsSection() {
             <Select
               value={defaults.overheadMode}
               onValueChange={mode =>
-                save.mutate({ overheadMode: mode as "percentage" | "flat", overheadValue: 0 })
+                save.mutate({
+                  overheadMode: mode as "percentage" | "flat",
+                  overheadValue: 0,
+                })
               }
             >
-              <SelectTrigger className="h-8 w-36 text-sm" aria-label="Overhead mode">
+              <SelectTrigger
+                className="h-8 w-36 text-sm"
+                aria-label="Overhead mode"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -125,7 +143,9 @@ export function BidPricingDefaultsSection() {
                   value={overheadPct}
                   onChange={e => setOverheadPct(e.target.value)}
                   onFocus={selectOnFocus}
-                  onBlur={() => save.mutate({ overheadValue: toFraction(overheadPct) })}
+                  onBlur={() =>
+                    save.mutate({ overheadValue: toFraction(overheadPct) })
+                  }
                   onKeyDown={e => {
                     if (e.key === "Enter") e.currentTarget.blur();
                   }}
@@ -144,7 +164,9 @@ export function BidPricingDefaultsSection() {
                   value={overheadFlat}
                   onChange={e => setOverheadFlat(e.target.value)}
                   onFocus={selectOnFocus}
-                  onBlur={() => save.mutate({ overheadValue: Number(overheadFlat) || 0 })}
+                  onBlur={() =>
+                    save.mutate({ overheadValue: Number(overheadFlat) || 0 })
+                  }
                   onKeyDown={e => {
                     if (e.key === "Enter") e.currentTarget.blur();
                   }}
@@ -180,7 +202,10 @@ export function BidPricingDefaultsSection() {
               save.mutate({ profitMethod: method as "markup" | "margin" })
             }
           >
-            <SelectTrigger className="h-8 w-36 text-sm" aria-label="Profit method">
+            <SelectTrigger
+              className="h-8 w-36 text-sm"
+              aria-label="Profit method"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -223,9 +248,10 @@ export function BidPricingDefaultsSection() {
           */}
           <p className="text-xs text-muted-foreground mt-0.5">
             Adjusts all labor hours up or down company-wide, for how your crews
-            actually perform against the hours in your assemblies. Positive means
-            the work takes longer than the book says; negative means your crews
-            beat it. Leave it at 0% until you have real jobs to compare against.
+            actually perform against the hours in your assemblies. Positive
+            means the work takes longer than the book says; negative means your
+            crews beat it. Leave it at 0% until you have real jobs to compare
+            against.
           </p>
           <p className="text-xs text-muted-foreground mt-1.5">
             Applied last, after job-condition modifiers are added up — it is a
@@ -240,7 +266,9 @@ export function BidPricingDefaultsSection() {
               value={productivityPct}
               onChange={e => setProductivityPct(e.target.value)}
               onFocus={selectOnFocus}
-              onBlur={() => save.mutate({ productivityPct: toFraction(productivityPct) })}
+              onBlur={() =>
+                save.mutate({ productivityPct: toFraction(productivityPct) })
+              }
               onKeyDown={e => {
                 if (e.key === "Enter") e.currentTarget.blur();
               }}

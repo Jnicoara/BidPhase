@@ -26,7 +26,10 @@ import {
   type LayerState,
 } from "../shared/takeoffLayers";
 
-const item = (systemKey: string, location: string | null) => ({ systemKey, location });
+const item = (systemKey: string, location: string | null) => ({
+  systemKey,
+  location,
+});
 
 /** A representative sheet: two systems, three locations, one untagged. */
 const SHEET = [
@@ -74,9 +77,12 @@ describe("what the checklist offers", () => {
     // Offering six Locations when two are used is four rows of noise that make
     // the two that matter harder to find.
     const present = layersPresent(SHEET);
-    expect(present.systems.map(s => s.key).sort()).toEqual(
-      ["Cable runs", "Conduit runs", "Devices", "Lighting"]
-    );
+    expect(present.systems.map(s => s.key).sort()).toEqual([
+      "Cable runs",
+      "Conduit runs",
+      "Devices",
+      "Lighting",
+    ]);
     expect(present.systems.find(s => s.key === "Devices")!.count).toBe(3);
   });
 
@@ -110,13 +116,20 @@ describe("filtering by System alone", () => {
     let state = allLayersOn(SHEET);
     state = toggleLayer(state, "systems", RUN_SYSTEM_KEYS.conduit);
     const shown = filterByLayers(SHEET, state);
-    expect(shown.some(i => i.systemKey === RUN_SYSTEM_KEYS.conduit)).toBe(false);
+    expect(shown.some(i => i.systemKey === RUN_SYSTEM_KEYS.conduit)).toBe(
+      false
+    );
     expect(shown.some(i => i.systemKey === "Devices")).toBe(true);
   });
 
   it("shows nothing when every system is off", () => {
     const present = layersPresent(SHEET);
-    const state = setAxis(allLayersOn(SHEET), "systems", present.systems.map(s => s.key), false);
+    const state = setAxis(
+      allLayersOn(SHEET),
+      "systems",
+      present.systems.map(s => s.key),
+      false
+    );
     expect(filterByLayers(SHEET, state)).toHaveLength(0);
   });
 });
@@ -151,7 +164,9 @@ describe("the two axes combining", () => {
 
     const shown = filterByLayers(SHEET, state);
     expect(shown).toHaveLength(2);
-    expect(shown.every(i => i.systemKey === "Devices" && i.location === "Wall")).toBe(true);
+    expect(
+      shown.every(i => i.systemKey === "Devices" && i.location === "Wall")
+    ).toBe(true);
     expect(present.systems.length).toBeGreaterThan(1);
   });
 
@@ -159,7 +174,9 @@ describe("the two axes combining", () => {
     let state = allLayersOn(SHEET);
     state = toggleLayer(state, "systems", "Devices");
     // Wall is still on, but every Wall item is a Device.
-    expect(filterByLayers(SHEET, state).some(i => i.location === "Wall")).toBe(false);
+    expect(filterByLayers(SHEET, state).some(i => i.location === "Wall")).toBe(
+      false
+    );
   });
 
   it("hides an item whose Location is off even when its System is on", () => {

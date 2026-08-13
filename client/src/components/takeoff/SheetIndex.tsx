@@ -35,7 +35,12 @@ export type IndexSheet = {
   scaleText: string | null;
 };
 
-function SheetRow({ sheet, isActive, onOpen, onRename }: {
+function SheetRow({
+  sheet,
+  isActive,
+  onOpen,
+  onRename,
+}: {
   sheet: IndexSheet;
   isActive: boolean;
   onOpen: () => void;
@@ -46,17 +51,25 @@ function SheetRow({ sheet, isActive, onOpen, onRename }: {
   const [flash, setFlash] = useState(false);
   const flashTimer = useRef<number | null>(null);
 
-  useEffect(() => { if (!editing) setDraft(sheet.name); }, [sheet.name, editing]);
-  useEffect(() => () => {
-    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
-  }, []);
+  useEffect(() => {
+    if (!editing) setDraft(sheet.name);
+  }, [sheet.name, editing]);
+  useEffect(
+    () => () => {
+      if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    },
+    []
+  );
 
   const commit = () => {
     setEditing(false);
     const next = draft.trim();
     // Blank or unchanged writes nothing — and must not flash, because a
     // confirmation for a save that did not happen is worse than none.
-    if (!next || next === sheet.name) { setDraft(sheet.name); return; }
+    if (!next || next === sheet.name) {
+      setDraft(sheet.name);
+      return;
+    }
     onRename(next);
     setFlash(true);
     if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
@@ -70,7 +83,10 @@ function SheetRow({ sheet, isActive, onOpen, onRename }: {
       onClick={() => !editing && onOpen()}
       onKeyDown={e => {
         if (editing) return;
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); }
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
       }}
       className={cn(
         "group flex items-start gap-2 px-3 py-2 cursor-pointer border-l-2 transition-colors",
@@ -100,7 +116,10 @@ function SheetRow({ sheet, isActive, onOpen, onRename }: {
             onClick={e => e.stopPropagation()}
             onKeyDown={e => {
               e.stopPropagation();
-              if (e.key === "Enter") { e.preventDefault(); commit(); }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              }
               if (e.key === "Escape") {
                 e.preventDefault();
                 setDraft(sheet.name);
@@ -117,7 +136,9 @@ function SheetRow({ sheet, isActive, onOpen, onRename }: {
               flash && "text-emerald-300",
               // A default label is visibly provisional, so it reads as
               // something to fix rather than as the sheet's actual name.
-              sheet.nameSource === "default" && !flash && "text-muted-foreground italic"
+              sheet.nameSource === "default" &&
+                !flash &&
+                "text-muted-foreground italic"
             )}
             title={sheet.name}
           >
@@ -135,7 +156,11 @@ function SheetRow({ sheet, isActive, onOpen, onRename }: {
 
       {!editing && (
         <button
-          onClick={e => { e.stopPropagation(); setDraft(sheet.name); setEditing(true); }}
+          onClick={e => {
+            e.stopPropagation();
+            setDraft(sheet.name);
+            setEditing(true);
+          }}
           className="shrink-0 p-1 rounded text-muted-foreground/60 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-foreground hover:bg-muted transition-all"
           aria-label={`Rename sheet ${sheet.pageNumber}`}
         >
@@ -150,7 +175,13 @@ function SheetRow({ sheet, isActive, onOpen, onRename }: {
   );
 }
 
-export function SheetIndex({ sheets, activePage, onOpenPage, onRename, loading }: {
+export function SheetIndex({
+  sheets,
+  activePage,
+  onOpenPage,
+  onRename,
+  loading,
+}: {
   sheets: IndexSheet[];
   activePage: number;
   onOpenPage: (pageNumber: number) => void;

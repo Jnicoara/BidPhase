@@ -2,8 +2,16 @@ import { useState, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import {
-  Plus, Trash2, ChevronDown, ChevronRight, Search,
-  Pencil, X, Check, Package, Layers
+  Plus,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  Pencil,
+  X,
+  Check,
+  Package,
+  Layers,
 } from "lucide-react";
 import { CATALOG } from "@/lib/materialCatalog";
 import { smartSearch } from "@/lib/smartSearch";
@@ -71,40 +79,56 @@ function AssemblyCard({
   const [addingItem, setAddingItem] = useState(false);
   const [itemSearch, setItemSearch] = useState("");
 
-  const { data: detail, refetch: refetchDetail } = trpc.masterAssemblies.get.useQuery(
-    { id: assembly.id },
-    { enabled: expanded }
-  );
+  const { data: detail, refetch: refetchDetail } =
+    trpc.masterAssemblies.get.useQuery(
+      { id: assembly.id },
+      { enabled: expanded }
+    );
   // Always fetch items when the assembly is expanded so the search panel
   // has fresh data immediately when opened (no stale-cache delay).
-  const { data: allItems, refetch: refetchItems } = trpc.masterItems.list.useQuery(
-    undefined,
-    { enabled: expanded, staleTime: 0 }
-  );
+  const { data: allItems, refetch: refetchItems } =
+    trpc.masterItems.list.useQuery(undefined, {
+      enabled: expanded,
+      staleTime: 0,
+    });
   // When the add-item panel opens, force a fresh fetch so we never show stale results
   useEffect(() => {
-    if (addingItem) { refetchItems(); }
+    if (addingItem) {
+      refetchItems();
+    }
   }, [addingItem]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateAssembly = trpc.masterAssemblies.update.useMutation({
-    onSuccess: () => { onRefresh(); setEditingName(false); },
-    onError: (e) => toast.error(e.message),
+    onSuccess: () => {
+      onRefresh();
+      setEditingName(false);
+    },
+    onError: e => toast.error(e.message),
   });
   const [addingInProgress, setAddingInProgress] = useState(false);
   const addItem = trpc.masterAssemblies.addItem.useMutation({
-    onSuccess: () => { refetchDetail(); setAddingInProgress(false); },
-    onError: (e) => { toast.error(e.message); setAddingInProgress(false); },
+    onSuccess: () => {
+      refetchDetail();
+      setAddingInProgress(false);
+    },
+    onError: e => {
+      toast.error(e.message);
+      setAddingInProgress(false);
+    },
   });
   const createMasterItem = trpc.masterItems.create.useMutation({
-    onError: (e) => { toast.error(`Failed to import item: ${e.message}`); setAddingInProgress(false); },
+    onError: e => {
+      toast.error(`Failed to import item: ${e.message}`);
+      setAddingInProgress(false);
+    },
   });
   const removeItem = trpc.masterAssemblies.removeItem.useMutation({
     onSuccess: () => refetchDetail(),
-    onError: (e) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
   const updateItem = trpc.masterAssemblies.updateItem.useMutation({
     onSuccess: () => refetchDetail(),
-    onError: (e) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
 
   const items = detail?.items ?? [];
@@ -124,19 +148,29 @@ function AssemblyCard({
   // Build a unified searchable list: master DB items first, then catalog items not already in DB
   const dbAsSearchable = useMemo((): (CatalogItem & SearchableItem)[] => {
     if (!allItems) return [];
-    return (allItems as MasterItem[]).map((m) => ({
-      id: `db-${m.id}`,
-      description: m.description,
-      category: m.category ?? "Custom",
-      unit: m.unit,
-      searchAliases: [],
-      _dbId: m.id,
-      _source: "db" as const,
-    } as unknown as CatalogItem & SearchableItem));
+    return (allItems as MasterItem[]).map(
+      m =>
+        ({
+          id: `db-${m.id}`,
+          description: m.description,
+          category: m.category ?? "Custom",
+          unit: m.unit,
+          searchAliases: [],
+          _dbId: m.id,
+          _source: "db" as const,
+        }) as unknown as CatalogItem & SearchableItem
+    );
   }, [allItems]);
 
   // Filtered results using smartSearch (trade slang + aliases)
-  const filteredItems = useMemo((): Array<{ id: string; description: string; category: string; unit: string; dbItem?: MasterItem; catalogItem?: CatalogItem }> => {
+  const filteredItems = useMemo((): Array<{
+    id: string;
+    description: string;
+    category: string;
+    unit: string;
+    dbItem?: MasterItem;
+    catalogItem?: CatalogItem;
+  }> => {
     const q = itemSearch.trim();
 
     // Helper: deduplicate DB items by description (keep the one with the lowest id = oldest)
@@ -152,35 +186,72 @@ function AssemblyCard({
     if (!q) {
       // No query: show DB items first (deduped), then first 20 catalog items
       const deduped = dedupeDb(allItems ?? []);
-      const dbResults = deduped.map((m: MasterItem) => ({ id: `db-${m.id}`, description: m.description, category: m.category ?? "Custom", unit: m.unit, dbItem: m }));
-      const catalogResults = CATALOG.slice(0, 20).map((c) => ({ id: c.id, description: c.description, category: c.category, unit: c.unit, catalogItem: c }));
-      const seen = new Set(dbResults.map((r) => r.description.toLowerCase()));
-      const filteredCat = catalogResults.filter((r) => !seen.has(r.description.toLowerCase()));
+      const dbResults = deduped.map((m: MasterItem) => ({
+        id: `db-${m.id}`,
+        description: m.description,
+        category: m.category ?? "Custom",
+        unit: m.unit,
+        dbItem: m,
+      }));
+      const catalogResults = CATALOG.slice(0, 20).map(c => ({
+        id: c.id,
+        description: c.description,
+        category: c.category,
+        unit: c.unit,
+        catalogItem: c,
+      }));
+      const seen = new Set(dbResults.map(r => r.description.toLowerCase()));
+      const filteredCat = catalogResults.filter(
+        r => !seen.has(r.description.toLowerCase())
+      );
       return [...dbResults, ...filteredCat].slice(0, 40);
     }
     // Search DB items (deduped)
     const deduped = dedupeDb(allItems ?? []);
-    const dedupedSearchable = deduped.map((m) => ({
-      id: `db-${m.id}`,
-      description: m.description,
-      category: m.category ?? "Custom",
-      unit: m.unit,
-      searchAliases: [],
-      _dbId: m.id,
-      _source: "db" as const,
-    } as unknown as CatalogItem & SearchableItem));
-    const dbResults = smartSearch<CatalogItem & SearchableItem>(dedupedSearchable, q, 20).map((r) => {
+    const dedupedSearchable = deduped.map(
+      m =>
+        ({
+          id: `db-${m.id}`,
+          description: m.description,
+          category: m.category ?? "Custom",
+          unit: m.unit,
+          searchAliases: [],
+          _dbId: m.id,
+          _source: "db" as const,
+        }) as unknown as CatalogItem & SearchableItem
+    );
+    const dbResults = smartSearch<CatalogItem & SearchableItem>(
+      dedupedSearchable,
+      q,
+      20
+    ).map(r => {
       const raw = r as unknown as { _dbId: number };
       const dbItem = deduped.find((m: MasterItem) => m.id === raw._dbId);
-      return { id: r.id, description: r.description, category: r.category, unit: r.unit, dbItem };
+      return {
+        id: r.id,
+        description: r.description,
+        category: r.category,
+        unit: r.unit,
+        dbItem,
+      };
     });
     // Search catalog
-    const catResults = smartSearch<CatalogItem & SearchableItem>(CATALOG as (CatalogItem & SearchableItem)[], q, 30).map((c) => ({
-      id: c.id, description: c.description, category: c.category, unit: c.unit, catalogItem: c as CatalogItem,
+    const catResults = smartSearch<CatalogItem & SearchableItem>(
+      CATALOG as (CatalogItem & SearchableItem)[],
+      q,
+      30
+    ).map(c => ({
+      id: c.id,
+      description: c.description,
+      category: c.category,
+      unit: c.unit,
+      catalogItem: c as CatalogItem,
     }));
     // Merge: DB first, then catalog, dedup by description
-    const seen = new Set(dbResults.map((r) => r.description.toLowerCase()));
-    const filteredCat = catResults.filter((r) => !seen.has(r.description.toLowerCase()));
+    const seen = new Set(dbResults.map(r => r.description.toLowerCase()));
+    const filteredCat = catResults.filter(
+      r => !seen.has(r.description.toLowerCase())
+    );
     return [...dbResults, ...filteredCat].slice(0, 50);
   }, [allItems, itemSearch]);
 
@@ -191,11 +262,18 @@ function AssemblyCard({
         className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors"
         onClick={() => setExpanded(v => !v)}
       >
-        {expanded ? <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
+        {expanded ? (
+          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+        )}
         <Layers className="w-4 h-4 text-primary shrink-0" />
 
         {editingName ? (
-          <div className="flex items-center gap-2 flex-1" onClick={e => e.stopPropagation()}>
+          <div
+            className="flex items-center gap-2 flex-1"
+            onClick={e => e.stopPropagation()}
+          >
             <Input
               value={nameVal}
               onChange={e => setNameVal(e.target.value)}
@@ -206,27 +284,53 @@ function AssemblyCard({
               size="icon"
               variant="ghost"
               className="h-6 w-6"
-              onClick={() => updateAssembly.mutate({ id: assembly.id, name: nameVal, description: descVal || null, phase: phaseVal || null })}
+              onClick={() =>
+                updateAssembly.mutate({
+                  id: assembly.id,
+                  name: nameVal,
+                  description: descVal || null,
+                  phase: phaseVal || null,
+                })
+              }
             >
               <Check className="w-3 h-3 text-green-500" />
             </Button>
-            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingName(false)}>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={() => setEditingName(false)}
+            >
               <X className="w-3 h-3" />
             </Button>
           </div>
         ) : (
           <div className="flex-1 min-w-0">
-            <span className="font-medium text-sm truncate">{assembly.name}</span>
+            <span className="font-medium text-sm truncate">
+              {assembly.name}
+            </span>
             {assembly.phase && (
-              <Badge variant="outline" className="ml-2 text-xs">{assembly.phase}</Badge>
+              <Badge variant="outline" className="ml-2 text-xs">
+                {assembly.phase}
+              </Badge>
             )}
           </div>
         )}
 
-        <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
-          <span className="text-xs text-muted-foreground">{items.length} item{items.length !== 1 ? "s" : ""}</span>
+        <div
+          className="flex items-center gap-2 shrink-0"
+          onClick={e => e.stopPropagation()}
+        >
+          <span className="text-xs text-muted-foreground">
+            {items.length} item{items.length !== 1 ? "s" : ""}
+          </span>
           {!editingName && (
-            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingName(true)}>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={() => setEditingName(true)}
+            >
               <Pencil className="w-3 h-3" />
             </Button>
           )}
@@ -252,7 +356,12 @@ function AssemblyCard({
               onChange={e => setDescVal(e.target.value)}
               onBlur={() => {
                 if (descVal !== (assembly.description ?? "")) {
-                  updateAssembly.mutate({ id: assembly.id, name: nameVal, description: descVal || null, phase: phaseVal || null });
+                  updateAssembly.mutate({
+                    id: assembly.id,
+                    name: nameVal,
+                    description: descVal || null,
+                    phase: phaseVal || null,
+                  });
                 }
               }}
               className="h-7 text-xs flex-1"
@@ -263,7 +372,12 @@ function AssemblyCard({
               onChange={e => setPhaseVal(e.target.value)}
               onBlur={() => {
                 if (phaseVal !== (assembly.phase ?? "")) {
-                  updateAssembly.mutate({ id: assembly.id, name: nameVal, description: descVal || null, phase: phaseVal || null });
+                  updateAssembly.mutate({
+                    id: assembly.id,
+                    name: nameVal,
+                    description: descVal || null,
+                    phase: phaseVal || null,
+                  });
                 }
               }}
               className="h-7 text-xs w-28"
@@ -276,11 +390,23 @@ function AssemblyCard({
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-muted/40 text-muted-foreground">
-                    <th className="text-left px-3 py-2 font-medium">Description</th>
-                    <th className="text-center px-2 py-2 font-medium w-16">Qty</th>
-                    <th className="text-center px-2 py-2 font-medium w-20">Unit</th>
-                    <th className="text-right px-2 py-2 font-medium w-24">Mat Cost</th>
-                    {showLabor && <th className="text-right px-2 py-2 font-medium w-20">Labor Hrs</th>}
+                    <th className="text-left px-3 py-2 font-medium">
+                      Description
+                    </th>
+                    <th className="text-center px-2 py-2 font-medium w-16">
+                      Qty
+                    </th>
+                    <th className="text-center px-2 py-2 font-medium w-20">
+                      Unit
+                    </th>
+                    <th className="text-right px-2 py-2 font-medium w-24">
+                      Mat Cost
+                    </th>
+                    {showLabor && (
+                      <th className="text-right px-2 py-2 font-medium w-20">
+                        Labor Hrs
+                      </th>
+                    )}
                     <th className="w-8" />
                   </tr>
                 </thead>
@@ -290,17 +416,30 @@ function AssemblyCard({
                       key={row.id}
                       row={row}
                       showLabor={showLabor}
-                      onQtyChange={(qty) => updateItem.mutate({ id: row.id, qty })}
+                      onQtyChange={qty =>
+                        updateItem.mutate({ id: row.id, qty })
+                      }
                       onRemove={() => removeItem.mutate({ id: row.id })}
                     />
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-border bg-muted/20 font-medium">
-                    <td className="px-3 py-2 text-xs text-muted-foreground" colSpan={2}>Totals</td>
+                    <td
+                      className="px-3 py-2 text-xs text-muted-foreground"
+                      colSpan={2}
+                    >
+                      Totals
+                    </td>
                     <td />
-                    <td className="text-right px-2 py-2 text-xs">${totalMat.toFixed(2)}</td>
-                    {showLabor && <td className="text-right px-2 py-2 text-xs">{totalLabor.toFixed(2)} hrs</td>}
+                    <td className="text-right px-2 py-2 text-xs">
+                      ${totalMat.toFixed(2)}
+                    </td>
+                    {showLabor && (
+                      <td className="text-right px-2 py-2 text-xs">
+                        {totalLabor.toFixed(2)} hrs
+                      </td>
+                    )}
                     <td />
                   </tr>
                 </tfoot>
@@ -320,12 +459,20 @@ function AssemblyCard({
                   className="h-7 text-xs flex-1"
                   autoFocus
                 />
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setAddingItem(false); setItemSearch(""); }}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    setAddingItem(false);
+                    setItemSearch("");
+                  }}
+                >
                   Cancel
                 </Button>
               </div>
               <div className="max-h-48 overflow-y-auto rounded-lg border border-border divide-y divide-border">
-                {filteredItems.map((result) => {
+                {filteredItems.map(result => {
                   const isDb = !!result.dbItem;
                   const dbItem = result.dbItem;
                   const catItem = result.catalogItem;
@@ -341,7 +488,11 @@ function AssemblyCard({
                         setAddingItem(false);
                         setItemSearch("");
                         if (isDb && dbItem) {
-                          addItem.mutate({ assemblyId: assembly.id, masterItemId: dbItem.id, qty: 1 });
+                          addItem.mutate({
+                            assemblyId: assembly.id,
+                            masterItemId: dbItem.id,
+                            qty: 1,
+                          });
                         } else if (catItem) {
                           // Auto-import catalog item into master_items DB, then add to assembly
                           try {
@@ -353,9 +504,19 @@ function AssemblyCard({
                               masterMaterialCost: 0,
                               masterLaborHours: 0,
                             });
-                            if (created && typeof created === "object" && "id" in created) {
-                              addItem.mutate({ assemblyId: assembly.id, masterItemId: (created as { id: number }).id, qty: 1 });
-                              toast.success(`"${catItem.description}" imported to your Materials DB and added.`);
+                            if (
+                              created &&
+                              typeof created === "object" &&
+                              "id" in created
+                            ) {
+                              addItem.mutate({
+                                assemblyId: assembly.id,
+                                masterItemId: (created as { id: number }).id,
+                                qty: 1,
+                              });
+                              toast.success(
+                                `"${catItem.description}" imported to your Materials DB and added.`
+                              );
                             } else {
                               setAddingInProgress(false);
                             }
@@ -369,15 +530,32 @@ function AssemblyCard({
                     >
                       <div className="text-xs font-medium truncate flex items-center gap-1.5">
                         {result.description}
-                        {!isDb && <span className="text-[9px] text-muted-foreground/60 bg-muted/30 px-1 rounded">catalog</span>}
+                        {!isDb && (
+                          <span className="text-[9px] text-muted-foreground/60 bg-muted/30 px-1 rounded">
+                            catalog
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-muted-foreground flex gap-3">
-                        {isDb && dbItem?.itemCode && <span>{dbItem.itemCode}</span>}
-                        {result.category && <span>{result.category}</span>}
-                        {isDb && dbItem && <span>${parseFloat(dbItem.masterMaterialCost).toFixed(2)}/{result.unit}</span>}
-                        {isDb && dbItem && showLabor && parseFloat(dbItem.masterLaborHours) > 0 && (
-                          <span>{parseFloat(dbItem.masterLaborHours).toFixed(3)} hrs</span>
+                        {isDb && dbItem?.itemCode && (
+                          <span>{dbItem.itemCode}</span>
                         )}
+                        {result.category && <span>{result.category}</span>}
+                        {isDb && dbItem && (
+                          <span>
+                            ${parseFloat(dbItem.masterMaterialCost).toFixed(2)}/
+                            {result.unit}
+                          </span>
+                        )}
+                        {isDb &&
+                          dbItem &&
+                          showLabor &&
+                          parseFloat(dbItem.masterLaborHours) > 0 && (
+                            <span>
+                              {parseFloat(dbItem.masterLaborHours).toFixed(3)}{" "}
+                              hrs
+                            </span>
+                          )}
                       </div>
                     </button>
                   );
@@ -425,8 +603,12 @@ function AssemblyItemEditRow({
   return (
     <tr className="border-t border-border hover:bg-muted/20 transition-colors">
       <td className="px-3 py-1.5">
-        <div className="text-xs font-medium truncate max-w-[200px]">{row.description ?? "—"}</div>
-        {row.itemCode && <div className="text-xs text-muted-foreground">{row.itemCode}</div>}
+        <div className="text-xs font-medium truncate max-w-[200px]">
+          {row.description ?? "—"}
+        </div>
+        {row.itemCode && (
+          <div className="text-xs text-muted-foreground">{row.itemCode}</div>
+        )}
       </td>
       <td className="px-2 py-1.5 text-center">
         <Input
@@ -442,11 +624,24 @@ function AssemblyItemEditRow({
           className="h-6 text-xs text-center w-14 px-1"
         />
       </td>
-      <td className="px-2 py-1.5 text-center text-xs text-muted-foreground">{row.unit ?? "EA"}</td>
-      <td className="px-2 py-1.5 text-right text-xs">${(matCost * qtyNum).toFixed(2)}</td>
-      {showLabor && <td className="px-2 py-1.5 text-right text-xs">{(laborHrs * qtyNum).toFixed(3)}</td>}
+      <td className="px-2 py-1.5 text-center text-xs text-muted-foreground">
+        {row.unit ?? "EA"}
+      </td>
+      <td className="px-2 py-1.5 text-right text-xs">
+        ${(matCost * qtyNum).toFixed(2)}
+      </td>
+      {showLabor && (
+        <td className="px-2 py-1.5 text-right text-xs">
+          {(laborHrs * qtyNum).toFixed(3)}
+        </td>
+      )}
       <td className="px-2 py-1.5 text-center">
-        <Button size="icon" variant="ghost" className="h-5 w-5 text-destructive hover:text-destructive" onClick={onRemove}>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-5 w-5 text-destructive hover:text-destructive"
+          onClick={onRemove}
+        >
           <X className="w-3 h-3" />
         </Button>
       </td>
@@ -464,7 +659,8 @@ export default function AssemblyBuilderPage() {
   const [newPhase, setNewPhase] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
-  const { data: assemblies = [], refetch } = trpc.masterAssemblies.list.useQuery();
+  const { data: assemblies = [], refetch } =
+    trpc.masterAssemblies.list.useQuery();
 
   const createAssembly = trpc.masterAssemblies.create.useMutation({
     onSuccess: () => {
@@ -474,18 +670,24 @@ export default function AssemblyBuilderPage() {
       setNewPhase("");
       toast.success("Assembly created");
     },
-    onError: (e) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
 
   const deleteAssembly = trpc.masterAssemblies.delete.useMutation({
-    onSuccess: () => { refetch(); setDeleteConfirm(null); toast.success("Assembly deleted"); },
-    onError: (e) => toast.error(e.message),
+    onSuccess: () => {
+      refetch();
+      setDeleteConfirm(null);
+      toast.success("Assembly deleted");
+    },
+    onError: e => toast.error(e.message),
   });
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return (assemblies as Assembly[]).filter(
-      a => a.name.toLowerCase().includes(q) || (a.phase ?? "").toLowerCase().includes(q)
+      a =>
+        a.name.toLowerCase().includes(q) ||
+        (a.phase ?? "").toLowerCase().includes(q)
     );
   }, [assemblies, search]);
 
@@ -498,7 +700,9 @@ export default function AssemblyBuilderPage() {
             <Package className="w-5 h-5 text-primary" />
             <div>
               <h1 className="text-lg font-semibold">Assembly Builder</h1>
-              <p className="text-xs text-muted-foreground">Create and manage reusable material assemblies</p>
+              <p className="text-xs text-muted-foreground">
+                Create and manage reusable material assemblies
+              </p>
             </div>
           </div>
           <Button
@@ -535,7 +739,13 @@ export default function AssemblyBuilderPage() {
                 onChange={e => setNewName(e.target.value)}
                 className="h-8 text-sm flex-1"
                 autoFocus
-                onKeyDown={e => { if (e.key === "Enter" && newName.trim()) createAssembly.mutate({ name: newName.trim(), phase: newPhase || undefined }); }}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && newName.trim())
+                    createAssembly.mutate({
+                      name: newName.trim(),
+                      phase: newPhase || undefined,
+                    });
+                }}
               />
               <Input
                 placeholder="Phase (optional)"
@@ -548,11 +758,24 @@ export default function AssemblyBuilderPage() {
               <Button
                 size="sm"
                 disabled={!newName.trim() || createAssembly.isPending}
-                onClick={() => createAssembly.mutate({ name: newName.trim(), phase: newPhase || undefined })}
+                onClick={() =>
+                  createAssembly.mutate({
+                    name: newName.trim(),
+                    phase: newPhase || undefined,
+                  })
+                }
               >
                 Create
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => { setCreating(false); setNewName(""); setNewPhase(""); }}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setCreating(false);
+                  setNewName("");
+                  setNewPhase("");
+                }}
+              >
                 Cancel
               </Button>
             </div>
@@ -579,7 +802,7 @@ export default function AssemblyBuilderPage() {
             key={a.id}
             assembly={a}
             showLabor={showLabor}
-            onDelete={(id) => setDeleteConfirm(id)}
+            onDelete={id => setDeleteConfirm(id)}
             onRefresh={refetch}
           />
         ))}
@@ -591,10 +814,17 @@ export default function AssemblyBuilderPage() {
           <div className="bg-card border border-border rounded-xl p-6 max-w-sm w-full mx-4 space-y-4">
             <p className="font-semibold">Delete Assembly?</p>
             <p className="text-sm text-muted-foreground">
-              This will permanently delete the assembly and all its items. This cannot be undone.
+              This will permanently delete the assembly and all its items. This
+              cannot be undone.
             </p>
             <div className="flex gap-2 justify-end">
-              <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteConfirm(null)}
+              >
+                Cancel
+              </Button>
               <Button
                 variant="destructive"
                 size="sm"

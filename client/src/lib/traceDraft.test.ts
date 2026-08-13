@@ -26,22 +26,37 @@ function installMemoryStorage() {
   vi.stubGlobal("window", {
     localStorage: {
       getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => { store.set(k, v); },
-      removeItem: (k: string) => { store.delete(k); },
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
     },
   });
   return store;
 }
 
-const POINTS = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }];
+const POINTS = [
+  { x: 0, y: 0 },
+  { x: 100, y: 0 },
+  { x: 100, y: 50 },
+];
 
 const draft = (over: Partial<Parameters<typeof saveDraft>[0]> = {}) => ({
-  sheetId: 1, bidId: 9, runId: null, name: "Feeder",
-  pathType: "conduit" as const, points: POINTS, ...over,
+  sheetId: 1,
+  bidId: 9,
+  runId: null,
+  name: "Feeder",
+  pathType: "conduit" as const,
+  points: POINTS,
+  ...over,
 });
 
 let store: Map<string, string>;
-beforeEach(() => { store = installMemoryStorage(); });
+beforeEach(() => {
+  store = installMemoryStorage();
+});
 
 describe("round-tripping a draft", () => {
   it("recovers exactly what was traced", () => {
@@ -88,18 +103,36 @@ describe("round-tripping a draft", () => {
 describe("refusing a draft that cannot be trusted", () => {
   it("refuses one with a non-finite coordinate", () => {
     // Offering this would let a corrupt vertex into a measured length.
-    store.set("helixbid:trace-draft:1", JSON.stringify({
-      sheetId: 1, bidId: 9, runId: null, name: "Bad", pathType: "conduit",
-      points: [{ x: 0, y: 0 }, { x: null, y: 10 }], savedAt: Date.now(),
-    }));
+    store.set(
+      "helixbid:trace-draft:1",
+      JSON.stringify({
+        sheetId: 1,
+        bidId: 9,
+        runId: null,
+        name: "Bad",
+        pathType: "conduit",
+        points: [
+          { x: 0, y: 0 },
+          { x: null, y: 10 },
+        ],
+        savedAt: Date.now(),
+      })
+    );
     expect(loadDraft(1)).toBeNull();
   });
 
   it("refuses one whose points are not points", () => {
-    store.set("helixbid:trace-draft:1", JSON.stringify({
-      sheetId: 1, bidId: 9, name: "Bad", pathType: "conduit",
-      points: ["nope", 3], savedAt: Date.now(),
-    }));
+    store.set(
+      "helixbid:trace-draft:1",
+      JSON.stringify({
+        sheetId: 1,
+        bidId: 9,
+        name: "Bad",
+        pathType: "conduit",
+        points: ["nope", 3],
+        savedAt: Date.now(),
+      })
+    );
     expect(loadDraft(1)).toBeNull();
   });
 
@@ -109,25 +142,37 @@ describe("refusing a draft that cannot be trusted", () => {
   });
 
   it("refuses a draft saved for a different sheet", () => {
-    store.set("helixbid:trace-draft:1", JSON.stringify({
-      ...draft({ sheetId: 2 }), savedAt: Date.now(),
-    }));
+    store.set(
+      "helixbid:trace-draft:1",
+      JSON.stringify({
+        ...draft({ sheetId: 2 }),
+        savedAt: Date.now(),
+      })
+    );
     expect(loadDraft(1)).toBeNull();
   });
 
   it("refuses a draft older than the retention window", () => {
     const now = Date.now();
-    store.set("helixbid:trace-draft:1", JSON.stringify({
-      ...draft(), savedAt: now - DRAFT_TTL_MS - 1,
-    }));
+    store.set(
+      "helixbid:trace-draft:1",
+      JSON.stringify({
+        ...draft(),
+        savedAt: now - DRAFT_TTL_MS - 1,
+      })
+    );
     expect(loadDraft(1, now)).toBeNull();
   });
 
   it("still offers one just inside the window", () => {
     const now = Date.now();
-    store.set("helixbid:trace-draft:1", JSON.stringify({
-      ...draft(), savedAt: now - DRAFT_TTL_MS + 1000,
-    }));
+    store.set(
+      "helixbid:trace-draft:1",
+      JSON.stringify({
+        ...draft(),
+        savedAt: now - DRAFT_TTL_MS + 1000,
+      })
+    );
     expect(loadDraft(1, now)).not.toBeNull();
   });
 
@@ -139,9 +184,15 @@ describe("refusing a draft that cannot be trusted", () => {
   it("does not throw when storage is unavailable", () => {
     vi.stubGlobal("window", {
       localStorage: {
-        getItem: () => { throw new Error("denied"); },
-        setItem: () => { throw new Error("quota"); },
-        removeItem: () => { throw new Error("denied"); },
+        getItem: () => {
+          throw new Error("denied");
+        },
+        setItem: () => {
+          throw new Error("quota");
+        },
+        removeItem: () => {
+          throw new Error("denied");
+        },
       },
     });
     // Tracing must not break because a backup failed — the server copy stands.
@@ -197,26 +248,42 @@ describe("the stamp queue", () => {
   it("refuses a queue with a corrupt coordinate", () => {
     // Half a batch restored silently is a quantity that is wrong with nothing
     // on screen to say so.
-    store.set("helixbid:stamp-queue:1", JSON.stringify({
-      sheetId: 1, bidId: 9, savedAt: Date.now(),
-      stamps: [{ assemblyId: 1, assemblyName: "A", x: 1, y: null }],
-    }));
+    store.set(
+      "helixbid:stamp-queue:1",
+      JSON.stringify({
+        sheetId: 1,
+        bidId: 9,
+        savedAt: Date.now(),
+        stamps: [{ assemblyId: 1, assemblyName: "A", x: 1, y: null }],
+      })
+    );
     expect(loadStampQueue(1)).toBeNull();
   });
 
   it("refuses a queue with a nameless stamp", () => {
-    store.set("helixbid:stamp-queue:1", JSON.stringify({
-      sheetId: 1, bidId: 9, savedAt: Date.now(),
-      stamps: [{ assemblyId: 1, assemblyName: "", x: 1, y: 2 }],
-    }));
+    store.set(
+      "helixbid:stamp-queue:1",
+      JSON.stringify({
+        sheetId: 1,
+        bidId: 9,
+        savedAt: Date.now(),
+        stamps: [{ assemblyId: 1, assemblyName: "", x: 1, y: 2 }],
+      })
+    );
     expect(loadStampQueue(1)).toBeNull();
   });
 
   it("refuses a stale queue", () => {
     const now = Date.now();
-    store.set("helixbid:stamp-queue:1", JSON.stringify({
-      sheetId: 1, bidId: 9, stamps: queued, savedAt: now - DRAFT_TTL_MS - 1,
-    }));
+    store.set(
+      "helixbid:stamp-queue:1",
+      JSON.stringify({
+        sheetId: 1,
+        bidId: 9,
+        stamps: queued,
+        savedAt: now - DRAFT_TTL_MS - 1,
+      })
+    );
     expect(loadStampQueue(1, now)).toBeNull();
   });
 

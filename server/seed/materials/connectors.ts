@@ -91,7 +91,8 @@ const lugs: BaselineMaterial[] = LUG_RANGES.map(({ range, slang }) => ({
     slang,
     "gauge compression terminal ring one hole two hole copper barrel mechanical"
   ),
-  description: "Sized by the conductor range it accepts, not by a single gauge.",
+  description:
+    "Sized by the conductor range it accepts, not by a single gauge.",
   defaultQty: 2,
 }));
 

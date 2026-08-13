@@ -26,7 +26,12 @@ import { selectOnFocus } from "@/lib/selectOnFocus";
 /** Longest edge of the stored thumbnail, in pixels. */
 const THUMBNAIL_MAX_EDGE = 96;
 
-export type CaptureRegion = { x: number; y: number; width: number; height: number };
+export type CaptureRegion = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 /**
  * Crop a region of the rendered page canvas to a small PNG data URL.
@@ -70,7 +75,11 @@ export function cropToThumbnail(
  * Follows the standing edit rules: the field selects on focus, Enter commits,
  * Escape abandons.
  */
-export function SymbolCaptureForm({ thumbnail, onSave, onCancel }: {
+export function SymbolCaptureForm({
+  thumbnail,
+  onSave,
+  onCancel,
+}: {
   thumbnail: string | null;
   onSave: (label: string) => void;
   onCancel: () => void;
@@ -78,7 +87,9 @@ export function SymbolCaptureForm({ thumbnail, onSave, onCancel }: {
   const [label, setLabel] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   const commit = () => {
     const trimmed = label.trim();
@@ -104,7 +115,9 @@ export function SymbolCaptureForm({ thumbnail, onSave, onCancel }: {
           />
         ) : (
           <div className="w-12 h-12 rounded bg-muted shrink-0 flex items-center justify-center">
-            <span className="text-[0.65rem] text-muted-foreground">no image</span>
+            <span className="text-[0.65rem] text-muted-foreground">
+              no image
+            </span>
           </div>
         )}
         <Input
@@ -113,8 +126,15 @@ export function SymbolCaptureForm({ thumbnail, onSave, onCancel }: {
           onChange={e => setLabel(e.target.value)}
           onFocus={selectOnFocus}
           onKeyDown={e => {
-            if (e.key === "Enter") { e.preventDefault(); commit(); }
-            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              onCancel();
+            }
           }}
           placeholder="Duplex recep"
           className="h-8 text-sm"
@@ -123,10 +143,20 @@ export function SymbolCaptureForm({ thumbnail, onSave, onCancel }: {
       </div>
 
       <div className="flex items-center gap-1.5 mt-2.5">
-        <Button size="sm" className="h-7 gap-1.5 text-xs flex-1" onClick={commit} disabled={!label.trim()}>
+        <Button
+          size="sm"
+          className="h-7 gap-1.5 text-xs flex-1"
+          onClick={commit}
+          disabled={!label.trim()}
+        >
           <Check className="w-3 h-3" /> Save symbol
         </Button>
-        <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={onCancel}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 gap-1.5 text-xs"
+          onClick={onCancel}
+        >
           <X className="w-3 h-3" /> Cancel
         </Button>
       </div>
@@ -141,7 +171,13 @@ export function SymbolCaptureForm({ thumbnail, onSave, onCancel }: {
  * mistaken for a stamp click — the two tools would otherwise both be listening
  * for a pointer down on the same pixels.
  */
-export function SymbolCaptureLayer({ width, height, renderScale, onRegion, onCancel }: {
+export function SymbolCaptureLayer({
+  width,
+  height,
+  renderScale,
+  onRegion,
+  onCancel,
+}: {
   width: number;
   height: number;
   renderScale: number;
@@ -154,7 +190,11 @@ export function SymbolCaptureLayer({ width, height, renderScale, onRegion, onCan
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancel(); }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onCancel();
+      }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -172,12 +212,15 @@ export function SymbolCaptureLayer({ width, height, renderScale, onRegion, onCan
     };
   };
 
-  const box = start && current ? {
-    x: Math.min(start.x, current.x) * renderScale,
-    y: Math.min(start.y, current.y) * renderScale,
-    w: Math.abs(current.x - start.x) * renderScale,
-    h: Math.abs(current.y - start.y) * renderScale,
-  } : null;
+  const box =
+    start && current
+      ? {
+          x: Math.min(start.x, current.x) * renderScale,
+          y: Math.min(start.y, current.y) * renderScale,
+          w: Math.abs(current.x - start.x) * renderScale,
+          h: Math.abs(current.y - start.y) * renderScale,
+        }
+      : null;
 
   return (
     <svg
@@ -189,28 +232,55 @@ export function SymbolCaptureLayer({ width, height, renderScale, onRegion, onCan
       onPointerDown={e => {
         if (e.button !== 0) return;
         const at = toPage(e);
-        if (at) { setStart(at); setCurrent(at); }
+        if (at) {
+          setStart(at);
+          setCurrent(at);
+        }
       }}
-      onPointerMove={e => { if (start) setCurrent(toPage(e)); }}
+      onPointerMove={e => {
+        if (start) setCurrent(toPage(e));
+      }}
       onPointerUp={() => {
         if (!start || !current) return;
         onRegion({
-          x: start.x, y: start.y,
-          width: current.x - start.x, height: current.y - start.y,
+          x: start.x,
+          y: start.y,
+          width: current.x - start.x,
+          height: current.y - start.y,
         });
         setStart(null);
         setCurrent(null);
       }}
     >
       {/* Dim everything but the box being drawn, so the crop is obvious. */}
-      <rect x={0} y={0} width={width} height={height} fill="#000" fillOpacity={0.35} />
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        fill="#000"
+        fillOpacity={0.35}
+      />
       {box && box.w > 0 && box.h > 0 && (
         <>
-          <rect x={box.x} y={box.y} width={box.w} height={box.h} fill="#000" fillOpacity={0} />
           <rect
-            x={box.x} y={box.y} width={box.w} height={box.h}
-            fill="#F5C518" fillOpacity={0.12}
-            stroke="#F5C518" strokeWidth={2} strokeDasharray="6 4"
+            x={box.x}
+            y={box.y}
+            width={box.w}
+            height={box.h}
+            fill="#000"
+            fillOpacity={0}
+          />
+          <rect
+            x={box.x}
+            y={box.y}
+            width={box.w}
+            height={box.h}
+            fill="#F5C518"
+            fillOpacity={0.12}
+            stroke="#F5C518"
+            strokeWidth={2}
+            strokeDasharray="6 4"
           />
         </>
       )}

@@ -43,17 +43,28 @@ const caller = () => callerFor(USER);
 
 async function scenario() {
   const bid = (await caller().bids.create({
-    name: `Stamp test ${Date.now()}${Math.random()}`, trades: ["electrical"],
+    name: `Stamp test ${Date.now()}${Math.random()}`,
+    trades: ["electrical"],
   }))!;
   const database = await getDb();
   const [pdf] = await database!.insert(bidPdfs).values({
-    bidId: bid.id, userId: USER, filename: "E1.pdf",
-    storageKey: `test/${bid.id}/e1.pdf`, byteSize: 1024, pageCount: 1, sortOrder: 0,
+    bidId: bid.id,
+    userId: USER,
+    filename: "E1.pdf",
+    storageKey: `test/${bid.id}/e1.pdf`,
+    byteSize: 1024,
+    pageCount: 1,
+    sortOrder: 0,
   });
   const { sheets } = await caller().bidPdfs.ensureSheets({
-    bidPdfId: pdf.insertId, pageCount: 1, outline: [],
+    bidPdfId: pdf.insertId,
+    pageCount: 1,
+    outline: [],
   });
-  await caller().bidPdfs.setSheetScale({ id: sheets[0].id, scaleText: `1/4" = 1'-0"` });
+  await caller().bidPdfs.setSheetScale({
+    id: sheets[0].id,
+    scaleText: `1/4" = 1'-0"`,
+  });
   return { bidId: bid.id, sheetId: sheets[0].id };
 }
 
@@ -62,10 +73,16 @@ beforeAll(async () => {
   const database = await getDb();
   if (!database) return;
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await database.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await database
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await database.insert(users).values({
-        id, openId: `test-stamps-${id}`, name: `Stamp test user ${id}`,
+        id,
+        openId: `test-stamps-${id}`,
+        name: `Stamp test user ${id}`,
       });
     }
   }
@@ -78,13 +95,20 @@ beforeEach(async () => {
   const database = await getDb();
   if (!database) return;
   await database.delete(bids).where(inArray(bids.userId, [USER, OTHER_USER]));
-  await database.delete(symbolLinks).where(inArray(symbolLinks.userId, [USER, OTHER_USER]));
+  await database
+    .delete(symbolLinks)
+    .where(inArray(symbolLinks.userId, [USER, OTHER_USER]));
 });
 
 // ── Pure grouping ────────────────────────────────────────────────────────────
 
-const stamp = (id: number, assemblyId: number | null, name: string, x = 0, y = 0) =>
-  ({ id, sheetId: 1, assemblyId, assemblyName: name, x, y });
+const stamp = (
+  id: number,
+  assemblyId: number | null,
+  name: string,
+  x = 0,
+  y = 0
+) => ({ id, sheetId: 1, assemblyId, assemblyName: name, x, y });
 
 describe("counting stamps", () => {
   it("gathers repeated drops of one assembly into a quantity", () => {
@@ -115,7 +139,10 @@ describe("counting stamps", () => {
       stamp(1, 10, "Recep", 100, 200),
       stamp(2, 10, "Recep", 300, 400),
     ]);
-    expect(grouped[0].stamps.map(s => [s.x, s.y])).toEqual([[100, 200], [300, 400]]);
+    expect(grouped[0].stamps.map(s => [s.x, s.y])).toEqual([
+      [100, 200],
+      [300, 400],
+    ]);
   });
 
   it("orders by first appearance, so the list does not reshuffle mid-click", () => {
@@ -157,42 +184,81 @@ describe("counting stamps", () => {
 
 describe("runs in the counted list", () => {
   it("points at the run's first vertex, so a click can jump there", () => {
-    const entries = runEntries([{
-      id: 5, sheetId: 1, name: "Feeder", pathType: "conduit",
-      points: [{ x: 50, y: 60 }, { x: 500, y: 60 }], runFeet: 100,
-    }]);
+    const entries = runEntries([
+      {
+        id: 5,
+        sheetId: 1,
+        name: "Feeder",
+        pathType: "conduit",
+        points: [
+          { x: 50, y: 60 },
+          { x: 500, y: 60 },
+        ],
+        runFeet: 100,
+      },
+    ]);
     expect(entries[0].at).toEqual({ x: 50, y: 60 });
     expect(entries[0].feet).toBe(100);
   });
 
   it("carries a null footage through rather than showing zero", () => {
-    const entries = runEntries([{
-      id: 5, sheetId: 1, name: "Unscaled", pathType: "conduit",
-      points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], runFeet: null,
-    }]);
+    const entries = runEntries([
+      {
+        id: 5,
+        sheetId: 1,
+        name: "Unscaled",
+        pathType: "conduit",
+        points: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        runFeet: null,
+      },
+    ]);
     expect(entries[0].feet).toBeNull();
   });
 
   it("has no location for a run with no points", () => {
-    const entries = runEntries([{
-      id: 5, sheetId: 1, name: "Empty", pathType: "cable", points: [], runFeet: null,
-    }]);
+    const entries = runEntries([
+      {
+        id: 5,
+        sheetId: 1,
+        name: "Empty",
+        pathType: "cable",
+        points: [],
+        runFeet: null,
+      },
+    ]);
     expect(entries[0].at).toBeNull();
   });
 });
 
 describe("boxing a region", () => {
-  const stamps = [stamp(1, 1, "A", 10, 10), stamp(2, 1, "A", 100, 100), stamp(3, 1, "A", 250, 250)];
+  const stamps = [
+    stamp(1, 1, "A", 10, 10),
+    stamp(2, 1, "A", 100, 100),
+    stamp(3, 1, "A", 250, 250),
+  ];
 
   it("finds what is inside", () => {
-    const found = stampsInRegion(stamps, { x: 0, y: 0, width: 150, height: 150 });
+    const found = stampsInRegion(stamps, {
+      x: 0,
+      y: 0,
+      width: 150,
+      height: 150,
+    });
     expect(found.map(s => s.id)).toEqual([1, 2]);
   });
 
   it("works when the box is dragged up and to the left", () => {
     // A negative width is what dragging backwards produces. Refusing it would
     // mean the tool only worked one way round.
-    const found = stampsInRegion(stamps, { x: 150, y: 150, width: -150, height: -150 });
+    const found = stampsInRegion(stamps, {
+      x: 150,
+      y: 150,
+      width: -150,
+      height: -150,
+    });
     expect(found.map(s => s.id)).toEqual([1, 2]);
   });
 
@@ -218,8 +284,15 @@ describe.skipIf(!hasDb)("dropping stamps", () => {
   it("records one row per click", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Duplex receptacle",
-      at: [{ x: 100, y: 100 }, { x: 200, y: 100 }, { x: 300, y: 100 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Duplex receptacle",
+      at: [
+        { x: 100, y: 100 },
+        { x: 200, y: 100 },
+        { x: 300, y: 100 },
+      ],
     });
 
     const stamps = await caller().takeoffStamps.listForSheet({ sheetId });
@@ -228,9 +301,14 @@ describe.skipIf(!hasDb)("dropping stamps", () => {
 
   it("increments the quantity without any quantity being typed", async () => {
     const { bidId, sheetId } = await scenario();
-    const drop = (x: number) => caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep", at: [{ x, y: 50 }],
-    });
+    const drop = (x: number) =>
+      caller().takeoffStamps.drop({
+        bidId,
+        sheetId,
+        assemblyId: null,
+        assemblyName: "Recep",
+        at: [{ x, y: 50 }],
+      });
 
     await drop(10);
     let items = await caller().takeoffStamps.countedItems({ sheetId });
@@ -247,7 +325,10 @@ describe.skipIf(!hasDb)("dropping stamps", () => {
     // assembly, so nothing is re-selected between them.
     const { bidId, sheetId } = await scenario();
     const result = await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep",
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
       at: Array.from({ length: 12 }, (_, i) => ({ x: i * 20, y: 40 })),
     });
     expect(result.dropped).toBe(12);
@@ -262,8 +343,15 @@ describe.skipIf(!hasDb)("dropping stamps", () => {
     // count would drift here and nothing on screen would say which was right.
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep",
-      at: [{ x: 10, y: 10 }, { x: 20, y: 20 }, { x: 30, y: 30 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
+      at: [
+        { x: 10, y: 10 },
+        { x: 20, y: 20 },
+        { x: 30, y: 30 },
+      ],
     });
 
     const stamps = await caller().takeoffStamps.listForSheet({ sheetId });
@@ -271,13 +359,18 @@ describe.skipIf(!hasDb)("dropping stamps", () => {
 
     const items = await caller().takeoffStamps.countedItems({ sheetId });
     expect((items[0] as { count: number }).count).toBe(2);
-    expect(await caller().takeoffStamps.listForSheet({ sheetId })).toHaveLength(2);
+    expect(await caller().takeoffStamps.listForSheet({ sheetId })).toHaveLength(
+      2
+    );
   });
 
   it("keeps each stamp's location, so the list can jump to it", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep",
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
       at: [{ x: 123.5, y: 456.25 }],
     });
     const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
@@ -289,20 +382,31 @@ describe.skipIf(!hasDb)("dropping stamps", () => {
     // Blocking counting on a missing scale would stop work that does not
     // depend on one. Only lengths need the gate.
     const bid = (await caller().bids.create({
-      name: `Unscaled ${Math.random()}`, trades: ["electrical"],
+      name: `Unscaled ${Math.random()}`,
+      trades: ["electrical"],
     }))!;
     const database = await getDb();
     const [pdf] = await database!.insert(bidPdfs).values({
-      bidId: bid.id, userId: USER, filename: "E1.pdf",
-      storageKey: `t/${bid.id}`, byteSize: 1, pageCount: 1, sortOrder: 0,
+      bidId: bid.id,
+      userId: USER,
+      filename: "E1.pdf",
+      storageKey: `t/${bid.id}`,
+      byteSize: 1,
+      pageCount: 1,
+      sortOrder: 0,
     });
     const { sheets } = await caller().bidPdfs.ensureSheets({
-      bidPdfId: pdf.insertId, pageCount: 1, outline: [],
+      bidPdfId: pdf.insertId,
+      pageCount: 1,
+      outline: [],
     });
 
     const result = await caller().takeoffStamps.drop({
-      bidId: bid.id, sheetId: sheets[0].id, assemblyId: null,
-      assemblyName: "Recep", at: [{ x: 10, y: 10 }],
+      bidId: bid.id,
+      sheetId: sheets[0].id,
+      assemblyId: null,
+      assemblyName: "Recep",
+      at: [{ x: 10, y: 10 }],
     });
     expect(result.dropped).toBe(1);
   });
@@ -311,7 +415,11 @@ describe.skipIf(!hasDb)("dropping stamps", () => {
     const { bidId, sheetId } = await scenario();
     await expect(
       callerFor(OTHER_USER).takeoffStamps.drop({
-        bidId, sheetId, assemblyId: null, assemblyName: "Recep", at: [{ x: 1, y: 1 }],
+        bidId,
+        sheetId,
+        assemblyId: null,
+        assemblyName: "Recep",
+        at: [{ x: 1, y: 1 }],
       })
     ).rejects.toThrow(/not found/i);
   });
@@ -321,12 +429,24 @@ describe.skipIf(!hasDb)("the live counted-items list", () => {
   it("shows stamps and traced runs together", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep",
-      at: [{ x: 10, y: 10 }, { x: 20, y: 20 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
+      at: [
+        { x: 10, y: 10 },
+        { x: 20, y: 20 },
+      ],
     });
     const run = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType: "conduit",
-      points: [{ x: 0, y: 0 }, { x: 25 * 72, y: 0 }],
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType: "conduit",
+      points: [
+        { x: 0, y: 0 },
+        { x: 25 * 72, y: 0 },
+      ],
     });
     await caller().takeoffRuns.commit({ id: run.id });
 
@@ -338,11 +458,21 @@ describe.skipIf(!hasDb)("the live counted-items list", () => {
   it("gives every entry a location to jump to", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep", at: [{ x: 77, y: 88 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
+      at: [{ x: 77, y: 88 }],
     });
     const run = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType: "cable",
-      points: [{ x: 5, y: 6 }, { x: 500, y: 6 }],
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType: "cable",
+      points: [
+        { x: 5, y: 6 },
+        { x: 500, y: 6 },
+      ],
     });
     await caller().takeoffRuns.commit({ id: run.id });
 
@@ -356,10 +486,20 @@ describe.skipIf(!hasDb)("the live counted-items list", () => {
   it("leaves suggestions out — they are not counted work", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffRuns.save({
-      bidId, sheetId, name: "AI idea", pathType: "conduit",
-      points: [{ x: 0, y: 0 }, { x: 100, y: 0 }], status: "committed", isSuggestion: true,
+      bidId,
+      sheetId,
+      name: "AI idea",
+      pathType: "conduit",
+      points: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+      status: "committed",
+      isSuggestion: true,
     });
-    expect(await caller().takeoffStamps.countedItems({ sheetId })).toHaveLength(0);
+    expect(await caller().takeoffStamps.countedItems({ sheetId })).toHaveLength(
+      0
+    );
   });
 
   it("is empty on an untouched sheet", async () => {
@@ -379,7 +519,8 @@ describe.skipIf(!hasDb)("linking a legend symbol to an assembly", () => {
   it("captures an unlinked symbol on first sight", async () => {
     const { sheetId } = await scenario();
     const captured = await caller().takeoffStamps.captureSymbol({
-      label: "Duplex recep", capturedFromSheetId: sheetId,
+      label: "Duplex recep",
+      capturedFromSheetId: sheetId,
     });
     expect(captured.alreadyKnown).toBe(false);
     expect(captured.isLinked).toBe(false);
@@ -387,8 +528,13 @@ describe.skipIf(!hasDb)("linking a legend symbol to an assembly", () => {
 
   it("answers the one-time prompt and stays linked", async () => {
     const assembly = await anAssembly();
-    const captured = await caller().takeoffStamps.captureSymbol({ label: "Duplex recep" });
-    await caller().takeoffStamps.linkSymbol({ id: captured.id, assemblyId: assembly.id });
+    const captured = await caller().takeoffStamps.captureSymbol({
+      label: "Duplex recep",
+    });
+    await caller().takeoffStamps.linkSymbol({
+      id: captured.id,
+      assemblyId: assembly.id,
+    });
 
     const symbols = await caller().takeoffStamps.symbols();
     expect(symbols[0].isLinked).toBe(true);
@@ -398,10 +544,17 @@ describe.skipIf(!hasDb)("linking a legend symbol to an assembly", () => {
   it("REUSES the link when the same symbol is captured on a later sheet", async () => {
     // The feature: the second job costs nothing to interpret.
     const assembly = await anAssembly();
-    const first = await caller().takeoffStamps.captureSymbol({ label: "Duplex recep" });
-    await caller().takeoffStamps.linkSymbol({ id: first.id, assemblyId: assembly.id });
+    const first = await caller().takeoffStamps.captureSymbol({
+      label: "Duplex recep",
+    });
+    await caller().takeoffStamps.linkSymbol({
+      id: first.id,
+      assemblyId: assembly.id,
+    });
 
-    const second = await caller().takeoffStamps.captureSymbol({ label: "Duplex recep" });
+    const second = await caller().takeoffStamps.captureSymbol({
+      label: "Duplex recep",
+    });
     expect(second.alreadyKnown).toBe(true);
     expect(second.id).toBe(first.id);
     expect(second.isLinked).toBe(true);
@@ -411,20 +564,32 @@ describe.skipIf(!hasDb)("linking a legend symbol to an assembly", () => {
   it("reuses across a completely different bid", async () => {
     const assembly = await anAssembly();
     const first = await caller().takeoffStamps.captureSymbol({ label: "GFCI" });
-    await caller().takeoffStamps.linkSymbol({ id: first.id, assemblyId: assembly.id });
+    await caller().takeoffStamps.linkSymbol({
+      id: first.id,
+      assemblyId: assembly.id,
+    });
 
     // A new job entirely — links are keyed to the user, not the bid.
     await scenario();
-    const onNewJob = await caller().takeoffStamps.captureSymbol({ label: "GFCI" });
+    const onNewJob = await caller().takeoffStamps.captureSymbol({
+      label: "GFCI",
+    });
     expect(onNewJob.isLinked).toBe(true);
   });
 
   it("matches regardless of case and spacing", async () => {
     const assembly = await anAssembly();
-    const first = await caller().takeoffStamps.captureSymbol({ label: "Duplex Recep" });
-    await caller().takeoffStamps.linkSymbol({ id: first.id, assemblyId: assembly.id });
+    const first = await caller().takeoffStamps.captureSymbol({
+      label: "Duplex Recep",
+    });
+    await caller().takeoffStamps.linkSymbol({
+      id: first.id,
+      assemblyId: assembly.id,
+    });
 
-    const again = await caller().takeoffStamps.captureSymbol({ label: "  duplex   recep " });
+    const again = await caller().takeoffStamps.captureSymbol({
+      label: "  duplex   recep ",
+    });
     expect(again.id).toBe(first.id);
     expect(again.isLinked).toBe(true);
   });
@@ -437,21 +602,30 @@ describe.skipIf(!hasDb)("linking a legend symbol to an assembly", () => {
 
   it("never overwrites a link the user already made", async () => {
     const list = await caller().assemblies.list();
-    const first = await caller().takeoffStamps.captureSymbol({ label: "Recep" });
-    await caller().takeoffStamps.linkSymbol({ id: first.id, assemblyId: list[0].id });
+    const first = await caller().takeoffStamps.captureSymbol({
+      label: "Recep",
+    });
+    await caller().takeoffStamps.linkSymbol({
+      id: first.id,
+      assemblyId: list[0].id,
+    });
 
     // A later capture proposing a different assembly must not silently retarget
     // a symbol the user has already answered for.
     const recapture = await caller().takeoffStamps.captureSymbol({
-      label: "Recep", assemblyId: list[1].id,
+      label: "Recep",
+      assemblyId: list[1].id,
     });
     expect(recapture.assemblyId).toBe(list[0].id);
   });
 
   it("fills in a thumbnail a later capture supplies", async () => {
-    const first = await caller().takeoffStamps.captureSymbol({ label: "Recep" });
+    const first = await caller().takeoffStamps.captureSymbol({
+      label: "Recep",
+    });
     await caller().takeoffStamps.captureSymbol({
-      label: "Recep", thumbnail: "data:image/png;base64,AAAA",
+      label: "Recep",
+      thumbnail: "data:image/png;base64,AAAA",
     });
     const symbols = await caller().takeoffStamps.symbols();
     expect(symbols[0].thumbnail).toBe("data:image/png;base64,AAAA");
@@ -460,14 +634,22 @@ describe.skipIf(!hasDb)("linking a legend symbol to an assembly", () => {
 
   it("can be unlinked and re-linked", async () => {
     const assembly = await anAssembly();
-    const captured = await caller().takeoffStamps.captureSymbol({ label: "Recep" });
-    await caller().takeoffStamps.linkSymbol({ id: captured.id, assemblyId: assembly.id });
+    const captured = await caller().takeoffStamps.captureSymbol({
+      label: "Recep",
+    });
+    await caller().takeoffStamps.linkSymbol({
+      id: captured.id,
+      assemblyId: assembly.id,
+    });
     await caller().takeoffStamps.unlinkSymbol({ id: captured.id });
 
     let symbols = await caller().takeoffStamps.symbols();
     expect(symbols[0].isLinked).toBe(false);
 
-    await caller().takeoffStamps.linkSymbol({ id: captured.id, assemblyId: assembly.id });
+    await caller().takeoffStamps.linkSymbol({
+      id: captured.id,
+      assemblyId: assembly.id,
+    });
     symbols = await caller().takeoffStamps.symbols();
     expect(symbols[0].isLinked).toBe(true);
   });
@@ -475,7 +657,8 @@ describe.skipIf(!hasDb)("linking a legend symbol to an assembly", () => {
   it("refuses a thumbnail that is not an image data URL", async () => {
     await expect(
       caller().takeoffStamps.captureSymbol({
-        label: "Bad", thumbnail: "https://example.com/huge.png",
+        label: "Bad",
+        thumbnail: "https://example.com/huge.png",
       })
     ).rejects.toThrow();
   });
@@ -486,11 +669,14 @@ describe.skipIf(!hasDb)("linking a legend symbol to an assembly", () => {
   });
 
   it("refuses to link another user's symbol", async () => {
-    const captured = await caller().takeoffStamps.captureSymbol({ label: "Mine" });
+    const captured = await caller().takeoffStamps.captureSymbol({
+      label: "Mine",
+    });
     const assembly = await anAssembly();
     await expect(
       callerFor(OTHER_USER).takeoffStamps.linkSymbol({
-        id: captured.id, assemblyId: assembly.id,
+        id: captured.id,
+        assemblyId: assembly.id,
       })
     ).rejects.toThrow(/not found/i);
   });
@@ -507,7 +693,10 @@ describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
     const assembly = (await caller().assemblies.list())[0];
 
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: assembly.id, assemblyName: assembly.name,
+      bidId,
+      sheetId,
+      assemblyId: assembly.id,
+      assemblyName: assembly.name,
       at: [{ x: 10, y: 10 }],
     });
 
@@ -518,7 +707,11 @@ describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
   it("starts untagged, which is a real state rather than a default", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep", at: [{ x: 1, y: 1 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
+      at: [{ x: 1, y: 1 }],
     });
     const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
     expect(placed.location).toBeNull();
@@ -527,8 +720,12 @@ describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
   it("accepts a Location at drop time", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep",
-      location: "Wall", at: [{ x: 1, y: 1 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
+      location: "Wall",
+      at: [{ x: 1, y: 1 }],
     });
     const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
     expect(placed.location).toBe("Wall");
@@ -537,10 +734,17 @@ describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
   it("tags one stamp after the fact", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep", at: [{ x: 1, y: 1 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
+      at: [{ x: 1, y: 1 }],
     });
     const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
-    await caller().takeoffStamps.setLocation({ id: placed.id, location: "Ceiling/Overhead" });
+    await caller().takeoffStamps.setLocation({
+      id: placed.id,
+      location: "Ceiling/Overhead",
+    });
 
     const [after] = await caller().takeoffStamps.listForSheet({ sheetId });
     expect(after.location).toBe("Ceiling/Overhead");
@@ -551,15 +755,28 @@ describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
     // the ceiling — rather than tagging twenty marks one at a time.
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Ceiling light",
-      at: [{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Ceiling light",
+      at: [
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+        { x: 3, y: 3 },
+      ],
     });
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Wall recep", at: [{ x: 9, y: 9 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Wall recep",
+      at: [{ x: 9, y: 9 }],
     });
 
     await caller().takeoffStamps.setLocationForAssembly({
-      sheetId, assemblyName: "Ceiling light", location: "Ceiling/Overhead",
+      sheetId,
+      assemblyName: "Ceiling light",
+      location: "Ceiling/Overhead",
     });
 
     const all = await caller().takeoffStamps.listForSheet({ sheetId });
@@ -571,8 +788,12 @@ describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
   it("can clear a Location back to untagged", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep",
-      location: "Wall", at: [{ x: 1, y: 1 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
+      location: "Wall",
+      at: [{ x: 1, y: 1 }],
     });
     const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
     await caller().takeoffStamps.setLocation({ id: placed.id, location: null });
@@ -585,8 +806,12 @@ describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
     const { bidId, sheetId } = await scenario();
     await expect(
       caller().takeoffStamps.drop({
-        bidId, sheetId, assemblyId: null, assemblyName: "Recep",
-        location: "Attic" as never, at: [{ x: 1, y: 1 }],
+        bidId,
+        sheetId,
+        assemblyId: null,
+        assemblyName: "Recep",
+        location: "Attic" as never,
+        at: [{ x: 1, y: 1 }],
       })
     ).rejects.toThrow();
   });
@@ -594,11 +819,20 @@ describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
   it("tags a traced run's Location without touching its geometry", async () => {
     const { bidId, sheetId } = await scenario();
     const run = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType: "conduit",
-      points: [{ x: 0, y: 0 }, { x: 25 * 72, y: 0 }],
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType: "conduit",
+      points: [
+        { x: 0, y: 0 },
+        { x: 25 * 72, y: 0 },
+      ],
     });
     await caller().takeoffRuns.commit({ id: run.id });
-    await caller().takeoffRuns.setLocation({ id: run.id, location: "Underground" });
+    await caller().takeoffRuns.setLocation({
+      id: run.id,
+      location: "Underground",
+    });
 
     const [saved] = await caller().takeoffRuns.listForSheet({ sheetId });
     expect(saved.location).toBe("Underground");
@@ -609,10 +843,17 @@ describe.skipIf(!hasDb)("tagging where a placed item sits", () => {
   it("refuses another user's stamp", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffStamps.drop({
-      bidId, sheetId, assemblyId: null, assemblyName: "Recep", at: [{ x: 1, y: 1 }],
+      bidId,
+      sheetId,
+      assemblyId: null,
+      assemblyName: "Recep",
+      at: [{ x: 1, y: 1 }],
     });
     const [placed] = await caller().takeoffStamps.listForSheet({ sheetId });
-    await callerFor(OTHER_USER).takeoffStamps.setLocation({ id: placed.id, location: "Wall" });
+    await callerFor(OTHER_USER).takeoffStamps.setLocation({
+      id: placed.id,
+      location: "Wall",
+    });
 
     // Scoped by userId in the query, so nothing changed.
     const [after] = await caller().takeoffStamps.listForSheet({ sheetId });

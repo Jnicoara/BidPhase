@@ -29,7 +29,8 @@ export type BaselineKit = {
 export const BASELINE_KITS: BaselineKit[] = [
   {
     name: "Bedroom package",
-    description: "Typical bedroom rough-in — receptacles, switching and a ceiling light.",
+    description:
+      "Typical bedroom rough-in — receptacles, switching and a ceiling light.",
     items: [
       { assembly: "Duplex receptacle standard", qty: 4 },
       { assembly: "Single-pole switch", qty: 1 },
@@ -38,7 +39,8 @@ export const BASELINE_KITS: BaselineKit[] = [
   },
   {
     name: "Bathroom package",
-    description: "GFCI-protected bathroom — vanity receptacle, switching and a fixture.",
+    description:
+      "GFCI-protected bathroom — vanity receptacle, switching and a fixture.",
     items: [
       { assembly: "GFCI receptacle", qty: 1 },
       { assembly: "Single-pole switch", qty: 2 },

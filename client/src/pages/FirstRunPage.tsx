@@ -50,7 +50,12 @@ export default function FirstRunPage() {
   const save = async (id: number) => {
     const raw = drafts[id];
     const value = Number(raw);
-    if (raw === undefined || raw.trim() === "" || Number.isNaN(value) || value < 0) {
+    if (
+      raw === undefined ||
+      raw.trim() === "" ||
+      Number.isNaN(value) ||
+      value < 0
+    ) {
       toast.error("Enter an hourly rate.");
       return;
     }
@@ -93,7 +98,9 @@ export default function FirstRunPage() {
         </p>
 
         <div className="rounded-xl border border-border bg-card p-5">
-          <h2 className="text-base font-semibold">What does an hour cost you?</h2>
+          <h2 className="text-base font-semibold">
+            What does an hour cost you?
+          </h2>
           <p className="text-sm text-muted-foreground mt-1">
             This is the number every bid multiplies by. Set the roles you
             actually use — one is enough to start, and you can change them any
@@ -121,7 +128,10 @@ export default function FirstRunPage() {
                           <Input
                             value={draft ?? ""}
                             onChange={e =>
-                              setDrafts(d => ({ ...d, [rate.id]: e.target.value }))
+                              setDrafts(d => ({
+                                ...d,
+                                [rate.id]: e.target.value,
+                              }))
                             }
                             onFocus={selectOnFocus}
                             onKeyDown={e => {
@@ -136,7 +146,9 @@ export default function FirstRunPage() {
                             className="h-9 w-32 pl-6 text-sm text-right"
                           />
                         </div>
-                        <span className="text-xs text-muted-foreground w-8">/hr</span>
+                        <span className="text-xs text-muted-foreground w-8">
+                          /hr
+                        </span>
                       </>
                     ) : (
                       <>

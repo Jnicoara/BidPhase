@@ -24,7 +24,10 @@ import { selectOnFocus } from "@/lib/selectOnFocus";
 import { mergeAliases } from "@shared/aliasSuggestions";
 
 export function AliasSuggestions({
-  value, onChange, onRequest, disabled,
+  value,
+  onChange,
+  onRequest,
+  disabled,
 }: {
   /** The alias text as it will be saved. */
   value: string;
@@ -76,28 +79,38 @@ export function AliasSuggestions({
           disabled={disabled}
         />
         <Button
-          size="sm" variant="outline" className="h-8 gap-1.5 text-xs shrink-0"
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1.5 text-xs shrink-0"
           onClick={request}
           disabled={disabled || loading}
           title="Suggest the terms electricians use for this"
         >
-          {loading
-            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking…</>
-            : <><Sparkles className="w-3.5 h-3.5" /> Suggest</>}
+          {loading ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking…
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-3.5 h-3.5" /> Suggest
+            </>
+          )}
         </Button>
       </div>
 
       {suggestions !== null && suggestions.length === 0 && (
         <p className="text-[0.7rem] text-muted-foreground">
-          No suggestions this time — type the terms people use for it yourself. Search still
-          works either way; the shared abbreviation list covers the common trade words.
+          No suggestions this time — type the terms people use for it yourself.
+          Search still works either way; the shared abbreviation list covers the
+          common trade words.
         </p>
       )}
 
       {suggestions !== null && suggestions.length > 0 && (
         <div className="rounded-lg border border-border bg-muted/20 p-2 space-y-2">
           <p className="text-[0.7rem] text-muted-foreground">
-            Tick the ones that are right for this material. Nothing is added until you apply.
+            Tick the ones that are right for this material. Nothing is added
+            until you apply.
           </p>
           <div className="flex flex-wrap gap-1">
             {suggestions.map(term => {
@@ -121,7 +134,8 @@ export function AliasSuggestions({
             })}
           </div>
           <Button
-            size="sm" className="h-6 gap-1 text-xs"
+            size="sm"
+            className="h-6 gap-1 text-xs"
             onClick={apply}
             disabled={accepted.size === 0}
           >

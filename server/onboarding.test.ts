@@ -112,7 +112,9 @@ describe("getting-started checklist", () => {
   });
 
   it("declares exactly the steps it builds", () => {
-    expect(buildChecklist(NOTHING_DONE).map(s => s.id)).toEqual([...ONBOARDING_STEP_IDS]);
+    expect(buildChecklist(NOTHING_DONE).map(s => s.id)).toEqual([
+      ...ONBOARDING_STEP_IDS,
+    ]);
   });
 });
 
@@ -121,9 +123,15 @@ describe("getting-started checklist", () => {
 describe("labor rates ship unrated", () => {
   it("ships every starter role at $0", () => {
     for (const rate of BASELINE_LABOR_RATES) {
-      expect(needsPricing(rate.hourlyCost), `${rate.name} has an hourly rate`).toBe(true);
+      expect(
+        needsPricing(rate.hourlyCost),
+        `${rate.name} has an hourly rate`
+      ).toBe(true);
       if (rate.rateType === "salary") {
-        expect(needsPricing(rate.annualSalary), `${rate.name} has a salary`).toBe(true);
+        expect(
+          needsPricing(rate.annualSalary),
+          `${rate.name} has a salary`
+        ).toBe(true);
       }
     }
   });
@@ -176,8 +184,12 @@ describe("labor rates ship unrated", () => {
       annualHours: null,
     };
     expect(hasAnyRealRate([unset, unset])).toBe(false);
-    expect(hasAnyRealRate([unset, { ...unset, hourlyCost: "42.0000" }])).toBe(true);
-    expect(countNeedingRate([unset, { ...unset, hourlyCost: "42.0000" }])).toBe(1);
+    expect(hasAnyRealRate([unset, { ...unset, hourlyCost: "42.0000" }])).toBe(
+      true
+    );
+    expect(countNeedingRate([unset, { ...unset, hourlyCost: "42.0000" }])).toBe(
+      1
+    );
   });
 });
 
@@ -186,10 +198,16 @@ describe("labor rates ship unrated", () => {
 describe.skipIf(!hasDb)("onboarding against the database", () => {
   beforeAll(async () => {
     const db = await getDb();
-    const [existing] = await db!.select().from(users).where(eq(users.id, USER)).limit(1);
+    const [existing] = await db!
+      .select()
+      .from(users)
+      .where(eq(users.id, USER))
+      .limit(1);
     if (!existing) {
       await db!.insert(users).values({
-        id: USER, openId: `test-onboarding-${USER}`, name: "Onboarding test user",
+        id: USER,
+        openId: `test-onboarding-${USER}`,
+        name: "Onboarding test user",
       });
     }
     await seedBaselineMaterials();
@@ -200,14 +218,18 @@ describe.skipIf(!hasDb)("onboarding against the database", () => {
     // Each test starts from a genuinely new account.
     const db = await getDb();
     await db!.delete(laborRates).where(eq(laborRates.userId, USER));
-    await db!.update(users)
+    await db!
+      .update(users)
       .set({ onboardingCompletedAt: null, checklistDismissedAt: null })
       .where(eq(users.id, USER));
   });
 
   it("seeds the shipped roles at $0", async () => {
     const db = await getDb();
-    const shipped = await db!.select().from(laborRates).where(isNull(laborRates.userId));
+    const shipped = await db!
+      .select()
+      .from(laborRates)
+      .where(isNull(laborRates.userId));
     const rated = shipped.filter(r => !needsRate(r)).map(r => r.name);
     expect(rated, "shipped with a rate").toEqual([]);
   });
@@ -233,9 +255,12 @@ describe.skipIf(!hasDb)("onboarding against the database", () => {
     expect(before.steps.find(s => s.id === "labor-rates")?.done).toBe(false);
 
     const rates = await getLibraryLaborRates(USER);
-    const starter = rates.find(r => r.userId === null && r.rateType === "hourly")!;
+    const starter = rates.find(
+      r => r.userId === null && r.rateType === "hourly"
+    )!;
     const result = await caller().onboarding.setStarterRate({
-      id: starter.id, hourlyCost: 44,
+      id: starter.id,
+      hourlyCost: 44,
     });
     // Editing a starter gives the user their own copy, exactly as the Labor
     // Rates screen would — onboarding must not leave a different shaped

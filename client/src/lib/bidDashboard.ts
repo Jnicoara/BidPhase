@@ -44,7 +44,7 @@ export function byDueDate(a: SortableBid, b: SortableBid): number {
   const right = toTime(b.dueDate);
 
   if (left === null && right === null) return a.name.localeCompare(b.name);
-  if (left === null) return 1;   // a has no deadline: push it down
+  if (left === null) return 1; // a has no deadline: push it down
   if (right === null) return -1; // b has no deadline: push it down
   if (left !== right) return left - right;
   return a.name.localeCompare(b.name);
@@ -60,7 +60,9 @@ export function byRecentlyUpdated(a: SortableBid, b: SortableBid): number {
 
 /** Which comparator a status uses. Draft/Active look forward, Won/Lost back. */
 export function comparatorFor(status: string) {
-  return status === "Draft" || status === "Active" ? byDueDate : byRecentlyUpdated;
+  return status === "Draft" || status === "Active"
+    ? byDueDate
+    : byRecentlyUpdated;
 }
 
 export type BidGroup<T extends SortableBid> = {
@@ -76,7 +78,9 @@ export type BidGroup<T extends SortableBid> = {
  * unrecognised status is dropped rather than silently filed under Draft — a bid
  * in the wrong column is worse than one the user notices is missing.
  */
-export function groupBidsByStatus<T extends SortableBid>(bids: T[]): BidGroup<T>[] {
+export function groupBidsByStatus<T extends SortableBid>(
+  bids: T[]
+): BidGroup<T>[] {
   return BID_STATUS_ORDER.map(status => ({
     status,
     bids: bids.filter(bid => bid.status === status).sort(comparatorFor(status)),
@@ -120,7 +124,9 @@ export function dueUrgency(
  */
 function toCalendarDay(value: string | Date | null | undefined): number | null {
   const date = calendarDate(value);
-  return date === null ? null : Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  return date === null
+    ? null
+    : Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 /**
@@ -131,7 +137,9 @@ function toCalendarDay(value: string | Date | null | undefined): number | null {
  * "Aug 13" anywhere behind UTC — a deadline off by a day, which on this screen
  * is the difference between on time and late.
  */
-export function calendarDate(value: string | Date | null | undefined): Date | null {
+export function calendarDate(
+  value: string | Date | null | undefined
+): Date | null {
   if (value == null) return null;
 
   if (typeof value === "string") {

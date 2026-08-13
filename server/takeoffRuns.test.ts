@@ -35,38 +35,54 @@ const callerFor = (userId: number) =>
 const caller = () => callerFor(USER);
 
 /** 25 paper inches — 100 feet at 1/4" = 1'-0". */
-const RUN_100FT = [{ x: 0, y: 0 }, { x: 25 * 72, y: 0 }];
+const RUN_100FT = [
+  { x: 0, y: 0 },
+  { x: 25 * 72, y: 0 },
+];
 
 /**
  * A bid with one document and one sheet, at a chosen scale.
  * Returns the ids the run procedures need.
  */
-async function scenario(options: {
-  scaleText?: string;
-  notToScale?: boolean;
-} = {}) {
+async function scenario(
+  options: {
+    scaleText?: string;
+    notToScale?: boolean;
+  } = {}
+) {
   const bid = (await caller().bids.create({
-    name: `Trace test ${Date.now()}${Math.random()}`, trades: ["electrical"],
+    name: `Trace test ${Date.now()}${Math.random()}`,
+    trades: ["electrical"],
   }))!;
 
   const database = await getDb();
   const [pdf] = await database!.insert(bidPdfs).values({
-    bidId: bid.id, userId: USER,
-    filename: "E1.pdf", storageKey: `test/${bid.id}/e1.pdf`,
-    byteSize: 1024, pageCount: 1, sortOrder: 0,
+    bidId: bid.id,
+    userId: USER,
+    filename: "E1.pdf",
+    storageKey: `test/${bid.id}/e1.pdf`,
+    byteSize: 1024,
+    pageCount: 1,
+    sortOrder: 0,
   });
 
   const { sheets } = await caller().bidPdfs.ensureSheets({
-    bidPdfId: pdf.insertId, pageCount: 1, outline: [],
+    bidPdfId: pdf.insertId,
+    pageCount: 1,
+    outline: [],
   });
   const sheet = sheets[0];
 
   if (options.scaleText) {
-    await caller().bidPdfs.setSheetScale({ id: sheet.id, scaleText: options.scaleText });
+    await caller().bidPdfs.setSheetScale({
+      id: sheet.id,
+      scaleText: options.scaleText,
+    });
   }
   if (options.notToScale) {
     // Persisted on the sheet — phase 2a only held this in browser state.
-    await database!.update(bidPdfSheets)
+    await database!
+      .update(bidPdfSheets)
       .set({ notToScale: true })
       .where(eq(bidPdfSheets.id, sheet.id));
   }
@@ -79,10 +95,16 @@ beforeAll(async () => {
   const database = await getDb();
   if (!database) return;
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await database.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await database
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await database.insert(users).values({
-        id, openId: `test-runs-${id}`, name: `Trace test user ${id}`,
+        id,
+        openId: `test-runs-${id}`,
+        name: `Trace test user ${id}`,
       });
     }
   }
@@ -117,7 +139,8 @@ describe.skipIf(!hasDb)("the scale gate", () => {
     const { sheetId } = await scenario({ notToScale: true });
     const database = await getDb();
     // Simulate detection having applied something — which must not clear the flag.
-    await database!.update(bidPdfSheets)
+    await database!
+      .update(bidPdfSheets)
       .set({ scaleRatio: "48.000000", scaleSource: "detected" })
       .where(eq(bidPdfSheets.id, sheetId));
 
@@ -128,7 +151,10 @@ describe.skipIf(!hasDb)("the scale gate", () => {
 
   it("clears a NOT-TO-SCALE sheet once a scale is set by hand", async () => {
     const { sheetId } = await scenario({ notToScale: true });
-    await caller().bidPdfs.setSheetScale({ id: sheetId, scaleText: `1/4" = 1'-0"` });
+    await caller().bidPdfs.setSheetScale({
+      id: sheetId,
+      scaleText: `1/4" = 1'-0"`,
+    });
 
     const result = await caller().takeoffRuns.measurability({ sheetId });
     expect(result.ok).toBe(true);
@@ -138,7 +164,11 @@ describe.skipIf(!hasDb)("the scale gate", () => {
     // The control, not the courtesy: bypassing the UI must not yield a number.
     const { bidId, sheetId } = await scenario();
     const saved = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType: "conduit", points: RUN_100FT,
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType: "conduit",
+      points: RUN_100FT,
     });
     expect(saved.measured).toBe(false);
     expect(saved.lengthFeet).toBeNull();
@@ -147,27 +177,39 @@ describe.skipIf(!hasDb)("the scale gate", () => {
   it("REFUSES to commit a run on an unscaled sheet", async () => {
     const { bidId, sheetId } = await scenario();
     const saved = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType: "conduit", points: RUN_100FT,
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType: "conduit",
+      points: RUN_100FT,
     });
-    await expect(
-      caller().takeoffRuns.commit({ id: saved.id })
-    ).rejects.toThrow(/no scale set/i);
+    await expect(caller().takeoffRuns.commit({ id: saved.id })).rejects.toThrow(
+      /no scale set/i
+    );
   });
 
   it("REFUSES to commit a run on a not-to-scale sheet", async () => {
     const { bidId, sheetId } = await scenario({ notToScale: true });
     const saved = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType: "conduit", points: RUN_100FT,
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType: "conduit",
+      points: RUN_100FT,
     });
-    await expect(
-      caller().takeoffRuns.commit({ id: saved.id })
-    ).rejects.toThrow(/not to scale/i);
+    await expect(caller().takeoffRuns.commit({ id: saved.id })).rejects.toThrow(
+      /not to scale/i
+    );
   });
 
   it("shows no quantities for runs on an unscaled sheet — not zero", async () => {
     const { bidId, sheetId } = await scenario();
     await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType: "conduit", points: RUN_100FT,
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType: "conduit",
+      points: RUN_100FT,
     });
     const [run] = await caller().takeoffRuns.listForSheet({ sheetId });
     expect(run.quantities).toBeNull();
@@ -177,9 +219,16 @@ describe.skipIf(!hasDb)("the scale gate", () => {
     // The recovery path: trace first, scale later, and the work is still there.
     const { bidId, sheetId } = await scenario();
     await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType: "conduit", points: RUN_100FT,
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType: "conduit",
+      points: RUN_100FT,
     });
-    await caller().bidPdfs.setSheetScale({ id: sheetId, scaleText: `1/4" = 1'-0"` });
+    await caller().bidPdfs.setSheetScale({
+      id: sheetId,
+      scaleText: `1/4" = 1'-0"`,
+    });
 
     const [run] = await caller().takeoffRuns.listForSheet({ sheetId });
     expect(run.quantities!.conduitFeet).toBe(100);
@@ -194,7 +243,11 @@ describe.skipIf(!hasDb)("saving trace work", () => {
     // throw away the thing that took the time.
     const { bidId, sheetId } = await scenario();
     await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Unscaled", pathType: "conduit", points: RUN_100FT,
+      bidId,
+      sheetId,
+      name: "Unscaled",
+      pathType: "conduit",
+      points: RUN_100FT,
     });
 
     const [run] = await caller().takeoffRuns.listForSheet({ sheetId });
@@ -205,8 +258,15 @@ describe.skipIf(!hasDb)("saving trace work", () => {
   it("stores a partial trace as a draft", async () => {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     const saved = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "In progress", pathType: "conduit",
-      points: [{ x: 0, y: 0 }, { x: 100, y: 0 }], status: "draft",
+      bidId,
+      sheetId,
+      name: "In progress",
+      pathType: "conduit",
+      points: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+      status: "draft",
     });
 
     const [run] = await caller().takeoffRuns.listForSheet({ sheetId });
@@ -218,12 +278,26 @@ describe.skipIf(!hasDb)("saving trace work", () => {
     // Autosave must not leave a trail of half-drawn duplicates behind it.
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     const first = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Growing", pathType: "conduit",
-      points: [{ x: 0, y: 0 }, { x: 720, y: 0 }],
+      bidId,
+      sheetId,
+      name: "Growing",
+      pathType: "conduit",
+      points: [
+        { x: 0, y: 0 },
+        { x: 720, y: 0 },
+      ],
     });
     await caller().takeoffRuns.save({
-      bidId, sheetId, id: first.id, name: "Growing", pathType: "conduit",
-      points: [{ x: 0, y: 0 }, { x: 720, y: 0 }, { x: 720, y: 720 }],
+      bidId,
+      sheetId,
+      id: first.id,
+      name: "Growing",
+      pathType: "conduit",
+      points: [
+        { x: 0, y: 0 },
+        { x: 720, y: 0 },
+        { x: 720, y: 720 },
+      ],
     });
 
     const runs = await caller().takeoffRuns.listForSheet({ sheetId });
@@ -235,12 +309,18 @@ describe.skipIf(!hasDb)("saving trace work", () => {
     // The crash-recovery guarantee, at the layer that actually persists.
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Interrupted", pathType: "conduit",
-      points: RUN_100FT, status: "draft",
+      bidId,
+      sheetId,
+      name: "Interrupted",
+      pathType: "conduit",
+      points: RUN_100FT,
+      status: "draft",
     });
 
     // A completely fresh caller, as a reloaded page would be.
-    const recovered = await callerFor(USER).takeoffRuns.listForSheet({ sheetId });
+    const recovered = await callerFor(USER).takeoffRuns.listForSheet({
+      sheetId,
+    });
     expect(recovered).toHaveLength(1);
     expect(recovered[0].name).toBe("Interrupted");
     expect(recovered[0].status).toBe("draft");
@@ -250,19 +330,29 @@ describe.skipIf(!hasDb)("saving trace work", () => {
   it("refuses to commit a run with fewer than two points", async () => {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     const saved = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "One click", pathType: "conduit", points: [{ x: 5, y: 5 }],
+      bidId,
+      sheetId,
+      name: "One click",
+      pathType: "conduit",
+      points: [{ x: 5, y: 5 }],
     });
-    await expect(
-      caller().takeoffRuns.commit({ id: saved.id })
-    ).rejects.toThrow(/two points/i);
+    await expect(caller().takeoffRuns.commit({ id: saved.id })).rejects.toThrow(
+      /two points/i
+    );
   });
 
   it("refuses a path with a non-finite coordinate", async () => {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     await expect(
       caller().takeoffRuns.save({
-        bidId, sheetId, name: "Bad", pathType: "conduit",
-        points: [{ x: 0, y: 0 }, { x: Number.NaN, y: 0 }],
+        bidId,
+        sheetId,
+        name: "Bad",
+        pathType: "conduit",
+        points: [
+          { x: 0, y: 0 },
+          { x: Number.NaN, y: 0 },
+        ],
       })
     ).rejects.toThrow();
   });
@@ -271,7 +361,11 @@ describe.skipIf(!hasDb)("saving trace work", () => {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     await expect(
       callerFor(OTHER_USER).takeoffRuns.save({
-        bidId, sheetId, name: "Theirs", pathType: "conduit", points: RUN_100FT,
+        bidId,
+        sheetId,
+        name: "Theirs",
+        pathType: "conduit",
+        points: RUN_100FT,
       })
     ).rejects.toThrow(/not found/i);
   });
@@ -279,9 +373,16 @@ describe.skipIf(!hasDb)("saving trace work", () => {
   it("flags a run whose sheet scale changed after it was traced", async () => {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Traced at 1/4", pathType: "conduit", points: RUN_100FT,
+      bidId,
+      sheetId,
+      name: "Traced at 1/4",
+      pathType: "conduit",
+      points: RUN_100FT,
     });
-    await caller().bidPdfs.setSheetScale({ id: sheetId, scaleText: `1/8" = 1'-0"` });
+    await caller().bidPdfs.setSheetScale({
+      id: sheetId,
+      scaleText: `1/8" = 1'-0"`,
+    });
 
     const [run] = await caller().takeoffRuns.listForSheet({ sheetId });
     expect(run.scaleChangedSinceTraced).toBe(true);
@@ -296,7 +397,11 @@ describe.skipIf(!hasDb)("shared runs", () => {
   async function committedRun(pathType: "conduit" | "cable" = "conduit") {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     const saved = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType, points: RUN_100FT,
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType,
+      points: RUN_100FT,
     });
     await caller().takeoffRuns.commit({ id: saved.id });
     return { bidId, sheetId, runId: saved.id };
@@ -316,8 +421,16 @@ describe.skipIf(!hasDb)("shared runs", () => {
   it("does not change the conduit total as circuits are added", async () => {
     const { bidId, runId } = await committedRun();
     const before = await caller().takeoffRuns.totals({ bidId });
-    await caller().takeoffRuns.addCircuit({ runId, name: "Ckt 1", conductorCount: 3 });
-    await caller().takeoffRuns.addCircuit({ runId, name: "Ckt 2", conductorCount: 3 });
+    await caller().takeoffRuns.addCircuit({
+      runId,
+      name: "Ckt 1",
+      conductorCount: 3,
+    });
+    await caller().takeoffRuns.addCircuit({
+      runId,
+      name: "Ckt 2",
+      conductorCount: 3,
+    });
     const after = await caller().takeoffRuns.totals({ bidId });
 
     expect(before.conduitFeet).toBe(100);
@@ -336,27 +449,48 @@ describe.skipIf(!hasDb)("shared runs", () => {
   it("refuses to assign a circuit to a cable run", async () => {
     const { runId } = await committedRun("cable");
     await expect(
-      caller().takeoffRuns.addCircuit({ runId, name: "Ckt 1", conductorCount: 2 })
+      caller().takeoffRuns.addCircuit({
+        runId,
+        name: "Ckt 1",
+        conductorCount: 2,
+      })
     ).rejects.toThrow(/cable run/i);
   });
 
   it("reflects an edited conductor count in the wire total", async () => {
     const { bidId, sheetId, runId } = await committedRun();
-    await caller().takeoffRuns.addCircuit({ runId, name: "Ckt 1", conductorCount: 2 });
+    await caller().takeoffRuns.addCircuit({
+      runId,
+      name: "Ckt 1",
+      conductorCount: 2,
+    });
     expect((await caller().takeoffRuns.totals({ bidId })).wireFeet).toBe(200);
 
     const [run] = await caller().takeoffRuns.listForSheet({ sheetId });
-    await caller().takeoffRuns.updateCircuit({ id: run.circuits[0].id, conductorCount: 4 });
+    await caller().takeoffRuns.updateCircuit({
+      id: run.circuits[0].id,
+      conductorCount: 4,
+    });
 
     expect((await caller().takeoffRuns.totals({ bidId })).wireFeet).toBe(400);
     // The pipe is unchanged — only the wire moved.
-    expect((await caller().takeoffRuns.totals({ bidId })).conduitFeet).toBe(100);
+    expect((await caller().takeoffRuns.totals({ bidId })).conduitFeet).toBe(
+      100
+    );
   });
 
   it("drops a circuit's wire when the circuit is removed", async () => {
     const { bidId, sheetId, runId } = await committedRun();
-    await caller().takeoffRuns.addCircuit({ runId, name: "Ckt 1", conductorCount: 3 });
-    await caller().takeoffRuns.addCircuit({ runId, name: "Ckt 2", conductorCount: 3 });
+    await caller().takeoffRuns.addCircuit({
+      runId,
+      name: "Ckt 1",
+      conductorCount: 3,
+    });
+    await caller().takeoffRuns.addCircuit({
+      runId,
+      name: "Ckt 2",
+      conductorCount: 3,
+    });
     expect((await caller().takeoffRuns.totals({ bidId })).wireFeet).toBe(600);
 
     const [run] = await caller().takeoffRuns.listForSheet({ sheetId });
@@ -372,12 +506,21 @@ describe.skipIf(!hasDb)("shared runs", () => {
     // quantity.
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Still drawing", pathType: "conduit",
-      points: RUN_100FT, status: "draft",
+      bidId,
+      sheetId,
+      name: "Still drawing",
+      pathType: "conduit",
+      points: RUN_100FT,
+      status: "draft",
     });
     await caller().takeoffRuns.save({
-      bidId, sheetId, name: "AI idea", pathType: "conduit",
-      points: RUN_100FT, status: "committed", isSuggestion: true,
+      bidId,
+      sheetId,
+      name: "AI idea",
+      pathType: "conduit",
+      points: RUN_100FT,
+      status: "committed",
+      isSuggestion: true,
     });
 
     const totals = await caller().takeoffRuns.totals({ bidId });
@@ -387,12 +530,19 @@ describe.skipIf(!hasDb)("shared runs", () => {
   it("counts a run only after it is committed", async () => {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     const saved = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Feeder", pathType: "conduit", points: RUN_100FT, status: "draft",
+      bidId,
+      sheetId,
+      name: "Feeder",
+      pathType: "conduit",
+      points: RUN_100FT,
+      status: "draft",
     });
     expect((await caller().takeoffRuns.totals({ bidId })).conduitFeet).toBe(0);
 
     await caller().takeoffRuns.commit({ id: saved.id });
-    expect((await caller().takeoffRuns.totals({ bidId })).conduitFeet).toBe(100);
+    expect((await caller().takeoffRuns.totals({ bidId })).conduitFeet).toBe(
+      100
+    );
   });
 });
 
@@ -402,22 +552,33 @@ describe.skipIf(!hasDb)("a suggested home run", () => {
   it("is never counted until the user accepts it", async () => {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     const saved = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Suggested home run", pathType: "conduit",
-      points: RUN_100FT, status: "committed", isSuggestion: true,
+      bidId,
+      sheetId,
+      name: "Suggested home run",
+      pathType: "conduit",
+      points: RUN_100FT,
+      status: "committed",
+      isSuggestion: true,
     });
 
     expect((await caller().takeoffRuns.totals({ bidId })).conduitFeet).toBe(0);
 
     await caller().takeoffRuns.acceptSuggestion({ id: saved.id });
     await caller().takeoffRuns.commit({ id: saved.id });
-    expect((await caller().takeoffRuns.totals({ bidId })).conduitFeet).toBe(100);
+    expect((await caller().takeoffRuns.totals({ bidId })).conduitFeet).toBe(
+      100
+    );
   });
 
   it("shows as a suggestion until accepted", async () => {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Suggested", pathType: "conduit",
-      points: RUN_100FT, isSuggestion: true,
+      bidId,
+      sheetId,
+      name: "Suggested",
+      pathType: "conduit",
+      points: RUN_100FT,
+      isSuggestion: true,
     });
     const [run] = await caller().takeoffRuns.listForSheet({ sheetId });
     expect(run.isSuggestion).toBe(true);
@@ -426,11 +587,14 @@ describe.skipIf(!hasDb)("a suggested home run", () => {
   it("refuses to accept something that is not a suggestion", async () => {
     const { bidId, sheetId } = await scenario({ scaleText: `1/4" = 1'-0"` });
     const saved = await caller().takeoffRuns.save({
-      bidId, sheetId, name: "Hand traced", pathType: "conduit", points: RUN_100FT,
+      bidId,
+      sheetId,
+      name: "Hand traced",
+      pathType: "conduit",
+      points: RUN_100FT,
     });
     await expect(
       caller().takeoffRuns.acceptSuggestion({ id: saved.id })
     ).rejects.toThrow(/not a suggestion/i);
   });
 });
-

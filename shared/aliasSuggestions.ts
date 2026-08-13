@@ -27,9 +27,31 @@
 
 /** Words too generic to earn their place, whatever suggested them. */
 const STOP_WORDS = new Set([
-  "the", "a", "an", "and", "or", "of", "for", "with", "to", "in", "on",
-  "electrical", "electric", "material", "item", "part", "supply", "supplies",
-  "product", "standard", "generic", "misc", "miscellaneous", "other", "type",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "of",
+  "for",
+  "with",
+  "to",
+  "in",
+  "on",
+  "electrical",
+  "electric",
+  "material",
+  "item",
+  "part",
+  "supply",
+  "supplies",
+  "product",
+  "standard",
+  "generic",
+  "misc",
+  "miscellaneous",
+  "other",
+  "type",
 ]);
 
 /** Normalise for comparison: lower case, no punctuation noise. */
@@ -83,7 +105,12 @@ export function filterAliasSuggestions(
   raw: string[],
   options: AliasFilterOptions
 ): string[] {
-  const { name, otherMaterialNames = [], existing = null, limit = 12 } = options;
+  const {
+    name,
+    otherMaterialNames = [],
+    existing = null,
+    limit = 12,
+  } = options;
 
   const nameWords = wordsInName(name);
   const wholeName = normalise(name);
@@ -143,7 +170,10 @@ export function filterAliasSuggestions(
  * and how smartSearch reads them. Existing terms are kept and lead, because a
  * user who typed their own words should see them stay where they put them.
  */
-export function mergeAliases(existing: string | null, accepted: string[]): string {
+export function mergeAliases(
+  existing: string | null,
+  accepted: string[]
+): string {
   // Deduped by PHRASE, not by word. The seeded rows settle this: an EMT strap
   // carries "one hole 1 hole two hole 2 hole", repeating "hole" on purpose,
   // because each phrase is a distinct way someone types the thing. Word-level
@@ -152,7 +182,10 @@ export function mergeAliases(existing: string | null, accepted: string[]): strin
   const out: string[] = [];
   const seenPhrases = new Set<string>();
 
-  const existingText = (existing ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  const existingText = (existing ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
   if (existingText) {
     out.push(existingText);
     seenPhrases.add(existingText);

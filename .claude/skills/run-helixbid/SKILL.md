@@ -13,10 +13,10 @@ cannot reach a single screen or API route without minting a session yourself.
 That is the whole difficulty of running this app, and both tools here exist
 to solve it:
 
-| Tool | Use it for |
-|---|---|
-| `.claude/skills/run-helixbid/smoke.mjs` | **Primary agent path.** Drives the running server over its real HTTP API. |
-| `.claude/skills/run-helixbid/devsession.mjs` | Mints the session token. Needed for browser work. |
+| Tool                                         | Use it for                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| `.claude/skills/run-helixbid/smoke.mjs`      | **Primary agent path.** Drives the running server over its real HTTP API. |
+| `.claude/skills/run-helixbid/devsession.mjs` | Mints the session token. Needed for browser work.                         |
 
 All paths below are relative to the repo root.
 
@@ -105,7 +105,8 @@ JWT_SECRET=local-dev-secret node .claude/skills/run-helixbid/devsession.mjs test
    the page console. It sets `sessionStorage` and hard-reloads:
 
 ```js
-sessionStorage.setItem("manus-cookie", "app_session_id=<TOKEN>"); location.reload();
+sessionStorage.setItem("manus-cookie", "app_session_id=<TOKEN>");
+location.reload();
 ```
 
 3. Navigate to the screen, e.g. `http://localhost:3000/#/library/materials`.
@@ -130,7 +131,7 @@ not mocked and it writes rows.
 - **Missing `VITE_OAUTH_PORTAL_URL` crashes the entire app, not just login.**
   `getLoginUrl` does `new URL(undefined + "/app-auth")` inside `AuthGuard`,
   which is a whole-app error boundary. You get a red `TypeError: Invalid URL`
-  page and *no* route renders. It looks like a broken build; it is a missing
+  page and _no_ route renders. It looks like a broken build; it is a missing
   env var.
 - **A token needs non-empty `openId`, `appId` AND `name`.** `verifySession`
   rejects the whole token if any is blank, and the only trace is
@@ -163,15 +164,15 @@ foreach ($p in 3000..3005) { $c = Get-NetTCPConnection -LocalPort $p -State List
 
 ## Troubleshooting
 
-| Symptom | Cause / fix |
-|---|---|
-| `TypeError: Invalid URL` red error page | `VITE_OAUTH_PORTAL_URL` not set. |
-| `smoke.mjs`: "answered but rejected the token" | Stale server on a lower port with a different secret. Kill it (above) or set `BASE_URL`. |
-| `Please login (10001)` from the API | `JWT_SECRET` mismatch, or blank `VITE_APP_ID` when minting. |
-| Login form appears despite a valid token | You changed the hash instead of reloading. Run `location.reload()`. |
-| `Failed to sync user info` in server log | That `openId` is not in `users`. Use `--list-users`. |
-| `'NODE_ENV' is not recognized` | Checkout predates the `cross-env` fix, or deps not installed. `pnpm install`. |
-| `ER_NO_REFERENCED_ROW_2` on a material insert | The `userId` has no row in `users`. |
-| `Unknown column '<name>'` in a `Seed failed` warning | Migrations not applied. `pnpm db:push`. |
-| Materials show no category sections | Same — `pnpm db:push`, then restart. |
-| "1900" / "gem box" find nothing, but "romex" works | Same — `searchAliases` column is missing; only global-map slang still resolves. |
+| Symptom                                              | Cause / fix                                                                              |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `TypeError: Invalid URL` red error page              | `VITE_OAUTH_PORTAL_URL` not set.                                                         |
+| `smoke.mjs`: "answered but rejected the token"       | Stale server on a lower port with a different secret. Kill it (above) or set `BASE_URL`. |
+| `Please login (10001)` from the API                  | `JWT_SECRET` mismatch, or blank `VITE_APP_ID` when minting.                              |
+| Login form appears despite a valid token             | You changed the hash instead of reloading. Run `location.reload()`.                      |
+| `Failed to sync user info` in server log             | That `openId` is not in `users`. Use `--list-users`.                                     |
+| `'NODE_ENV' is not recognized`                       | Checkout predates the `cross-env` fix, or deps not installed. `pnpm install`.            |
+| `ER_NO_REFERENCED_ROW_2` on a material insert        | The `userId` has no row in `users`.                                                      |
+| `Unknown column '<name>'` in a `Seed failed` warning | Migrations not applied. `pnpm db:push`.                                                  |
+| Materials show no category sections                  | Same — `pnpm db:push`, then restart.                                                     |
+| "1900" / "gem box" find nothing, but "romex" works   | Same — `searchAliases` column is missing; only global-map slang still resolves.          |

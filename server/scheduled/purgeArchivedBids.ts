@@ -110,7 +110,9 @@ export async function purgeArchivedBidsHandler(req: Request, res: Response) {
 
     const result = await purgeExpiredBids(systemClock());
     if (result.purged > 0) {
-      console.log(`[PurgeArchivedBids] deleted ${result.purged}: ${result.ids.join(", ")}`);
+      console.log(
+        `[PurgeArchivedBids] deleted ${result.purged}: ${result.ids.join(", ")}`
+      );
     }
     return res.json({ ok: true, ...result });
   } catch (err) {

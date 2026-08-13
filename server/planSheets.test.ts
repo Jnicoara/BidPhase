@@ -45,7 +45,8 @@ const caller = () => callerFor(USER);
 /** A bid with one attached document, bypassing S3 (no storage in tests). */
 async function newDocument(pageCount = 4, userId = USER) {
   const bid = await callerFor(userId).bids.create({
-    name: `Sheet test ${Date.now()}${Math.random()}`, trades: ["electrical"],
+    name: `Sheet test ${Date.now()}${Math.random()}`,
+    trades: ["electrical"],
   });
   const database = await getDb();
   const [result] = await database!.insert(bidPdfs).values({
@@ -65,10 +66,16 @@ beforeAll(async () => {
   const database = await getDb();
   if (!database) return;
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await database.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await database
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await database.insert(users).values({
-        id, openId: `test-plan-sheets-${id}`, name: `Sheet test user ${id}`,
+        id,
+        openId: `test-plan-sheets-${id}`,
+        name: `Sheet test user ${id}`,
       });
     }
   }
@@ -121,7 +128,14 @@ describe("parsing a written scale", () => {
     // "NTS" and "AS NOTED" mean something to a person but are not a scale.
     // Returning a number here would put a fabricated ratio behind every
     // measurement taken afterwards.
-    for (const input of ["N.T.S.", "NTS", "AS NOTED", "", "scale", "1/4 inch"]) {
+    for (const input of [
+      "N.T.S.",
+      "NTS",
+      "AS NOTED",
+      "",
+      "scale",
+      "1/4 inch",
+    ]) {
       expect(parseScaleText(input)).toBeNull();
     }
   });
@@ -174,13 +188,17 @@ describe("detecting a scale from sheet text", () => {
   });
 
   it("is NOT confident when the title block says AS NOTED", () => {
-    const detection = detectScaleFromText(`SCALE: 1/4" = 1'-0"\nSCALE: AS NOTED`);
+    const detection = detectScaleFromText(
+      `SCALE: 1/4" = 1'-0"\nSCALE: AS NOTED`
+    );
     expect(detection.confidence).toBe("low");
     expect(isAutoApplicable(detection)).toBe(false);
   });
 
   it("counts one scale stated twice as one scale", () => {
-    const detection = detectScaleFromText(`SCALE: 1/4" = 1'-0"\n... 1/4" = 1'-0"`);
+    const detection = detectScaleFromText(
+      `SCALE: 1/4" = 1'-0"\n... 1/4" = 1'-0"`
+    );
     expect(detection.candidates).toHaveLength(1);
     expect(detection.confidence).toBe("high");
   });
@@ -219,7 +237,10 @@ describe.skipIf(!hasDb)("building the sheet index", () => {
 
     expect(result.created).toBe(4);
     expect(result.sheets.map(s => s.name)).toEqual([
-      "E1 - Power Plan", "E2 - Lighting Plan", "E3 - Panel Schedule", "E4 - Single Line",
+      "E1 - Power Plan",
+      "E2 - Lighting Plan",
+      "E3 - Panel Schedule",
+      "E4 - Single Line",
     ]);
     expect(result.sheets.every(s => s.nameSource === "bookmark")).toBe(true);
   });
@@ -228,28 +249,41 @@ describe.skipIf(!hasDb)("building the sheet index", () => {
     // The fallback that matters: a scanned or plainly-exported set has no
     // bookmarks at all, and the index must not become a column of numbers.
     const { bidPdfId } = await newDocument(3);
-    const result = await caller().bidPdfs.ensureSheets({ bidPdfId, pageCount: 3, outline: [] });
+    const result = await caller().bidPdfs.ensureSheets({
+      bidPdfId,
+      pageCount: 3,
+      outline: [],
+    });
 
-    expect(result.sheets.map(s => s.name)).toEqual(["Sheet 1", "Sheet 2", "Sheet 3"]);
+    expect(result.sheets.map(s => s.name)).toEqual([
+      "Sheet 1",
+      "Sheet 2",
+      "Sheet 3",
+    ]);
     expect(result.sheets.every(s => s.nameSource === "default")).toBe(true);
   });
 
   it("falls back per page when the outline covers only some pages", async () => {
     const { bidPdfId } = await newDocument(4);
     const result = await caller().bidPdfs.ensureSheets({
-      bidPdfId, pageCount: 4,
+      bidPdfId,
+      pageCount: 4,
       outline: [{ pageNumber: 2, title: "E2 - Lighting" }],
     });
 
     expect(result.sheets.map(s => s.name)).toEqual([
-      "Sheet 1", "E2 - Lighting", "Sheet 3", "Sheet 4",
+      "Sheet 1",
+      "E2 - Lighting",
+      "Sheet 3",
+      "Sheet 4",
     ]);
   });
 
   it("never leaves a sheet nameless, whatever the outline contains", async () => {
     const { bidPdfId } = await newDocument(3);
     const result = await caller().bidPdfs.ensureSheets({
-      bidPdfId, pageCount: 3,
+      bidPdfId,
+      pageCount: 3,
       // A title pointing past the end of the document is ignored rather than
       // creating a phantom sheet.
       outline: [{ pageNumber: 99, title: "Appendix" }],
@@ -261,7 +295,8 @@ describe.skipIf(!hasDb)("building the sheet index", () => {
   it("keeps the outer entry when the outline nests details under a sheet", async () => {
     const { bidPdfId } = await newDocument(2);
     const result = await caller().bidPdfs.ensureSheets({
-      bidPdfId, pageCount: 2,
+      bidPdfId,
+      pageCount: 2,
       outline: [
         { pageNumber: 1, title: "E1 - Power Plan" },
         { pageNumber: 1, title: "Enlarged Plan - Room 101" },
@@ -275,8 +310,16 @@ describe.skipIf(!hasDb)("building the sheet index", () => {
     const { bidPdfId } = await newDocument(4);
     const outline = [{ pageNumber: 1, title: "E1 - Power Plan" }];
 
-    const first = await caller().bidPdfs.ensureSheets({ bidPdfId, pageCount: 4, outline });
-    const second = await caller().bidPdfs.ensureSheets({ bidPdfId, pageCount: 4, outline });
+    const first = await caller().bidPdfs.ensureSheets({
+      bidPdfId,
+      pageCount: 4,
+      outline,
+    });
+    const second = await caller().bidPdfs.ensureSheets({
+      bidPdfId,
+      pageCount: 4,
+      outline,
+    });
 
     expect(first.created).toBe(4);
     expect(second.created).toBe(0);
@@ -286,7 +329,11 @@ describe.skipIf(!hasDb)("building the sheet index", () => {
   it("refuses another user's document", async () => {
     const { bidPdfId } = await newDocument(2);
     await expect(
-      callerFor(OTHER_USER).bidPdfs.ensureSheets({ bidPdfId, pageCount: 2, outline: [] })
+      callerFor(OTHER_USER).bidPdfs.ensureSheets({
+        bidPdfId,
+        pageCount: 2,
+        outline: [],
+      })
     ).rejects.toThrow(/not found/i);
   });
 });
@@ -294,9 +341,16 @@ describe.skipIf(!hasDb)("building the sheet index", () => {
 describe.skipIf(!hasDb)("renaming a sheet", () => {
   it("takes the new name and marks it as the user's", async () => {
     const { bidPdfId } = await newDocument(2);
-    const { sheets } = await caller().bidPdfs.ensureSheets({ bidPdfId, pageCount: 2, outline: [] });
+    const { sheets } = await caller().bidPdfs.ensureSheets({
+      bidPdfId,
+      pageCount: 2,
+      outline: [],
+    });
 
-    const renamed = await caller().bidPdfs.renameSheet({ id: sheets[0].id, name: "E1 - Power" });
+    const renamed = await caller().bidPdfs.renameSheet({
+      id: sheets[0].id,
+      name: "E1 - Power",
+    });
     expect(renamed.name).toBe("E1 - Power");
     expect(renamed.nameSource).toBe("user");
   });
@@ -307,13 +361,18 @@ describe.skipIf(!hasDb)("renaming a sheet", () => {
     // correction every time they came back to the drawing.
     const { bidPdfId } = await newDocument(2);
     const { sheets } = await caller().bidPdfs.ensureSheets({
-      bidPdfId, pageCount: 2,
+      bidPdfId,
+      pageCount: 2,
       outline: [{ pageNumber: 1, title: "Sheet-1-A" }],
     });
-    await caller().bidPdfs.renameSheet({ id: sheets[0].id, name: "E1 - Power" });
+    await caller().bidPdfs.renameSheet({
+      id: sheets[0].id,
+      name: "E1 - Power",
+    });
 
     await caller().bidPdfs.ensureSheets({
-      bidPdfId, pageCount: 2,
+      bidPdfId,
+      pageCount: 2,
       outline: [{ pageNumber: 1, title: "Sheet-1-A" }],
     });
 
@@ -323,7 +382,11 @@ describe.skipIf(!hasDb)("renaming a sheet", () => {
 
   it("refuses a blank name", async () => {
     const { bidPdfId } = await newDocument(1);
-    const { sheets } = await caller().bidPdfs.ensureSheets({ bidPdfId, pageCount: 1, outline: [] });
+    const { sheets } = await caller().bidPdfs.ensureSheets({
+      bidPdfId,
+      pageCount: 1,
+      outline: [],
+    });
     await expect(
       caller().bidPdfs.renameSheet({ id: sheets[0].id, name: "   " })
     ).rejects.toThrow();
@@ -331,9 +394,16 @@ describe.skipIf(!hasDb)("renaming a sheet", () => {
 
   it("refuses another user's sheet", async () => {
     const { bidPdfId } = await newDocument(1);
-    const { sheets } = await caller().bidPdfs.ensureSheets({ bidPdfId, pageCount: 1, outline: [] });
+    const { sheets } = await caller().bidPdfs.ensureSheets({
+      bidPdfId,
+      pageCount: 1,
+      outline: [],
+    });
     await expect(
-      callerFor(OTHER_USER).bidPdfs.renameSheet({ id: sheets[0].id, name: "Mine now" })
+      callerFor(OTHER_USER).bidPdfs.renameSheet({
+        id: sheets[0].id,
+        name: "Mine now",
+      })
     ).rejects.toThrow(/not found/i);
   });
 });
@@ -343,14 +413,19 @@ describe.skipIf(!hasDb)("renaming a sheet", () => {
 describe.skipIf(!hasDb)("setting a scale by hand", () => {
   async function oneSheet(pageCount = 3) {
     const { bidPdfId } = await newDocument(pageCount);
-    const { sheets } = await caller().bidPdfs.ensureSheets({ bidPdfId, pageCount, outline: [] });
+    const { sheets } = await caller().bidPdfs.ensureSheets({
+      bidPdfId,
+      pageCount,
+      outline: [],
+    });
     return { bidPdfId, sheets };
   }
 
   it("stores the ratio and the text it was written as", async () => {
     const { sheets } = await oneSheet();
     const updated = await caller().bidPdfs.setSheetScale({
-      id: sheets[0].id, scaleText: `1/4" = 1'-0"`,
+      id: sheets[0].id,
+      scaleText: `1/4" = 1'-0"`,
     });
 
     expect(updated.scaleRatio).toBe(48);
@@ -366,7 +441,8 @@ describe.skipIf(!hasDb)("setting a scale by hand", () => {
     expect(sheets[0].detectedScaleText).toBeNull();
 
     const updated = await caller().bidPdfs.setSheetScale({
-      id: sheets[0].id, scaleText: "1:100",
+      id: sheets[0].id,
+      scaleText: "1:100",
     });
     expect(updated.scaleRatio).toBe(100);
   });
@@ -374,8 +450,14 @@ describe.skipIf(!hasDb)("setting a scale by hand", () => {
   it("stores a scale PER SHEET, not per document", async () => {
     // A site plan at 1"=40' and a detail at 3/4"=1'-0" live in one PDF.
     const { bidPdfId, sheets } = await oneSheet(3);
-    await caller().bidPdfs.setSheetScale({ id: sheets[0].id, scaleText: `1/8" = 1'-0"` });
-    await caller().bidPdfs.setSheetScale({ id: sheets[1].id, scaleText: `3/4" = 1'-0"` });
+    await caller().bidPdfs.setSheetScale({
+      id: sheets[0].id,
+      scaleText: `1/8" = 1'-0"`,
+    });
+    await caller().bidPdfs.setSheetScale({
+      id: sheets[1].id,
+      scaleText: `3/4" = 1'-0"`,
+    });
 
     const all = await caller().bidPdfs.sheets({ bidPdfId });
     expect(all[0].scaleRatio).toBe(96);
@@ -387,7 +469,10 @@ describe.skipIf(!hasDb)("setting a scale by hand", () => {
 
   it("survives a re-read, which is the whole point of storing it", async () => {
     const { bidPdfId, sheets } = await oneSheet();
-    await caller().bidPdfs.setSheetScale({ id: sheets[1].id, scaleText: `1" = 20'` });
+    await caller().bidPdfs.setSheetScale({
+      id: sheets[1].id,
+      scaleText: `1" = 20'`,
+    });
 
     const reread = await caller().bidPdfs.sheets({ bidPdfId });
     expect(reread[1].scaleRatio).toBe(240);
@@ -397,25 +482,41 @@ describe.skipIf(!hasDb)("setting a scale by hand", () => {
   it("rejects something it cannot read, with a message naming what works", async () => {
     const { sheets } = await oneSheet();
     await expect(
-      caller().bidPdfs.setSheetScale({ id: sheets[0].id, scaleText: "quarter inch" })
+      caller().bidPdfs.setSheetScale({
+        id: sheets[0].id,
+        scaleText: "quarter inch",
+      })
     ).rejects.toThrow(/not a scale this can read/i);
   });
 
   it("leaves the previous scale alone when a new one is rejected", async () => {
     const { sheets } = await oneSheet();
-    await caller().bidPdfs.setSheetScale({ id: sheets[0].id, scaleText: `1/4" = 1'-0"` });
+    await caller().bidPdfs.setSheetScale({
+      id: sheets[0].id,
+      scaleText: `1/4" = 1'-0"`,
+    });
     await expect(
-      caller().bidPdfs.setSheetScale({ id: sheets[0].id, scaleText: "nonsense" })
+      caller().bidPdfs.setSheetScale({
+        id: sheets[0].id,
+        scaleText: "nonsense",
+      })
     ).rejects.toThrow();
 
-    const [sheet] = await caller().bidPdfs.sheets({ bidPdfId: sheets[0].bidPdfId });
+    const [sheet] = await caller().bidPdfs.sheets({
+      bidPdfId: sheets[0].bidPdfId,
+    });
     expect(sheet.scaleRatio).toBe(48);
   });
 
   it("can be cleared back to unset", async () => {
     const { sheets } = await oneSheet();
-    await caller().bidPdfs.setSheetScale({ id: sheets[0].id, scaleText: `1/4" = 1'-0"` });
-    const cleared = await caller().bidPdfs.clearSheetScale({ id: sheets[0].id });
+    await caller().bidPdfs.setSheetScale({
+      id: sheets[0].id,
+      scaleText: `1/4" = 1'-0"`,
+    });
+    const cleared = await caller().bidPdfs.clearSheetScale({
+      id: sheets[0].id,
+    });
 
     expect(cleared.scaleRatio).toBeNull();
     expect(cleared.scaleSource).toBe("none");
@@ -424,7 +525,10 @@ describe.skipIf(!hasDb)("setting a scale by hand", () => {
   it("refuses another user's sheet", async () => {
     const { sheets } = await oneSheet();
     await expect(
-      callerFor(OTHER_USER).bidPdfs.setSheetScale({ id: sheets[0].id, scaleText: "1:50" })
+      callerFor(OTHER_USER).bidPdfs.setSheetScale({
+        id: sheets[0].id,
+        scaleText: "1:50",
+      })
     ).rejects.toThrow(/not found/i);
   });
 });
@@ -432,7 +536,11 @@ describe.skipIf(!hasDb)("setting a scale by hand", () => {
 describe.skipIf(!hasDb)("detection writing to a sheet", () => {
   async function oneSheet() {
     const { bidPdfId } = await newDocument(2);
-    const { sheets } = await caller().bidPdfs.ensureSheets({ bidPdfId, pageCount: 2, outline: [] });
+    const { sheets } = await caller().bidPdfs.ensureSheets({
+      bidPdfId,
+      pageCount: 2,
+      outline: [],
+    });
     return sheets;
   }
 
@@ -468,7 +576,8 @@ describe.skipIf(!hasDb)("detection writing to a sheet", () => {
   it("does not apply an unlabelled reading", async () => {
     const sheets = await oneSheet();
     const result = await caller().bidPdfs.detectSheetScale({
-      id: sheets[0].id, sheetText: `NOTES\n1/4" = 1'-0"`,
+      id: sheets[0].id,
+      sheetText: `NOTES\n1/4" = 1'-0"`,
     });
     expect(result.applied).toBe(false);
     expect(result.sheet.scaleSource).toBe("none");
@@ -479,10 +588,14 @@ describe.skipIf(!hasDb)("detection writing to a sheet", () => {
     // Reopening a document re-runs detection. A sheet the user calibrated must
     // not be quietly re-scaled out from under them.
     const sheets = await oneSheet();
-    await caller().bidPdfs.setSheetScale({ id: sheets[0].id, scaleText: `1/2" = 1'-0"` });
+    await caller().bidPdfs.setSheetScale({
+      id: sheets[0].id,
+      scaleText: `1/2" = 1'-0"`,
+    });
 
     const result = await caller().bidPdfs.detectSheetScale({
-      id: sheets[0].id, sheetText: `SCALE: 1/4" = 1'-0"`,
+      id: sheets[0].id,
+      sheetText: `SCALE: 1/4" = 1'-0"`,
     });
 
     expect(result.applied).toBe(false);
@@ -493,7 +606,8 @@ describe.skipIf(!hasDb)("detection writing to a sheet", () => {
   it("leaves a sheet unset when nothing is stated on it", async () => {
     const sheets = await oneSheet();
     const result = await caller().bidPdfs.detectSheetScale({
-      id: sheets[0].id, sheetText: "PANEL SCHEDULE\nBREAKER LOAD VA",
+      id: sheets[0].id,
+      sheetText: "PANEL SCHEDULE\nBREAKER LOAD VA",
     });
     expect(result.applied).toBe(false);
     expect(result.sheet.scaleRatio).toBeNull();
@@ -503,7 +617,8 @@ describe.skipIf(!hasDb)("detection writing to a sheet", () => {
   it("reports an explicit NOT TO SCALE so the UI can say so", async () => {
     const sheets = await oneSheet();
     const result = await caller().bidPdfs.detectSheetScale({
-      id: sheets[0].id, sheetText: "SINGLE LINE DIAGRAM - N.T.S.",
+      id: sheets[0].id,
+      sheetText: "SINGLE LINE DIAGRAM - N.T.S.",
     });
     expect(result.notToScale).toBe(true);
     expect(result.applied).toBe(false);
@@ -512,7 +627,8 @@ describe.skipIf(!hasDb)("detection writing to a sheet", () => {
   it("detects per sheet, leaving its neighbours alone", async () => {
     const sheets = await oneSheet();
     await caller().bidPdfs.detectSheetScale({
-      id: sheets[0].id, sheetText: `SCALE: 1/4" = 1'-0"`,
+      id: sheets[0].id,
+      sheetText: `SCALE: 1/4" = 1'-0"`,
     });
 
     const all = await caller().bidPdfs.sheets({ bidPdfId: sheets[0].bidPdfId });
@@ -523,7 +639,10 @@ describe.skipIf(!hasDb)("detection writing to a sheet", () => {
   it("refuses another user's sheet", async () => {
     const sheets = await oneSheet();
     await expect(
-      callerFor(OTHER_USER).bidPdfs.detectSheetScale({ id: sheets[0].id, sheetText: "SCALE: 1:50" })
+      callerFor(OTHER_USER).bidPdfs.detectSheetScale({
+        id: sheets[0].id,
+        sheetText: "SCALE: 1:50",
+      })
     ).rejects.toThrow(/not found/i);
   });
 });

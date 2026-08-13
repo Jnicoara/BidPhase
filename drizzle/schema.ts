@@ -23,7 +23,9 @@ export const users = mysqlTable("users", {
   passwordHash: text("passwordHash"),
   loginMethod: varchar("loginMethod", { length: 64 }),
   emailVerified: boolean("emailVerified").default(false).notNull(),
-  role: mysqlEnum("role", ["user", "admin", "contractor"]).default("user").notNull(),
+  role: mysqlEnum("role", ["user", "admin", "contractor"])
+    .default("user")
+    .notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -62,16 +64,22 @@ export const projects = mysqlTable(
   "projects",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
-    category: mysqlEnum("category", ["electrical"]).default("electrical").notNull(),
+    category: mysqlEnum("category", ["electrical"])
+      .default("electrical")
+      .notNull(),
     description: text("description"),
     // ── v5.45 expanded fields ──
     customerName: varchar("customerName", { length: 255 }),
     address: varchar("address", { length: 512 }),
     bidDate: date("bidDate"),
     notes: text("notes"),
-    status: mysqlEnum("status", ["Bidding", "Won", "In Progress", "Lost"]).default("Bidding").notNull(),
+    status: mysqlEnum("status", ["Bidding", "Won", "In Progress", "Lost"])
+      .default("Bidding")
+      .notNull(),
     metadata: json("metadata"),
     isArchived: boolean("isArchived").default(false).notNull(),
     // ── PDF storage (S3) ──
@@ -81,7 +89,7 @@ export const projects = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  (t) => [index("projects_userId_idx").on(t.userId)]
+  t => [index("projects_userId_idx").on(t.userId)]
 );
 
 export type Project = typeof projects.$inferSelect;
@@ -92,7 +100,9 @@ export const userMaterialsDb = mysqlTable(
   "user_materials_db",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     itemCode: varchar("itemCode", { length: 128 }),
     category: varchar("category", { length: 128 }),
     description: varchar("description", { length: 512 }).notNull(),
@@ -109,7 +119,7 @@ export const userMaterialsDb = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  (t) => [
+  t => [
     index("user_materials_db_userId_idx").on(t.userId),
     index("user_materials_db_category_idx").on(t.category),
   ]
@@ -124,19 +134,28 @@ export const masterItems = mysqlTable(
   "master_items",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     itemCode: varchar("itemCode", { length: 128 }),
     category: varchar("category", { length: 128 }),
     description: varchar("description", { length: 512 }).notNull(),
     unit: varchar("unit", { length: 32 }).default("EA").notNull(),
-    masterMaterialCost: decimal("masterMaterialCost", { precision: 10, scale: 4 }).default("0").notNull(),
-    masterLaborHours: decimal("masterLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
+    masterMaterialCost: decimal("masterMaterialCost", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
+    masterLaborHours: decimal("masterLaborHours", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
     notes: text("notes"),
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  (t) => [
+  t => [
     index("master_items_userId_idx").on(t.userId),
     index("master_items_category_idx").on(t.category),
   ]
@@ -151,7 +170,9 @@ export const masterAssemblies = mysqlTable(
   "master_assemblies",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     phase: varchar("phase", { length: 128 }),
@@ -159,7 +180,7 @@ export const masterAssemblies = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  (t) => [index("master_assemblies_userId_idx").on(t.userId)]
+  t => [index("master_assemblies_userId_idx").on(t.userId)]
 );
 
 export type MasterAssembly = typeof masterAssemblies.$inferSelect;
@@ -171,12 +192,16 @@ export const masterAssemblyItems = mysqlTable(
   "master_assembly_items",
   {
     id: int("id").autoincrement().primaryKey(),
-    assemblyId: int("assemblyId").notNull().references(() => masterAssemblies.id, { onDelete: "cascade" }),
-    masterItemId: int("masterItemId").notNull().references(() => masterItems.id, { onDelete: "cascade" }),
+    assemblyId: int("assemblyId")
+      .notNull()
+      .references(() => masterAssemblies.id, { onDelete: "cascade" }),
+    masterItemId: int("masterItemId")
+      .notNull()
+      .references(() => masterItems.id, { onDelete: "cascade" }),
     qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
     sortOrder: int("sortOrder").default(0).notNull(),
   },
-  (t) => [
+  t => [
     index("master_assembly_items_assemblyId_idx").on(t.assemblyId),
     index("master_assembly_items_masterItemId_idx").on(t.masterItemId),
   ]
@@ -190,15 +215,21 @@ export const masterLaborRates = mysqlTable(
   "master_labor_rates",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 128 }).notNull(),
-    ratePerHour: decimal("ratePerHour", { precision: 10, scale: 4 }).default("0").notNull(),
-    type: mysqlEnum("type", ["journeyman", "apprentice", "foreman"]).default("journeyman").notNull(),
+    ratePerHour: decimal("ratePerHour", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
+    type: mysqlEnum("type", ["journeyman", "apprentice", "foreman"])
+      .default("journeyman")
+      .notNull(),
     isDefault: boolean("isDefault").default(false).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  (t) => [index("master_labor_rates_userId_idx").on(t.userId)]
+  t => [index("master_labor_rates_userId_idx").on(t.userId)]
 );
 
 export type MasterLaborRate = typeof masterLaborRates.$inferSelect;
@@ -210,17 +241,20 @@ export const projectAssemblies = mysqlTable(
   "project_assemblies",
   {
     id: int("id").autoincrement().primaryKey(),
-    projectId: int("projectId").notNull().references(() => projects.id, { onDelete: "cascade" }),
-    masterAssemblyId: int("masterAssemblyId").references(() => masterAssemblies.id, { onDelete: "set null" }),
+    projectId: int("projectId")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    masterAssemblyId: int("masterAssemblyId").references(
+      () => masterAssemblies.id,
+      { onDelete: "set null" }
+    ),
     name: varchar("name", { length: 255 }).notNull(),
     phase: varchar("phase", { length: 128 }),
     sortOrder: int("sortOrder").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  (t) => [
-    index("project_assemblies_projectId_idx").on(t.projectId),
-  ]
+  t => [index("project_assemblies_projectId_idx").on(t.projectId)]
 );
 
 export type ProjectAssembly = typeof projectAssemblies.$inferSelect;
@@ -232,29 +266,49 @@ export const projectAssemblyItems = mysqlTable(
   "project_assembly_items",
   {
     id: int("id").autoincrement().primaryKey(),
-    projectAssemblyId: int("projectAssemblyId").notNull().references(() => projectAssemblies.id, { onDelete: "cascade" }),
-    masterItemId: int("masterItemId").references(() => masterItems.id, { onDelete: "set null" }),
+    projectAssemblyId: int("projectAssemblyId")
+      .notNull()
+      .references(() => projectAssemblies.id, { onDelete: "cascade" }),
+    masterItemId: int("masterItemId").references(() => masterItems.id, {
+      onDelete: "set null",
+    }),
     itemCode: varchar("itemCode", { length: 128 }),
     description: varchar("description", { length: 512 }).notNull(),
     unit: varchar("unit", { length: 32 }).default("EA").notNull(),
     qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
     // Master values — static reference, never auto-updated after snapshot
-    masterMaterialCost: decimal("masterMaterialCost", { precision: 10, scale: 4 }).default("0").notNull(),
-    masterLaborHours: decimal("masterLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
+    masterMaterialCost: decimal("masterMaterialCost", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
+    masterLaborHours: decimal("masterLaborHours", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
     // Override values — default to master on creation, editable per-project
-    overrideMaterialCost: decimal("overrideMaterialCost", { precision: 10, scale: 4 }).default("0").notNull(),
-    overrideLaborHours: decimal("overrideLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
+    overrideMaterialCost: decimal("overrideMaterialCost", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
+    overrideLaborHours: decimal("overrideLaborHours", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
     sortOrder: int("sortOrder").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  (t) => [
-    index("project_assembly_items_assemblyId_idx").on(t.projectAssemblyId),
-  ]
+  t => [index("project_assembly_items_assemblyId_idx").on(t.projectAssemblyId)]
 );
 
 export type ProjectAssemblyItem = typeof projectAssemblyItems.$inferSelect;
-export type InsertProjectAssemblyItem = typeof projectAssemblyItems.$inferInsert;
+export type InsertProjectAssemblyItem =
+  typeof projectAssemblyItems.$inferInsert;
 
 // ─── Project Items (Standalone) ───────────────────────────────────────────────
 // Individual items added directly to a project (not inside an assembly).
@@ -262,24 +316,43 @@ export const projectItems = mysqlTable(
   "project_items",
   {
     id: int("id").autoincrement().primaryKey(),
-    projectId: int("projectId").notNull().references(() => projects.id, { onDelete: "cascade" }),
-    masterItemId: int("masterItemId").references(() => masterItems.id, { onDelete: "set null" }),
+    projectId: int("projectId")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    masterItemId: int("masterItemId").references(() => masterItems.id, {
+      onDelete: "set null",
+    }),
     itemCode: varchar("itemCode", { length: 128 }),
     description: varchar("description", { length: 512 }).notNull(),
     unit: varchar("unit", { length: 32 }).default("EA").notNull(),
     qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
     phase: varchar("phase", { length: 128 }),
-    masterMaterialCost: decimal("masterMaterialCost", { precision: 10, scale: 4 }).default("0").notNull(),
-    masterLaborHours: decimal("masterLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
-    overrideMaterialCost: decimal("overrideMaterialCost", { precision: 10, scale: 4 }).default("0").notNull(),
-    overrideLaborHours: decimal("overrideLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
+    masterMaterialCost: decimal("masterMaterialCost", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
+    masterLaborHours: decimal("masterLaborHours", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
+    overrideMaterialCost: decimal("overrideMaterialCost", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
+    overrideLaborHours: decimal("overrideLaborHours", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
     sortOrder: int("sortOrder").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  (t) => [
-    index("project_items_projectId_idx").on(t.projectId),
-  ]
+  t => [index("project_items_projectId_idx").on(t.projectId)]
 );
 
 export type ProjectItem = typeof projectItems.$inferSelect;
@@ -287,22 +360,34 @@ export type InsertProjectItem = typeof projectItems.$inferInsert;
 
 // ─── Bid Summary ──────────────────────────────────────────────────────────────
 // One row per project — stores global labor adjustment settings.
-export const bidSummary = mysqlTable(
-  "bid_summary",
-  {
-    id: int("id").autoincrement().primaryKey(),
-    projectId: int("projectId").notNull().unique().references(() => projects.id, { onDelete: "cascade" }),
-    // Labor adjustments
-    percentageLaborFactor: decimal("percentageLaborFactor", { precision: 6, scale: 4 }).default("1.0000").notNull(),
-    lumpSumHours: decimal("lumpSumHours", { precision: 10, scale: 4 }).default("0").notNull(),
-    // Material markup
-    markupPct: decimal("markupPct", { precision: 6, scale: 4 }).default("0").notNull(),
-    // Default labor rate to use for cost calculation
-    defaultLaborRateId: int("defaultLaborRateId").references(() => masterLaborRates.id, { onDelete: "set null" }),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  }
-);
+export const bidSummary = mysqlTable("bid_summary", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId")
+    .notNull()
+    .unique()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  // Labor adjustments
+  percentageLaborFactor: decimal("percentageLaborFactor", {
+    precision: 6,
+    scale: 4,
+  })
+    .default("1.0000")
+    .notNull(),
+  lumpSumHours: decimal("lumpSumHours", { precision: 10, scale: 4 })
+    .default("0")
+    .notNull(),
+  // Material markup
+  markupPct: decimal("markupPct", { precision: 6, scale: 4 })
+    .default("0")
+    .notNull(),
+  // Default labor rate to use for cost calculation
+  defaultLaborRateId: int("defaultLaborRateId").references(
+    () => masterLaborRates.id,
+    { onDelete: "set null" }
+  ),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
 
 export type BidSummary = typeof bidSummary.$inferSelect;
 export type InsertBidSummary = typeof bidSummary.$inferInsert;
@@ -477,8 +562,12 @@ export const materials = mysqlTable(
     version: int("version").default(1).notNull(),
 
     name: varchar("name", { length: 512 }).notNull(),
-    unitOfSale: mysqlEnum("unitOfSale", MATERIAL_UNITS_OF_SALE).default("each").notNull(),
-    costPerUnit: decimal("costPerUnit", { precision: 10, scale: 4 }).default("0").notNull(),
+    unitOfSale: mysqlEnum("unitOfSale", MATERIAL_UNITS_OF_SALE)
+      .default("each")
+      .notNull(),
+    costPerUnit: decimal("costPerUnit", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
     /**
      * Nullable on purpose. Rows created before this column existed are honestly
      * uncategorised rather than wrongly guessed, and a quick add does not force
@@ -578,10 +667,14 @@ export const laborRates = mysqlTable(
 
     /** Free text. Roles are the contractor's own org chart, not a fixed list. */
     name: varchar("name", { length: 255 }).notNull(),
-    rateType: mysqlEnum("rateType", LABOR_RATE_TYPES).default("hourly").notNull(),
+    rateType: mysqlEnum("rateType", LABOR_RATE_TYPES)
+      .default("hourly")
+      .notNull(),
 
     /** The rate for an hourly role. Ignored when rateType is "salary". */
-    hourlyCost: decimal("hourlyCost", { precision: 10, scale: 4 }).default("0").notNull(),
+    hourlyCost: decimal("hourlyCost", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
 
     /**
      * Salary inputs, kept RAW and separate from any computed rate.
@@ -623,12 +716,19 @@ export const modifiers = mysqlTable(
 
     name: varchar("name", { length: 255 }).notNull(),
     /** Fractional labor adjustment: 0.15 = +15% hours, -0.10 = -10% hours. */
-    laborAdjustmentPct: decimal("laborAdjustmentPct", { precision: 6, scale: 4 }).default("0").notNull(),
+    laborAdjustmentPct: decimal("laborAdjustmentPct", {
+      precision: 6,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
     /**
      * "global"   — shared list (height, outdoor, retrofit); assemblies opt in.
      * "assembly" — one-off for a single assembly (e.g. isolated ground).
      */
-    scope: mysqlEnum("scope", ["global", "assembly"]).default("global").notNull(),
+    scope: mysqlEnum("scope", ["global", "assembly"])
+      .default("global")
+      .notNull(),
 
     /** active / archived / deleted — see MODIFIER_STATUSES. */
     status: mysqlEnum("status", MODIFIER_STATUSES).default("active").notNull(),
@@ -667,14 +767,18 @@ export const assemblies = mysqlTable(
     trade: varchar("trade", { length: 64 }).default("electrical").notNull(),
     /** Optional library filter. See PROJECT_TYPES. */
     projectType: mysqlEnum("projectType", PROJECT_TYPES),
-    baseLaborHours: decimal("baseLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
+    baseLaborHours: decimal("baseLaborHours", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
 
     /**
      * Which role does this work. Nullable, and "set null" on delete rather than
      * cascade: losing a labor rate must not silently delete the recipe that
      * referenced it. The UI shows such an assembly as needing a role picked.
      */
-    laborRateId: int("laborRateId").references(() => laborRates.id, { onDelete: "set null" }),
+    laborRateId: int("laborRateId").references(() => laborRates.id, {
+      onDelete: "set null",
+    }),
 
     /** active / archived / deleted. See materials.status — same lifecycle. */
     status: mysqlEnum("status", LIBRARY_STATUSES).default("active").notNull(),
@@ -703,8 +807,12 @@ export const assemblyMaterials = mysqlTable(
   "assembly_materials",
   {
     id: int("id").autoincrement().primaryKey(),
-    assemblyId: int("assemblyId").notNull().references(() => assemblies.id, { onDelete: "cascade" }),
-    materialId: int("materialId").notNull().references(() => materials.id, { onDelete: "cascade" }),
+    assemblyId: int("assemblyId")
+      .notNull()
+      .references(() => assemblies.id, { onDelete: "cascade" }),
+    materialId: int("materialId")
+      .notNull()
+      .references(() => materials.id, { onDelete: "cascade" }),
     qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
     sortOrder: int("sortOrder").default(0).notNull(),
   },
@@ -725,8 +833,12 @@ export const assemblyModifiers = mysqlTable(
   "assembly_modifiers",
   {
     id: int("id").autoincrement().primaryKey(),
-    assemblyId: int("assemblyId").notNull().references(() => assemblies.id, { onDelete: "cascade" }),
-    modifierId: int("modifierId").notNull().references(() => modifiers.id, { onDelete: "cascade" }),
+    assemblyId: int("assemblyId")
+      .notNull()
+      .references(() => assemblies.id, { onDelete: "cascade" }),
+    modifierId: int("modifierId")
+      .notNull()
+      .references(() => modifiers.id, { onDelete: "cascade" }),
     sortOrder: int("sortOrder").default(0).notNull(),
   },
   t => [
@@ -742,42 +854,55 @@ export type InsertAssemblyModifier = typeof assemblyModifiers.$inferInsert;
 // Company-level defaults that auto-fill new estimates. The per-project override
 // layer is deliberately NOT here — that belongs to Bid/Project structure (build
 // step 3), so this table stays the single company-wide source.
-export const pricingDefaults = mysqlTable(
-  "pricing_defaults",
-  {
-    id: int("id").autoincrement().primaryKey(),
-    userId: int("userId").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+export const pricingDefaults = mysqlTable("pricing_defaults", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
 
-    // Overhead — optional, applied BEFORE profit.
-    overheadEnabled: boolean("overheadEnabled").default(false).notNull(),
-    overheadMode: mysqlEnum("overheadMode", ["percentage", "flat"]).default("percentage").notNull(),
-    /** Fraction when percentage (0.10 = 10%); currency amount when flat. */
-    overheadValue: decimal("overheadValue", { precision: 12, scale: 4 }).default("0").notNull(),
+  // Overhead — optional, applied BEFORE profit.
+  overheadEnabled: boolean("overheadEnabled").default(false).notNull(),
+  overheadMode: mysqlEnum("overheadMode", ["percentage", "flat"])
+    .default("percentage")
+    .notNull(),
+  /** Fraction when percentage (0.10 = 10%); currency amount when flat. */
+  overheadValue: decimal("overheadValue", { precision: 12, scale: 4 })
+    .default("0")
+    .notNull(),
 
-    // Profit — the method is always an explicit choice, never assumed.
-    profitMethod: mysqlEnum("profitMethod", ["markup", "margin"]).default("markup").notNull(),
-    /** Fraction: 0.20 = 20% markup, or 20% target margin, per profitMethod. */
-    profitValue: decimal("profitValue", { precision: 6, scale: 4 }).default("0").notNull(),
+  // Profit — the method is always an explicit choice, never assumed.
+  profitMethod: mysqlEnum("profitMethod", ["markup", "margin"])
+    .default("markup")
+    .notNull(),
+  /** Fraction: 0.20 = 20% markup, or 20% target margin, per profitMethod. */
+  profitValue: decimal("profitValue", { precision: 6, scale: 4 })
+    .default("0")
+    .notNull(),
 
-    /**
-     * Company-wide productivity adjustment, as a fraction (0.10 = +10% hours).
-     *
-     * Applied at calculation time as a final multiplier AFTER job-condition
-     * modifiers have been summed — a separate step, never added into them. See
-     * applyProductivityToHours in shared/pricing.ts for why that separation
-     * matters. Ships at 0: no adjustment until the contractor has a reason.
-     *
-     * Signed, so scale(4) with a negative range — a crew that beats book hours
-     * is as real as one that does not.
-     */
-    productivityPct: decimal("productivityPct", { precision: 6, scale: 4 }).default("0").notNull(),
+  /**
+   * Company-wide productivity adjustment, as a fraction (0.10 = +10% hours).
+   *
+   * Applied at calculation time as a final multiplier AFTER job-condition
+   * modifiers have been summed — a separate step, never added into them. See
+   * applyProductivityToHours in shared/pricing.ts for why that separation
+   * matters. Ships at 0: no adjustment until the contractor has a reason.
+   *
+   * Signed, so scale(4) with a negative range — a crew that beats book hours
+   * is as real as one that does not.
+   */
+  productivityPct: decimal("productivityPct", { precision: 6, scale: 4 })
+    .default("0")
+    .notNull(),
 
-    defaultLaborRateId: int("defaultLaborRateId").references(() => laborRates.id, { onDelete: "set null" }),
+  defaultLaborRateId: int("defaultLaborRateId").references(
+    () => laborRates.id,
+    { onDelete: "set null" }
+  ),
 
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  }
-);
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
 
 export type PricingDefaults = typeof pricingDefaults.$inferSelect;
 export type InsertPricingDefaults = typeof pricingDefaults.$inferInsert;
@@ -794,7 +919,9 @@ export const bids = mysqlTable(
   "bids",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
     name: varchar("name", { length: 255 }).notNull(),
     status: mysqlEnum("status", BID_STATUSES).default("Draft").notNull(),
@@ -887,13 +1014,17 @@ export const bidPdfs = mysqlTable(
   "bid_pdfs",
   {
     id: int("id").autoincrement().primaryKey(),
-    bidId: int("bidId").notNull().references(() => bids.id, { onDelete: "cascade" }),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
     /**
      * Denormalised from the bid so an ownership check is one query, not two.
      * Every read still filters on it — a storage key is guessable enough that
      * "you had the id" must never be the only thing standing in the way.
      */
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
     /** What the user called it. Shown in the sheet list; never used as a path. */
     filename: varchar("filename", { length: 512 }).notNull(),
@@ -946,9 +1077,13 @@ export const bidPdfSheets = mysqlTable(
   "bid_pdf_sheets",
   {
     id: int("id").autoincrement().primaryKey(),
-    bidPdfId: int("bidPdfId").notNull().references(() => bidPdfs.id, { onDelete: "cascade" }),
+    bidPdfId: int("bidPdfId")
+      .notNull()
+      .references(() => bidPdfs.id, { onDelete: "cascade" }),
     /** Denormalised for one-query ownership checks, as on bid_pdfs. */
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
     /** 1-based, matching how pdfjs and every human count pages. */
     pageNumber: int("pageNumber").notNull(),
@@ -963,7 +1098,9 @@ export const bidPdfSheets = mysqlTable(
      * Where the name came from. `user` is sticky: a re-scan of the document
      * must never overwrite a name someone typed.
      */
-    nameSource: mysqlEnum("nameSource", SHEET_NAME_SOURCES).default("default").notNull(),
+    nameSource: mysqlEnum("nameSource", SHEET_NAME_SOURCES)
+      .default("default")
+      .notNull(),
 
     /**
      * Real-world distance per unit of paper — `1/4" = 1'-0"` is 48. NULL means
@@ -973,7 +1110,9 @@ export const bidPdfSheets = mysqlTable(
     scaleRatio: decimal("scaleRatio", { precision: 14, scale: 6 }),
     /** How the scale reads, e.g. `1/4" = 1'-0"`. Display only; ratio governs. */
     scaleText: varchar("scaleText", { length: 64 }),
-    scaleSource: mysqlEnum("scaleSource", SCALE_SOURCES).default("none").notNull(),
+    scaleSource: mysqlEnum("scaleSource", SCALE_SOURCES)
+      .default("none")
+      .notNull(),
     /**
      * What auto-detection found, kept even when it was NOT applied.
      *
@@ -1034,9 +1173,15 @@ export const takeoffRuns = mysqlTable(
   "takeoff_runs",
   {
     id: int("id").autoincrement().primaryKey(),
-    bidId: int("bidId").notNull().references(() => bids.id, { onDelete: "cascade" }),
-    sheetId: int("sheetId").notNull().references(() => bidPdfSheets.id, { onDelete: "cascade" }),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+    sheetId: int("sheetId")
+      .notNull()
+      .references(() => bidPdfSheets.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
     name: varchar("name", { length: 255 }).notNull(),
     /**
@@ -1044,7 +1189,9 @@ export const takeoffRuns = mysqlTable(
      *           for the run; wire is counted per circuit (see takeoff_run_circuits).
      * cable   — Romex/MC. The cable IS the raceway; there is no conduit line.
      */
-    pathType: mysqlEnum("pathType", RUN_PATH_TYPES).default("conduit").notNull(),
+    pathType: mysqlEnum("pathType", RUN_PATH_TYPES)
+      .default("conduit")
+      .notNull(),
 
     /**
      * The traced vertices, in PDF PAGE POINTS — never screen pixels, which
@@ -1095,8 +1242,12 @@ export const takeoffRunCircuits = mysqlTable(
   "takeoff_run_circuits",
   {
     id: int("id").autoincrement().primaryKey(),
-    runId: int("runId").notNull().references(() => takeoffRuns.id, { onDelete: "cascade" }),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    runId: int("runId")
+      .notNull()
+      .references(() => takeoffRuns.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
     /** "Ckt 12", "Panel A-3" — the estimator's own label. */
     name: varchar("name", { length: 255 }).notNull(),
@@ -1141,12 +1292,20 @@ export const takeoffStamps = mysqlTable(
   "takeoff_stamps",
   {
     id: int("id").autoincrement().primaryKey(),
-    bidId: int("bidId").notNull().references(() => bids.id, { onDelete: "cascade" }),
-    sheetId: int("sheetId").notNull().references(() => bidPdfSheets.id, { onDelete: "cascade" }),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+    sheetId: int("sheetId")
+      .notNull()
+      .references(() => bidPdfSheets.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
     /** Provenance. Null once the library assembly is gone; the name remains. */
-    assemblyId: int("assemblyId").references(() => assemblies.id, { onDelete: "set null" }),
+    assemblyId: int("assemblyId").references(() => assemblies.id, {
+      onDelete: "set null",
+    }),
     /** What it was called when it was dropped. Never re-read from the library. */
     assemblyName: varchar("assemblyName", { length: 255 }).notNull(),
     /**
@@ -1204,7 +1363,9 @@ export const symbolLinks = mysqlTable(
   "symbol_links",
   {
     id: int("id").autoincrement().primaryKey(),
-    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
     /** What the user calls the symbol. Matched case-insensitively via `key`. */
     label: varchar("label", { length: 255 }).notNull(),
@@ -1216,7 +1377,9 @@ export const symbolLinks = mysqlTable(
      * a legend and left unlinked, which is exactly the "which assembly does
      * this match?" state the first click resolves.
      */
-    assemblyId: int("assemblyId").references(() => assemblies.id, { onDelete: "set null" }),
+    assemblyId: int("assemblyId").references(() => assemblies.id, {
+      onDelete: "set null",
+    }),
 
     /**
      * A small PNG data URL of the boxed region, so the legend panel shows the
@@ -1226,8 +1389,10 @@ export const symbolLinks = mysqlTable(
     thumbnail: text("thumbnail"),
 
     /** Where it was first captured, for reference. Not a scoping key. */
-    capturedFromSheetId: int("capturedFromSheetId")
-      .references(() => bidPdfSheets.id, { onDelete: "set null" }),
+    capturedFromSheetId: int("capturedFromSheetId").references(
+      () => bidPdfSheets.id,
+      { onDelete: "set null" }
+    ),
 
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -1259,9 +1424,13 @@ export const bidLineItems = mysqlTable(
   "bid_line_items",
   {
     id: int("id").autoincrement().primaryKey(),
-    bidId: int("bidId").notNull().references(() => bids.id, { onDelete: "cascade" }),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
     /** Provenance only. Null once the source assembly is gone. */
-    assemblyId: int("assemblyId").references(() => assemblies.id, { onDelete: "set null" }),
+    assemblyId: int("assemblyId").references(() => assemblies.id, {
+      onDelete: "set null",
+    }),
 
     /** Assembly name at add time — the bid reads the same after a rename. */
     name: varchar("name", { length: 255 }).notNull(),
@@ -1284,13 +1453,30 @@ export const bidLineItems = mysqlTable(
 
     // ── The snapshot: four inputs, frozen ──
     /** Material cost for ONE of this assembly. */
-    snapshotMaterialCost: decimal("snapshotMaterialCost", { precision: 12, scale: 4 }).default("0").notNull(),
+    snapshotMaterialCost: decimal("snapshotMaterialCost", {
+      precision: 12,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
     /** Base labor hours before modifiers. */
-    snapshotLaborHours: decimal("snapshotLaborHours", { precision: 10, scale: 4 }).default("0").notNull(),
+    snapshotLaborHours: decimal("snapshotLaborHours", {
+      precision: 10,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
     /** Summed modifier fraction, e.g. 0.32 for +32%. Already added, not compounded. */
-    snapshotModifierPct: decimal("snapshotModifierPct", { precision: 6, scale: 4 }).default("0").notNull(),
+    snapshotModifierPct: decimal("snapshotModifierPct", {
+      precision: 6,
+      scale: 4,
+    })
+      .default("0")
+      .notNull(),
     /** Hourly cost of the role assigned at add time. */
-    snapshotLaborRate: decimal("snapshotLaborRate", { precision: 10, scale: 4 }).default("0").notNull(),
+    snapshotLaborRate: decimal("snapshotLaborRate", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
     /** Modifier names at add time, for showing why the hours are what they are. */
     snapshotModifierNames: json("snapshotModifierNames").$type<string[]>(),
     snapshotAt: timestamp("snapshotAt").defaultNow().notNull(),
@@ -1361,8 +1547,12 @@ export const kitAssemblies = mysqlTable(
   "kit_assemblies",
   {
     id: int("id").autoincrement().primaryKey(),
-    kitId: int("kitId").notNull().references(() => kits.id, { onDelete: "cascade" }),
-    assemblyId: int("assemblyId").notNull().references(() => assemblies.id, { onDelete: "cascade" }),
+    kitId: int("kitId")
+      .notNull()
+      .references(() => kits.id, { onDelete: "cascade" }),
+    assemblyId: int("assemblyId")
+      .notNull()
+      .references(() => assemblies.id, { onDelete: "cascade" }),
     qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
     sortOrder: int("sortOrder").default(0).notNull(),
   },
@@ -1383,7 +1573,9 @@ export const featureFlags = mysqlTable("feature_flags", {
   flagKey: varchar("flagKey", { length: 128 }).notNull().unique(),
   label: varchar("label", { length: 255 }).notNull(),
   description: text("description"),
-  enabledForContractors: boolean("enabledForContractors").default(false).notNull(),
+  enabledForContractors: boolean("enabledForContractors")
+    .default(false)
+    .notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

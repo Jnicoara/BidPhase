@@ -131,37 +131,27 @@
       "indexes": {
         "assemblies_userId_idx": {
           "name": "assemblies_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "assemblies_baselineId_idx": {
           "name": "assemblies_baselineId_idx",
-          "columns": [
-            "baselineId"
-          ],
+          "columns": ["baselineId"],
           "isUnique": false
         },
         "assemblies_status_idx": {
           "name": "assemblies_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         },
         "assemblies_category_idx": {
           "name": "assemblies_category_idx",
-          "columns": [
-            "category"
-          ],
+          "columns": ["category"],
           "isUnique": false
         },
         "assemblies_trade_idx": {
           "name": "assemblies_trade_idx",
-          "columns": [
-            "trade"
-          ],
+          "columns": ["trade"],
           "isUnique": false
         }
       },
@@ -170,12 +160,8 @@
           "name": "assemblies_userId_users_id_fk",
           "tableFrom": "assemblies",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -183,12 +169,8 @@
           "name": "assemblies_laborRateId_labor_rates_id_fk",
           "tableFrom": "assemblies",
           "tableTo": "labor_rates",
-          "columnsFrom": [
-            "laborRateId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["laborRateId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -196,9 +178,7 @@
       "compositePrimaryKeys": {
         "assemblies_id": {
           "name": "assemblies_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -248,16 +228,12 @@
       "indexes": {
         "assembly_materials_assemblyId_idx": {
           "name": "assembly_materials_assemblyId_idx",
-          "columns": [
-            "assemblyId"
-          ],
+          "columns": ["assemblyId"],
           "isUnique": false
         },
         "assembly_materials_materialId_idx": {
           "name": "assembly_materials_materialId_idx",
-          "columns": [
-            "materialId"
-          ],
+          "columns": ["materialId"],
           "isUnique": false
         }
       },
@@ -266,12 +242,8 @@
           "name": "assembly_materials_assemblyId_assemblies_id_fk",
           "tableFrom": "assembly_materials",
           "tableTo": "assemblies",
-          "columnsFrom": [
-            "assemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["assemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -279,12 +251,8 @@
           "name": "assembly_materials_materialId_materials_id_fk",
           "tableFrom": "assembly_materials",
           "tableTo": "materials",
-          "columnsFrom": [
-            "materialId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["materialId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -292,9 +260,7 @@
       "compositePrimaryKeys": {
         "assembly_materials_id": {
           "name": "assembly_materials_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -336,16 +302,12 @@
       "indexes": {
         "assembly_modifiers_assemblyId_idx": {
           "name": "assembly_modifiers_assemblyId_idx",
-          "columns": [
-            "assemblyId"
-          ],
+          "columns": ["assemblyId"],
           "isUnique": false
         },
         "assembly_modifiers_modifierId_idx": {
           "name": "assembly_modifiers_modifierId_idx",
-          "columns": [
-            "modifierId"
-          ],
+          "columns": ["modifierId"],
           "isUnique": false
         }
       },
@@ -354,12 +316,8 @@
           "name": "assembly_modifiers_assemblyId_assemblies_id_fk",
           "tableFrom": "assembly_modifiers",
           "tableTo": "assemblies",
-          "columnsFrom": [
-            "assemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["assemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -367,12 +325,8 @@
           "name": "assembly_modifiers_modifierId_modifiers_id_fk",
           "tableFrom": "assembly_modifiers",
           "tableTo": "modifiers",
-          "columnsFrom": [
-            "modifierId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["modifierId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -380,9 +334,7 @@
       "compositePrimaryKeys": {
         "assembly_modifiers_id": {
           "name": "assembly_modifiers_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -517,16 +469,12 @@
       "indexes": {
         "bid_line_items_bidId_idx": {
           "name": "bid_line_items_bidId_idx",
-          "columns": [
-            "bidId"
-          ],
+          "columns": ["bidId"],
           "isUnique": false
         },
         "bid_line_items_unitLabel_idx": {
           "name": "bid_line_items_unitLabel_idx",
-          "columns": [
-            "unitLabel"
-          ],
+          "columns": ["unitLabel"],
           "isUnique": false
         }
       },
@@ -535,12 +483,8 @@
           "name": "bid_line_items_bidId_bids_id_fk",
           "tableFrom": "bid_line_items",
           "tableTo": "bids",
-          "columnsFrom": [
-            "bidId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bidId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -548,12 +492,8 @@
           "name": "bid_line_items_assemblyId_assemblies_id_fk",
           "tableFrom": "bid_line_items",
           "tableTo": "assemblies",
-          "columnsFrom": [
-            "assemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["assemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -561,9 +501,7 @@
       "compositePrimaryKeys": {
         "bid_line_items_id": {
           "name": "bid_line_items_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -665,16 +603,12 @@
       "indexes": {
         "bid_pdf_sheets_bidPdfId_idx": {
           "name": "bid_pdf_sheets_bidPdfId_idx",
-          "columns": [
-            "bidPdfId"
-          ],
+          "columns": ["bidPdfId"],
           "isUnique": false
         },
         "bid_pdf_sheets_userId_idx": {
           "name": "bid_pdf_sheets_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -683,12 +617,8 @@
           "name": "bid_pdf_sheets_bidPdfId_bid_pdfs_id_fk",
           "tableFrom": "bid_pdf_sheets",
           "tableTo": "bid_pdfs",
-          "columnsFrom": [
-            "bidPdfId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bidPdfId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -696,12 +626,8 @@
           "name": "bid_pdf_sheets_userId_users_id_fk",
           "tableFrom": "bid_pdf_sheets",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -709,9 +635,7 @@
       "compositePrimaryKeys": {
         "bid_pdf_sheets_id": {
           "name": "bid_pdf_sheets_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -799,16 +723,12 @@
       "indexes": {
         "bid_pdfs_bidId_idx": {
           "name": "bid_pdfs_bidId_idx",
-          "columns": [
-            "bidId"
-          ],
+          "columns": ["bidId"],
           "isUnique": false
         },
         "bid_pdfs_userId_idx": {
           "name": "bid_pdfs_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -817,12 +737,8 @@
           "name": "bid_pdfs_bidId_bids_id_fk",
           "tableFrom": "bid_pdfs",
           "tableTo": "bids",
-          "columnsFrom": [
-            "bidId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["bidId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -830,12 +746,8 @@
           "name": "bid_pdfs_userId_users_id_fk",
           "tableFrom": "bid_pdfs",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -843,9 +755,7 @@
       "compositePrimaryKeys": {
         "bid_pdfs_id": {
           "name": "bid_pdfs_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -923,12 +833,8 @@
           "name": "bid_summary_projectId_projects_id_fk",
           "tableFrom": "bid_summary",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -936,12 +842,8 @@
           "name": "bid_summary_defaultLaborRateId_master_labor_rates_id_fk",
           "tableFrom": "bid_summary",
           "tableTo": "master_labor_rates",
-          "columnsFrom": [
-            "defaultLaborRateId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["defaultLaborRateId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -949,17 +851,13 @@
       "compositePrimaryKeys": {
         "bid_summary_id": {
           "name": "bid_summary_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "bid_summary_projectId_unique": {
           "name": "bid_summary_projectId_unique",
-          "columns": [
-            "projectId"
-          ]
+          "columns": ["projectId"]
         }
       },
       "checkConstraint": {}
@@ -1073,23 +971,17 @@
       "indexes": {
         "bids_userId_idx": {
           "name": "bids_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "bids_status_idx": {
           "name": "bids_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         },
         "bids_archivedAt_idx": {
           "name": "bids_archivedAt_idx",
-          "columns": [
-            "archivedAt"
-          ],
+          "columns": ["archivedAt"],
           "isUnique": false
         }
       },
@@ -1098,12 +990,8 @@
           "name": "bids_userId_users_id_fk",
           "tableFrom": "bids",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1111,9 +999,7 @@
       "compositePrimaryKeys": {
         "bids_id": {
           "name": "bids_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1181,17 +1067,13 @@
       "compositePrimaryKeys": {
         "feature_flags_id": {
           "name": "feature_flags_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "feature_flags_flagKey_unique": {
           "name": "feature_flags_flagKey_unique",
-          "columns": [
-            "flagKey"
-          ]
+          "columns": ["flagKey"]
         }
       },
       "checkConstraint": {}
@@ -1240,16 +1122,12 @@
       "indexes": {
         "kit_assemblies_kitId_idx": {
           "name": "kit_assemblies_kitId_idx",
-          "columns": [
-            "kitId"
-          ],
+          "columns": ["kitId"],
           "isUnique": false
         },
         "kit_assemblies_assemblyId_idx": {
           "name": "kit_assemblies_assemblyId_idx",
-          "columns": [
-            "assemblyId"
-          ],
+          "columns": ["assemblyId"],
           "isUnique": false
         }
       },
@@ -1258,12 +1136,8 @@
           "name": "kit_assemblies_kitId_kits_id_fk",
           "tableFrom": "kit_assemblies",
           "tableTo": "kits",
-          "columnsFrom": [
-            "kitId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["kitId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1271,12 +1145,8 @@
           "name": "kit_assemblies_assemblyId_assemblies_id_fk",
           "tableFrom": "kit_assemblies",
           "tableTo": "assemblies",
-          "columnsFrom": [
-            "assemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["assemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1284,9 +1154,7 @@
       "compositePrimaryKeys": {
         "kit_assemblies_id": {
           "name": "kit_assemblies_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1389,23 +1257,17 @@
       "indexes": {
         "kits_userId_idx": {
           "name": "kits_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "kits_baselineId_idx": {
           "name": "kits_baselineId_idx",
-          "columns": [
-            "baselineId"
-          ],
+          "columns": ["baselineId"],
           "isUnique": false
         },
         "kits_status_idx": {
           "name": "kits_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         }
       },
@@ -1414,12 +1276,8 @@
           "name": "kits_userId_users_id_fk",
           "tableFrom": "kits",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1427,9 +1285,7 @@
       "compositePrimaryKeys": {
         "kits_id": {
           "name": "kits_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1540,16 +1396,12 @@
       "indexes": {
         "labor_rates_userId_idx": {
           "name": "labor_rates_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "labor_rates_baselineId_idx": {
           "name": "labor_rates_baselineId_idx",
-          "columns": [
-            "baselineId"
-          ],
+          "columns": ["baselineId"],
           "isUnique": false
         }
       },
@@ -1558,12 +1410,8 @@
           "name": "labor_rates_userId_users_id_fk",
           "tableFrom": "labor_rates",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1571,9 +1419,7 @@
       "compositePrimaryKeys": {
         "labor_rates_id": {
           "name": "labor_rates_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1646,9 +1492,7 @@
       "indexes": {
         "master_assemblies_userId_idx": {
           "name": "master_assemblies_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -1657,12 +1501,8 @@
           "name": "master_assemblies_userId_users_id_fk",
           "tableFrom": "master_assemblies",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1670,9 +1510,7 @@
       "compositePrimaryKeys": {
         "master_assemblies_id": {
           "name": "master_assemblies_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1722,16 +1560,12 @@
       "indexes": {
         "master_assembly_items_assemblyId_idx": {
           "name": "master_assembly_items_assemblyId_idx",
-          "columns": [
-            "assemblyId"
-          ],
+          "columns": ["assemblyId"],
           "isUnique": false
         },
         "master_assembly_items_masterItemId_idx": {
           "name": "master_assembly_items_masterItemId_idx",
-          "columns": [
-            "masterItemId"
-          ],
+          "columns": ["masterItemId"],
           "isUnique": false
         }
       },
@@ -1740,12 +1574,8 @@
           "name": "master_assembly_items_assemblyId_master_assemblies_id_fk",
           "tableFrom": "master_assembly_items",
           "tableTo": "master_assemblies",
-          "columnsFrom": [
-            "assemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["assemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1753,12 +1583,8 @@
           "name": "master_assembly_items_masterItemId_master_items_id_fk",
           "tableFrom": "master_assembly_items",
           "tableTo": "master_items",
-          "columnsFrom": [
-            "masterItemId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["masterItemId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1766,9 +1592,7 @@
       "compositePrimaryKeys": {
         "master_assembly_items_id": {
           "name": "master_assembly_items_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1872,16 +1696,12 @@
       "indexes": {
         "master_items_userId_idx": {
           "name": "master_items_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "master_items_category_idx": {
           "name": "master_items_category_idx",
-          "columns": [
-            "category"
-          ],
+          "columns": ["category"],
           "isUnique": false
         }
       },
@@ -1890,12 +1710,8 @@
           "name": "master_items_userId_users_id_fk",
           "tableFrom": "master_items",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1903,9 +1719,7 @@
       "compositePrimaryKeys": {
         "master_items_id": {
           "name": "master_items_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1980,9 +1794,7 @@
       "indexes": {
         "master_labor_rates_userId_idx": {
           "name": "master_labor_rates_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -1991,12 +1803,8 @@
           "name": "master_labor_rates_userId_users_id_fk",
           "tableFrom": "master_labor_rates",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2004,9 +1812,7 @@
       "compositePrimaryKeys": {
         "master_labor_rates_id": {
           "name": "master_labor_rates_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -2139,23 +1945,17 @@
       "indexes": {
         "materials_userId_idx": {
           "name": "materials_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "materials_baselineId_idx": {
           "name": "materials_baselineId_idx",
-          "columns": [
-            "baselineId"
-          ],
+          "columns": ["baselineId"],
           "isUnique": false
         },
         "materials_status_idx": {
           "name": "materials_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         }
       },
@@ -2164,12 +1964,8 @@
           "name": "materials_userId_users_id_fk",
           "tableFrom": "materials",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2177,9 +1973,7 @@
       "compositePrimaryKeys": {
         "materials_id": {
           "name": "materials_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -2291,23 +2085,17 @@
       "indexes": {
         "modifiers_userId_idx": {
           "name": "modifiers_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "modifiers_baselineId_idx": {
           "name": "modifiers_baselineId_idx",
-          "columns": [
-            "baselineId"
-          ],
+          "columns": ["baselineId"],
           "isUnique": false
         },
         "modifiers_status_idx": {
           "name": "modifiers_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         }
       },
@@ -2316,12 +2104,8 @@
           "name": "modifiers_userId_users_id_fk",
           "tableFrom": "modifiers",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2329,9 +2113,7 @@
       "compositePrimaryKeys": {
         "modifiers_id": {
           "name": "modifiers_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -2425,12 +2207,8 @@
           "name": "pricing_defaults_userId_users_id_fk",
           "tableFrom": "pricing_defaults",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2438,12 +2216,8 @@
           "name": "pricing_defaults_defaultLaborRateId_labor_rates_id_fk",
           "tableFrom": "pricing_defaults",
           "tableTo": "labor_rates",
-          "columnsFrom": [
-            "defaultLaborRateId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["defaultLaborRateId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2451,17 +2225,13 @@
       "compositePrimaryKeys": {
         "pricing_defaults_id": {
           "name": "pricing_defaults_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "pricing_defaults_userId_unique": {
           "name": "pricing_defaults_userId_unique",
-          "columns": [
-            "userId"
-          ]
+          "columns": ["userId"]
         }
       },
       "checkConstraint": {}
@@ -2533,9 +2303,7 @@
       "indexes": {
         "project_assemblies_projectId_idx": {
           "name": "project_assemblies_projectId_idx",
-          "columns": [
-            "projectId"
-          ],
+          "columns": ["projectId"],
           "isUnique": false
         }
       },
@@ -2544,12 +2312,8 @@
           "name": "project_assemblies_projectId_projects_id_fk",
           "tableFrom": "project_assemblies",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2557,12 +2321,8 @@
           "name": "project_assemblies_masterAssemblyId_master_assemblies_id_fk",
           "tableFrom": "project_assemblies",
           "tableTo": "master_assemblies",
-          "columnsFrom": [
-            "masterAssemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["masterAssemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2570,9 +2330,7 @@
       "compositePrimaryKeys": {
         "project_assemblies_id": {
           "name": "project_assemblies_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -2693,9 +2451,7 @@
       "indexes": {
         "project_assembly_items_assemblyId_idx": {
           "name": "project_assembly_items_assemblyId_idx",
-          "columns": [
-            "projectAssemblyId"
-          ],
+          "columns": ["projectAssemblyId"],
           "isUnique": false
         }
       },
@@ -2704,12 +2460,8 @@
           "name": "project_assembly_items_projectAssemblyId_project_assemblies_id_fk",
           "tableFrom": "project_assembly_items",
           "tableTo": "project_assemblies",
-          "columnsFrom": [
-            "projectAssemblyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectAssemblyId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2717,12 +2469,8 @@
           "name": "project_assembly_items_masterItemId_master_items_id_fk",
           "tableFrom": "project_assembly_items",
           "tableTo": "master_items",
-          "columnsFrom": [
-            "masterItemId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["masterItemId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2730,9 +2478,7 @@
       "compositePrimaryKeys": {
         "project_assembly_items_id": {
           "name": "project_assembly_items_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -2860,9 +2606,7 @@
       "indexes": {
         "project_items_projectId_idx": {
           "name": "project_items_projectId_idx",
-          "columns": [
-            "projectId"
-          ],
+          "columns": ["projectId"],
           "isUnique": false
         }
       },
@@ -2871,12 +2615,8 @@
           "name": "project_items_projectId_projects_id_fk",
           "tableFrom": "project_items",
           "tableTo": "projects",
-          "columnsFrom": [
-            "projectId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2884,12 +2624,8 @@
           "name": "project_items_masterItemId_master_items_id_fk",
           "tableFrom": "project_items",
           "tableTo": "master_items",
-          "columnsFrom": [
-            "masterItemId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["masterItemId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2897,9 +2633,7 @@
       "compositePrimaryKeys": {
         "project_items_id": {
           "name": "project_items_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -3037,9 +2771,7 @@
       "indexes": {
         "projects_userId_idx": {
           "name": "projects_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -3048,12 +2780,8 @@
           "name": "projects_userId_users_id_fk",
           "tableFrom": "projects",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3061,9 +2789,7 @@
       "compositePrimaryKeys": {
         "projects_id": {
           "name": "projects_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -3203,16 +2929,12 @@
       "indexes": {
         "user_materials_db_userId_idx": {
           "name": "user_materials_db_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         },
         "user_materials_db_category_idx": {
           "name": "user_materials_db_category_idx",
-          "columns": [
-            "category"
-          ],
+          "columns": ["category"],
           "isUnique": false
         }
       },
@@ -3221,12 +2943,8 @@
           "name": "user_materials_db_userId_users_id_fk",
           "tableFrom": "user_materials_db",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3234,9 +2952,7 @@
       "compositePrimaryKeys": {
         "user_materials_db_id": {
           "name": "user_materials_db_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -3334,17 +3050,13 @@
       "compositePrimaryKeys": {
         "users_id": {
           "name": "users_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "users_openId_unique": {
           "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ]
+          "columns": ["openId"]
         }
       },
       "checkConstraint": {}

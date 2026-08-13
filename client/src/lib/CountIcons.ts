@@ -44,8 +44,13 @@ export interface CountIconDef {
   }>;
 }
 
-export const ICON_CATEGORIES = ["Dots", "Circles", "Squares", "Triangles"] as const;
-export type IconCategory = typeof ICON_CATEGORIES[number];
+export const ICON_CATEGORIES = [
+  "Dots",
+  "Circles",
+  "Squares",
+  "Triangles",
+] as const;
+export type IconCategory = (typeof ICON_CATEGORIES)[number];
 
 export const COUNT_ICONS: CountIconDef[] = [
   // ── Dots (solid filled) ───────────────────────────────────────────────────
@@ -78,25 +83,49 @@ export const COUNT_ICONS: CountIconDef[] = [
     id: "circle-sm",
     label: "Circle",
     category: "Circles",
-    paths: [{ d: "M17 12 a5 5 0 1 1 -10 0 a5 5 0 1 1 10 0 Z", strokeOnly: true, strokeWidth: 1.6 }],
+    paths: [
+      {
+        d: "M17 12 a5 5 0 1 1 -10 0 a5 5 0 1 1 10 0 Z",
+        strokeOnly: true,
+        strokeWidth: 1.6,
+      },
+    ],
   },
   {
     id: "circle-md",
     label: "Circle",
     category: "Circles",
-    paths: [{ d: "M19 12 a7 7 0 1 1 -14 0 a7 7 0 1 1 14 0 Z", strokeOnly: true, strokeWidth: 1.8 }],
+    paths: [
+      {
+        d: "M19 12 a7 7 0 1 1 -14 0 a7 7 0 1 1 14 0 Z",
+        strokeOnly: true,
+        strokeWidth: 1.8,
+      },
+    ],
   },
   {
     id: "circle-lg",
     label: "Circle",
     category: "Circles",
-    paths: [{ d: "M21 12 a9 9 0 1 1 -18 0 a9 9 0 1 1 18 0 Z", strokeOnly: true, strokeWidth: 1.8 }],
+    paths: [
+      {
+        d: "M21 12 a9 9 0 1 1 -18 0 a9 9 0 1 1 18 0 Z",
+        strokeOnly: true,
+        strokeWidth: 1.8,
+      },
+    ],
   },
   {
     id: "circle-xl",
     label: "Circle",
     category: "Circles",
-    paths: [{ d: "M23.5 12 a11.5 11.5 0 1 1 -23 0 a11.5 11.5 0 1 1 23 0 Z", strokeOnly: true, strokeWidth: 2 }],
+    paths: [
+      {
+        d: "M23.5 12 a11.5 11.5 0 1 1 -23 0 a11.5 11.5 0 1 1 23 0 Z",
+        strokeOnly: true,
+        strokeWidth: 2,
+      },
+    ],
   },
   // ── Squares (stroke-only) ─────────────────────────────────────────────────
   {
@@ -146,22 +175,24 @@ export const COUNT_ICONS: CountIconDef[] = [
     id: "triangle-xl",
     label: "Triangle",
     category: "Triangles",
-    paths: [{ d: "M12 0.5 L23.5 23 L0.5 23 Z", strokeOnly: true, strokeWidth: 2.2 }],
+    paths: [
+      { d: "M12 0.5 L23.5 23 L0.5 23 Z", strokeOnly: true, strokeWidth: 2.2 },
+    ],
   },
 ];
 
 /** Pin colors — harmonized with app palette, still clearly distinguishable */
 export const PIN_COLORS = [
-  { label: "Amber",      hex: "#FBBF24" },
-  { label: "Sky",        hex: "#38BDF8" },
-  { label: "Emerald",    hex: "#34D399" },
-  { label: "Violet",     hex: "#A78BFA" },
-  { label: "Orange",     hex: "#F97316" },
-  { label: "Pink",       hex: "#F472B6" },
-  { label: "Blue",       hex: "#60A5FA" },
-  { label: "Green",      hex: "#4ADE80" },
-  { label: "Indigo",     hex: "#818CF8" },
-  { label: "Peach",      hex: "#FB923C" },
+  { label: "Amber", hex: "#FBBF24" },
+  { label: "Sky", hex: "#38BDF8" },
+  { label: "Emerald", hex: "#34D399" },
+  { label: "Violet", hex: "#A78BFA" },
+  { label: "Orange", hex: "#F97316" },
+  { label: "Pink", hex: "#F472B6" },
+  { label: "Blue", hex: "#60A5FA" },
+  { label: "Green", hex: "#4ADE80" },
+  { label: "Indigo", hex: "#818CF8" },
+  { label: "Peach", hex: "#FB923C" },
 ];
 
 export const DEFAULT_ICON_ID: PinShape = "dot-md";

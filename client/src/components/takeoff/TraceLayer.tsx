@@ -22,7 +22,10 @@ import { cn } from "@/lib/utils";
 import { Check, Ruler, TriangleAlert, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  formatFeetInches, pathRealInches, screenToPagePoints, type PagePoint,
+  formatFeetInches,
+  pathRealInches,
+  screenToPagePoints,
+  type PagePoint,
 } from "@shared/takeoffGeometry";
 import type { Measurability, RunPathType } from "@shared/takeoffQuantities";
 
@@ -48,9 +51,25 @@ export type PlacedStamp = {
 };
 
 export function TraceLayer({
-  width, height, renderScale, measurability, tracing, pathType,
-  points, onPointsChange, existingRuns, onFinish, onCancel, selectedRunId, onSelectRun,
-  stamping, stampAssemblyName, stamps, onDropStamp, selectedStampId, onSelectStamp,
+  width,
+  height,
+  renderScale,
+  measurability,
+  tracing,
+  pathType,
+  points,
+  onPointsChange,
+  existingRuns,
+  onFinish,
+  onCancel,
+  selectedRunId,
+  onSelectRun,
+  stamping,
+  stampAssemblyName,
+  stamps,
+  onDropStamp,
+  selectedStampId,
+  onSelectStamp,
   focusPoint,
 }: {
   /** Canvas size in device pixels — the overlay matches it exactly. */
@@ -90,19 +109,25 @@ export function TraceLayer({
     [renderScale]
   );
 
-  const pointerToPage = useCallback((e: React.PointerEvent): PagePoint | null => {
-    const svg = svgRef.current;
-    if (!svg) return null;
-    const rect = svg.getBoundingClientRect();
-    // The SVG is laid out at CSS size but sized in device pixels, so scale the
-    // pointer into the SVG's own coordinate space before converting.
-    const scaleX = rect.width === 0 ? 1 : width / rect.width;
-    const scaleY = rect.height === 0 ? 1 : height / rect.height;
-    return screenToPagePoints(
-      { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY },
-      renderScale
-    );
-  }, [width, height, renderScale]);
+  const pointerToPage = useCallback(
+    (e: React.PointerEvent): PagePoint | null => {
+      const svg = svgRef.current;
+      if (!svg) return null;
+      const rect = svg.getBoundingClientRect();
+      // The SVG is laid out at CSS size but sized in device pixels, so scale the
+      // pointer into the SVG's own coordinate space before converting.
+      const scaleX = rect.width === 0 ? 1 : width / rect.width;
+      const scaleY = rect.height === 0 ? 1 : height / rect.height;
+      return screenToPagePoints(
+        {
+          x: (e.clientX - rect.left) * scaleX,
+          y: (e.clientY - rect.top) * scaleY,
+        },
+        renderScale
+      );
+    },
+    [width, height, renderScale]
+  );
 
   /** Live length of what is being traced, including the rubber-band segment. */
   const liveInches = useMemo(() => {
@@ -129,7 +154,10 @@ export function TraceLayer({
       } else if (e.key === "Enter" && points.length >= 2) {
         e.preventDefault();
         onFinish();
-      } else if ((e.key === "z" && (e.ctrlKey || e.metaKey)) || e.key === "Backspace") {
+      } else if (
+        (e.key === "z" && (e.ctrlKey || e.metaKey)) ||
+        e.key === "Backspace"
+      ) {
         e.preventDefault();
         if (points.length > 0) onPointsChange(points.slice(0, -1));
       }
@@ -151,7 +179,9 @@ export function TraceLayer({
                   ? "This sheet is marked not to scale"
                   : "No scale set for this sheet"}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">{measurability.message}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {measurability.message}
+              </p>
               <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
                 <Ruler className="w-3 h-3" />
                 Use the scale control below the drawing.
@@ -174,13 +204,18 @@ export function TraceLayer({
           "absolute inset-0 w-full h-full",
           tracing || stamping ? "cursor-crosshair" : "pointer-events-none"
         )}
-        onPointerMove={e => { if (tracing) setHover(pointerToPage(e)); }}
+        onPointerMove={e => {
+          if (tracing) setHover(pointerToPage(e));
+        }}
         onPointerLeave={() => setHover(null)}
         onPointerDown={e => {
           if (e.button !== 0) return;
           const page = pointerToPage(e);
           if (!page) return;
-          if (tracing) { onPointsChange([...points, page]); return; }
+          if (tracing) {
+            onPointsChange([...points, page]);
+            return;
+          }
           // The stamp mechanic: one selection, then a drop per click with
           // nothing to re-choose in between.
           if (stamping) onDropStamp(page);
@@ -188,7 +223,10 @@ export function TraceLayer({
         onDoubleClick={e => {
           // Double-click finishes, which is what every drawing tool does. The
           // extra point the first click added is already in the path.
-          if (tracing && points.length >= 2) { e.preventDefault(); onFinish(); }
+          if (tracing && points.length >= 2) {
+            e.preventDefault();
+            onFinish();
+          }
         }}
       >
         {/* Runs already traced */}
@@ -197,7 +235,10 @@ export function TraceLayer({
           if (screen.length < 2) return null;
           const isSelected = run.id === selectedRunId;
           return (
-            <g key={run.id} className={tracing ? "" : "pointer-events-auto cursor-pointer"}>
+            <g
+              key={run.id}
+              className={tracing ? "" : "pointer-events-auto cursor-pointer"}
+            >
               <polyline
                 points={screen.map(p => `${p.x},${p.y}`).join(" ")}
                 fill="none"
@@ -209,14 +250,20 @@ export function TraceLayer({
                 strokeDasharray={run.isSuggestion ? "10 6" : undefined}
                 strokeLinejoin="round"
                 strokeLinecap="round"
-                onClick={() => !tracing && onSelectRun(isSelected ? null : run.id)}
+                onClick={() =>
+                  !tracing && onSelectRun(isSelected ? null : run.id)
+                }
               />
               {/* A fat invisible line makes the run clickable without needing
                   pixel-accurate aim on a 3px stroke. */}
               <polyline
                 points={screen.map(p => `${p.x},${p.y}`).join(" ")}
-                fill="none" stroke="transparent" strokeWidth={18}
-                onClick={() => !tracing && onSelectRun(isSelected ? null : run.id)}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={18}
+                onClick={() =>
+                  !tracing && onSelectRun(isSelected ? null : run.id)
+                }
               />
             </g>
           );
@@ -233,12 +280,18 @@ export function TraceLayer({
             <g
               key={placed.id}
               className={tracing ? "" : "pointer-events-auto cursor-pointer"}
-              onClick={() => !tracing && onSelectStamp(isSelected ? null : placed.id)}
+              onClick={() =>
+                !tracing && onSelectStamp(isSelected ? null : placed.id)
+              }
             >
               <circle
-                cx={at.x} cy={at.y} r={isSelected ? 13 : 10}
-                fill="#F5C518" fillOpacity={0.22}
-                stroke="#F5C518" strokeWidth={isSelected ? 3.5 : 2.5}
+                cx={at.x}
+                cy={at.y}
+                r={isSelected ? 13 : 10}
+                fill="#F5C518"
+                fillOpacity={0.22}
+                stroke="#F5C518"
+                strokeWidth={isSelected ? 3.5 : 2.5}
               />
               <circle cx={at.x} cy={at.y} r={3} fill="#F5C518" />
               <title>{placed.assemblyName}</title>
@@ -249,8 +302,13 @@ export function TraceLayer({
         {/* Where a click from the counted-items list landed. */}
         {focusPoint && (
           <circle
-            cx={toScreen(focusPoint).x} cy={toScreen(focusPoint).y} r={26}
-            fill="none" stroke="#F5C518" strokeWidth={3} strokeDasharray="7 5"
+            cx={toScreen(focusPoint).x}
+            cy={toScreen(focusPoint).y}
+            r={26}
+            fill="none"
+            stroke="#F5C518"
+            strokeWidth={3}
+            strokeDasharray="7 5"
             className="animate-pulse"
           />
         )}
@@ -259,7 +317,10 @@ export function TraceLayer({
         {tracing && points.length > 0 && (
           <>
             <polyline
-              points={points.map(toScreen).map(p => `${p.x},${p.y}`).join(" ")}
+              points={points
+                .map(toScreen)
+                .map(p => `${p.x},${p.y}`)
+                .join(" ")}
               fill="none"
               stroke={RUN_COLOR[pathType]}
               strokeWidth={3}
@@ -285,7 +346,9 @@ export function TraceLayer({
               return (
                 <circle
                   key={index}
-                  cx={screen.x} cy={screen.y} r={index === 0 ? 6 : 4}
+                  cx={screen.x}
+                  cy={screen.y}
+                  r={index === 0 ? 6 : 4}
                   fill={index === 0 ? RUN_COLOR[pathType] : "#0b0b0b"}
                   stroke={RUN_COLOR[pathType]}
                   strokeWidth={2}
@@ -324,7 +387,9 @@ export function TraceLayer({
           <div className="w-px h-4 bg-border" />
 
           <Button
-            size="sm" variant="ghost" className="h-6 w-6 p-0"
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0"
             onClick={() => onPointsChange(points.slice(0, -1))}
             disabled={points.length === 0}
             title="Undo last point (Backspace)"
@@ -333,18 +398,23 @@ export function TraceLayer({
             <Undo2 className="w-3.5 h-3.5" />
           </Button>
           <Button
-            size="sm" className="h-6 gap-1 text-xs"
+            size="sm"
+            className="h-6 gap-1 text-xs"
             onClick={onFinish}
             disabled={points.length < 2}
             title="Finish this run (Enter or double-click)"
           >
             <Check className="w-3 h-3" /> Finish
             {committedInches !== null && points.length >= 2 && (
-              <span className="font-mono">{formatFeetInches(committedInches)}</span>
+              <span className="font-mono">
+                {formatFeetInches(committedInches)}
+              </span>
             )}
           </Button>
           <Button
-            size="sm" variant="ghost" className="h-6 w-6 p-0 text-muted-foreground"
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 text-muted-foreground"
             onClick={onCancel}
             title="Discard this run (Escape twice)"
             aria-label="Discard this run"

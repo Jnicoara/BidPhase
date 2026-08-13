@@ -22,7 +22,14 @@ import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Archive, CalendarDays, LayoutDashboard, Plus, Check, X } from "lucide-react";
+import {
+  Archive,
+  CalendarDays,
+  LayoutDashboard,
+  Plus,
+  Check,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -32,13 +39,19 @@ import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
 import { NavigationHelper } from "@/components/NavigationHelper";
 import { RETENTION_DAYS } from "@shared/retention";
 import {
-  BID_STATUS_ORDER, calendarDate, dueUrgency, groupBidsByStatus, type DueUrgency,
+  BID_STATUS_ORDER,
+  calendarDate,
+  dueUrgency,
+  groupBidsByStatus,
+  type DueUrgency,
 } from "@/lib/bidDashboard";
 
 const money = (value: number) =>
   value.toLocaleString("en-US", {
-    style: "currency", currency: "USD",
-    minimumFractionDigits: 0, maximumFractionDigits: 0,
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   });
 
 /** Deadlines read as a weekday and date — "Fri 14 Aug" scans faster than a slashed number. */
@@ -47,7 +60,11 @@ const formatDue = (value: string | Date | null) => {
   // midnight and would print as the 13th anywhere behind UTC.
   const date = calendarDate(value);
   if (!date) return null;
-  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 };
 
 const STATUS_ACCENT: Record<string, string> = {
@@ -71,15 +88,18 @@ const URGENCY_LABEL: Partial<Record<DueUrgency, string>> = {
   today: "due today",
 };
 
-
-
-export default function DashboardPage({ onOpenBid, onOpenArchive }: {
+export default function DashboardPage({
+  onOpenBid,
+  onOpenArchive,
+}: {
   onOpenBid: (id: number) => void;
   onOpenArchive: () => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
-  const [confirmArchive, setConfirmArchive] = useState<PendingArchive | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState<PendingArchive | null>(
+    null
+  );
 
   const utils = trpc.useUtils();
   const { data: bids = [], isLoading } = trpc.bids.dashboard.useQuery();
@@ -87,8 +107,13 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
 
   const createBid = trpc.bids.create.useMutation({
     onError: error => toast.error(error.message),
-    onSuccess: bid => { if (bid) onOpenBid(bid.id); },
-    onSettled: () => { void utils.bids.dashboard.invalidate(); void utils.bids.list.invalidate(); },
+    onSuccess: bid => {
+      if (bid) onOpenBid(bid.id);
+    },
+    onSettled: () => {
+      void utils.bids.dashboard.invalidate();
+      void utils.bids.list.invalidate();
+    },
   });
 
   /**
@@ -104,11 +129,14 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
       // Captured BEFORE the optimistic removal — by the time onSuccess runs the
       // row is out of the cache, and looking it up there names every bid "Bid".
       const name = snapshot?.find(b => b.id === id)?.name;
-      utils.bids.dashboard.setData(undefined, old => old?.filter(b => b.id !== id));
+      utils.bids.dashboard.setData(undefined, old =>
+        old?.filter(b => b.id !== id)
+      );
       return { snapshot, name };
     },
     onError: (error, _vars, context) => {
-      if (context?.snapshot) utils.bids.dashboard.setData(undefined, context.snapshot);
+      if (context?.snapshot)
+        utils.bids.dashboard.setData(undefined, context.snapshot);
       toast.error(error.message);
     },
     onSuccess: (_result, { id }, context) => {
@@ -139,19 +167,27 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
   /** One number per column, plus the headline: what is still in play. */
   const summary = useMemo(() => {
     const perStatus = Object.fromEntries(
-      groups.map(g => [g.status, {
-        count: g.bids.length,
-        value: g.bids.reduce((sum, b) => sum + b.finalPrice, 0),
-      }])
+      groups.map(g => [
+        g.status,
+        {
+          count: g.bids.length,
+          value: g.bids.reduce((sum, b) => sum + b.finalPrice, 0),
+        },
+      ])
     ) as Record<string, { count: number; value: number }>;
 
-    const openValue = (perStatus.Draft?.value ?? 0) + (perStatus.Active?.value ?? 0);
-    const openCount = (perStatus.Draft?.count ?? 0) + (perStatus.Active?.count ?? 0);
+    const openValue =
+      (perStatus.Draft?.value ?? 0) + (perStatus.Active?.value ?? 0);
+    const openCount =
+      (perStatus.Draft?.count ?? 0) + (perStatus.Active?.count ?? 0);
     return { perStatus, openValue, openCount };
   }, [groups]);
 
   const start = () => {
-    if (!name.trim()) { toast.error("Give the bid a name."); return; }
+    if (!name.trim()) {
+      toast.error("Give the bid a name.");
+      return;
+    }
     createBid.mutate({ name: name.trim() });
     setName("");
     setAdding(false);
@@ -165,28 +201,36 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold">Dashboard</h1>
             <p className="text-xs text-muted-foreground">
-              Every bid by stage. Draft and Active sort by deadline; Won and Lost by what you
-              touched last.
+              Every bid by stage. Draft and Active sort by deadline; Won and
+              Lost by what you touched last.
             </p>
           </div>
           <div className="text-right shrink-0 mr-2">
             <div className="text-xs text-muted-foreground">
               Out for bid ({summary.openCount})
             </div>
-            <div className="font-mono text-base text-[#F5C518]">{money(summary.openValue)}</div>
+            <div className="font-mono text-base text-[#F5C518]">
+              {money(summary.openValue)}
+            </div>
           </div>
           {/* Only offered once there is something in it — an always-visible
               empty Archive is a door to a blank room. */}
           {archived.length > 0 && (
             <Button
-              size="sm" variant="ghost" className="h-8 gap-1.5 text-xs shrink-0"
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 text-xs shrink-0"
               onClick={onOpenArchive}
             >
               <Archive className="w-3.5 h-3.5" /> Archive
               <span className="text-muted-foreground">{archived.length}</span>
             </Button>
           )}
-          <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setAdding(v => !v)}>
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setAdding(v => !v)}
+          >
             <Plus className="w-3.5 h-3.5" /> New bid
           </Button>
         </div>
@@ -198,7 +242,10 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
               onChange={e => setName(e.target.value)}
               onKeyDown={e => {
                 if (e.key === "Enter") start();
-                if (e.key === "Escape") { setAdding(false); setName(""); }
+                if (e.key === "Escape") {
+                  setAdding(false);
+                  setName("");
+                }
               }}
               placeholder="Bid name — e.g. Maple Street duplex"
               className="h-8 flex-1 min-w-[14rem] text-sm"
@@ -208,8 +255,13 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
               <Check className="w-3 h-3" /> Create
             </Button>
             <Button
-              size="sm" variant="ghost" className="h-8 gap-1.5 text-xs"
-              onClick={() => { setAdding(false); setName(""); }}
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => {
+                setAdding(false);
+                setName("");
+              }}
             >
               <X className="w-3 h-3" /> Cancel
             </Button>
@@ -228,7 +280,9 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
         </div>
 
         {isLoading ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">Loading bids…</div>
+          <div className="py-16 text-center text-sm text-muted-foreground">
+            Loading bids…
+          </div>
         ) : bids.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted-foreground">
             No bids yet. Create one to start pricing a job.
@@ -236,17 +290,24 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {groups.map(group => {
-              const stats = summary.perStatus[group.status] ?? { count: 0, value: 0 };
+              const stats = summary.perStatus[group.status] ?? {
+                count: 0,
+                value: 0,
+              };
               return (
                 <div key={group.status} className="min-w-0">
                   <div className="flex items-baseline gap-2 mb-2 px-1">
-                    <span className={cn(
-                      "text-xs font-semibold uppercase tracking-wide",
-                      STATUS_ACCENT[group.status]
-                    )}>
+                    <span
+                      className={cn(
+                        "text-xs font-semibold uppercase tracking-wide",
+                        STATUS_ACCENT[group.status]
+                      )}
+                    >
                       {group.status}
                     </span>
-                    <span className="text-xs text-muted-foreground/70">{stats.count}</span>
+                    <span className="text-xs text-muted-foreground/70">
+                      {stats.count}
+                    </span>
                     <span className="ml-auto font-mono text-xs text-muted-foreground">
                       {money(stats.value)}
                     </span>
@@ -289,7 +350,13 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
                                   the dashboard is for reading, and a delete-ish
                                   control on every card competes with that. */}
                               <button
-                                onClick={e => { e.stopPropagation(); setConfirmArchive({ id: bid.id, name: bid.name }); }}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setConfirmArchive({
+                                    id: bid.id,
+                                    name: bid.name,
+                                  });
+                                }}
                                 className="shrink-0 -mr-1 -mt-0.5 p-1 rounded text-muted-foreground/60 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-foreground hover:bg-muted transition-all"
                                 aria-label={`Archive ${bid.name}`}
                                 title="Archive — hides it here, recoverable for 30 days"
@@ -299,25 +366,34 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
                             </div>
 
                             <div className="flex items-center gap-2 mt-1.5">
-                              <span className={cn(
-                                "flex items-center gap-1 text-xs",
-                                URGENCY_STYLE[urgency]
-                              )}>
+                              <span
+                                className={cn(
+                                  "flex items-center gap-1 text-xs",
+                                  URGENCY_STYLE[urgency]
+                                )}
+                              >
                                 <CalendarDays className="w-3 h-3" />
                                 {due ?? "No due date"}
                                 {URGENCY_LABEL[urgency] && (
-                                  <span className="font-medium">· {URGENCY_LABEL[urgency]}</span>
+                                  <span className="font-medium">
+                                    · {URGENCY_LABEL[urgency]}
+                                  </span>
                                 )}
                               </span>
                               <span className="ml-auto text-xs text-muted-foreground/70">
-                                {bid.lineCount} line{bid.lineCount === 1 ? "" : "s"}
+                                {bid.lineCount} line
+                                {bid.lineCount === 1 ? "" : "s"}
                               </span>
                             </div>
 
                             {bid.trades?.length ? (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {bid.trades.slice(0, 3).map(trade => (
-                                  <Badge key={trade} variant="outline" className="text-[10px] px-1.5 py-0">
+                                  <Badge
+                                    key={trade}
+                                    variant="outline"
+                                    className="text-[10px] px-1.5 py-0"
+                                  >
                                     {trade}
                                   </Badge>
                                 ))}
@@ -335,8 +411,8 @@ export default function DashboardPage({ onOpenBid, onOpenArchive }: {
         )}
 
         <p className="text-xs text-muted-foreground mt-4">
-          Bids without a deadline sort to the bottom of Draft and Active, so real dates stay on top.
-          Set one from the bid itself.
+          Bids without a deadline sort to the bottom of Draft and Active, so
+          real dates stay on top. Set one from the bid itself.
         </p>
       </div>
 

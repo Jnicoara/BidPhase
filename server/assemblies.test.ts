@@ -23,7 +23,13 @@ import {
   seedBaselineMaterials,
   seedBaselineModifiers,
 } from "./db";
-import { assemblies, laborRates, materials, modifiers, users } from "../drizzle/schema";
+import {
+  assemblies,
+  laborRates,
+  materials,
+  modifiers,
+  users,
+} from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
 
 const USER = 6161;
@@ -39,11 +45,22 @@ const callerFor = (userId: number) =>
 const caller = () => callerFor(USER);
 
 /** Look up a seeded baseline row id by name. */
-async function baselineId(table: "materials" | "modifiers" | "labor_rates", name: string) {
+async function baselineId(
+  table: "materials" | "modifiers" | "labor_rates",
+  name: string
+) {
   const db = await getDb();
-  const target = table === "materials" ? materials : table === "modifiers" ? modifiers : laborRates;
-  const [row] = await db!.select().from(target)
-    .where(eq(target.name, name)).limit(1);
+  const target =
+    table === "materials"
+      ? materials
+      : table === "modifiers"
+        ? modifiers
+        : laborRates;
+  const [row] = await db!
+    .select()
+    .from(target)
+    .where(eq(target.name, name))
+    .limit(1);
   return row.id as number;
 }
 
@@ -53,10 +70,16 @@ beforeAll(async () => {
   if (!db) return;
 
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await db.insert(users).values({
-        id, openId: `test-assemblies-${id}`, name: `Assembly test user ${id}`,
+        id,
+        openId: `test-assemblies-${id}`,
+        name: `Assembly test user ${id}`,
       });
     }
   }
@@ -72,7 +95,9 @@ beforeEach(async () => {
   if (!hasDb) return;
   const db = await getDb();
   if (!db) return;
-  await db.delete(assemblies).where(inArray(assemblies.userId, [USER, OTHER_USER]));
+  await db
+    .delete(assemblies)
+    .where(inArray(assemblies.userId, [USER, OTHER_USER]));
 });
 
 describe.skipIf(!hasDb)("starter assemblies", () => {
@@ -84,18 +109,26 @@ describe.skipIf(!hasDb)("starter assemblies", () => {
     const detail = await caller().assemblies.get({ id: duplex!.id });
     expect(detail.materials.length).toBe(5);
     expect(detail.materials.map(m => m.name)).toContain("Duplex receptacle");
-    expect(detail.materials.find(m => m.name === "12-2 NM-B")?.qty).toBe("25.0000");
+    expect(detail.materials.find(m => m.name === "12-2 NM-B")?.qty).toBe(
+      "25.0000"
+    );
   });
 
   it("only seeds assemblies whose materials all exist", async () => {
     // STARTER_LIBRARY marks 36 materials as missing; anything needing one is
     // skipped rather than shipped half-built and under-priced.
     const db = await getDb();
-    const baselines = await db!.select().from(assemblies).where(isNull(assemblies.userId));
+    const baselines = await db!
+      .select()
+      .from(assemblies)
+      .where(isNull(assemblies.userId));
     expect(baselines.length).toBeGreaterThan(0);
     for (const assembly of baselines) {
       const detail = await caller().assemblies.get({ id: assembly.id });
-      expect(detail.materials.length, `${assembly.name} has no materials`).toBeGreaterThan(0);
+      expect(
+        detail.materials.length,
+        `${assembly.name} has no materials`
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -139,7 +172,8 @@ describe.skipIf(!hasDb)("recipe cost", () => {
     const rates = await caller().laborRates.list();
     const journeyman = rates.find(r => r.name === "Journeyman")!;
     const updated = await caller().laborRates.update({
-      id: journeyman.id, hourlyCost: JOURNEYMAN_RATE,
+      id: journeyman.id,
+      hourlyCost: JOURNEYMAN_RATE,
     });
     return updated.laborRate!.id;
   }
@@ -147,23 +181,31 @@ describe.skipIf(!hasDb)("recipe cost", () => {
   beforeAll(async () => {
     const device = await caller().materials.create({
       name: `Cost fixture device ${Date.now()}${Math.random()}`,
-      unitOfSale: "each", costPerUnit: 1.5, category: "Receptacles",
+      unitOfSale: "each",
+      costPerUnit: 1.5,
+      category: "Receptacles",
     });
     const box = await caller().materials.create({
       name: `Cost fixture box ${Date.now()}${Math.random()}`,
-      unitOfSale: "each", costPerUnit: 1.25, category: "Boxes",
+      unitOfSale: "each",
+      costPerUnit: 1.25,
+      category: "Boxes",
     });
     pricedDeviceId = device!.id;
     pricedBoxId = box!.id;
   });
 
   /** Build a small assembly with known numbers so the math is checkable by hand. */
-  async function buildFixture(overrides: Partial<{
-    hours: number; modifierIds: number[]; laborRateId: number | null;
-  }> = {}) {
+  async function buildFixture(
+    overrides: Partial<{
+      hours: number;
+      modifierIds: number[];
+      laborRateId: number | null;
+    }> = {}
+  ) {
     const journeymanId = await pricedJourneymanId();
-    const duplexId = pricedDeviceId;   // $1.50 each
-    const boxId = pricedBoxId;         // $1.25 each
+    const duplexId = pricedDeviceId; // $1.50 each
+    const boxId = pricedBoxId; // $1.25 each
 
     const created = await caller().assemblies.create({
       name: `Cost fixture ${Date.now()}${Math.random()}`,
@@ -171,7 +213,10 @@ describe.skipIf(!hasDb)("recipe cost", () => {
       trade: "electrical",
       projectType: "both",
       baseLaborHours: overrides.hours ?? 1,
-      laborRateId: overrides.laborRateId !== undefined ? overrides.laborRateId : journeymanId,
+      laborRateId:
+        overrides.laborRateId !== undefined
+          ? overrides.laborRateId
+          : journeymanId,
       materials: [
         { materialId: duplexId, qty: 2 },
         { materialId: boxId, qty: 2 },
@@ -209,10 +254,12 @@ describe.skipIf(!hasDb)("recipe cost", () => {
     // Priced by this test, like the Journeyman above — starter roles ship at $0.
     const rates = await caller().laborRates.list();
     const apprentice = await caller().laborRates.update({
-      id: rates.find(r => r.name === "Apprentice")!.id, hourlyCost: 22,
+      id: rates.find(r => r.name === "Apprentice")!.id,
+      hourlyCost: 22,
     });
     await caller().assemblies.update({
-      id: assembly.id, laborRateId: apprentice.laborRate!.id,
+      id: assembly.id,
+      laborRateId: apprentice.laborRate!.id,
     });
     const priced = await caller().assemblies.price({ id: assembly.id });
     expect(priced.line.laborCost).toBeCloseTo(22, 10);
@@ -225,7 +272,10 @@ describe.skipIf(!hasDb)("recipe cost", () => {
       annualSalary: 60000,
       annualHours: 2080,
     });
-    const assembly = await buildFixture({ hours: 1, laborRateId: pm.laborRate!.id });
+    const assembly = await buildFixture({
+      hours: 1,
+      laborRateId: pm.laborRate!.id,
+    });
     const priced = await caller().assemblies.price({ id: assembly.id });
     // $60,000 ÷ 2,080 ≈ $28.85
     expect(priced.line.laborCost).toBeCloseTo(28.85, 1);
@@ -242,7 +292,9 @@ describe.skipIf(!hasDb)("recipe cost", () => {
     const assembly = await buildFixture();
     const cheap = await caller().materials.create({
       name: `Cost fixture consumable ${Date.now()}${Math.random()}`,
-      unitOfSale: "each", costPerUnit: 0.08, category: "Connectors & Terminations",
+      unitOfSale: "each",
+      costPerUnit: 0.08,
+      category: "Connectors & Terminations",
     });
     await caller().assemblies.update({
       id: assembly.id,
@@ -253,9 +305,12 @@ describe.skipIf(!hasDb)("recipe cost", () => {
   });
 
   it("ADDS modifiers rather than compounding them", async () => {
-    const heightId = await baselineId("modifiers", "Working at height");        // +12%
-    const overtimeId = await baselineId("modifiers", "Scheduled overtime");     // +20%
-    const assembly = await buildFixture({ hours: 10, modifierIds: [heightId, overtimeId] });
+    const heightId = await baselineId("modifiers", "Working at height"); // +12%
+    const overtimeId = await baselineId("modifiers", "Scheduled overtime"); // +20%
+    const assembly = await buildFixture({
+      hours: 10,
+      modifierIds: [heightId, overtimeId],
+    });
 
     const priced = await caller().assemblies.price({ id: assembly.id });
     // 10 h × (1 + 0.32) = 13.2 h. Compounding would give 1.12 × 1.20 = 13.44 h.
@@ -278,8 +333,14 @@ describe.skipIf(!hasDb)("recipe cost", () => {
 
   it("scales the whole line by quantity", async () => {
     const assembly = await buildFixture({ hours: 1 });
-    const one = await caller().assemblies.price({ id: assembly.id, quantity: 1 });
-    const ten = await caller().assemblies.price({ id: assembly.id, quantity: 10 });
+    const one = await caller().assemblies.price({
+      id: assembly.id,
+      quantity: 1,
+    });
+    const ten = await caller().assemblies.price({
+      id: assembly.id,
+      quantity: 10,
+    });
     expect(ten.line.directCost).toBeCloseTo(one.line.directCost * 10, 8);
   });
 
@@ -307,10 +368,12 @@ describe.skipIf(!hasDb)("recipe cost", () => {
   it("gives a higher price for target margin than markup at the same rate", async () => {
     const assembly = await buildFixture({ hours: 1 });
     const markup = await caller().assemblies.price({
-      id: assembly.id, profit: { method: "markup", value: 0.2 },
+      id: assembly.id,
+      profit: { method: "markup", value: 0.2 },
     });
     const margin = await caller().assemblies.price({
-      id: assembly.id, profit: { method: "margin", value: 0.2 },
+      id: assembly.id,
+      profit: { method: "margin", value: 0.2 },
     });
     expect(margin.bid!.finalPrice).toBeGreaterThan(markup.bid!.finalPrice);
   });
@@ -319,19 +382,27 @@ describe.skipIf(!hasDb)("recipe cost", () => {
 describe.skipIf(!hasDb)("fork and revert", () => {
   async function starter() {
     const list = await caller().assemblies.list();
-    return list.find(a => a.name === "Single-pole switch" && a.userId === null)!;
+    return list.find(
+      a => a.name === "Single-pole switch" && a.userId === null
+    )!;
   }
 
   it("editing a starter forks it and leaves the shipped row alone", async () => {
     const original = await starter();
-    const result = await caller().assemblies.update({ id: original.id, baseLaborHours: 2.5 });
+    const result = await caller().assemblies.update({
+      id: original.id,
+      baseLaborHours: 2.5,
+    });
 
     expect(result.forked).toBe(true);
     expect(result.assembly?.userId).toBe(USER);
     expect(result.assembly?.id).not.toBe(original.id);
 
     const db = await getDb();
-    const [shared] = await db!.select().from(assemblies).where(eq(assemblies.id, original.id));
+    const [shared] = await db!
+      .select()
+      .from(assemblies)
+      .where(eq(assemblies.id, original.id));
     expect(Number(shared.baseLaborHours)).toBeCloseTo(0.6, 4);
   });
 
@@ -339,12 +410,16 @@ describe.skipIf(!hasDb)("fork and revert", () => {
     const original = await starter();
     const before = await caller().assemblies.get({ id: original.id });
 
-    const result = await caller().assemblies.update({ id: original.id, baseLaborHours: 2.5 });
+    const result = await caller().assemblies.update({
+      id: original.id,
+      baseLaborHours: 2.5,
+    });
     const forked = await caller().assemblies.get({ id: result.assembly!.id });
 
     expect(forked.materials.length).toBe(before.materials.length);
-    expect(forked.materials.map(m => m.name).sort())
-      .toEqual(before.materials.map(m => m.name).sort());
+    expect(forked.materials.map(m => m.name).sort()).toEqual(
+      before.materials.map(m => m.name).sort()
+    );
   });
 
   it("the fork replaces its starter in the list", async () => {
@@ -358,9 +433,13 @@ describe.skipIf(!hasDb)("fork and revert", () => {
 
   it("a second edit does not fork again", async () => {
     const original = await starter();
-    const first = await caller().assemblies.update({ id: original.id, baseLaborHours: 2.5 });
+    const first = await caller().assemblies.update({
+      id: original.id,
+      baseLaborHours: 2.5,
+    });
     const second = await caller().assemblies.update({
-      id: first.assembly!.id, baseLaborHours: 3,
+      id: first.assembly!.id,
+      baseLaborHours: 3,
     });
     expect(second.forked).toBe(false);
   });
@@ -377,7 +456,9 @@ describe.skipIf(!hasDb)("fork and revert", () => {
     const edited = await caller().assemblies.get({ id: forked.assembly!.id });
     expect(edited.materials).toHaveLength(1);
 
-    const reverted = await caller().assemblies.revert({ id: forked.assembly!.id });
+    const reverted = await caller().assemblies.revert({
+      id: forked.assembly!.id,
+    });
     expect(Number(reverted!.baseLaborHours)).toBeCloseTo(0.6, 4);
     expect(reverted!.materials.length).toBe(before.materials.length);
     expect(reverted!.id).toBe(forked.assembly!.id);
@@ -386,10 +467,15 @@ describe.skipIf(!hasDb)("fork and revert", () => {
   it("reverting restores the modifier set too", async () => {
     const list = await caller().assemblies.list();
     const fan = list.find(a => a.name === "Ceiling fan standard")!;
-    const forked = await caller().assemblies.update({ id: fan.id, modifierIds: [] });
+    const forked = await caller().assemblies.update({
+      id: fan.id,
+      modifierIds: [],
+    });
     expect(forked.assembly?.modifierIds).toHaveLength(0);
 
-    const reverted = await caller().assemblies.revert({ id: forked.assembly!.id });
+    const reverted = await caller().assemblies.revert({
+      id: forked.assembly!.id,
+    });
     expect(reverted!.modifierIds).toHaveLength(1);
   });
 
@@ -397,19 +483,35 @@ describe.skipIf(!hasDb)("fork and revert", () => {
     const original = await starter();
     const starterPrice = await caller().assemblies.price({ id: original.id });
 
-    const forked = await caller().assemblies.update({ id: original.id, baseLaborHours: 9 });
+    const forked = await caller().assemblies.update({
+      id: original.id,
+      baseLaborHours: 9,
+    });
     await caller().assemblies.revert({ id: forked.assembly!.id });
-    const revertedPrice = await caller().assemblies.price({ id: forked.assembly!.id });
+    const revertedPrice = await caller().assemblies.price({
+      id: forked.assembly!.id,
+    });
 
-    expect(revertedPrice.line.directCost).toBeCloseTo(starterPrice.line.directCost, 6);
+    expect(revertedPrice.line.directCost).toBeCloseTo(
+      starterPrice.line.directCost,
+      6
+    );
   });
 
   it("refuses to revert an assembly built from scratch", async () => {
     const created = await caller().assemblies.create({
-      name: `Scratch ${Date.now()}`, category: "Devices", trade: "electrical",
-      projectType: null, baseLaborHours: 1, laborRateId: null, materials: [], modifierIds: [],
+      name: `Scratch ${Date.now()}`,
+      category: "Devices",
+      trade: "electrical",
+      projectType: null,
+      baseLaborHours: 1,
+      laborRateId: null,
+      materials: [],
+      modifierIds: [],
     });
-    await expect(caller().assemblies.revert({ id: created!.id })).rejects.toThrow(/no original/i);
+    await expect(
+      caller().assemblies.revert({ id: created!.id })
+    ).rejects.toThrow(/no original/i);
   });
 
   it("one user's fork does not change another user's list", async () => {
@@ -424,21 +526,38 @@ describe.skipIf(!hasDb)("fork and revert", () => {
 
   it("refuses to remove a starter but removes a custom one", async () => {
     const original = await starter();
-    await expect(caller().assemblies.archive({ id: original.id }))
-      .rejects.toThrow(/cannot be removed/i);
+    await expect(
+      caller().assemblies.archive({ id: original.id })
+    ).rejects.toThrow(/cannot be removed/i);
 
     const created = await caller().assemblies.create({
-      name: `Disposable ${Date.now()}`, category: "Devices", trade: "electrical",
-      projectType: null, baseLaborHours: 1, laborRateId: null, materials: [], modifierIds: [],
+      name: `Disposable ${Date.now()}`,
+      category: "Devices",
+      trade: "electrical",
+      projectType: null,
+      baseLaborHours: 1,
+      laborRateId: null,
+      materials: [],
+      modifierIds: [],
     });
     await caller().assemblies.archive({ id: created!.id });
-    expect((await caller().assemblies.list()).some(a => a.id === created!.id)).toBe(false);
+    expect(
+      (await caller().assemblies.list()).some(a => a.id === created!.id)
+    ).toBe(false);
   });
 
   it("refuses a duplicate name", async () => {
-    await expect(caller().assemblies.create({
-      name: "Single-pole switch", category: "Devices", trade: "electrical",
-      projectType: null, baseLaborHours: 1, laborRateId: null, materials: [], modifierIds: [],
-    })).rejects.toThrow(/already exists/i);
+    await expect(
+      caller().assemblies.create({
+        name: "Single-pole switch",
+        category: "Devices",
+        trade: "electrical",
+        projectType: null,
+        baseLaborHours: 1,
+        laborRateId: null,
+        materials: [],
+        modifierIds: [],
+      })
+    ).rejects.toThrow(/already exists/i);
   });
 });

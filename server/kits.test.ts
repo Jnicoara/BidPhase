@@ -47,10 +47,12 @@ async function readyAssembly(name: string) {
   // this file zero and the assertions meaningless.
   const rates = await caller().laborRates.list();
   const journeyman = await caller().laborRates.update({
-    id: rates.find(r => r.name === "Journeyman")!.id, hourlyCost: 38,
+    id: rates.find(r => r.name === "Journeyman")!.id,
+    hourlyCost: 38,
   });
   const result = await caller().assemblies.update({
-    id: starter.id, laborRateId: journeyman.laborRate!.id,
+    id: starter.id,
+    laborRateId: journeyman.laborRate!.id,
   });
   return result.assembly!;
 }
@@ -65,9 +67,15 @@ beforeAll(async () => {
   if (!db) return;
 
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
-      await db.insert(users).values({ id, openId: `test-kits-${id}`, name: `Kit test user ${id}` });
+      await db
+        .insert(users)
+        .values({ id, openId: `test-kits-${id}`, name: `Kit test user ${id}` });
     }
   }
 
@@ -84,7 +92,9 @@ beforeEach(async () => {
   if (!db) return;
   await db.delete(bids).where(inArray(bids.userId, [USER, OTHER_USER]));
   await db.delete(kits).where(inArray(kits.userId, [USER, OTHER_USER]));
-  await db.delete(assemblies).where(inArray(assemblies.userId, [USER, OTHER_USER]));
+  await db
+    .delete(assemblies)
+    .where(inArray(assemblies.userId, [USER, OTHER_USER]));
 });
 
 describe.skipIf(!hasDb)("starter kits", () => {
@@ -95,7 +105,9 @@ describe.skipIf(!hasDb)("starter kits", () => {
 
     const detail = await caller().kits.get({ id: bedroom!.id });
     expect(detail.items.length).toBeGreaterThan(0);
-    expect(detail.items.find(i => i.name === "Duplex receptacle standard")?.qty).toBe("4.0000");
+    expect(
+      detail.items.find(i => i.name === "Duplex receptacle standard")?.qty
+    ).toBe("4.0000");
   });
 
   it("only seeds kits whose assemblies all exist", async () => {
@@ -139,12 +151,23 @@ describe.skipIf(!hasDb)("kit cost rollup", () => {
     const priced = await caller().kits.price({ id: kit.id });
 
     const bid = await newBid();
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: receptacle.id, qty: 4 });
-    await caller().bids.addAssembly({ bidId: bid.id, assemblyId: switchAsm.id, qty: 2 });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: receptacle.id,
+      qty: 4,
+    });
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: switchAsm.id,
+      qty: 2,
+    });
     const detail = await caller().bids.get({ id: bid.id });
 
     expect(priced.totals.directCost).toBeCloseTo(detail.totals.directCost, 2);
-    expect(priced.totals.totalLaborHours).toBeCloseTo(detail.totals.totalLaborHours, 4);
+    expect(priced.totals.totalLaborHours).toBeCloseTo(
+      detail.totals.totalLaborHours,
+      4
+    );
   });
 
   it("scales linearly with the kit quantity", async () => {
@@ -166,7 +189,10 @@ describe.skipIf(!hasDb)("kit cost rollup", () => {
   });
 
   it("prices an empty kit at zero rather than failing", async () => {
-    const kit = await caller().kits.create({ name: `Empty ${Date.now()}`, items: [] });
+    const kit = await caller().kits.create({
+      name: `Empty ${Date.now()}`,
+      items: [],
+    });
     const priced = await caller().kits.price({ id: kit!.id });
     expect(priced.totals.directCost).toBe(0);
   });
@@ -253,7 +279,10 @@ describe.skipIf(!hasDb)("adding a kit to a bid", () => {
     await caller().bids.updateLine({ bidId: bid.id, id: line.id, qty: 5 });
 
     const after = await caller().bids.get({ id: bid.id });
-    expect(Number(after.lines.find(l => l.id === line.id)!.qty)).toBeCloseTo(5, 4);
+    expect(Number(after.lines.find(l => l.id === line.id)!.qty)).toBeCloseTo(
+      5,
+      4
+    );
     // The sibling line is untouched.
     const sibling = after.lines.find(l => l.assemblyId !== receptacle.id)!;
     expect(Number(sibling.qty)).toBeCloseTo(1, 4);
@@ -262,7 +291,12 @@ describe.skipIf(!hasDb)("adding a kit to a bid", () => {
   it("carries a unit label onto every line, so kits work with mass duplicate", async () => {
     const { kit } = await kitFixture();
     const bid = await newBid();
-    await caller().bids.addKit({ bidId: bid.id, kitId: kit.id, qty: 1, unitLabel: "Bedroom 1" });
+    await caller().bids.addKit({
+      bidId: bid.id,
+      kitId: kit.id,
+      qty: 1,
+      unitLabel: "Bedroom 1",
+    });
 
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.lines.every(l => l.unitLabel === "Bedroom 1")).toBe(true);
@@ -280,9 +314,14 @@ describe.skipIf(!hasDb)("kit fork and revert", () => {
     expect(result.forked).toBe(true);
 
     const db = await getDb();
-    const [shared] = await db!.select().from(kits).where(eq(kits.id, starter.id));
+    const [shared] = await db!
+      .select()
+      .from(kits)
+      .where(eq(kits.id, starter.id));
     expect(shared.userId).toBeNull();
-    const sharedItems = await callerFor(OTHER_USER).kits.get({ id: starter.id });
+    const sharedItems = await callerFor(OTHER_USER).kits.get({
+      id: starter.id,
+    });
     expect(sharedItems.items.length).toBeGreaterThan(0);
   });
 
@@ -301,7 +340,9 @@ describe.skipIf(!hasDb)("kit fork and revert", () => {
   it("refuses to remove a starter kit", async () => {
     const list = await caller().kits.list();
     const starter = list.find(k => k.userId === null)!;
-    await expect(caller().kits.archive({ id: starter.id })).rejects.toThrow(/cannot be removed/i);
+    await expect(caller().kits.archive({ id: starter.id })).rejects.toThrow(
+      /cannot be removed/i
+    );
   });
 });
 
@@ -311,7 +352,8 @@ describe.skipIf(!hasDb)("duplicating", () => {
     const before = await caller().assemblies.get({ id: source.id });
 
     const copy = await caller().assemblies.duplicate({
-      id: source.id, name: `Copy ${Date.now()}`,
+      id: source.id,
+      name: `Copy ${Date.now()}`,
     });
 
     expect(copy?.id).not.toBe(source.id);
@@ -321,25 +363,39 @@ describe.skipIf(!hasDb)("duplicating", () => {
 
     // Edit the copy hard, then confirm the original is untouched.
     await caller().assemblies.update({
-      id: copy!.id, baseLaborHours: 99, materials: [], modifierIds: [],
+      id: copy!.id,
+      baseLaborHours: 99,
+      materials: [],
+      modifierIds: [],
     });
 
     const original = await caller().assemblies.get({ id: source.id });
-    expect(Number(original.baseLaborHours)).toBeCloseTo(Number(before.baseLaborHours), 4);
+    expect(Number(original.baseLaborHours)).toBeCloseTo(
+      Number(before.baseLaborHours),
+      4
+    );
     expect(original.materials).toHaveLength(before.materials.length);
   });
 
   it("editing the SOURCE does not reach the duplicate either", async () => {
     const source = await readyAssembly("Single-pole switch");
     const copy = await caller().assemblies.duplicate({
-      id: source.id, name: `Copy back ${Date.now()}`,
+      id: source.id,
+      name: `Copy back ${Date.now()}`,
     });
     const copyBefore = await caller().assemblies.get({ id: copy!.id });
 
-    await caller().assemblies.update({ id: source.id, baseLaborHours: 42, materials: [] });
+    await caller().assemblies.update({
+      id: source.id,
+      baseLaborHours: 42,
+      materials: [],
+    });
 
     const copyAfter = await caller().assemblies.get({ id: copy!.id });
-    expect(Number(copyAfter.baseLaborHours)).toBeCloseTo(Number(copyBefore.baseLaborHours), 4);
+    expect(Number(copyAfter.baseLaborHours)).toBeCloseTo(
+      Number(copyBefore.baseLaborHours),
+      4
+    );
     expect(copyAfter.materials).toHaveLength(copyBefore.materials.length);
   });
 
@@ -355,7 +411,9 @@ describe.skipIf(!hasDb)("duplicating", () => {
 
   it("duplicates a STARTER assembly without forking it", async () => {
     const list = await caller().assemblies.list();
-    const starter = list.find(a => a.name === "GFCI receptacle" && a.userId === null)!;
+    const starter = list.find(
+      a => a.name === "GFCI receptacle" && a.userId === null
+    )!;
     const name = `From starter ${Date.now()}`;
     const copy = await caller().assemblies.duplicate({ id: starter.id, name });
 
@@ -368,9 +426,12 @@ describe.skipIf(!hasDb)("duplicating", () => {
 
   it("refuses a duplicate name", async () => {
     const source = await readyAssembly("Duplex receptacle standard");
-    await expect(caller().assemblies.duplicate({
-      id: source.id, name: "Single-pole switch",
-    })).rejects.toThrow(/already exists/i);
+    await expect(
+      caller().assemblies.duplicate({
+        id: source.id,
+        name: "Single-pole switch",
+      })
+    ).rejects.toThrow(/already exists/i);
   });
 
   it("a kit duplicate is independent too", async () => {
@@ -381,7 +442,8 @@ describe.skipIf(!hasDb)("duplicating", () => {
     });
 
     const copy = await caller().kits.duplicate({
-      id: kit!.id, name: `Copied kit ${Date.now()}${Math.random()}`,
+      id: kit!.id,
+      name: `Copied kit ${Date.now()}${Math.random()}`,
     });
     expect(copy?.baselineId).toBeNull();
     expect(copy?.items).toHaveLength(1);
@@ -395,15 +457,23 @@ describe.skipIf(!hasDb)("duplicating", () => {
 describe.skipIf(!hasDb)("default quantities", () => {
   it("marks the consumables that are never used one at a time", async () => {
     const materials = await caller().materials.list();
-    expect(Number(materials.find(m => m.name === "Wire nuts")?.defaultQty)).toBe(3);
-    expect(Number(materials.find(m => m.name === "EMT strap")?.defaultQty)).toBe(3);
+    expect(
+      Number(materials.find(m => m.name === "Wire nuts")?.defaultQty)
+    ).toBe(3);
+    expect(
+      Number(materials.find(m => m.name === "EMT strap")?.defaultQty)
+    ).toBe(3);
   });
 
   it("leaves ordinary materials without a default", async () => {
     const materials = await caller().materials.list();
     // A default of 1 is the absence of an opinion, expressed as NULL.
-    expect(materials.find(m => m.name === "Duplex receptacle")?.defaultQty).toBeNull();
-    expect(materials.find(m => m.name === "200A main panel")?.defaultQty).toBeNull();
+    expect(
+      materials.find(m => m.name === "Duplex receptacle")?.defaultQty
+    ).toBeNull();
+    expect(
+      materials.find(m => m.name === "200A main panel")?.defaultQty
+    ).toBeNull();
   });
 });
 
@@ -419,16 +489,25 @@ describe.skipIf(!hasDb)("recently used materials", () => {
 
     await caller().assemblies.create({
       name: `Recent A ${Date.now()}${Math.random()}`,
-      category: "Devices", trade: "electrical", projectType: null,
-      baseLaborHours: 1, laborRateId: null,
+      category: "Devices",
+      trade: "electrical",
+      projectType: null,
+      baseLaborHours: 1,
+      laborRateId: null,
       materials: [{ materialId: box.id, qty: 1 }],
       modifierIds: [],
     });
     await caller().assemblies.create({
       name: `Recent B ${Date.now()}${Math.random()}`,
-      category: "Devices", trade: "electrical", projectType: null,
-      baseLaborHours: 1, laborRateId: null,
-      materials: [{ materialId: nuts.id, qty: 3 }, { materialId: box.id, qty: 2 }],
+      category: "Devices",
+      trade: "electrical",
+      projectType: null,
+      baseLaborHours: 1,
+      laborRateId: null,
+      materials: [
+        { materialId: nuts.id, qty: 3 },
+        { materialId: box.id, qty: 2 },
+      ],
       modifierIds: [],
     });
 

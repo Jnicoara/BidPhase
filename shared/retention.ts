@@ -39,7 +39,10 @@ export type Clock = () => Date;
 export const systemClock: Clock = () => new Date();
 
 /** The instant an item archived at `archivedAt` becomes eligible for deletion. */
-export function purgeDueAt(archivedAt: Date, retentionDays: number = RETENTION_DAYS): Date {
+export function purgeDueAt(
+  archivedAt: Date,
+  retentionDays: number = RETENTION_DAYS
+): Date {
   return new Date(archivedAt.getTime() + retentionDays * MS_PER_DAY);
 }
 
@@ -67,7 +70,8 @@ export function daysRemaining(
   now: Date,
   retentionDays: number = RETENTION_DAYS
 ): number {
-  const remainingMs = purgeDueAt(archivedAt, retentionDays).getTime() - now.getTime();
+  const remainingMs =
+    purgeDueAt(archivedAt, retentionDays).getTime() - now.getTime();
   if (remainingMs <= 0) return 0;
   const remainingSeconds = Math.floor(remainingMs / 1000);
   const days = Math.ceil(remainingSeconds / (MS_PER_DAY / 1000));

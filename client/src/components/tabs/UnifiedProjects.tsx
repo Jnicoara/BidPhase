@@ -24,8 +24,19 @@ import type {
   CountPin,
   CountSession,
 } from "@/contexts/AppContext";
-import { COUNT_ICONS, ICON_CATEGORIES, PIN_COLORS, DEFAULT_ICON_ID, DEFAULT_PIN_COLOR, type PinShape } from "@/lib/CountIcons";
-import { WIRE_TYPES, WIRE_CATEGORIES, type WireCategory } from "@/lib/wireTypes";
+import {
+  COUNT_ICONS,
+  ICON_CATEGORIES,
+  PIN_COLORS,
+  DEFAULT_ICON_ID,
+  DEFAULT_PIN_COLOR,
+  type PinShape,
+} from "@/lib/CountIcons";
+import {
+  WIRE_TYPES,
+  WIRE_CATEGORIES,
+  type WireCategory,
+} from "@/lib/wireTypes";
 import { toast } from "sonner";
 import CatalogPicker from "@/components/CatalogPicker";
 import { Input } from "@/components/ui/input";
@@ -41,22 +52,53 @@ import PlanPanel from "@/components/PlanPanel";
 import ProjectHomepage from "@/components/ProjectHomepage";
 import { cn } from "@/lib/utils";
 import {
-  Plus, Minus, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Link2, Trash2, Pencil, Check, X, Undo2, Maximize2, Download, Layers, Search,
+  Plus,
+  Minus,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Link2,
+  Trash2,
+  Pencil,
+  Check,
+  X,
+  Undo2,
+  Maximize2,
+  Download,
+  Layers,
+  Search,
 } from "lucide-react";
 import type { CatalogItem, UserMaterialRow } from "@/lib/materialCatalog";
-import { getConduitPricePerFoot, getWirePricePerFoot } from "@/lib/materialCatalog";
+import {
+  getConduitPricePerFoot,
+  getWirePricePerFoot,
+} from "@/lib/materialCatalog";
 import { trpc } from "@/lib/trpc";
 import type { SavedMaterialRow } from "@/contexts/AppContext";
 import { PriceSyncDialog } from "@/components/PriceSyncDialog";
 
 // ─── Custom section icons (Lucide-style: strokeWidth 2, round caps/joins, no fill) ─
-function ConduitPipeIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
+function ConduitPipeIcon({
+  size = 16,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
   // Simple conduit: two parallel horizontal lines (walls) with vertical end caps
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       <line x1="2" y1="9" x2="22" y2="9" />
       <line x1="2" y1="15" x2="22" y2="15" />
       <line x1="2" y1="9" x2="2" y2="15" />
@@ -65,13 +107,27 @@ function ConduitPipeIcon({ size = 16, className = "" }: { size?: number; classNa
   );
 }
 
-function MaleAdapterIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
+function MaleAdapterIcon({
+  size = 16,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
   // Electrical conduit connector (set-screw type):
   // left pipe stub → wider connector body with set-screw on top → right pipe stub
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       {/* Left pipe stub */}
       <line x1="2" y1="10" x2="8" y2="10" />
       <line x1="2" y1="14" x2="8" y2="14" />
@@ -90,12 +146,26 @@ function MaleAdapterIcon({ size = 16, className = "" }: { size?: number; classNa
   );
 }
 
-function StrippedWireIcon({ size = 16, className = "" }: { size?: number; className?: string }) {
+function StrippedWireIcon({
+  size = 16,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
   // Single conductor: insulated wire (tube) on left, stripped end on right showing bare conductor circle
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       {/* Insulated wire body */}
       <line x1="2" y1="9" x2="17" y2="9" />
       <line x1="2" y1="15" x2="17" y2="15" />
@@ -111,11 +181,25 @@ function StrippedWireIcon({ size = 16, className = "" }: { size?: number; classN
 // ─── Infrastructure icon ────────────────────────────────────────────────
 // Exported so HelixBidShell can import it directly instead of duplicating the
 // SVG definition. Both the sidebar nav and the editor header use this icon.
-export function CivilIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+export function CivilIcon({
+  size = 20,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       <rect x="3" y="2" width="18" height="10" rx="1.5" />
       <line x1="6" y1="7" x2="18" y2="7" />
       <line x1="7.5" y1="12" x2="7.5" y2="16" />
@@ -129,11 +213,25 @@ export function CivilIcon({ size = 20, className = "" }: { size?: number; classN
   );
 }
 
-export function CommercialIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+export function CommercialIcon({
+  size = 20,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <line x1="3" y1="9" x2="21" y2="9" />
       <line x1="9" y1="9" x2="9" y2="21" />
@@ -144,11 +242,25 @@ export function CommercialIcon({ size = 20, className = "" }: { size?: number; c
   );
 }
 
-export function ResidentialIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+export function ResidentialIcon({
+  size = 20,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       <path d="M3 10.5L12 3l9 7.5" />
       <path d="M5 8.5V21h14V8.5" />
       <rect x="9" y="14" width="6" height="7" rx="1" />
@@ -158,11 +270,25 @@ export function ResidentialIcon({ size = 20, className = "" }: { size?: number; 
   );
 }
 
-export function IndustrialIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+export function IndustrialIcon({
+  size = 20,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       {/* Factory building */}
       <rect x="2" y="10" width="20" height="12" rx="1" />
       {/* Chimney stacks */}
@@ -178,11 +304,25 @@ export function IndustrialIcon({ size = 20, className = "" }: { size?: number; c
 }
 
 // ── Electrical (combined) icon — lightning bolt ─────────────────────────────
-export function ElectricalIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+export function ElectricalIcon({
+  size = 20,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       {/* Bolt shape */}
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </svg>
@@ -190,11 +330,25 @@ export function ElectricalIcon({ size = 20, className = "" }: { size?: number; c
 }
 
 // ── Projects icon — folder with blueprint grid inside (matches early-phase icon style) ─────────
-export function ElectricalPanelIcon({ size = 20, className = "" }: { size?: number; className?: string }) {
+export function ElectricalPanelIcon({
+  size = 20,
+  className = "",
+}: {
+  size?: number;
+  className?: string;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
       {/* Folder tab */}
       <path d="M2 7.5C2 6.67 2.67 6 3.5 6H9l2 2h9.5c.83 0 1.5.67 1.5 1.5V18c0 .83-.67 1.5-1.5 1.5h-17C2.67 19.5 2 18.83 2 18V7.5Z" />
       {/* Blueprint grid: horizontal rules */}
@@ -213,7 +367,15 @@ export function ElectricalPanelIcon({ size = 20, className = "" }: { size?: numb
 const CONDUIT_TYPES = CIVIL_CONDUIT_TYPES;
 
 function defaultFittings(): FittingCounts {
-  return { connector: 0, coupling: 0, lb: 0, elbow90: 0, elbow45: 0, sweep: 0, offset: 0 };
+  return {
+    connector: 0,
+    coupling: 0,
+    lb: 0,
+    elbow90: 0,
+    elbow45: 0,
+    sweep: 0,
+    offset: 0,
+  };
 }
 
 // ── Jacketed / Romex wire calculation ────────────────────────────────────────
@@ -225,7 +387,7 @@ function calcWire(
   makeupAllowance = 0,
   serviceLoop = 0,
   numTerminations = 0,
-  wirewasteFactor = 0,
+  wirewasteFactor = 0
 ) {
   const netLength = feet + makeupAllowance * numTerminations + serviceLoop;
   return parseFloat((netLength * (1 + wirewasteFactor / 100)).toFixed(1));
@@ -243,10 +405,12 @@ function calcConduitWire(
   conductors: number,
   wireTermMakeup = 0,
   numPullPoints = 0,
-  wireWasteFactor = 0,
+  wireWasteFactor = 0
 ) {
   const netWireLength = feet + wireTermMakeup * numPullPoints;
-  return parseFloat((netWireLength * (1 + wireWasteFactor / 100) * conductors).toFixed(1));
+  return parseFloat(
+    (netWireLength * (1 + wireWasteFactor / 100) * conductors).toFixed(1)
+  );
 }
 /** @deprecated Use calcConduitBillable instead */
 function calcConduitWithSlack(feet: number, slackPct = 10) {
@@ -254,7 +418,8 @@ function calcConduitWithSlack(feet: number, slackPct = 10) {
 }
 
 function conductorLabel(mat: ConductorMaterial, size: ConductorSize) {
-  const isKcmil = Number(size) >= 250 || ["1/0","2/0","3/0","4/0"].includes(size);
+  const isKcmil =
+    Number(size) >= 250 || ["1/0", "2/0", "3/0", "4/0"].includes(size);
   const unit = isKcmil && !size.includes("/") ? " kcmil" : " AWG";
   return `#${size}${unit} ${mat === "CU" ? "Cu" : "Al"}`;
 }
@@ -309,17 +474,23 @@ function WireTypePicker({
   onChange: (id: string, stranded: boolean) => void;
   availableCategories?: WireCategory[];
 }) {
-  const cats = availableCategories && availableCategories.length > 0 ? availableCategories : WIRE_CATEGORIES;
-  const [activeCategory, setActiveCategory] = useState<WireCategory>("THHN / THWN");
-  const filtered = WIRE_TYPES.filter((w) => w.category === activeCategory);
-  const selected = WIRE_TYPES.find((w) => w.id === value);
+  const cats =
+    availableCategories && availableCategories.length > 0
+      ? availableCategories
+      : WIRE_CATEGORIES;
+  const [activeCategory, setActiveCategory] =
+    useState<WireCategory>("THHN / THWN");
+  const filtered = WIRE_TYPES.filter(w => w.category === activeCategory);
+  const selected = WIRE_TYPES.find(w => w.id === value);
 
   return (
     <div className="space-y-2">
-      <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Wire Type</Label>
+      <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+        Wire Type
+      </Label>
       {/* Category tabs */}
       <div className="flex flex-wrap gap-1">
-        {cats.map((cat) => (
+        {cats.map(cat => (
           <button
             key={cat}
             onClick={() => setActiveCategory(cat)}
@@ -335,13 +506,21 @@ function WireTypePicker({
         ))}
       </div>
       {/* Wire list */}
-      <div className="max-h-32 overflow-y-auto space-y-0.5 pr-0.5" style={{ scrollbarWidth: "thin" }}>
-        {filtered.map((wt) => {
+      <div
+        className="max-h-32 overflow-y-auto space-y-0.5 pr-0.5"
+        style={{ scrollbarWidth: "thin" }}
+      >
+        {filtered.map(wt => {
           const isSelected = value === wt.id;
           return (
             <button
               key={wt.id}
-              onClick={() => onChange(wt.id, wt.hasStrandedChoice ? (wt.defaultStranded ?? false) : false)}
+              onClick={() =>
+                onChange(
+                  wt.id,
+                  wt.hasStrandedChoice ? (wt.defaultStranded ?? false) : false
+                )
+              }
               className={cn(
                 "w-full text-left px-2 py-1.5 rounded text-[10px] border transition-all",
                 isSelected
@@ -350,7 +529,9 @@ function WireTypePicker({
               )}
             >
               <span className="font-mono font-semibold">{wt.label}</span>
-              <span className="ml-1.5 text-[9px] opacity-70">{wt.description}</span>
+              <span className="ml-1.5 text-[9px] opacity-70">
+                {wt.description}
+              </span>
             </button>
           );
         })}
@@ -358,7 +539,7 @@ function WireTypePicker({
       {/* Stranded / Solid toggle — only shown when selected wire supports it */}
       {selected?.hasStrandedChoice && (
         <div className="flex gap-2">
-          {([false, true] as const).map((isStranded) => (
+          {([false, true] as const).map(isStranded => (
             <button
               key={String(isStranded)}
               onClick={() => onChange(selected.id, isStranded)}
@@ -398,7 +579,14 @@ function CompactRunRow({
   const [nameInput, setNameInput] = useState(run.name);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const isWire = (run.runType ?? "conduit") === "wire";
-  const palette = ["#22C55E","#3B82F6","#F97316","#A855F7","#EC4899","#14B8A6"];
+  const palette = [
+    "#22C55E",
+    "#3B82F6",
+    "#F97316",
+    "#A855F7",
+    "#EC4899",
+    "#14B8A6",
+  ];
 
   const startEditName = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -425,14 +613,14 @@ function CompactRunRow({
             <input
               ref={nameInputRef}
               value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
+              onChange={e => setNameInput(e.target.value)}
               onBlur={commitName}
-              onKeyDown={(e) => {
+              onKeyDown={e => {
                 if (e.key === "Enter") commitName();
                 if (e.key === "Escape") setEditingName(false);
               }}
               className="text-xs font-medium bg-transparent border-b border-[#F5C518] outline-none text-foreground w-24"
-              onClick={(e) => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
             />
           ) : (
             <span
@@ -447,12 +635,16 @@ function CompactRunRow({
       </td>
       {/* Footage cell — total only; per-segment breakdown shows on canvas */}
       <td className="px-2 py-1.5 text-right">
-        <span className="font-mono text-[#F5C518] font-semibold">{run.feet > 0 ? `${run.feet.toFixed(0)}'` : "—"}</span>
+        <span className="font-mono text-[#F5C518] font-semibold">
+          {run.feet > 0 ? `${run.feet.toFixed(0)}'` : "—"}
+        </span>
       </td>
       {/* Type cell */}
       <td className="px-2 py-1.5">
         <span className="text-[10px] font-mono text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded">
-          {isWire ? `Wire ${run.conductors}c` : `${run.conduitType ?? "EMT"} ${run.conduitSize}"`}
+          {isWire
+            ? `Wire ${run.conductors}c`
+            : `${run.conduitType ?? "EMT"} ${run.conduitSize}"`}
         </span>
       </td>
       {/* Remove cell */}
@@ -519,142 +711,244 @@ function RunCard({
 
   // ── Derive available conduit types from user DB, ordered most-to-least common ──
   // Priority order: EMT, PVC, RMC, IMC, FMC, LFMC, ENT, LFNC, GRC
-  const CONDUIT_ORDER = ["EMT", "PVC", "RMC", "IMC", "FMC", "LFMC", "ENT", "LFNC", "GRC"];
+  const CONDUIT_ORDER = [
+    "EMT",
+    "PVC",
+    "RMC",
+    "IMC",
+    "FMC",
+    "LFMC",
+    "ENT",
+    "LFNC",
+    "GRC",
+  ];
   const DB_CONDUIT_KEYWORDS: Record<string, string[]> = {
-    EMT:  ["emt"],
-    RMC:  ["rmc", "rigid metal"],
-    IMC:  ["imc"],
-    PVC:  ["pvc"],
-    FMC:  ["fmc", "flex conduit", "flexible metal"],
+    EMT: ["emt"],
+    RMC: ["rmc", "rigid metal"],
+    IMC: ["imc"],
+    PVC: ["pvc"],
+    FMC: ["fmc", "flex conduit", "flexible metal"],
     LFMC: ["lfmc", "liquidtight"],
     LFNC: ["lfnc"],
-    ENT:  ["ent", "smurf"],
-    GRC:  ["grc"],
+    ENT: ["ent", "smurf"],
+    GRC: ["grc"],
   };
-  const dbConduitTypes = CONDUIT_ORDER.filter((ct) => {
+  const dbConduitTypes = CONDUIT_ORDER.filter(ct => {
     if (userMaterials.length === 0) return true; // show all when no DB
     const kws = DB_CONDUIT_KEYWORDS[ct] ?? [ct.toLowerCase()];
-    return userMaterials.some((m) => {
+    return userMaterials.some(m => {
       const d = m.description.toLowerCase();
-      return kws.some((k) => d.includes(k));
+      return kws.some(k => d.includes(k));
     });
   });
   // Always include at least EMT as fallback
-  const availableConduitTypes = dbConduitTypes.length > 0 ? dbConduitTypes : ["EMT"];
+  const availableConduitTypes =
+    dbConduitTypes.length > 0 ? dbConduitTypes : ["EMT"];
 
   // ── Wire-only mode: derive available wire types from user DB ──
   // Group by category label for the picker tabs
   const DB_WIRE_KEYWORDS: Record<string, string[]> = {
-    "THHN / THWN":    ["thhn", "thwn"],
+    "THHN / THWN": ["thhn", "thwn"],
     "NM Cable (Romex)": ["nm-b", "nm", "romex"],
-    "Specialty":       ["mc", "bx", "ac-90", "metal clad"],
+    Specialty: ["mc", "bx", "ac-90", "metal clad"],
     "Service Entrance": ["ser", "seu", "service entrance"],
-    "XHHW":            ["xhhw"],
-    "USE / URD":       ["urd", "use-2", "use "],
-    "Bare / Ground":   ["bare", "ground wire"],
-    "Low Voltage":     ["cat6", "cat 6", "coax", "fire alarm", "security", "speaker", "thermostat", "cl2"],
+    XHHW: ["xhhw"],
+    "USE / URD": ["urd", "use-2", "use "],
+    "Bare / Ground": ["bare", "ground wire"],
+    "Low Voltage": [
+      "cat6",
+      "cat 6",
+      "coax",
+      "fire alarm",
+      "security",
+      "speaker",
+      "thermostat",
+      "cl2",
+    ],
   };
-  const dbWireCategories = userMaterials.length === 0
-    ? WIRE_CATEGORIES
-    : WIRE_CATEGORIES.filter((cat) => {
-        const kws = DB_WIRE_KEYWORDS[cat] ?? [];
-        return kws.length === 0 || userMaterials.some((m) => {
-          const d = m.description.toLowerCase();
-          return kws.some((k) => d.includes(k));
+  const dbWireCategories =
+    userMaterials.length === 0
+      ? WIRE_CATEGORIES
+      : WIRE_CATEGORIES.filter(cat => {
+          const kws = DB_WIRE_KEYWORDS[cat] ?? [];
+          return (
+            kws.length === 0 ||
+            userMaterials.some(m => {
+              const d = m.description.toLowerCase();
+              return kws.some(k => d.includes(k));
+            })
+          );
         });
-      });
-  const availableWireCategories = dbWireCategories.length > 0 ? dbWireCategories : WIRE_CATEGORIES;
+  const availableWireCategories =
+    dbWireCategories.length > 0 ? dbWireCategories : WIRE_CATEGORIES;
 
   // ── Wire-only mode calculations ──
-  const makeupAllowance = run.makeupAllowance ?? 0;   // default 0 — user sets per-job
-  const serviceLoop     = run.serviceLoop     ?? 0;   // default 0 — user sets per-job
-  const numTerminations = run.numTerminations ?? 0;   // default 0 — user sets per-job
-  const wirewasteFactor = run.wirewasteFactor ?? 0;   // default 0 — user sets per-job
-  const wireNetLength   = run.feet + makeupAllowance * numTerminations + serviceLoop;
-  const wireBillable    = calcWire(run.feet, run.conductors, makeupAllowance, serviceLoop, numTerminations, wirewasteFactor);
+  const makeupAllowance = run.makeupAllowance ?? 0; // default 0 — user sets per-job
+  const serviceLoop = run.serviceLoop ?? 0; // default 0 — user sets per-job
+  const numTerminations = run.numTerminations ?? 0; // default 0 — user sets per-job
+  const wirewasteFactor = run.wirewasteFactor ?? 0; // default 0 — user sets per-job
+  const wireNetLength =
+    run.feet + makeupAllowance * numTerminations + serviceLoop;
+  const wireBillable = calcWire(
+    run.feet,
+    run.conductors,
+    makeupAllowance,
+    serviceLoop,
+    numTerminations,
+    wirewasteFactor
+  );
 
   // ── Conduit mode calculations ──
-  const conduitWasteFactor  = run.conduitWasteFactor ?? 0;   // default 0 — user sets per-job
-  const wireWasteFactor     = run.wireWasteFactor    ?? 0;   // default 0 — user sets per-job
-  const wireTermMakeup      = run.wireTermMakeup     ?? 0;   // default 0 — user sets per-job
-  const numPullPoints       = run.numPullPoints      ?? 0;   // default 0 — user sets per-job
-  const conduitBillable     = calcConduitBillable(run.feet, conduitWasteFactor);
+  const conduitWasteFactor = run.conduitWasteFactor ?? 0; // default 0 — user sets per-job
+  const wireWasteFactor = run.wireWasteFactor ?? 0; // default 0 — user sets per-job
+  const wireTermMakeup = run.wireTermMakeup ?? 0; // default 0 — user sets per-job
+  const numPullPoints = run.numPullPoints ?? 0; // default 0 — user sets per-job
+  const conduitBillable = calcConduitBillable(run.feet, conduitWasteFactor);
   // For multi-circuit runs, sum wire footage across all conductor groups
-  const _activeGroups = (run.conductorGroups && run.conductorGroups.length > 0)
-    ? run.conductorGroups
-    : [{ conductors: run.conductors, conductorMaterial: run.conductorMaterial ?? "CU" as ConductorMaterial, conductorSize: run.conductorSize ?? "12" as ConductorSize, id: "grp-legacy" }];
+  const _activeGroups =
+    run.conductorGroups && run.conductorGroups.length > 0
+      ? run.conductorGroups
+      : [
+          {
+            conductors: run.conductors,
+            conductorMaterial:
+              run.conductorMaterial ?? ("CU" as ConductorMaterial),
+            conductorSize: run.conductorSize ?? ("12" as ConductorSize),
+            id: "grp-legacy",
+          },
+        ];
   const conduitWireBillableCC = conduitOnly
     ? 0
-    : _activeGroups.reduce((sum, g) => sum + calcConduitWire(run.feet, g.conductors, wireTermMakeup, numPullPoints, wireWasteFactor), 0);
+    : _activeGroups.reduce(
+        (sum, g) =>
+          sum +
+          calcConduitWire(
+            run.feet,
+            g.conductors,
+            wireTermMakeup,
+            numPullPoints,
+            wireWasteFactor
+          ),
+        0
+      );
   // Include EGC footage in the Billable Wire total when EGC is enabled
-  const egcBillableFt = (!conduitOnly && run.includeGround)
-    ? calcConduitWire(run.feet, 1, wireTermMakeup, numPullPoints, wireWasteFactor)
-    : 0;
+  const egcBillableFt =
+    !conduitOnly && run.includeGround
+      ? calcConduitWire(
+          run.feet,
+          1,
+          wireTermMakeup,
+          numPullPoints,
+          wireWasteFactor
+        )
+      : 0;
   const conduitWireBillable = conduitWireBillableCC + egcBillableFt;
 
   // ── Conduit sizes filtered per conduit type ──
   // Real NEC trade sizes available for each conduit type
-  const CONDUIT_SIZES_BY_TYPE: Record<string, { value: string; label: string }[]> = {
-    EMT:  [
-      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
-      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
-      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
-      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
-      { value: "3-1/2", label: '3½"' }, { value: "4",     label: '4"'  },
+  const CONDUIT_SIZES_BY_TYPE: Record<
+    string,
+    { value: string; label: string }[]
+  > = {
+    EMT: [
+      { value: "1/2", label: '½"' },
+      { value: "3/4", label: '¾"' },
+      { value: "1", label: '1"' },
+      { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' },
+      { value: "2", label: '2"' },
+      { value: "2-1/2", label: '2½"' },
+      { value: "3", label: '3"' },
+      { value: "3-1/2", label: '3½"' },
+      { value: "4", label: '4"' },
     ],
-    RMC:  [
-      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
-      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
-      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
-      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
-      { value: "3-1/2", label: '3½"' }, { value: "4",     label: '4"'  },
+    RMC: [
+      { value: "1/2", label: '½"' },
+      { value: "3/4", label: '¾"' },
+      { value: "1", label: '1"' },
+      { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' },
+      { value: "2", label: '2"' },
+      { value: "2-1/2", label: '2½"' },
+      { value: "3", label: '3"' },
+      { value: "3-1/2", label: '3½"' },
+      { value: "4", label: '4"' },
     ],
-    IMC:  [
-      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
-      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
-      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
-      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
+    IMC: [
+      { value: "1/2", label: '½"' },
+      { value: "3/4", label: '¾"' },
+      { value: "1", label: '1"' },
+      { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' },
+      { value: "2", label: '2"' },
+      { value: "2-1/2", label: '2½"' },
+      { value: "3", label: '3"' },
     ],
-    PVC:  [
-      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
-      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
-      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
-      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
-      { value: "3-1/2", label: '3½"' }, { value: "4",     label: '4"'  },
-      { value: "5",     label: '5"'  }, { value: "6",     label: '6"'  },
+    PVC: [
+      { value: "1/2", label: '½"' },
+      { value: "3/4", label: '¾"' },
+      { value: "1", label: '1"' },
+      { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' },
+      { value: "2", label: '2"' },
+      { value: "2-1/2", label: '2½"' },
+      { value: "3", label: '3"' },
+      { value: "3-1/2", label: '3½"' },
+      { value: "4", label: '4"' },
+      { value: "5", label: '5"' },
+      { value: "6", label: '6"' },
     ],
-    FMC:  [
-      { value: "3/8",   label: '⅜"'  }, { value: "1/2",   label: '½"'  },
-      { value: "3/4",   label: '¾"'  }, { value: "1",     label: '1"'  },
-      { value: "1-1/4", label: '1¼"' }, { value: "1-1/2", label: '1½"' },
-      { value: "2",     label: '2"'  },
+    FMC: [
+      { value: "3/8", label: '⅜"' },
+      { value: "1/2", label: '½"' },
+      { value: "3/4", label: '¾"' },
+      { value: "1", label: '1"' },
+      { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' },
+      { value: "2", label: '2"' },
     ],
     LFMC: [
-      { value: "3/8",   label: '⅜"'  }, { value: "1/2",   label: '½"'  },
-      { value: "3/4",   label: '¾"'  }, { value: "1",     label: '1"'  },
-      { value: "1-1/4", label: '1¼"' }, { value: "1-1/2", label: '1½"' },
-      { value: "2",     label: '2"'  },
+      { value: "3/8", label: '⅜"' },
+      { value: "1/2", label: '½"' },
+      { value: "3/4", label: '¾"' },
+      { value: "1", label: '1"' },
+      { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' },
+      { value: "2", label: '2"' },
     ],
     LFNC: [
-      { value: "3/8",   label: '⅜"'  }, { value: "1/2",   label: '½"'  },
-      { value: "3/4",   label: '¾"'  }, { value: "1",     label: '1"'  },
-      { value: "1-1/4", label: '1¼"' }, { value: "1-1/2", label: '1½"' },
-      { value: "2",     label: '2"'  },
+      { value: "3/8", label: '⅜"' },
+      { value: "1/2", label: '½"' },
+      { value: "3/4", label: '¾"' },
+      { value: "1", label: '1"' },
+      { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' },
+      { value: "2", label: '2"' },
     ],
-    ENT:  [
-      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
-      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
-      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
+    ENT: [
+      { value: "1/2", label: '½"' },
+      { value: "3/4", label: '¾"' },
+      { value: "1", label: '1"' },
+      { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' },
+      { value: "2", label: '2"' },
     ],
-    GRC:  [
-      { value: "1/2",   label: '½"'  }, { value: "3/4",   label: '¾"'  },
-      { value: "1",     label: '1"'  }, { value: "1-1/4", label: '1¼"' },
-      { value: "1-1/2", label: '1½"' }, { value: "2",     label: '2"'  },
-      { value: "2-1/2", label: '2½"' }, { value: "3",     label: '3"'  },
-      { value: "3-1/2", label: '3½"' }, { value: "4",     label: '4"'  },
+    GRC: [
+      { value: "1/2", label: '½"' },
+      { value: "3/4", label: '¾"' },
+      { value: "1", label: '1"' },
+      { value: "1-1/4", label: '1¼"' },
+      { value: "1-1/2", label: '1½"' },
+      { value: "2", label: '2"' },
+      { value: "2-1/2", label: '2½"' },
+      { value: "3", label: '3"' },
+      { value: "3-1/2", label: '3½"' },
+      { value: "4", label: '4"' },
     ],
   };
-  const conduitSizesForType = CONDUIT_SIZES_BY_TYPE[run.conduitType ?? "EMT"] ?? CONDUIT_SIZES_BY_TYPE["EMT"];
+  const conduitSizesForType =
+    CONDUIT_SIZES_BY_TYPE[run.conduitType ?? "EMT"] ??
+    CONDUIT_SIZES_BY_TYPE["EMT"];
 
   // ── Cost-per-foot lookup: user DB price > built-in catalog ──
   // For jacketed cables (MC, NM), parse the AWG size from the wireTypeId (e.g. "mc-12-2" → "12")
@@ -668,47 +962,80 @@ function RunCard({
     return "12";
   };
   const conduitCostPerFt = !isWire
-    ? getConduitPricePerFoot(run.conduitType ?? "EMT", run.conduitSize ?? "1/2", userMaterials)
+    ? getConduitPricePerFoot(
+        run.conduitType ?? "EMT",
+        run.conduitSize ?? "1/2",
+        userMaterials
+      )
     : null;
   const wireTypeStr = (() => {
     const id = run.wireTypeId ?? "";
-    if (id.startsWith("nm") || id.includes("nm-b") || id.includes("romex")) return "NM";
+    if (id.startsWith("nm") || id.includes("nm-b") || id.includes("romex"))
+      return "NM";
     if (id.startsWith("mc") || id.includes("mc-")) return "MC";
     if (id.startsWith("xhhw")) return "XHHW";
     if (id.startsWith("bare") || id.startsWith("ground")) return "BARE";
     return "THHN";
   })();
   // For jacketed cables, size comes from wireTypeId; for THHN/XHHW, use conductorSize picker
-  const effectiveWireSize = (wireTypeStr === "MC" || wireTypeStr === "NM")
-    ? parseWireIdSize(run.wireTypeId)
-    : (run.conductorSize ?? "12");
-  const wireCostPerFt = (!conduitOnly)
-    ? getWirePricePerFoot(wireTypeStr, effectiveWireSize, run.conductorMaterial ?? "CU", userMaterials, run.wireTypeId)
+  const effectiveWireSize =
+    wireTypeStr === "MC" || wireTypeStr === "NM"
+      ? parseWireIdSize(run.wireTypeId)
+      : (run.conductorSize ?? "12");
+  const wireCostPerFt = !conduitOnly
+    ? getWirePricePerFoot(
+        wireTypeStr,
+        effectiveWireSize,
+        run.conductorMaterial ?? "CU",
+        userMaterials,
+        run.wireTypeId
+      )
     : null;
 
-  const conduitMaterialCost = conduitCostPerFt != null ? conduitCostPerFt * conduitBillable : null;
+  const conduitMaterialCost =
+    conduitCostPerFt != null ? conduitCostPerFt * conduitBillable : null;
   // Wire cost: for conduit mode, sum across all conductor groups (each group may have different size/material)
   // wireCostPerFt above uses first group / scalar fallback for the compact price indicator
   const wireMaterialCost = (() => {
     if (conduitOnly) return null;
     if (isWire) {
       // Wire-only: single spec, multiply by conductors
-      return wireCostPerFt != null ? wireCostPerFt * wireBillable * run.conductors : null;
+      return wireCostPerFt != null
+        ? wireCostPerFt * wireBillable * run.conductors
+        : null;
     }
     // Conduit mode: sum cost across all groups
     let total = 0;
     let hasAnyPrice = false;
     for (const g of _activeGroups) {
-      const gSize = (wireTypeStr === "MC" || wireTypeStr === "NM") ? parseWireIdSize(run.wireTypeId) : g.conductorSize;
-      const gCpf = getWirePricePerFoot(wireTypeStr, gSize, g.conductorMaterial, userMaterials, run.wireTypeId);
+      const gSize =
+        wireTypeStr === "MC" || wireTypeStr === "NM"
+          ? parseWireIdSize(run.wireTypeId)
+          : g.conductorSize;
+      const gCpf = getWirePricePerFoot(
+        wireTypeStr,
+        gSize,
+        g.conductorMaterial,
+        userMaterials,
+        run.wireTypeId
+      );
       if (gCpf != null) {
-        total += gCpf * calcConduitWire(run.feet, g.conductors, wireTermMakeup, numPullPoints, wireWasteFactor);
+        total +=
+          gCpf *
+          calcConduitWire(
+            run.feet,
+            g.conductors,
+            wireTermMakeup,
+            numPullPoints,
+            wireWasteFactor
+          );
         hasAnyPrice = true;
       }
     }
     return hasAnyPrice ? total : null;
   })();
-  const totalMaterialCost   = (conduitMaterialCost ?? 0) + (wireMaterialCost ?? 0);
+  const totalMaterialCost =
+    (conduitMaterialCost ?? 0) + (wireMaterialCost ?? 0);
 
   const updateFitting = (key: FittingId, val: number) => {
     onUpdate(run.id, { fittings: { ...run.fittings, [key]: val } });
@@ -716,14 +1043,19 @@ function RunCard({
   const totalFittings = Object.values(run.fittings).reduce((a, b) => a + b, 0);
 
   // Helper: safe numeric input that allows 0
-  const numInput = (val: number, onChange: (n: number) => void, step = 1, placeholder = "0") => (
+  const numInput = (
+    val: number,
+    onChange: (n: number) => void,
+    step = 1,
+    placeholder = "0"
+  ) => (
     <Input
       type="number"
       min={0}
       step={step}
       value={val === 0 ? "" : val}
       placeholder={placeholder}
-      onChange={(e) => {
+      onChange={e => {
         const raw = e.target.value;
         onChange(raw === "" ? 0 : parseFloat(raw) || 0);
       }}
@@ -738,18 +1070,28 @@ function RunCard({
         <div className="absolute inset-0 z-10 bg-background/90 backdrop-blur-sm flex items-center justify-center rounded-lg">
           <div className="bg-card border border-border rounded-xl shadow-xl p-4 max-w-[240px] w-full space-y-3">
             <div className="space-y-1">
-              <h3 className="text-sm font-bold text-destructive">Remove Run?</h3>
+              <h3 className="text-sm font-bold text-destructive">
+                Remove Run?
+              </h3>
               <p className="text-xs text-muted-foreground">
-                Remove <strong>{run.name}</strong> from the right panel? The measurement on the plan is not affected.
+                Remove <strong>{run.name}</strong> from the right panel? The
+                measurement on the plan is not affected.
               </p>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => { onRemove(run.id); setConfirmDelete(false); }}
-                className="flex-1 py-1.5 rounded text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors">
+              <button
+                onClick={() => {
+                  onRemove(run.id);
+                  setConfirmDelete(false);
+                }}
+                className="flex-1 py-1.5 rounded text-xs font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+              >
                 Remove
               </button>
-              <button onClick={() => setConfirmDelete(false)}
-                className="flex-1 py-1.5 rounded text-xs font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-1.5 rounded text-xs font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors"
+              >
                 Cancel
               </button>
             </div>
@@ -760,23 +1102,43 @@ function RunCard({
       {/* Run header */}
       <div
         className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/10 cursor-pointer select-none"
-        onClick={() => setIsCollapsed((v) => !v)}
+        onClick={() => setIsCollapsed(v => !v)}
       >
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full shrink-0"
-            style={{ background: ["#22C55E","#3B82F6","#F97316","#A855F7","#EC4899","#14B8A6"][index % 6] }} />
+          <div
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{
+              background: [
+                "#22C55E",
+                "#3B82F6",
+                "#F97316",
+                "#A855F7",
+                "#EC4899",
+                "#14B8A6",
+              ][index % 6],
+            }}
+          />
           {editingName ? (
-            <input ref={nameInputRef} value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
+            <input
+              ref={nameInputRef}
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
               onBlur={commitName}
-              onKeyDown={(e) => { if (e.key === "Enter") commitName(); if (e.key === "Escape") setEditingName(false); }}
+              onKeyDown={e => {
+                if (e.key === "Enter") commitName();
+                if (e.key === "Escape") setEditingName(false);
+              }}
               className="text-sm font-semibold bg-transparent border-b border-[#F5C518] outline-none text-foreground w-28"
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              onClick={(e) => e.stopPropagation()} />
+              onClick={e => e.stopPropagation()}
+            />
           ) : (
-            <span className="text-sm font-semibold text-foreground cursor-text hover:text-[#F5C518] transition-colors"
+            <span
+              className="text-sm font-semibold text-foreground cursor-text hover:text-[#F5C518] transition-colors"
               style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-              onClick={startEditName} title="Click to rename">
+              onClick={startEditName}
+              title="Click to rename"
+            >
               {run.name}
             </span>
           )}
@@ -788,21 +1150,32 @@ function RunCard({
                 : `${run.conduitType ?? "EMT"} ${run.conduitSize}"`}
           </span>
           {run.pageNumber !== undefined && (
-            <span className="text-[10px] font-mono text-muted-foreground/60 bg-muted/20 px-1.5 py-0.5 rounded">pg {run.pageNumber}</span>
+            <span className="text-[10px] font-mono text-muted-foreground/60 bg-muted/20 px-1.5 py-0.5 rounded">
+              pg {run.pageNumber}
+            </span>
           )}
           {isCollapsed && (
-            <span className="text-[10px] font-mono text-[#F5C518] bg-[#F5C518]/10 px-1.5 py-0.5 rounded">{run.feet} ft</span>
+            <span className="text-[10px] font-mono text-[#F5C518] bg-[#F5C518]/10 px-1.5 py-0.5 rounded">
+              {run.feet} ft
+            </span>
           )}
         </div>
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => setIsCollapsed((v) => !v)}
+        <div
+          className="flex items-center gap-1"
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            onClick={() => setIsCollapsed(v => !v)}
             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            title={isCollapsed ? "Expand" : "Collapse"}>
+            title={isCollapsed ? "Expand" : "Collapse"}
+          >
             {isCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
           </button>
-          <button onClick={() => setConfirmDelete(true)}
+          <button
+            onClick={() => setConfirmDelete(true)}
             className="p-1 text-muted-foreground/50 hover:text-destructive transition-colors rounded hover:bg-destructive/10"
-            title="Remove run">
+            title="Remove run"
+          >
             <X size={13} />
           </button>
         </div>
@@ -810,21 +1183,40 @@ function RunCard({
 
       {/* Run body */}
       <div className={cn("p-4 space-y-4", isCollapsed ? "hidden" : "")}>
-
         {/* Measured Takeoff */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Measured Takeoff (ft)</Label>
+            <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+              Measured Takeoff (ft)
+            </Label>
             {run.feetFromPlan && (
-              <span className="flex items-center gap-1 text-[9px] text-[#F5C518]/70 font-mono" title="Set by plan tool — drag run points to update">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span
+                className="flex items-center gap-1 text-[9px] text-[#F5C518]/70 font-mono"
+                title="Set by plan tool — drag run points to update"
+              >
+                <svg
+                  width="9"
+                  height="9"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
                 plan-locked
               </span>
             )}
           </div>
-          <Input type="number" min={0} step={1}
+          <Input
+            type="number"
+            min={0}
+            step={1}
             value={run.feet === 0 ? "" : run.feet}
-            onChange={(e) => {
+            onChange={e => {
               if (run.feetFromPlan) return; // locked — only plan tool can update
               onUpdate(run.id, { feet: parseFloat(e.target.value) || 0 });
             }}
@@ -833,25 +1225,34 @@ function RunCard({
             className={cn(
               "h-8 font-mono text-sm bg-input border-border",
               run.feetFromPlan && "opacity-60 cursor-not-allowed select-none"
-            )} />
+            )}
+          />
           {run.feetFromPlan && (
-            <p className="text-[9px] text-muted-foreground/50">Drag run points on the plan to update footage.</p>
+            <p className="text-[9px] text-muted-foreground/50">
+              Drag run points on the plan to update footage.
+            </p>
           )}
         </div>
 
         {/* ── Run type toggle: Conduit vs Wire Only — FIRST so irrelevant fields hide immediately ── */}
         <div className="space-y-1.5">
-          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Run Type</Label>
+          <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+            Run Type
+          </Label>
           <div className="flex gap-2">
-            {(["conduit", "wire"] as const).map((rt) => (
-              <button key={rt}
-                onClick={() => onUpdate(run.id, { runType: rt, conduitOnly: false })}
+            {(["conduit", "wire"] as const).map(rt => (
+              <button
+                key={rt}
+                onClick={() =>
+                  onUpdate(run.id, { runType: rt, conduitOnly: false })
+                }
                 className={cn(
                   "flex-1 py-1.5 rounded text-xs font-medium border transition-all",
                   (run.runType ?? "conduit") === rt
                     ? "bg-yellow-400 text-black border-yellow-400"
                     : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                )}>
+                )}
+              >
                 {rt === "wire" ? "Wire Only" : "Conduit / Wire"}
               </button>
             ))}
@@ -863,17 +1264,23 @@ function RunCard({
           <>
             {/* Conduit Type — DB-synced, ordered most-to-least common */}
             <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Type</Label>
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                Conduit Type
+              </Label>
               <div className="flex flex-wrap gap-1">
-                {availableConduitTypes.map((ct) => (
-                  <button key={ct}
-                    onClick={() => onUpdate(run.id, { conduitType: ct as ConduitType })}
+                {availableConduitTypes.map(ct => (
+                  <button
+                    key={ct}
+                    onClick={() =>
+                      onUpdate(run.id, { conduitType: ct as ConduitType })
+                    }
                     className={cn(
                       "px-2.5 py-1 rounded text-[10px] font-mono font-semibold border transition-all",
                       (run.conduitType ?? "EMT") === ct
                         ? "bg-yellow-400 text-black border-yellow-400"
                         : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                    )}>
+                    )}
+                  >
                     {ct}
                   </button>
                 ))}
@@ -882,17 +1289,21 @@ function RunCard({
 
             {/* Conduit Size */}
             <div className="space-y-1.5">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Conduit Size</Label>
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                Conduit Size
+              </Label>
               <div className="grid grid-cols-5 gap-1">
-                {conduitSizesForType.map((cs) => (
-                  <button key={cs.value}
+                {conduitSizesForType.map(cs => (
+                  <button
+                    key={cs.value}
                     onClick={() => onUpdate(run.id, { conduitSize: cs.value })}
                     className={cn(
                       "py-1 rounded text-[10px] font-mono font-medium border transition-all",
                       run.conduitSize === cs.value
                         ? "bg-yellow-400 text-black border-yellow-400"
                         : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                    )}>
+                    )}
+                  >
                     {cs.label}
                   </button>
                 ))}
@@ -900,13 +1311,26 @@ function RunCard({
             </div>
 
             {/* Conduit-Only toggle (future pull / empty conduit) */}
-            <div className={cn(
-              "flex items-center justify-between rounded-lg border px-3 py-2 transition-all",
-              conduitOnly ? "border-yellow-400/50 bg-yellow-400/8" : "border-border/50 bg-muted/10"
-            )}>
+            <div
+              className={cn(
+                "flex items-center justify-between rounded-lg border px-3 py-2 transition-all",
+                conduitOnly
+                  ? "border-yellow-400/50 bg-yellow-400/8"
+                  : "border-border/50 bg-muted/10"
+              )}
+            >
               <div>
-                <div className={cn("text-[11px] font-medium", conduitOnly ? "text-yellow-400" : "text-foreground")}>Empty / Future Pull</div>
-                <div className="text-[10px] text-muted-foreground">No wire — conduit only (stub-out)</div>
+                <div
+                  className={cn(
+                    "text-[11px] font-medium",
+                    conduitOnly ? "text-yellow-400" : "text-foreground"
+                  )}
+                >
+                  Empty / Future Pull
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  No wire — conduit only (stub-out)
+                </div>
               </div>
               <button
                 onClick={() => onUpdate(run.id, { conduitOnly: !conduitOnly })}
@@ -917,168 +1341,231 @@ function RunCard({
                     : "bg-muted/40 border-border"
                 )}
               >
-                <span className={cn(
-                  "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
-                  conduitOnly ? "left-4" : "left-0.5"
-                )} />
+                <span
+                  className={cn(
+                    "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
+                    conduitOnly ? "left-4" : "left-0.5"
+                  )}
+                />
               </button>
             </div>
           </>
         )}
 
         {/* ── Multi-circuit conductor groups — hidden when Empty/Future Pull is on ── */}
-        {!isWire && !conduitOnly && (() => {
-          // Derive active groups: use conductorGroups if present and non-empty,
-          // otherwise synthesise one group from the legacy scalar fields.
-          const groups = (run.conductorGroups && run.conductorGroups.length > 0)
-            ? run.conductorGroups
-            : [{
-                id: "grp-legacy",
-                conductors: run.conductors,
-                conductorMaterial: run.conductorMaterial ?? "CU" as ConductorMaterial,
-                conductorSize: run.conductorSize ?? "12" as ConductorSize,
-              }];
+        {!isWire &&
+          !conduitOnly &&
+          (() => {
+            // Derive active groups: use conductorGroups if present and non-empty,
+            // otherwise synthesise one group from the legacy scalar fields.
+            const groups =
+              run.conductorGroups && run.conductorGroups.length > 0
+                ? run.conductorGroups
+                : [
+                    {
+                      id: "grp-legacy",
+                      conductors: run.conductors,
+                      conductorMaterial:
+                        run.conductorMaterial ?? ("CU" as ConductorMaterial),
+                      conductorSize:
+                        run.conductorSize ?? ("12" as ConductorSize),
+                    },
+                  ];
 
-          const updateGroup = (gid: string, patch: Partial<typeof groups[0]>) => {
-            const next = groups.map((g) => g.id === gid ? { ...g, ...patch } : g);
-            // Also keep scalar fields in sync with the first group for backward compat
-            const first = next[0];
-            onUpdate(run.id, {
-              conductorGroups: next,
-              conductors: first.conductors,
-              conductorMaterial: first.conductorMaterial,
-              conductorSize: first.conductorSize,
-            });
-          };
-
-          const addGroup = () => {
-            const last = groups[groups.length - 1];
-            const newGroup = {
-              id: `grp-${Date.now().toString(36)}`,
-              conductors: last?.conductors ?? 2,
-              conductorMaterial: last?.conductorMaterial ?? "CU" as ConductorMaterial,
-              conductorSize: last?.conductorSize ?? "12" as ConductorSize,
+            const updateGroup = (
+              gid: string,
+              patch: Partial<(typeof groups)[0]>
+            ) => {
+              const next = groups.map(g =>
+                g.id === gid ? { ...g, ...patch } : g
+              );
+              // Also keep scalar fields in sync with the first group for backward compat
+              const first = next[0];
+              onUpdate(run.id, {
+                conductorGroups: next,
+                conductors: first.conductors,
+                conductorMaterial: first.conductorMaterial,
+                conductorSize: first.conductorSize,
+              });
             };
-            const next = [...groups, newGroup];
-            const first = next[0];
-            onUpdate(run.id, {
-              conductorGroups: next,
-              conductors: first.conductors,
-              conductorMaterial: first.conductorMaterial,
-              conductorSize: first.conductorSize,
-            });
-          };
 
-          const removeGroup = (gid: string) => {
-            if (groups.length <= 1) return; // must keep at least one
-            const next = groups.filter((g) => g.id !== gid);
-            const first = next[0];
-            onUpdate(run.id, {
-              conductorGroups: next,
-              conductors: first.conductors,
-              conductorMaterial: first.conductorMaterial,
-              conductorSize: first.conductorSize,
-            });
-          };
+            const addGroup = () => {
+              const last = groups[groups.length - 1];
+              const newGroup = {
+                id: `grp-${Date.now().toString(36)}`,
+                conductors: last?.conductors ?? 2,
+                conductorMaterial:
+                  last?.conductorMaterial ?? ("CU" as ConductorMaterial),
+                conductorSize: last?.conductorSize ?? ("12" as ConductorSize),
+              };
+              const next = [...groups, newGroup];
+              const first = next[0];
+              onUpdate(run.id, {
+                conductorGroups: next,
+                conductors: first.conductors,
+                conductorMaterial: first.conductorMaterial,
+                conductorSize: first.conductorSize,
+              });
+            };
 
-          return (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Current Carrying Conductors</Label>
-                <button
-                  onClick={addGroup}
-                  className="flex items-center gap-1 text-[10px] font-semibold text-[#F5C518] hover:text-[#F5C518]/80 transition-colors"
-                  title="Add another circuit to this conduit">
-                  <Plus size={11} /> Add Circuit
-                </button>
-              </div>
-              {groups.map((g, gi) => (
-                <div key={g.id} className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2.5 space-y-2.5">
-                  {/* Group header: circuit label + remove button */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      {groups.length > 1 ? `Circuit ${gi + 1} of ${groups.length}` : "Circuit"}
-                    </span>
-                    {groups.length > 1 && (
-                      <button
-                        onClick={() => removeGroup(g.id)}
-                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                        title="Remove this circuit">
-                        <X size={11} />
-                      </button>
-                    )}
-                  </div>
-                  {/* Conductor count slider */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-[10px] text-muted-foreground">Conductors</Label>
-                      <span className="text-sm font-bold text-[#F5C518] font-mono">{g.conductors}</span>
-                    </div>
-                    <Slider min={1} max={12} step={1} value={[g.conductors]}
-                      onValueChange={([v]) => updateGroup(g.id, { conductors: v })}
-                      className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
-                  </div>
-                  {/* Cu / Al material toggle */}
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground">Material</Label>
-                    <div className="flex gap-2">
-                      {CONDUCTOR_MATERIALS.map((cm) => (
-                        <button key={cm.id}
-                          onClick={() => updateGroup(g.id, { conductorMaterial: cm.id as ConductorMaterial })}
-                          className={cn(
-                            "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
-                            g.conductorMaterial === cm.id
-                              ? "bg-yellow-400 text-black border-yellow-400"
-                              : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                          )}>
-                          {cm.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Conductor size grid */}
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground">Size (AWG)</Label>
-                    <div className="grid grid-cols-5 gap-1">
-                      {CONDUCTOR_SIZES.map((sz) => (
-                        <button key={sz}
-                          onClick={() => updateGroup(g.id, { conductorSize: sz as ConductorSize })}
-                          className={cn(
-                            "py-1 rounded text-[10px] font-mono font-medium border transition-all",
-                            g.conductorSize === sz
-                              ? "bg-yellow-400 text-black border-yellow-400"
-                              : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
-                          )}>
-                          {sz}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+            const removeGroup = (gid: string) => {
+              if (groups.length <= 1) return; // must keep at least one
+              const next = groups.filter(g => g.id !== gid);
+              const first = next[0];
+              onUpdate(run.id, {
+                conductorGroups: next,
+                conductors: first.conductors,
+                conductorMaterial: first.conductorMaterial,
+                conductorSize: first.conductorSize,
+              });
+            };
+
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                    Current Carrying Conductors
+                  </Label>
+                  <button
+                    onClick={addGroup}
+                    className="flex items-center gap-1 text-[10px] font-semibold text-[#F5C518] hover:text-[#F5C518]/80 transition-colors"
+                    title="Add another circuit to this conduit"
+                  >
+                    <Plus size={11} /> Add Circuit
+                  </button>
                 </div>
-              ))}
-            </div>
-          );
-        })()}
+                {groups.map((g, gi) => (
+                  <div
+                    key={g.id}
+                    className="rounded-lg border border-border/50 bg-muted/10 px-3 py-2.5 space-y-2.5"
+                  >
+                    {/* Group header: circuit label + remove button */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        {groups.length > 1
+                          ? `Circuit ${gi + 1} of ${groups.length}`
+                          : "Circuit"}
+                      </span>
+                      {groups.length > 1 && (
+                        <button
+                          onClick={() => removeGroup(g.id)}
+                          className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                          title="Remove this circuit"
+                        >
+                          <X size={11} />
+                        </button>
+                      )}
+                    </div>
+                    {/* Conductor count slider */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] text-muted-foreground">
+                          Conductors
+                        </Label>
+                        <span className="text-sm font-bold text-[#F5C518] font-mono">
+                          {g.conductors}
+                        </span>
+                      </div>
+                      <Slider
+                        min={1}
+                        max={12}
+                        step={1}
+                        value={[g.conductors]}
+                        onValueChange={([v]) =>
+                          updateGroup(g.id, { conductors: v })
+                        }
+                        className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+                      />
+                    </div>
+                    {/* Cu / Al material toggle */}
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        Material
+                      </Label>
+                      <div className="flex gap-2">
+                        {CONDUCTOR_MATERIALS.map(cm => (
+                          <button
+                            key={cm.id}
+                            onClick={() =>
+                              updateGroup(g.id, {
+                                conductorMaterial: cm.id as ConductorMaterial,
+                              })
+                            }
+                            className={cn(
+                              "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
+                              g.conductorMaterial === cm.id
+                                ? "bg-yellow-400 text-black border-yellow-400"
+                                : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                            )}
+                          >
+                            {cm.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Conductor size grid */}
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">
+                        Size (AWG)
+                      </Label>
+                      <div className="grid grid-cols-5 gap-1">
+                        {CONDUCTOR_SIZES.map(sz => (
+                          <button
+                            key={sz}
+                            onClick={() =>
+                              updateGroup(g.id, {
+                                conductorSize: sz as ConductorSize,
+                              })
+                            }
+                            className={cn(
+                              "py-1 rounded text-[10px] font-mono font-medium border transition-all",
+                              g.conductorSize === sz
+                                ? "bg-yellow-400 text-black border-yellow-400"
+                                : "bg-muted/30 text-muted-foreground border-border hover:border-yellow-400/50 hover:text-foreground"
+                            )}
+                          >
+                            {sz}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
         {/* Equipment Grounding Conductor (EGC) — hidden when Empty/Future Pull is on */}
         {!isWire && !conduitOnly && (
-          <div className={cn(
-            "rounded-lg border px-3 py-2.5 transition-all",
-            run.includeGround
-              ? "border-green-500/60 bg-green-500/8"
-              : "border-border/50 bg-muted/10"
-          )}>
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2.5 transition-all",
+              run.includeGround
+                ? "border-green-500/60 bg-green-500/8"
+                : "border-border/50 bg-muted/10"
+            )}
+          >
             {/* Header row: label + toggle */}
             <div className="flex items-center justify-between">
               <div>
-                <div className={cn(
-                  "text-[11px] font-semibold uppercase tracking-wide",
-                  run.includeGround ? "text-green-400" : "text-muted-foreground"
-                )}>Equipment Grounding Conductor (EGC)</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">Add bare/green EGC to this run</div>
+                <div
+                  className={cn(
+                    "text-[11px] font-semibold uppercase tracking-wide",
+                    run.includeGround
+                      ? "text-green-400"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  Equipment Grounding Conductor (EGC)
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Add bare/green EGC to this run
+                </div>
               </div>
               <button
-                onClick={() => onUpdate(run.id, { includeGround: !run.includeGround })}
+                onClick={() =>
+                  onUpdate(run.id, { includeGround: !run.includeGround })
+                }
                 className={cn(
                   "relative w-9 h-5 rounded-full border transition-all ml-3 shrink-0",
                   run.includeGround
@@ -1086,10 +1573,12 @@ function RunCard({
                     : "bg-muted/40 border-border"
                 )}
               >
-                <span className={cn(
-                  "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
-                  run.includeGround ? "left-4" : "left-0.5"
-                )} />
+                <span
+                  className={cn(
+                    "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
+                    run.includeGround ? "left-4" : "left-0.5"
+                  )}
+                />
               </button>
             </div>
 
@@ -1098,17 +1587,25 @@ function RunCard({
               <div className="mt-3 space-y-2.5">
                 {/* Cu / Al material toggle */}
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">EGC Material</Label>
+                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                    EGC Material
+                  </Label>
                   <div className="flex gap-2">
-                    {CONDUCTOR_MATERIALS.map((cm) => (
-                      <button key={cm.id}
-                        onClick={() => onUpdate(run.id, { groundMaterial: cm.id as ConductorMaterial })}
+                    {CONDUCTOR_MATERIALS.map(cm => (
+                      <button
+                        key={cm.id}
+                        onClick={() =>
+                          onUpdate(run.id, {
+                            groundMaterial: cm.id as ConductorMaterial,
+                          })
+                        }
                         className={cn(
                           "flex-1 py-1.5 rounded text-xs font-mono font-semibold border transition-all",
                           (run.groundMaterial ?? "CU") === cm.id
                             ? "bg-green-500 text-black border-green-500"
                             : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
-                        )}>
+                        )}
+                      >
                         {cm.label}
                       </button>
                     ))}
@@ -1116,17 +1613,35 @@ function RunCard({
                 </div>
                 {/* EGC size grid */}
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">EGC Size (AWG)</Label>
+                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                    EGC Size (AWG)
+                  </Label>
                   <div className="grid grid-cols-5 gap-1">
-                    {(["14","12","10","8","6","4","2","1/0","2/0","3/0","4/0"] as const).map((sz) => (
-                      <button key={sz}
+                    {(
+                      [
+                        "14",
+                        "12",
+                        "10",
+                        "8",
+                        "6",
+                        "4",
+                        "2",
+                        "1/0",
+                        "2/0",
+                        "3/0",
+                        "4/0",
+                      ] as const
+                    ).map(sz => (
+                      <button
+                        key={sz}
                         onClick={() => onUpdate(run.id, { groundSize: sz })}
                         className={cn(
                           "py-1 rounded text-[10px] font-mono font-medium border transition-all",
                           (run.groundSize ?? "12") === sz
                             ? "bg-green-500 text-black border-green-500"
                             : "bg-muted/30 text-muted-foreground border-border hover:border-green-500/50 hover:text-foreground"
-                        )}>
+                        )}
+                      >
                         {sz}
                       </button>
                     ))}
@@ -1142,40 +1657,74 @@ function RunCard({
           <>
             {/* Conduit Estimating Inputs */}
             <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                Estimating Inputs
+              </Label>
               <div className="grid grid-cols-2 gap-3">
                 {/* Conduit waste factor */}
                 <div className="space-y-1 col-span-2">
                   <div className="flex items-center justify-between">
-                    <Label className="text-[10px] text-muted-foreground">Conduit Waste Factor</Label>
-                    <span className="text-[10px] font-bold font-mono text-[#F5C518]">{conduitWasteFactor}%</span>
+                    <Label className="text-[10px] text-muted-foreground">
+                      Conduit Waste Factor
+                    </Label>
+                    <span className="text-[10px] font-bold font-mono text-[#F5C518]">
+                      {conduitWasteFactor}%
+                    </span>
                   </div>
-                  <Slider min={0} max={50} step={1} value={[conduitWasteFactor]}
-                    onValueChange={([v]) => onUpdate(run.id, { conduitWasteFactor: v })}
-                    className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
+                  <Slider
+                    min={0}
+                    max={50}
+                    step={1}
+                    value={[conduitWasteFactor]}
+                    onValueChange={([v]) =>
+                      onUpdate(run.id, { conduitWasteFactor: v })
+                    }
+                    className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+                  />
                 </div>
                 {/* Wire waste factor — only shown when wire is included */}
                 {!conduitOnly && (
                   <div className="space-y-1 col-span-2">
                     <div className="flex items-center justify-between">
-                      <Label className="text-[10px] text-muted-foreground">Wire Waste Factor</Label>
-                      <span className="text-[10px] font-bold font-mono text-[#F5C518]">{wireWasteFactor}%</span>
+                      <Label className="text-[10px] text-muted-foreground">
+                        Wire Waste Factor
+                      </Label>
+                      <span className="text-[10px] font-bold font-mono text-[#F5C518]">
+                        {wireWasteFactor}%
+                      </span>
                     </div>
-                    <Slider min={0} max={50} step={1} value={[wireWasteFactor]}
-                      onValueChange={([v]) => onUpdate(run.id, { wireWasteFactor: v })}
-                      className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
+                    <Slider
+                      min={0}
+                      max={50}
+                      step={1}
+                      value={[wireWasteFactor]}
+                      onValueChange={([v]) =>
+                        onUpdate(run.id, { wireWasteFactor: v })
+                      }
+                      className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+                    />
                   </div>
                 )}
                 {/* Pull points */}
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">No. of Pull Points</Label>
-                  {numInput(numPullPoints, (v) => onUpdate(run.id, { numPullPoints: v }))}
+                  <Label className="text-[10px] text-muted-foreground">
+                    No. of Pull Points
+                  </Label>
+                  {numInput(numPullPoints, v =>
+                    onUpdate(run.id, { numPullPoints: v })
+                  )}
                 </div>
                 {/* Wire makeup per pull point — only when wire is included */}
                 {!conduitOnly && (
                   <div className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground">Wire Makeup / Pull Pt (ft)</Label>
-                    {numInput(wireTermMakeup, (v) => onUpdate(run.id, { wireTermMakeup: v }), 0.5)}
+                    <Label className="text-[10px] text-muted-foreground">
+                      Wire Makeup / Pull Pt (ft)
+                    </Label>
+                    {numInput(
+                      wireTermMakeup,
+                      v => onUpdate(run.id, { wireTermMakeup: v }),
+                      0.5
+                    )}
                   </div>
                 )}
               </div>
@@ -1183,24 +1732,37 @@ function RunCard({
 
             {/* Conduit Outputs */}
             <div className="space-y-2">
-              <div className={cn("grid gap-2", conduitOnly ? "grid-cols-1" : "grid-cols-2")}>
+              <div
+                className={cn(
+                  "grid gap-2",
+                  conduitOnly ? "grid-cols-1" : "grid-cols-2"
+                )}
+              >
                 <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
                   <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
                     <ConduitPipeIcon size={10} /> Billable Conduit
                   </div>
-                  <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitBillable}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">ft → {calcSticks(conduitBillable)} sticks</div>
+                  <div className="text-xl font-bold font-mono text-[#F5C518]">
+                    {conduitBillable}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono">
+                    ft → {calcSticks(conduitBillable)} sticks
+                  </div>
                 </div>
                 {!conduitOnly && (
                   <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
                     <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
                       <StrippedWireIcon size={10} /> Billable Wire
                     </div>
-                    <div className="text-xl font-bold font-mono text-[#F5C518]">{conduitWireBillable.toFixed(1)}</div>
+                    <div className="text-xl font-bold font-mono text-[#F5C518]">
+                      {conduitWireBillable.toFixed(1)}
+                    </div>
                     <div className="text-[10px] text-muted-foreground font-mono">
                       ft w/ {wireWasteFactor}% waste
                       {run.includeGround && egcBillableFt > 0 && (
-                        <span className="ml-1 text-[#F5C518]/60">(incl. {egcBillableFt.toFixed(1)} ft EGC)</span>
+                        <span className="ml-1 text-[#F5C518]/60">
+                          (incl. {egcBillableFt.toFixed(1)} ft EGC)
+                        </span>
                       )}
                     </div>
                   </div>
@@ -1209,38 +1771,57 @@ function RunCard({
               {/* Compact price indicator — full cost breakdown lives in Labor & Material summary */}
               <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/70">
                 {conduitCostPerFt != null ? (
-                  <span>{run.conduitType ?? "EMT"} {run.conduitSize}": ${conduitCostPerFt.toFixed(3)}/ft</span>
+                  <span>
+                    {run.conduitType ?? "EMT"} {run.conduitSize}": $
+                    {conduitCostPerFt.toFixed(3)}/ft
+                  </span>
                 ) : (
-                  <span className="text-muted-foreground/40">No price for {run.conduitType ?? "EMT"} {run.conduitSize}" — set in Material DB</span>
+                  <span className="text-muted-foreground/40">
+                    No price for {run.conduitType ?? "EMT"} {run.conduitSize}" —
+                    set in Material DB
+                  </span>
                 )}
                 {!conduitOnly && wireCostPerFt != null && (
-                  <><span className="text-muted-foreground/30">·</span><span>Wire: ${wireCostPerFt.toFixed(3)}/ft</span></>
+                  <>
+                    <span className="text-muted-foreground/30">·</span>
+                    <span>Wire: ${wireCostPerFt.toFixed(3)}/ft</span>
+                  </>
                 )}
               </div>
             </div>
 
             {/* Fittings */}
             <button
-              onClick={() => setShowFittings((v) => !v)}
+              onClick={() => setShowFittings(v => !v)}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-lg border transition-all text-xs font-medium",
                 showFittings
                   ? "border-[#F5C518]/40 bg-[#F5C518]/5 text-[#F5C518]"
                   : "border-border bg-muted/20 text-muted-foreground hover:text-foreground hover:border-border/80"
-              )}>
+              )}
+            >
               <div className="flex items-center gap-2">
                 <MaleAdapterIcon size={12} />
                 <span>Fittings</span>
                 {totalFittings > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-[#F5C518]/20 text-[#F5C518] text-[10px] font-bold">{totalFittings}</span>
+                  <span className="px-1.5 py-0.5 rounded-full bg-[#F5C518]/20 text-[#F5C518] text-[10px] font-bold">
+                    {totalFittings}
+                  </span>
                 )}
               </div>
-              <span className="text-[10px] text-muted-foreground">{showFittings ? "▲" : "▼"}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {showFittings ? "▲" : "▼"}
+              </span>
             </button>
             {showFittings && (
               <div className="bg-muted/10 rounded-lg px-3 py-2 border border-border/50">
-                {FITTING_TYPES.map((ft) => (
-                  <FittingCounter key={ft.id} label={ft.label} value={run.fittings[ft.id]} onChange={(v) => updateFitting(ft.id, v)} />
+                {FITTING_TYPES.map(ft => (
+                  <FittingCounter
+                    key={ft.id}
+                    label={ft.label}
+                    value={run.fittings[ft.id]}
+                    onChange={v => updateFitting(ft.id, v)}
+                  />
                 ))}
               </div>
             )}
@@ -1255,33 +1836,64 @@ function RunCard({
               value={run.wireTypeId}
               stranded={run.wireStranded}
               availableCategories={availableWireCategories}
-              onChange={(id, stranded) => onUpdate(run.id, { wireTypeId: id, wireStranded: stranded })}
+              onChange={(id, stranded) =>
+                onUpdate(run.id, { wireTypeId: id, wireStranded: stranded })
+              }
             />
 
             {/* Wire-Only Estimating Inputs — no separate AWG picker; size is embedded in the wire type selection above */}
             <div className="space-y-3 rounded-lg border border-border/50 bg-muted/10 p-3">
-              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">Estimating Inputs</Label>
+              <Label className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                Estimating Inputs
+              </Label>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Makeup Allowance (ft/term)</Label>
-                  {numInput(makeupAllowance, (v) => onUpdate(run.id, { makeupAllowance: v }), 0.5)}
+                  <Label className="text-[10px] text-muted-foreground">
+                    Makeup Allowance (ft/term)
+                  </Label>
+                  {numInput(
+                    makeupAllowance,
+                    v => onUpdate(run.id, { makeupAllowance: v }),
+                    0.5
+                  )}
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">Service Loop (ft)</Label>
-                  {numInput(serviceLoop, (v) => onUpdate(run.id, { serviceLoop: v }), 0.5)}
+                  <Label className="text-[10px] text-muted-foreground">
+                    Service Loop (ft)
+                  </Label>
+                  {numInput(
+                    serviceLoop,
+                    v => onUpdate(run.id, { serviceLoop: v }),
+                    0.5
+                  )}
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] text-muted-foreground">No. of Terminations</Label>
-                  {numInput(numTerminations, (v) => onUpdate(run.id, { numTerminations: v }))}
+                  <Label className="text-[10px] text-muted-foreground">
+                    No. of Terminations
+                  </Label>
+                  {numInput(numTerminations, v =>
+                    onUpdate(run.id, { numTerminations: v })
+                  )}
                 </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <Label className="text-[10px] text-muted-foreground">Waste Factor</Label>
-                    <span className="text-[10px] font-bold font-mono text-[#F5C518]">{wirewasteFactor}%</span>
+                    <Label className="text-[10px] text-muted-foreground">
+                      Waste Factor
+                    </Label>
+                    <span className="text-[10px] font-bold font-mono text-[#F5C518]">
+                      {wirewasteFactor}%
+                    </span>
                   </div>
-                  <Slider min={0} max={50} step={1} value={[wirewasteFactor]}
-                    onValueChange={([v]) => onUpdate(run.id, { wirewasteFactor: v })}
-                    className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]" />
+                  <Slider
+                    min={0}
+                    max={50}
+                    step={1}
+                    value={[wirewasteFactor]}
+                    onValueChange={([v]) =>
+                      onUpdate(run.id, { wirewasteFactor: v })
+                    }
+                    className="[&_[role=slider]]:bg-[#F5C518] [&_[role=slider]]:border-[#F5C518] [&_.bg-primary]:bg-[#F5C518]"
+                  />
                 </div>
               </div>
             </div>
@@ -1293,29 +1905,42 @@ function RunCard({
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
                     <StrippedWireIcon size={10} /> Net Length
                   </div>
-                  <div className="text-xl font-bold font-mono text-foreground">{wireNetLength.toFixed(1)}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">ft before waste</div>
+                  <div className="text-xl font-bold font-mono text-foreground">
+                    {wireNetLength.toFixed(1)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono">
+                    ft before waste
+                  </div>
                 </div>
                 <div className="bg-[#F5C518]/10 rounded-lg p-2.5 border border-[#F5C518]/20">
                   <div className="flex items-center gap-1.5 text-[10px] text-[#F5C518] uppercase tracking-wide mb-1">
                     <StrippedWireIcon size={10} /> Billable Wire
                   </div>
-                  <div className="text-xl font-bold font-mono text-[#F5C518]">{(wireBillable * run.conductors).toFixed(1)}</div>
-                  <div className="text-[10px] text-muted-foreground font-mono">{run.conductors}c × {wireBillable} ft w/ {wirewasteFactor}% waste</div>
+                  <div className="text-xl font-bold font-mono text-[#F5C518]">
+                    {(wireBillable * run.conductors).toFixed(1)}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground font-mono">
+                    {run.conductors}c × {wireBillable} ft w/ {wirewasteFactor}%
+                    waste
+                  </div>
                 </div>
               </div>
               {/* Compact price indicator — full cost breakdown lives in Labor & Material summary */}
               <div className="text-[10px] font-mono text-muted-foreground/70">
                 {wireCostPerFt != null ? (
-                  <span>Wire: ${wireCostPerFt.toFixed(3)}/ft · total est. ${(wireCostPerFt * wireBillable * run.conductors).toFixed(2)}</span>
+                  <span>
+                    Wire: ${wireCostPerFt.toFixed(3)}/ft · total est. $
+                    {(wireCostPerFt * wireBillable * run.conductors).toFixed(2)}
+                  </span>
                 ) : (
-                  <span className="text-muted-foreground/40">No price for this wire type — set in Material DB</span>
+                  <span className="text-muted-foreground/40">
+                    No price for this wire type — set in Material DB
+                  </span>
                 )}
               </div>
             </div>
           </>
         )}
-
       </div>
     </div>
   );
@@ -1336,23 +1961,52 @@ function RunCard({
  * the whole-project picture, not just the current page.
  */
 // ─── Summary Strip (with flash animation on change) ──────────────────────────
-function SummaryStrip({ totalFeet, totalSticks, totalWire }: { totalFeet: number; totalSticks: number; totalWire: number }) {
+function SummaryStrip({
+  totalFeet,
+  totalSticks,
+  totalWire,
+}: {
+  totalFeet: number;
+  totalSticks: number;
+  totalWire: number;
+}) {
   const feetKey = useFlashKey(totalFeet);
   const sticksKey = useFlashKey(totalSticks);
   const wireKey = useFlashKey(totalWire);
   return (
     <div className="grid grid-cols-3 gap-2 mb-1 mt-3">
       <div className="bg-muted/20 rounded p-2 text-center">
-        <div key={feetKey} className="text-lg font-bold font-mono text-[#F5C518] num-flash">{totalFeet.toFixed(0)}</div>
-        <div className="text-[9px] text-muted-foreground font-mono uppercase">Total ft</div>
+        <div
+          key={feetKey}
+          className="text-lg font-bold font-mono text-[#F5C518] num-flash"
+        >
+          {totalFeet.toFixed(0)}
+        </div>
+        <div className="text-[9px] text-muted-foreground font-mono uppercase">
+          Total ft
+        </div>
       </div>
       <div className="bg-muted/20 rounded p-2 text-center">
-        <div key={sticksKey} className="text-lg font-bold font-mono text-[#F5C518] num-flash">{totalSticks}</div>
-        <div className="text-[9px] text-muted-foreground font-mono uppercase">Sticks</div>
+        <div
+          key={sticksKey}
+          className="text-lg font-bold font-mono text-[#F5C518] num-flash"
+        >
+          {totalSticks}
+        </div>
+        <div className="text-[9px] text-muted-foreground font-mono uppercase">
+          Sticks
+        </div>
       </div>
       <div className="bg-muted/20 rounded p-2 text-center">
-        <div key={wireKey} className="text-lg font-bold font-mono text-[#F5C518] num-flash">{totalWire.toFixed(0)}</div>
-        <div className="text-[9px] text-muted-foreground font-mono uppercase">Wire ft</div>
+        <div
+          key={wireKey}
+          className="text-lg font-bold font-mono text-[#F5C518] num-flash"
+        >
+          {totalWire.toFixed(0)}
+        </div>
+        <div className="text-[9px] text-muted-foreground font-mono uppercase">
+          Wire ft
+        </div>
       </div>
     </div>
   );
@@ -1365,21 +2019,30 @@ function useFlashKey(value: number): string {
   useEffect(() => {
     if (prevRef.current !== value) {
       prevRef.current = value;
-      setFlashKey((k) => k + 1);
+      setFlashKey(k => k + 1);
     }
   }, [value]);
   return String(flashKey);
 }
 
 // ─── Export Button ─────────────────────────────────────────────────────────────
-function ExportButton({ runs, countSessions = [], projectName }: { runs: RunItem[]; countSessions?: CountSession[]; projectName: string }) {
+function ExportButton({
+  runs,
+  countSessions = [],
+  projectName,
+}: {
+  runs: RunItem[];
+  countSessions?: CountSession[];
+  projectName: string;
+}) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     if (open) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -1388,16 +2051,45 @@ function ExportButton({ runs, countSessions = [], projectName }: { runs: RunItem
   const buildRows = () => {
     const rows: string[][] = [];
     rows.push(["HelixBid \u2014 Material Export", "", "", "", "", "", ""]);
-    rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", ""]);
+    rows.push([
+      `Generated: ${new Date().toLocaleString()}`,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
     rows.push([`Project: ${projectName}`, "", "", "", "", "", ""]);
     rows.push([]);
-    rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft)"]);
+    rows.push([
+      "Run Name",
+      "Page",
+      "Conduit Type",
+      "Conduit Size",
+      "Distance (ft)",
+      "Pipe Sticks",
+      "Wire (ft)",
+    ]);
     for (const run of runs) {
-      const activeGroups = (run.conductorGroups && run.conductorGroups.length > 0)
-        ? run.conductorGroups
-        : [{ conductors: run.conductors, conductorMaterial: run.conductorMaterial ?? "CU", conductorSize: run.conductorSize ?? "12", id: "grp-legacy" }];
-      const wireFt = run.conduitOnly ? 0 : activeGroups.reduce((s, g) => s + parseFloat((run.feet * g.conductors * 1.1).toFixed(1)), 0)
-        + (run.includeGround ? parseFloat((run.feet * 1.1).toFixed(1)) : 0);
+      const activeGroups =
+        run.conductorGroups && run.conductorGroups.length > 0
+          ? run.conductorGroups
+          : [
+              {
+                conductors: run.conductors,
+                conductorMaterial: run.conductorMaterial ?? "CU",
+                conductorSize: run.conductorSize ?? "12",
+                id: "grp-legacy",
+              },
+            ];
+      const wireFt = run.conduitOnly
+        ? 0
+        : activeGroups.reduce(
+            (s, g) =>
+              s + parseFloat((run.feet * g.conductors * 1.1).toFixed(1)),
+            0
+          ) + (run.includeGround ? parseFloat((run.feet * 1.1).toFixed(1)) : 0);
       rows.push([
         run.name,
         run.pageNumber != null ? String(run.pageNumber) : "",
@@ -1410,8 +2102,16 @@ function ExportButton({ runs, countSessions = [], projectName }: { runs: RunItem
     }
     const totalFt = runs.reduce((a, r) => a + r.feet, 0);
     const totalSticks = runs.reduce((a, r) => a + Math.ceil(r.feet / 10), 0);
-    rows.push(["TOTAL", "", "", "", String(totalFt.toFixed(0)), String(totalSticks), ""]);
-    const activeSessions = countSessions.filter((cs) => cs.pins.length > 0);
+    rows.push([
+      "TOTAL",
+      "",
+      "",
+      "",
+      String(totalFt.toFixed(0)),
+      String(totalSticks),
+      "",
+    ]);
+    const activeSessions = countSessions.filter(cs => cs.pins.length > 0);
     if (activeSessions.length > 0) {
       rows.push([]);
       rows.push(["Unit Count", "", "", "", "", "", ""]);
@@ -1425,10 +2125,18 @@ function ExportButton({ runs, countSessions = [], projectName }: { runs: RunItem
 
   const exportCSV = () => {
     const rows = buildRows();
-    const csv = rows.map((row) => row.map((v) => {
-      const s = String(v);
-      return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(",")).join("\n");
+    const csv = rows
+      .map(row =>
+        row
+          .map(v => {
+            const s = String(v);
+            return s.includes(",") || s.includes('"') || s.includes("\n")
+              ? `"${s.replace(/"/g, '""')}"`
+              : s;
+          })
+          .join(",")
+      )
+      .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1459,21 +2167,31 @@ function ExportButton({ runs, countSessions = [], projectName }: { runs: RunItem
 <h1>HelixBid — Material Export</h1>
 <div class="meta">Project: ${projectName} &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}</div>
 <table>
-<thead><tr>${rows[4].map((h) => `<th>${h}</th>`).join("")}</tr></thead>
+<thead><tr>${rows[4].map(h => `<th>${h}</th>`).join("")}</tr></thead>
 <tbody>
-${rows.slice(5).map((row) => {
-  if (row.length === 0) return "";
-  if (row[0] === "TOTAL") return `<tr class="total">${row.map((c) => `<td>${c}</td>`).join("")}</tr>`;
-  if (row[1] === "" && row[2] === "" && row[3] === "") return `<tr><td colspan="7" class="section">${row[0]}</td></tr>`;
-  return `<tr>${row.map((c) => `<td>${c}</td>`).join("")}</tr>`;
-}).join("\n")}
+${rows
+  .slice(5)
+  .map(row => {
+    if (row.length === 0) return "";
+    if (row[0] === "TOTAL")
+      return `<tr class="total">${row.map(c => `<td>${c}</td>`).join("")}</tr>`;
+    if (row[1] === "" && row[2] === "" && row[3] === "")
+      return `<tr><td colspan="7" class="section">${row[0]}</td></tr>`;
+    return `<tr>${row.map(c => `<td>${c}</td>`).join("")}</tr>`;
+  })
+  .join("\n")}
 </tbody></table></body></html>`;
     const win = window.open("", "_blank");
-    if (!win) { toast.error("Pop-up blocked. Allow pop-ups and try again."); return; }
+    if (!win) {
+      toast.error("Pop-up blocked. Allow pop-ups and try again.");
+      return;
+    }
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); }, 400);
+    setTimeout(() => {
+      win.print();
+    }, 400);
     toast.success("PDF print dialog opened.");
     setOpen(false);
   };
@@ -1481,12 +2199,22 @@ ${rows.slice(5).map((row) => {
   return (
     <div ref={ref} className="px-4 pb-4 relative">
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-center gap-2 px-4 py-3.5 rounded-lg bg-[#F5C518] text-black hover:bg-[#F5C518]/90 active:scale-[0.98] transition-all text-sm font-bold shadow-md"
       >
         <Download size={16} />
         Export
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="ml-1"
+        >
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
@@ -1496,33 +2224,55 @@ ${rows.slice(5).map((row) => {
             onClick={exportCSV}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors border-b border-border/40"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10 9 9 9 8 9"/>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
             </svg>
             <div className="text-left">
               <div className="font-semibold">Export as CSV</div>
-              <div className="text-[10px] text-muted-foreground">Open in Excel, Google Sheets, or Numbers</div>
+              <div className="text-[10px] text-muted-foreground">
+                Open in Excel, Google Sheets, or Numbers
+              </div>
             </div>
           </button>
           <button
             onClick={exportPDF}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <path d="M9 15v-4h2a2 2 0 0 1 0 4H9z"/>
-              <path d="M14 15v-4"/>
-              <path d="M19 11h-2v4"/>
-              <path d="M17 13h1.5"/>
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <path d="M9 15v-4h2a2 2 0 0 1 0 4H9z" />
+              <path d="M14 15v-4" />
+              <path d="M19 11h-2v4" />
+              <path d="M17 13h1.5" />
             </svg>
             <div className="text-left">
               <div className="font-semibold">Export as PDF</div>
-              <div className="text-[10px] text-muted-foreground">Print or save as PDF via browser dialog</div>
+              <div className="text-[10px] text-muted-foreground">
+                Print or save as PDF via browser dialog
+              </div>
             </div>
           </button>
         </div>
@@ -1531,78 +2281,120 @@ ${rows.slice(5).map((row) => {
   );
 }
 
-function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { runs: RunItem[]; countSessions?: CountSession[]; userMaterials?: UserMaterialRow[] }) {
+function CrossPageTotals({
+  runs,
+  countSessions = [],
+  userMaterials = [],
+}: {
+  runs: RunItem[];
+  countSessions?: CountSession[];
+  userMaterials?: UserMaterialRow[];
+}) {
   const { setShowMaterialList } = useApp();
 
-  const pages = Array.from(new Set(runs.map((r) => r.pageNumber).filter((p): p is number => p !== undefined))).sort((a, b) => a - b);
+  const pages = Array.from(
+    new Set(
+      runs.map(r => r.pageNumber).filter((p): p is number => p !== undefined)
+    )
+  ).sort((a, b) => a - b);
 
   // ── Conduit breakdown by type+size ──────────────────────────────────────────
   type ConduitKey = string; // e.g. "EMT 3/4""
-  const conduitMap = new Map<ConduitKey, { type: string; size: string; feet: number; sticks: number }>();
+  const conduitMap = new Map<
+    ConduitKey,
+    { type: string; size: string; feet: number; sticks: number }
+  >();
   for (const r of runs) {
     if ((r.runType ?? "conduit") === "wire") continue; // wire runs handled separately
     const key = `${r.conduitType ?? "EMT"} ${r.conduitSize}"`;
     const billableFt = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0);
     const existing = conduitMap.get(key);
     if (existing) {
-      existing.feet   += billableFt;
+      existing.feet += billableFt;
       existing.sticks += calcSticks(billableFt);
     } else {
-      conduitMap.set(key, { type: r.conduitType ?? "EMT", size: r.conduitSize, feet: billableFt, sticks: calcSticks(billableFt) });
+      conduitMap.set(key, {
+        type: r.conduitType ?? "EMT",
+        size: r.conduitSize,
+        feet: billableFt,
+        sticks: calcSticks(billableFt),
+      });
     }
   }
-  const conduitRows = Array.from(conduitMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+  const conduitRows = Array.from(conduitMap.entries()).sort(([a], [b]) =>
+    a.localeCompare(b)
+  );
 
   // ── Wire breakdown by conductor spec ────────────────────────────────────────
   type WireKey = string; // e.g. "#12 AWG Cu"
-  const wireMap = new Map<WireKey, { label: string; qty: number; feet: number }>();
+  const wireMap = new Map<
+    WireKey,
+    { label: string; qty: number; feet: number }
+  >();
   for (const r of runs) {
     const isWireRun = (r.runType ?? "conduit") === "wire";
     if (isWireRun) {
       // Wire-only runs use scalar fields (no multi-circuit support for wire-only mode)
       if (r.conductors < 1) continue;
-      const mat  = r.conductorMaterial ?? "CU";
+      const mat = r.conductorMaterial ?? "CU";
       const size = r.conductorSize ?? "12";
-      const label = conductorLabel(mat as ConductorMaterial, size as ConductorSize);
-      const wireFt = calcWire(
-        r.feet, r.conductors,
-        r.makeupAllowance ?? 0,
-        r.serviceLoop ?? 0,
-        r.numTerminations ?? 0,
-        r.wirewasteFactor ?? 0,
-      ) * r.conductors;
+      const label = conductorLabel(
+        mat as ConductorMaterial,
+        size as ConductorSize
+      );
+      const wireFt =
+        calcWire(
+          r.feet,
+          r.conductors,
+          r.makeupAllowance ?? 0,
+          r.serviceLoop ?? 0,
+          r.numTerminations ?? 0,
+          r.wirewasteFactor ?? 0
+        ) * r.conductors;
       const existing = wireMap.get(label);
       if (existing) {
         existing.feet += wireFt;
-        existing.qty  += r.conductors;
+        existing.qty += r.conductors;
       } else {
         wireMap.set(label, { label, qty: r.conductors, feet: wireFt });
       }
     } else {
       // Conduit runs: iterate conductor groups (or fall back to scalar)
-      const groups = (r.conductorGroups && r.conductorGroups.length > 0)
-        ? r.conductorGroups
-        : [{ conductors: r.conductors, conductorMaterial: r.conductorMaterial ?? "CU" as ConductorMaterial, conductorSize: r.conductorSize ?? "12" as ConductorSize, id: "grp-legacy" }];
+      const groups =
+        r.conductorGroups && r.conductorGroups.length > 0
+          ? r.conductorGroups
+          : [
+              {
+                conductors: r.conductors,
+                conductorMaterial:
+                  r.conductorMaterial ?? ("CU" as ConductorMaterial),
+                conductorSize: r.conductorSize ?? ("12" as ConductorSize),
+                id: "grp-legacy",
+              },
+            ];
       for (const g of groups) {
         if (g.conductors < 1) continue;
         const label = conductorLabel(g.conductorMaterial, g.conductorSize);
         const wireFt = calcConduitWire(
-          r.feet, g.conductors,
+          r.feet,
+          g.conductors,
           r.wireTermMakeup ?? 0,
           r.numPullPoints ?? 0,
-          r.wireWasteFactor ?? 0,
+          r.wireWasteFactor ?? 0
         );
         const existing = wireMap.get(label);
         if (existing) {
           existing.feet += wireFt;
-          existing.qty  += g.conductors;
+          existing.qty += g.conductors;
         } else {
           wireMap.set(label, { label, qty: g.conductors, feet: wireFt });
         }
       }
     }
   }
-  const wireRows = Array.from(wireMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+  const wireRows = Array.from(wireMap.entries()).sort(([a], [b]) =>
+    a.localeCompare(b)
+  );
 
   // ── EGC breakdown by size+material ─────────────────────────────────────────
   const egcMap = new Map<string, { label: string; feet: number }>();
@@ -1612,7 +2404,13 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
     const mat = (r.groundMaterial ?? "CU") as ConductorMaterial;
     const size = (r.groundSize ?? "12") as ConductorSize;
     const label = conductorLabel(mat, size) + " EGC";
-    const egcFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+    const egcFt = calcConduitWire(
+      r.feet,
+      1,
+      r.wireTermMakeup ?? 0,
+      r.numPullPoints ?? 0,
+      r.wireWasteFactor ?? 0
+    );
     const existing = egcMap.get(label);
     if (existing) {
       existing.feet += egcFt;
@@ -1620,12 +2418,17 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       egcMap.set(label, { label, feet: egcFt });
     }
   }
-  const egcRows = Array.from(egcMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+  const egcRows = Array.from(egcMap.entries()).sort(([a], [b]) =>
+    a.localeCompare(b)
+  );
 
   // ── Fittings breakdown by type ───────────────────────────────────────────────
   // Group by conduit type+size so you know which fittings go where
   type FittingKey = string; // e.g. "EMT 3/4" — Connectors"
-  const fittingMap = new Map<FittingKey, { conduitSpec: string; fittingLabel: string; count: number }>();
+  const fittingMap = new Map<
+    FittingKey,
+    { conduitSpec: string; fittingLabel: string; count: number }
+  >();
   for (const r of runs) {
     const spec = `${r.conduitType ?? "EMT"} ${r.conduitSize}"`;
     for (const ft of FITTING_TYPES) {
@@ -1636,35 +2439,71 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       if (existing) {
         existing.count += count;
       } else {
-        fittingMap.set(key, { conduitSpec: spec, fittingLabel: ft.label, count });
+        fittingMap.set(key, {
+          conduitSpec: spec,
+          fittingLabel: ft.label,
+          count,
+        });
       }
     }
   }
-  const fittingRows = Array.from(fittingMap.values()).sort((a, b) =>
-    a.conduitSpec.localeCompare(b.conduitSpec) || a.fittingLabel.localeCompare(b.fittingLabel)
+  const fittingRows = Array.from(fittingMap.values()).sort(
+    (a, b) =>
+      a.conduitSpec.localeCompare(b.conduitSpec) ||
+      a.fittingLabel.localeCompare(b.fittingLabel)
   );
 
-  const totalFeet   = runs.reduce((a, r) => a + r.feet, 0);
+  const totalFeet = runs.reduce((a, r) => a + r.feet, 0);
   const totalSticks = runs.reduce((a, r) => {
     if ((r.runType ?? "conduit") === "wire") return a;
-    return a + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0));
+    return (
+      a + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0))
+    );
   }, 0);
-  const totalWire   = runs.reduce((a, r) => {
+  const totalWire = runs.reduce((a, r) => {
     const isWireRun = (r.runType ?? "conduit") === "wire";
     let runWire: number;
     if (isWireRun) {
       // calcWire returns per-conductor footage — multiply by conductors for total
-      runWire = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 0) * r.conductors;
+      runWire =
+        calcWire(
+          r.feet,
+          r.conductors,
+          r.makeupAllowance ?? 0,
+          r.serviceLoop ?? 0,
+          r.numTerminations ?? 0,
+          r.wirewasteFactor ?? 0
+        ) * r.conductors;
     } else {
       // Conduit runs: sum across conductor groups
-      const groups = (r.conductorGroups && r.conductorGroups.length > 0)
-        ? r.conductorGroups
-        : [{ conductors: r.conductors, id: "grp-legacy" }];
-      runWire = r.conduitOnly ? 0 : groups.reduce((s, g) => s + calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0), 0);
+      const groups =
+        r.conductorGroups && r.conductorGroups.length > 0
+          ? r.conductorGroups
+          : [{ conductors: r.conductors, id: "grp-legacy" }];
+      runWire = r.conduitOnly
+        ? 0
+        : groups.reduce(
+            (s, g) =>
+              s +
+              calcConduitWire(
+                r.feet,
+                g.conductors,
+                r.wireTermMakeup ?? 0,
+                r.numPullPoints ?? 0,
+                r.wireWasteFactor ?? 0
+              ),
+            0
+          );
     }
     // Add EGC footage when enabled (1 conductor, same waste factor as wire)
     if (!isWireRun && !r.conduitOnly && r.includeGround) {
-      runWire += calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+      runWire += calcConduitWire(
+        r.feet,
+        1,
+        r.wireTermMakeup ?? 0,
+        r.numPullPoints ?? 0,
+        r.wireWasteFactor ?? 0
+      );
     }
     return a + runWire;
   }, 0);
@@ -1677,43 +2516,100 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
     let runCost = 0;
     if (!isWireRun) {
       // Conduit cost
-      const conduitCpf = getConduitPricePerFoot(r.conduitType ?? "EMT", r.conduitSize ?? "1/2", userMaterials);
+      const conduitCpf = getConduitPricePerFoot(
+        r.conduitType ?? "EMT",
+        r.conduitSize ?? "1/2",
+        userMaterials
+      );
       if (conduitCpf != null) {
         const billable = calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0);
         runCost += conduitCpf * billable;
       }
       // Wire cost (skip if conduit-only)
       if (!r.conduitOnly) {
-        const wireTypeStr = r.wireTypeId ? r.wireTypeId.replace(/^wir-/, "") : "thhn";
+        const wireTypeStr = r.wireTypeId
+          ? r.wireTypeId.replace(/^wir-/, "")
+          : "thhn";
         // Iterate conductor groups for accurate per-group pricing
-        const groups = (r.conductorGroups && r.conductorGroups.length > 0)
-          ? r.conductorGroups
-          : [{ conductors: r.conductors, conductorMaterial: r.conductorMaterial ?? "CU" as ConductorMaterial, conductorSize: r.conductorSize ?? "12" as ConductorSize, id: "grp-legacy" }];
+        const groups =
+          r.conductorGroups && r.conductorGroups.length > 0
+            ? r.conductorGroups
+            : [
+                {
+                  conductors: r.conductors,
+                  conductorMaterial:
+                    r.conductorMaterial ?? ("CU" as ConductorMaterial),
+                  conductorSize: r.conductorSize ?? ("12" as ConductorSize),
+                  id: "grp-legacy",
+                },
+              ];
         for (const g of groups) {
-          const wireSize = (wireTypeStr === "mc" || wireTypeStr === "nm") ? (r.conductorSize ?? "12") : g.conductorSize;
-          const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, g.conductorMaterial, userMaterials, r.wireTypeId);
+          const wireSize =
+            wireTypeStr === "mc" || wireTypeStr === "nm"
+              ? (r.conductorSize ?? "12")
+              : g.conductorSize;
+          const wireCpf = getWirePricePerFoot(
+            wireTypeStr,
+            wireSize,
+            g.conductorMaterial,
+            userMaterials,
+            r.wireTypeId
+          );
           if (wireCpf != null) {
-            const wireFt = calcConduitWire(r.feet, g.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+            const wireFt = calcConduitWire(
+              r.feet,
+              g.conductors,
+              r.wireTermMakeup ?? 0,
+              r.numPullPoints ?? 0,
+              r.wireWasteFactor ?? 0
+            );
             runCost += wireCpf * wireFt;
           }
         }
         // Grounding conductor cost
         if (r.includeGround) {
           // Use groundMaterial for EGC pricing (defaults to CU if not set)
-          const groundCpf = getWirePricePerFoot("thhn", r.groundSize ?? "12", r.groundMaterial ?? "CU", userMaterials, undefined);
+          const groundCpf = getWirePricePerFoot(
+            "thhn",
+            r.groundSize ?? "12",
+            r.groundMaterial ?? "CU",
+            userMaterials,
+            undefined
+          );
           if (groundCpf != null) {
-            const wireFt = calcConduitWire(r.feet, 1, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+            const wireFt = calcConduitWire(
+              r.feet,
+              1,
+              r.wireTermMakeup ?? 0,
+              r.numPullPoints ?? 0,
+              r.wireWasteFactor ?? 0
+            );
             runCost += groundCpf * wireFt;
           }
         }
       }
     } else {
       // Wire-only run
-      const wireTypeStr = r.wireTypeId ? r.wireTypeId.replace(/^wir-/, "") : "thhn";
+      const wireTypeStr = r.wireTypeId
+        ? r.wireTypeId.replace(/^wir-/, "")
+        : "thhn";
       const wireSize = r.conductorSize ?? "12";
-      const wireCpf = getWirePricePerFoot(wireTypeStr, wireSize, r.conductorMaterial ?? "CU", userMaterials, r.wireTypeId);
+      const wireCpf = getWirePricePerFoot(
+        wireTypeStr,
+        wireSize,
+        r.conductorMaterial ?? "CU",
+        userMaterials,
+        r.wireTypeId
+      );
       if (wireCpf != null) {
-        const wireFt = calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 0);
+        const wireFt = calcWire(
+          r.feet,
+          r.conductors,
+          r.makeupAllowance ?? 0,
+          r.serviceLoop ?? 0,
+          r.numTerminations ?? 0,
+          r.wirewasteFactor ?? 0
+        );
         runCost += wireCpf * wireFt * r.conductors;
       }
     }
@@ -1722,15 +2618,26 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
 
   // Unit count material cost
   const unitCountCost = countSessions
-    .filter((cs) => cs.pins.length > 0 && cs.unitCost != null)
-    .reduce((a, cs) => a + (cs.unitCost! * cs.pins.length), 0);
+    .filter(cs => cs.pins.length > 0 && cs.unitCost != null)
+    .reduce((a, cs) => a + cs.unitCost! * cs.pins.length, 0);
 
   const grandTotalMaterialCost = totalMaterialCost + unitCountCost;
 
-  const SectionHeader = ({ icon, title }: { icon: React.ReactNode; title: string }) => (
+  const SectionHeader = ({
+    icon,
+    title,
+  }: {
+    icon: React.ReactNode;
+    title: string;
+  }) => (
     <div className="flex items-center gap-2 mt-4 mb-2 pb-1 border-b border-border/40">
       <span className="text-[#F5C518]">{icon}</span>
-      <span className="text-[10px] font-semibold text-[#F5C518] uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{title}</span>
+      <span
+        className="text-[10px] font-semibold text-[#F5C518] uppercase tracking-wider"
+        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+      >
+        {title}
+      </span>
     </div>
   );
 
@@ -1744,11 +2651,17 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
         className="text-xs font-semibold text-[#F5C518] uppercase tracking-wider mb-1 flex items-center gap-2"
         style={{ fontFamily: "'Space Grotesk', sans-serif" }}
       >
-        <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-[#F5C518]/20 text-[#F5C518] font-bold text-[9px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>HB</span>
+        <span
+          className="inline-flex items-center justify-center w-5 h-5 rounded bg-[#F5C518]/20 text-[#F5C518] font-bold text-[9px]"
+          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+        >
+          HB
+        </span>
         Labor & Material
         {pages.length > 0 && (
           <span className="text-[10px] font-mono text-muted-foreground normal-case tracking-normal">
-            {runs.length} run{runs.length !== 1 ? "s" : ""} · {pages.length} page{pages.length !== 1 ? "s" : ""}
+            {runs.length} run{runs.length !== 1 ? "s" : ""} · {pages.length}{" "}
+            page{pages.length !== 1 ? "s" : ""}
           </span>
         )}
         <span className="ml-auto text-[10px] font-mono text-[#F5C518]/70 flex items-center gap-1 normal-case tracking-normal">
@@ -1758,38 +2671,68 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
 
       {/* Summary strip — only shown once runs exist */}
       {runs.length > 0 && (
-        <SummaryStrip totalFeet={totalFeet} totalSticks={totalSticks} totalWire={totalWire} />
+        <SummaryStrip
+          totalFeet={totalFeet}
+          totalSticks={totalSticks}
+          totalWire={totalWire}
+        />
       )}
 
       {/* ── Labor & Material Summary ── */}
       <SectionHeader icon={<span />} title="Labor & Material Summary" />
       <div className="space-y-1">
         {conduitRows.length === 0 ? (
-          <p className="text-[10px] text-muted-foreground/50 italic font-mono">No runs or materials yet — push measurements or save count sessions to populate</p>
-        ) : conduitRows.map(([key, row]) => (
-          <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
-            <span className="font-mono text-foreground font-semibold">{row.type} {row.size}"</span>
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-[#F5C518]">{row.feet.toFixed(1)} ft</span>
-              <span className="font-mono text-muted-foreground">{row.sticks} sticks</span>
+          <p className="text-[10px] text-muted-foreground/50 italic font-mono">
+            No runs or materials yet — push measurements or save count sessions
+            to populate
+          </p>
+        ) : (
+          conduitRows.map(([key, row]) => (
+            <div
+              key={key}
+              className="flex items-center justify-between text-[11px] py-0.5"
+            >
+              <span className="font-mono text-foreground font-semibold">
+                {row.type} {row.size}"
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-[#F5C518]">
+                  {row.feet.toFixed(1)} ft
+                </span>
+                <span className="font-mono text-muted-foreground">
+                  {row.sticks} sticks
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* ── Fittings ── */}
       {fittingRows.length > 0 && (
         <>
-          <SectionHeader icon={<MaleAdapterIcon size={11} />} title="Fittings" />
+          <SectionHeader
+            icon={<MaleAdapterIcon size={11} />}
+            title="Fittings"
+          />
           <div className="space-y-1">
             {fittingRows.map((row, i) => (
-              <div key={i} className="flex items-center justify-between text-[11px] py-0.5">
+              <div
+                key={i}
+                className="flex items-center justify-between text-[11px] py-0.5"
+              >
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-muted-foreground text-[10px]">{row.conduitSpec}</span>
+                  <span className="font-mono text-muted-foreground text-[10px]">
+                    {row.conduitSpec}
+                  </span>
                   <span className="text-muted-foreground/40">·</span>
-                  <span className="font-mono text-foreground">{row.fittingLabel}</span>
+                  <span className="font-mono text-foreground">
+                    {row.fittingLabel}
+                  </span>
                 </div>
-                <span className="font-mono text-[#F5C518] font-bold">{row.count}</span>
+                <span className="font-mono text-[#F5C518] font-bold">
+                  {row.count}
+                </span>
               </div>
             ))}
           </div>
@@ -1799,14 +2742,26 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       {/* ── Wire / Conductors ── */}
       {wireRows.length > 0 && (
         <>
-          <SectionHeader icon={<StrippedWireIcon size={11} />} title="Conductors" />
+          <SectionHeader
+            icon={<StrippedWireIcon size={11} />}
+            title="Conductors"
+          />
           <div className="space-y-1">
             {wireRows.map(([key, row]) => (
-              <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
-                <span className="font-mono text-foreground font-semibold">{row.label}</span>
+              <div
+                key={key}
+                className="flex items-center justify-between text-[11px] py-0.5"
+              >
+                <span className="font-mono text-foreground font-semibold">
+                  {row.label}
+                </span>
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-[#F5C518]">{row.feet.toFixed(1)} ft</span>
-                  <span className="font-mono text-muted-foreground text-[10px]">billable ft</span>
+                  <span className="font-mono text-[#F5C518]">
+                    {row.feet.toFixed(1)} ft
+                  </span>
+                  <span className="font-mono text-muted-foreground text-[10px]">
+                    billable ft
+                  </span>
                 </div>
               </div>
             ))}
@@ -1820,11 +2775,20 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
           <SectionHeader icon={<StrippedWireIcon size={11} />} title="EGC" />
           <div className="space-y-1">
             {egcRows.map(([key, row]) => (
-              <div key={key} className="flex items-center justify-between text-[11px] py-0.5">
-                <span className="font-mono text-foreground font-semibold">{row.label}</span>
+              <div
+                key={key}
+                className="flex items-center justify-between text-[11px] py-0.5"
+              >
+                <span className="font-mono text-foreground font-semibold">
+                  {row.label}
+                </span>
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-[#F5C518]">{row.feet.toFixed(1)} ft</span>
-                  <span className="font-mono text-muted-foreground text-[10px]">billable ft</span>
+                  <span className="font-mono text-[#F5C518]">
+                    {row.feet.toFixed(1)} ft
+                  </span>
+                  <span className="font-mono text-muted-foreground text-[10px]">
+                    billable ft
+                  </span>
                 </div>
               </div>
             ))}
@@ -1835,19 +2799,36 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
       {/* ── Per-page breakdown ── */}
       {pages.length > 1 && (
         <>
-          <SectionHeader icon={<Link2 size={11} />} title="Per-Page Breakdown" />
+          <SectionHeader
+            icon={<Link2 size={11} />}
+            title="Per-Page Breakdown"
+          />
           <div className="space-y-1">
-            {pages.map((pg) => {
-              const pgRuns = runs.filter((r) => r.pageNumber === pg);
+            {pages.map(pg => {
+              const pgRuns = runs.filter(r => r.pageNumber === pg);
               const pgFeet = pgRuns.reduce((a, r) => a + r.feet, 0);
-              const pgSticks = pgRuns.reduce((a, r) => a + calcSticks(r.feet), 0);
+              const pgSticks = pgRuns.reduce(
+                (a, r) => a + calcSticks(r.feet),
+                0
+              );
               return (
-                <div key={pg} className="flex items-center justify-between text-[11px] py-0.5">
-                  <span className="text-muted-foreground font-mono">Page {pg}</span>
+                <div
+                  key={pg}
+                  className="flex items-center justify-between text-[11px] py-0.5"
+                >
+                  <span className="text-muted-foreground font-mono">
+                    Page {pg}
+                  </span>
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-foreground">{pgFeet.toFixed(1)} ft</span>
-                    <span className="font-mono text-muted-foreground">{pgSticks} sticks</span>
-                    <span className="text-muted-foreground">{pgRuns.length} run{pgRuns.length !== 1 ? "s" : ""}</span>
+                    <span className="font-mono text-foreground">
+                      {pgFeet.toFixed(1)} ft
+                    </span>
+                    <span className="font-mono text-muted-foreground">
+                      {pgSticks} sticks
+                    </span>
+                    <span className="text-muted-foreground">
+                      {pgRuns.length} run{pgRuns.length !== 1 ? "s" : ""}
+                    </span>
                   </div>
                 </div>
               );
@@ -1856,27 +2837,46 @@ function CrossPageTotals({ runs, countSessions = [], userMaterials = [] }: { run
         </>
       )}
       {/* ── Unit Count ── */}
-      {countSessions.filter((cs) => cs.pins.length > 0).length > 0 && (
+      {countSessions.filter(cs => cs.pins.length > 0).length > 0 && (
         <>
-          <SectionHeader icon={<span className="text-[10px]">⊕</span>} title="Unit Count" />
+          <SectionHeader
+            icon={<span className="text-[10px]">⊕</span>}
+            title="Unit Count"
+          />
           <div className="space-y-1">
-            {countSessions.filter((cs) => cs.pins.length > 0).map((cs) => {
-              const extCost = cs.unitCost != null ? cs.unitCost * cs.pins.length : null;
-              return (
-                <div key={cs.id} className="flex items-center justify-between text-[11px] py-0.5">
-                  <div className="flex items-center gap-1.5">
-                    <PinShapeSwatch shape={cs.iconId as PinShape} color={cs.color} size={11} />
-                    <span className="font-mono text-foreground">{cs.name}</span>
+            {countSessions
+              .filter(cs => cs.pins.length > 0)
+              .map(cs => {
+                const extCost =
+                  cs.unitCost != null ? cs.unitCost * cs.pins.length : null;
+                return (
+                  <div
+                    key={cs.id}
+                    className="flex items-center justify-between text-[11px] py-0.5"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <PinShapeSwatch
+                        shape={cs.iconId as PinShape}
+                        color={cs.color}
+                        size={11}
+                      />
+                      <span className="font-mono text-foreground">
+                        {cs.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-[#F5C518] font-bold">
+                        {cs.pins.length} EA
+                      </span>
+                      {extCost != null && (
+                        <span className="font-mono text-muted-foreground">
+                          ${extCost.toFixed(2)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-[#F5C518] font-bold">{cs.pins.length} EA</span>
-                    {extCost != null && (
-                      <span className="font-mono text-muted-foreground">${extCost.toFixed(2)}</span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </>
       )}
@@ -1909,15 +2909,21 @@ function CivilEditor({
   } = useApp();
   // Use the actual category prop (not the display label string) to select the right store
   const activeCivilProject =
-    category === "civil" ? activeCivilCatProject
-    : category === "commercial" ? activeCommercialCatProject
-    : category === "industrial" ? activeIndustrialCatProject
-    : activeResidentialCatProject;
+    category === "civil"
+      ? activeCivilCatProject
+      : category === "commercial"
+        ? activeCommercialCatProject
+        : category === "industrial"
+          ? activeIndustrialCatProject
+          : activeResidentialCatProject;
   const setCivilState =
-    category === "civil" ? setCivilCatState
-    : category === "commercial" ? setCommercialCatState
-    : category === "industrial" ? setIndustrialCatState
-    : setResidentialCatState;
+    category === "civil"
+      ? setCivilCatState
+      : category === "commercial"
+        ? setCommercialCatState
+        : category === "industrial"
+          ? setIndustrialCatState
+          : setResidentialCatState;
   const s = activeCivilProject.state;
 
   // Per-run items — stored in component state (persisted via AppContext civilState.runs)
@@ -1926,18 +2932,26 @@ function CivilEditor({
   const [runs, setRuns] = useState<RunItem[]>(() => s.runs ?? []);
 
   // Fetch user materials for run-tool price overrides (userPrice > catalog default)
-  const { data: userMaterials = [] } = trpc.data.materials.list.useQuery(undefined, {
-    staleTime: 60_000,
-  });
+  const { data: userMaterials = [] } = trpc.data.materials.list.useQuery(
+    undefined,
+    {
+      staleTime: 60_000,
+    }
+  );
 
   // Fetch master assemblies for assembly-counting picker
-  const { data: masterAssemblies = [] } = trpc.masterAssemblies.list.useQuery(undefined, {
-    staleTime: 30_000,
-  });
+  const { data: masterAssemblies = [] } = trpc.masterAssemblies.list.useQuery(
+    undefined,
+    {
+      staleTime: 30_000,
+    }
+  );
   // When an assembly is selected in the picker, fetch its items
   // Use a ref to hold the target session ID so the useEffect always applies to the correct session
   // even if the component re-renders between selection and data arrival.
-  const [pendingAssemblyId, setPendingAssemblyId] = useState<number | null>(null);
+  const [pendingAssemblyId, setPendingAssemblyId] = useState<number | null>(
+    null
+  );
   const pendingTargetSessionRef = useRef<string | null>(null);
   const { data: pendingAssemblyDetail } = trpc.masterAssemblies.get.useQuery(
     { id: pendingAssemblyId ?? 0 },
@@ -1951,36 +2965,53 @@ function CivilEditor({
   useEffect(() => {
     if (!pendingAssemblyDetail || pendingAssemblyId == null) return;
     const asm = pendingAssemblyDetail;
-    const targetSessionId = pendingTargetSessionRef.current ?? activeCountSessionId;
+    const targetSessionId =
+      pendingTargetSessionRef.current ?? activeCountSessionId;
     if (!targetSessionId) return;
-    const items = (asm.items ?? []).map((it) => ({
+    const items = (asm.items ?? []).map(it => ({
       description: it.description,
       unit: it.unit ?? "EA",
       qty: typeof it.qty === "string" ? parseFloat(it.qty) : Number(it.qty),
-      masterMaterialCost: typeof it.masterMaterialCost === "string" ? parseFloat(it.masterMaterialCost) : Number(it.masterMaterialCost ?? 0),
-      masterLaborHours: typeof it.masterLaborHours === "string" ? parseFloat(it.masterLaborHours) : Number(it.masterLaborHours ?? 0),
+      masterMaterialCost:
+        typeof it.masterMaterialCost === "string"
+          ? parseFloat(it.masterMaterialCost)
+          : Number(it.masterMaterialCost ?? 0),
+      masterLaborHours:
+        typeof it.masterLaborHours === "string"
+          ? parseFloat(it.masterLaborHours)
+          : Number(it.masterLaborHours ?? 0),
     }));
     // Apply to the target session — read the latest sessions from the ref to avoid stale closure
     const latestSessions: CountSession[] = s.countSessions ?? [];
-    const updatedSessions = latestSessions.map((cs) =>
+    const updatedSessions = latestSessions.map(cs =>
       cs.id === targetSessionId
         ? {
             ...cs,
-            name: (!cs.name || cs.name === "New Count" || cs.name.trim() === "") ? asm.name : cs.name,
+            name:
+              !cs.name || cs.name === "New Count" || cs.name.trim() === ""
+                ? asm.name
+                : cs.name,
             assemblyId: asm.id,
             assemblyName: asm.name,
             assemblyItems: items,
           }
         : cs
     );
-    setCivilState({ ...s, runs, countSessions: updatedSessions, activeCountSessionId });
+    setCivilState({
+      ...s,
+      runs,
+      countSessions: updatedSessions,
+      activeCountSessionId,
+    });
     // Clear pending state after applying
     pendingTargetSessionRef.current = null;
     setPendingAssemblyId(null);
     setAssemblySearch("");
     setAssemblyDropdownOpen(false);
-    toast.success(`Assembly "${asm.name}" linked (${items.length} item${items.length !== 1 ? "s" : ""}) — each pin = 1 instance.`);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    toast.success(
+      `Assembly "${asm.name}" linked (${items.length} item${items.length !== 1 ? "s" : ""}) — each pin = 1 instance.`
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAssemblyDetail, pendingAssemblyId]);
 
   // ── Price sync dialog state ──────────────────────────────────────────────────
@@ -1999,7 +3030,8 @@ function CivilEditor({
   // ── Count session state ─────────────────────────────────────────────────────
   const countSessions: CountSession[] = s.countSessions ?? [];
   const activeCountSessionId = s.activeCountSessionId;
-  const activeCountSession = countSessions.find((cs) => cs.id === activeCountSessionId) ?? null;
+  const activeCountSession =
+    countSessions.find(cs => cs.id === activeCountSessionId) ?? null;
 
   const [newSessionName, setNewSessionName] = useState("");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -2008,7 +3040,8 @@ function CivilEditor({
   type RightSection = "count" | "runs" | "materials" | null;
   const [activeSection, setActiveSection] = useState<RightSection>("runs");
   const countSessionsOpen = activeSection === "count";
-  const setCountSessionsOpen = (open: boolean) => setActiveSection(open ? "count" : null);
+  const setCountSessionsOpen = (open: boolean) =>
+    setActiveSection(open ? "count" : null);
   const [countModeRequest, setCountModeRequest] = useState(0);
   const [measureModeRequest, setMeasureModeRequest] = useState(0);
   const rightPanelRef = useRef<ImperativePanelHandle>(null);
@@ -2038,7 +3071,8 @@ function CivilEditor({
         ...s,
         runs,
         countSessions: sessions,
-        activeCountSessionId: activeId !== undefined ? activeId : activeCountSessionId,
+        activeCountSessionId:
+          activeId !== undefined ? activeId : activeCountSessionId,
       });
     },
     [s, runs, setCivilState, activeCountSessionId]
@@ -2058,123 +3092,185 @@ function CivilEditor({
     toast.success(`Session "${name}" created.`);
   };
 
-  const handleSaveCountToLM = useCallback((cs: CountSession) => {
-    if (cs.pins.length === 0) {
-      toast.error(`"${cs.name}" has no pins yet — drop pins first.`);
-      return;
-    }
-    const existing = s.savedMaterialRows ?? [];
-    const now = Date.now();
-    let newRows: SavedMaterialRow[];
-    if (cs.assemblyId && cs.assemblyItems && cs.assemblyItems.length > 0) {
-      // Assembly session: expand into one row per assembly item × number of pins
-      newRows = cs.assemblyItems.map((item, idx) => ({
-        id: `smr-${now.toString(36)}-${cs.id}-${idx}`,
-        sessionId: cs.id,
-        description: item.description,
-        qty: parseFloat((item.qty * cs.pins.length).toFixed(4)),
-        unitCost: item.masterMaterialCost,
-        unit: item.unit || "EA",
-        savedAt: now,
-      }));
-    } else {
-      // Standard session: single row
-      newRows = [{
-        id: `smr-${now.toString(36)}-${cs.id}`,
-        sessionId: cs.id,
-        description: cs.name,
-        qty: cs.pins.length,
-        unitCost: cs.unitCost ?? 0,
-        unit: "EA",
-        savedAt: now,
-      }];
-    }
-    setCivilState({ ...s, runs, countSessions, activeCountSessionId, savedMaterialRows: [...existing, ...newRows] });
-    if (cs.assemblyId) {
-      toast.success(`"${cs.assemblyName ?? cs.name}" ×${cs.pins.length} expanded into ${newRows.length} line item${newRows.length !== 1 ? "s" : ""} in Labor & Material.`);
-    } else {
-      toast.success(`"${cs.name}" (${cs.pins.length} EA) saved to Labor & Material.`);
-    }
-  }, [s, runs, countSessions, activeCountSessionId, setCivilState]);
+  const handleSaveCountToLM = useCallback(
+    (cs: CountSession) => {
+      if (cs.pins.length === 0) {
+        toast.error(`"${cs.name}" has no pins yet — drop pins first.`);
+        return;
+      }
+      const existing = s.savedMaterialRows ?? [];
+      const now = Date.now();
+      let newRows: SavedMaterialRow[];
+      if (cs.assemblyId && cs.assemblyItems && cs.assemblyItems.length > 0) {
+        // Assembly session: expand into one row per assembly item × number of pins
+        newRows = cs.assemblyItems.map((item, idx) => ({
+          id: `smr-${now.toString(36)}-${cs.id}-${idx}`,
+          sessionId: cs.id,
+          description: item.description,
+          qty: parseFloat((item.qty * cs.pins.length).toFixed(4)),
+          unitCost: item.masterMaterialCost,
+          unit: item.unit || "EA",
+          savedAt: now,
+        }));
+      } else {
+        // Standard session: single row
+        newRows = [
+          {
+            id: `smr-${now.toString(36)}-${cs.id}`,
+            sessionId: cs.id,
+            description: cs.name,
+            qty: cs.pins.length,
+            unitCost: cs.unitCost ?? 0,
+            unit: "EA",
+            savedAt: now,
+          },
+        ];
+      }
+      setCivilState({
+        ...s,
+        runs,
+        countSessions,
+        activeCountSessionId,
+        savedMaterialRows: [...existing, ...newRows],
+      });
+      if (cs.assemblyId) {
+        toast.success(
+          `"${cs.assemblyName ?? cs.name}" ×${cs.pins.length} expanded into ${newRows.length} line item${newRows.length !== 1 ? "s" : ""} in Labor & Material.`
+        );
+      } else {
+        toast.success(
+          `"${cs.name}" (${cs.pins.length} EA) saved to Labor & Material.`
+        );
+      }
+    },
+    [s, runs, countSessions, activeCountSessionId, setCivilState]
+  );
 
-  const handleAddCountSessionFromCatalog = useCallback((item: CatalogItem | null) => {
-    if (!item) return;
-    // If there is an active session, update it with the selected material
-    if (activeCountSessionId) {
-      const updated = countSessions.map((cs) =>
-        cs.id === activeCountSessionId
-          ? { ...cs, name: item.description, unitCost: item.unitPrice, priceMode: "per-unit" as const }
-          : cs
-      );
-      updateSessions(updated, activeCountSessionId);
-      toast.success(`Active count updated to "${item.description}" @ $${item.unitPrice.toFixed(2)}/ea.`);
-    } else {
-      // No active session — create a new one
-      const newSession: CountSession = {
-        id: `cs-${Date.now().toString(36)}`,
-        name: item.description,
-        iconId: DEFAULT_ICON_ID,
-        color: DEFAULT_PIN_COLOR,
-        pins: [],
-        unitCost: item.unitPrice,
-        priceMode: "per-unit",
-      };
-      updateSessions([...countSessions, newSession], newSession.id);
-      toast.success(`"${item.description}" added to Unit Count.`);
-    }
-  }, [countSessions, updateSessions, activeCountSessionId]);
+  const handleAddCountSessionFromCatalog = useCallback(
+    (item: CatalogItem | null) => {
+      if (!item) return;
+      // If there is an active session, update it with the selected material
+      if (activeCountSessionId) {
+        const updated = countSessions.map(cs =>
+          cs.id === activeCountSessionId
+            ? {
+                ...cs,
+                name: item.description,
+                unitCost: item.unitPrice,
+                priceMode: "per-unit" as const,
+              }
+            : cs
+        );
+        updateSessions(updated, activeCountSessionId);
+        toast.success(
+          `Active count updated to "${item.description}" @ $${item.unitPrice.toFixed(2)}/ea.`
+        );
+      } else {
+        // No active session — create a new one
+        const newSession: CountSession = {
+          id: `cs-${Date.now().toString(36)}`,
+          name: item.description,
+          iconId: DEFAULT_ICON_ID,
+          color: DEFAULT_PIN_COLOR,
+          pins: [],
+          unitCost: item.unitPrice,
+          priceMode: "per-unit",
+        };
+        updateSessions([...countSessions, newSession], newSession.id);
+        toast.success(`"${item.description}" added to Unit Count.`);
+      }
+    },
+    [countSessions, updateSessions, activeCountSessionId]
+  );
 
   const handleDeleteCountSession = (id: string) => {
-    const updated = countSessions.filter((cs) => cs.id !== id);
-    const newActive = activeCountSessionId === id ? (updated[0]?.id ?? undefined) : activeCountSessionId;
+    const updated = countSessions.filter(cs => cs.id !== id);
+    const newActive =
+      activeCountSessionId === id
+        ? (updated[0]?.id ?? undefined)
+        : activeCountSessionId;
     updateSessions(updated, newActive);
   };
 
   const handleRenameCountSession = (id: string) => {
     const name = editingName.trim();
-    if (!name) { setEditingSessionId(null); return; }
-    updateSessions(countSessions.map((cs) => cs.id === id ? { ...cs, name } : cs));
+    if (!name) {
+      setEditingSessionId(null);
+      return;
+    }
+    updateSessions(
+      countSessions.map(cs => (cs.id === id ? { ...cs, name } : cs))
+    );
     setEditingSessionId(null);
   };
 
-  const handleCountPinAdded = useCallback((pin: CountPin) => {
-    if (!activeCountSessionId) return;
-    const updated = countSessions.map((cs) =>
-      cs.id === activeCountSessionId ? { ...cs, pins: [...cs.pins, pin] } : cs
-    );
-    setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
-  }, [activeCountSessionId, countSessions, s, runs, setCivilState]);
+  const handleCountPinAdded = useCallback(
+    (pin: CountPin) => {
+      if (!activeCountSessionId) return;
+      const updated = countSessions.map(cs =>
+        cs.id === activeCountSessionId ? { ...cs, pins: [...cs.pins, pin] } : cs
+      );
+      setCivilState({
+        ...s,
+        runs,
+        countSessions: updated,
+        activeCountSessionId,
+      });
+    },
+    [activeCountSessionId, countSessions, s, runs, setCivilState]
+  );
 
-  const handleCountPinRemoved = useCallback((pinId: string) => {
-    if (!activeCountSessionId) return;
-    const updated = countSessions.map((cs) =>
-      cs.id === activeCountSessionId
-        ? { ...cs, pins: cs.pins.filter((p) => p.id !== pinId) }
-        : cs
-    );
-    setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
-  }, [activeCountSessionId, countSessions, s, runs, setCivilState]);
+  const handleCountPinRemoved = useCallback(
+    (pinId: string) => {
+      if (!activeCountSessionId) return;
+      const updated = countSessions.map(cs =>
+        cs.id === activeCountSessionId
+          ? { ...cs, pins: cs.pins.filter(p => p.id !== pinId) }
+          : cs
+      );
+      setCivilState({
+        ...s,
+        runs,
+        countSessions: updated,
+        activeCountSessionId,
+      });
+    },
+    [activeCountSessionId, countSessions, s, runs, setCivilState]
+  );
 
-  const handleClearPageCountPins = useCallback((pageNumber: number) => {
-    if (!activeCountSessionId) return;
-    const updated = countSessions.map((cs) =>
-      cs.id === activeCountSessionId
-        ? { ...cs, pins: cs.pins.filter((p) => p.pageNumber !== pageNumber) }
-        : cs
-    );
-    setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
-  }, [activeCountSessionId, countSessions, s, runs, setCivilState]);
+  const handleClearPageCountPins = useCallback(
+    (pageNumber: number) => {
+      if (!activeCountSessionId) return;
+      const updated = countSessions.map(cs =>
+        cs.id === activeCountSessionId
+          ? { ...cs, pins: cs.pins.filter(p => p.pageNumber !== pageNumber) }
+          : cs
+      );
+      setCivilState({
+        ...s,
+        runs,
+        countSessions: updated,
+        activeCountSessionId,
+      });
+    },
+    [activeCountSessionId, countSessions, s, runs, setCivilState]
+  );
 
   const handleUndoLastPin = useCallback(() => {
     if (!activeCountSessionId) return;
-    const session = countSessions.find((cs) => cs.id === activeCountSessionId);
+    const session = countSessions.find(cs => cs.id === activeCountSessionId);
     if (!session) return;
-    const pagePins = session.pins.filter((p) => (p.pageNumber ?? 1) === activePage);
-    if (pagePins.length === 0) { toast.info("No pins to undo on this page."); return; }
+    const pagePins = session.pins.filter(
+      p => (p.pageNumber ?? 1) === activePage
+    );
+    if (pagePins.length === 0) {
+      toast.info("No pins to undo on this page.");
+      return;
+    }
     const lastPin = pagePins[pagePins.length - 1];
-    const updated = countSessions.map((cs) =>
+    const updated = countSessions.map(cs =>
       cs.id === activeCountSessionId
-        ? { ...cs, pins: cs.pins.filter((p) => p.id !== lastPin.id) }
+        ? { ...cs, pins: cs.pins.filter(p => p.id !== lastPin.id) }
         : cs
     );
     setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
@@ -2182,7 +3278,7 @@ function CivilEditor({
   }, [activeCountSessionId, countSessions, activePage, s, runs, setCivilState]);
 
   // Runs visible in the right panel = only those belonging to the current page
-  const pageRuns = runs.filter((r) => (r.pageNumber ?? 1) === activePage);
+  const pageRuns = runs.filter(r => (r.pageNumber ?? 1) === activePage);
 
   const syncRuns = useCallback(
     (next: RunItem[]) => {
@@ -2195,12 +3291,26 @@ function CivilEditor({
   );
 
   const handlePush = useCallback(
-    (ft: number, runName: string, conduitSize?: string, pageNumber?: number, segmentFeet?: number[]) => {
-      const existingIdx = runs.findIndex((r) => r.name === runName && r.pageNumber === pageNumber);
+    (
+      ft: number,
+      runName: string,
+      conduitSize?: string,
+      pageNumber?: number,
+      segmentFeet?: number[]
+    ) => {
+      const existingIdx = runs.findIndex(
+        r => r.name === runName && r.pageNumber === pageNumber
+      );
       if (existingIdx !== -1) {
-        const updated = runs.map((r) =>
-          (r.name === runName && r.pageNumber === pageNumber)
-            ? { ...r, feet: ft, conduitSize: conduitSize ?? r.conduitSize, segmentFeet, feetFromPlan: true }
+        const updated = runs.map(r =>
+          r.name === runName && r.pageNumber === pageNumber
+            ? {
+                ...r,
+                feet: ft,
+                conduitSize: conduitSize ?? r.conduitSize,
+                segmentFeet,
+                feetFromPlan: true,
+              }
             : r
         );
         syncRuns(updated);
@@ -2247,13 +3357,16 @@ function CivilEditor({
   );
 
   const updateRun = (id: string, partial: Partial<RunItem>) => {
-    syncRuns(runs.map((r) => (r.id === id ? { ...r, ...partial } : r)));
+    syncRuns(runs.map(r => (r.id === id ? { ...r, ...partial } : r)));
   };
 
   const removeRun = (id: string) => {
-    const remaining = runs.filter((r) => r.id !== id);
+    const remaining = runs.filter(r => r.id !== id);
     // Renumber remaining runs sequentially (Run 1, Run 2, …)
-    const renumbered = remaining.map((r, i) => ({ ...r, name: `Run ${i + 1}` }));
+    const renumbered = remaining.map((r, i) => ({
+      ...r,
+      name: `Run ${i + 1}`,
+    }));
     syncRuns(renumbered);
   };
 
@@ -2261,9 +3374,18 @@ function CivilEditor({
   const handleDeleteRun = useCallback(
     (runName: string, pageNumber?: number) => {
       // If pageNumber is provided, only delete the run on that specific page
-      const remaining = runs.filter((r) => !(r.name === runName && (pageNumber == null || r.pageNumber === pageNumber)));
+      const remaining = runs.filter(
+        r =>
+          !(
+            r.name === runName &&
+            (pageNumber == null || r.pageNumber === pageNumber)
+          )
+      );
       // Renumber remaining runs sequentially (Run 1, Run 2, …)
-      const renumbered = remaining.map((r, i) => ({ ...r, name: `Run ${i + 1}` }));
+      const renumbered = remaining.map((r, i) => ({
+        ...r,
+        name: `Run ${i + 1}`,
+      }));
       syncRuns(renumbered);
     },
     [runs, syncRuns]
@@ -2273,30 +3395,49 @@ function CivilEditor({
   // confirmClear: what destructive action is pending confirmation
   //   { type: "page-runs" | "page-counts" | "total-reset" }
   const [confirmClear, setConfirmClear] = useState<
-    { type: "page-runs" } | { type: "page-counts" } | { type: "total-reset" } | null
+    | { type: "page-runs" }
+    | { type: "page-counts" }
+    | { type: "total-reset" }
+    | null
   >(null);
   // Undo snapshot for total reset
-  const [resetUndo, setResetUndo] = useState<{ runs: RunItem[]; countSessions: CountSession[] } | null>(null);
-  const [resetUndoTimer, setResetUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [resetUndo, setResetUndo] = useState<{
+    runs: RunItem[];
+    countSessions: CountSession[];
+  } | null>(null);
+  const [resetUndoTimer, setResetUndoTimer] = useState<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   // Clear all runs on the current page
-  const handleClearPageRuns = useCallback((pageNum?: number) => {
-    const pg = pageNum ?? activePage;
-    const next = runs.filter((r) => (r.pageNumber ?? 1) !== pg);
-    syncRuns(next);
-    toast.info(`Cleared all runs on page ${pg}.`);
-  }, [runs, activePage, syncRuns]);
+  const handleClearPageRuns = useCallback(
+    (pageNum?: number) => {
+      const pg = pageNum ?? activePage;
+      const next = runs.filter(r => (r.pageNumber ?? 1) !== pg);
+      syncRuns(next);
+      toast.info(`Cleared all runs on page ${pg}.`);
+    },
+    [runs, activePage, syncRuns]
+  );
 
   // Clear all count pins on the current page (across all sessions)
-  const handleClearPageAllCounts = useCallback((pageNum?: number) => {
-    const pg = pageNum ?? activePage;
-    const updated = countSessions.map((cs) => ({
-      ...cs,
-      pins: cs.pins.filter((p) => (p.pageNumber ?? 1) !== pg),
-    }));
-    setCivilState({ ...s, runs, countSessions: updated, activeCountSessionId });
-    toast.info(`Cleared all count pins on page ${pg}.`);
-  }, [countSessions, activePage, s, runs, activeCountSessionId, setCivilState]);
+  const handleClearPageAllCounts = useCallback(
+    (pageNum?: number) => {
+      const pg = pageNum ?? activePage;
+      const updated = countSessions.map(cs => ({
+        ...cs,
+        pins: cs.pins.filter(p => (p.pageNumber ?? 1) !== pg),
+      }));
+      setCivilState({
+        ...s,
+        runs,
+        countSessions: updated,
+        activeCountSessionId,
+      });
+      toast.info(`Cleared all count pins on page ${pg}.`);
+    },
+    [countSessions, activePage, s, runs, activeCountSessionId, setCivilState]
+  );
 
   // Total reset: wipe all runs and all count pins across all pages
   const handleTotalReset = useCallback(() => {
@@ -2306,31 +3447,78 @@ function CivilEditor({
     const t = setTimeout(() => setResetUndo(null), 10000); // 10s undo window
     setResetUndoTimer(t);
     // Clear everything
-    const clearedSessions = countSessions.map((cs) => ({ ...cs, pins: [] }));
+    const clearedSessions = countSessions.map(cs => ({ ...cs, pins: [] }));
     syncRuns([]);
-    setCivilState({ ...s, runs: [], countSessions: clearedSessions, activeCountSessionId });
+    setCivilState({
+      ...s,
+      runs: [],
+      countSessions: clearedSessions,
+      activeCountSessionId,
+    });
     toast.info("All marks cleared.");
-  }, [runs, countSessions, s, activeCountSessionId, syncRuns, setCivilState, resetUndoTimer]);
+  }, [
+    runs,
+    countSessions,
+    s,
+    activeCountSessionId,
+    syncRuns,
+    setCivilState,
+    resetUndoTimer,
+  ]);
 
   // Undo total reset
   const handleUndoTotalReset = useCallback(() => {
     if (!resetUndo) return;
     syncRuns(resetUndo.runs);
-    setCivilState({ ...s, runs: resetUndo.runs, countSessions: resetUndo.countSessions, activeCountSessionId });
+    setCivilState({
+      ...s,
+      runs: resetUndo.runs,
+      countSessions: resetUndo.countSessions,
+      activeCountSessionId,
+    });
     setResetUndo(null);
     if (resetUndoTimer) clearTimeout(resetUndoTimer);
     toast.success("All marks restored.");
-  }, [resetUndo, s, activeCountSessionId, syncRuns, setCivilState, resetUndoTimer]);
+  }, [
+    resetUndo,
+    s,
+    activeCountSessionId,
+    syncRuns,
+    setCivilState,
+    resetUndoTimer,
+  ]);
 
   // These are computed for potential future use in the header strip
   const totalWire = runs.reduce((acc, r) => {
     const isWireRun = (r.runType ?? "conduit") === "wire";
-    if (isWireRun) return acc + calcWire(r.feet, r.conductors, r.makeupAllowance ?? 0, r.serviceLoop ?? 0, r.numTerminations ?? 0, r.wirewasteFactor ?? 0);
-    return acc + calcConduitWire(r.feet, r.conductors, r.wireTermMakeup ?? 0, r.numPullPoints ?? 0, r.wireWasteFactor ?? 0);
+    if (isWireRun)
+      return (
+        acc +
+        calcWire(
+          r.feet,
+          r.conductors,
+          r.makeupAllowance ?? 0,
+          r.serviceLoop ?? 0,
+          r.numTerminations ?? 0,
+          r.wirewasteFactor ?? 0
+        )
+      );
+    return (
+      acc +
+      calcConduitWire(
+        r.feet,
+        r.conductors,
+        r.wireTermMakeup ?? 0,
+        r.numPullPoints ?? 0,
+        r.wireWasteFactor ?? 0
+      )
+    );
   }, 0);
   const totalSticks = runs.reduce((acc, r) => {
     if ((r.runType ?? "conduit") === "wire") return acc;
-    return acc + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0));
+    return (
+      acc + calcSticks(calcConduitBillable(r.feet, r.conduitWasteFactor ?? 0))
+    );
   }, 0);
 
   return (
@@ -2338,7 +3526,7 @@ function CivilEditor({
       {/* Price sync dialog — shown when user edits a price in Unit Count */}
       <PriceSyncDialog
         open={priceSyncDialog.open}
-        onOpenChange={(open) => setPriceSyncDialog((prev) => ({ ...prev, open }))}
+        onOpenChange={open => setPriceSyncDialog(prev => ({ ...prev, open }))}
         description={priceSyncDialog.description}
         newPrice={priceSyncDialog.newPrice}
         category={priceSyncDialog.category}
@@ -2353,529 +3541,922 @@ function CivilEditor({
           <ChevronLeft size={14} /> All Projects
         </button>
         <span className="text-muted-foreground/40">/</span>
-        <span className="text-xs font-medium text-foreground">{projectName}</span>
+        <span className="text-xs font-medium text-foreground">
+          {projectName}
+        </span>
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-
-      <ResizablePanelGroup direction="horizontal" className="h-full overflow-hidden">
-        {/* ── Plan Panel — always gets at least 55% so the right panel can never cover the PDF ── */}
-        <ResizablePanel defaultSize={60} minSize={55} maxSize={80}>
-          <PlanPanel
-            tabKey={`unified_${projectId}`}
-            projectId={parseInt(projectId, 10)}
-            onPushDistance={(ft, runName, conduitSize, pageNumber, segmentFeet) => handlePush(ft, runName, conduitSize, pageNumber, segmentFeet)}
-            onDeleteRun={(name, page) => handleDeleteRun(name, page)}
-            onCurrentPageChange={(page) => setActivePage(page)}
-            activeCountSession={activeCountSession}
-            allCountSessions={countSessions}
-            onPinAdded={handleCountPinAdded}
-            onPinRemoved={handleCountPinRemoved}
-            onClearPagePins={handleClearPageCountPins}
-            onClearPageAll={(page) => {
-              handleClearPageRuns(page);
-              handleClearPageAllCounts(page);
-            }}
-            onPdfReplaced={() => {
-              // Silently clear all runs and count pins when PDF is replaced
-              const clearedSessions = countSessions.map((cs) => ({ ...cs, pins: [] }));
-              syncRuns([]);
-              setCivilState({ ...s, runs: [], countSessions: clearedSessions, activeCountSessionId });
-            }}
-            onUnitCountToggle={(open) => {
-              setCountSessionsOpen(open);
-              // When Unit Count opens, collapse Runs to give it space
-
-            }}
-            countModeRequest={countModeRequest}
-            measureModeRequest={measureModeRequest}
-            onMeasureStart={() => {
-              setActiveSection("runs");
-              if (rightPanelCollapsed) toggleRightPanel();
-            }}
-            onRequestCountSession={() => {
-              // Bootstrap a session if none exists (mirrors right-panel Start Counting behavior)
-              if (countSessions.length === 0) {
-                const defaultSession: CountSession = {
-                  id: `cs-${Date.now().toString(36)}`,
-                  name: "Count 1",
-                  iconId: DEFAULT_ICON_ID,
-                  color: DEFAULT_PIN_COLOR,
-                  pins: [],
-                };
-                updateSessions([defaultSession], defaultSession.id);
-                toast.success('Session "Count 1" created — click to place pins.');
-              } else if (!activeCountSessionId && countSessions.length > 0) {
-                updateSessions(countSessions, countSessions[0].id);
-              }
-              setCountSessionsOpen(true);
-            }}
-          />
-        </ResizablePanel>
-
-        <ResizableHandle withHandle />
-
-        {/* ── Calculator / Runs — max 45% so it stays to the right of the PDF ── */}
-        <ResizablePanel
-          ref={rightPanelRef}
-          defaultSize={40}
-          minSize={20}
-          maxSize={45}
-          collapsible
-          collapsedSize={3}
-          onCollapse={() => setRightPanelCollapsed(true)}
-          onExpand={() => setRightPanelCollapsed(false)}
-          onResize={(size) => {
-            setRightPanelSize(size);
-            // Treat anything at or below collapsedSize+1 as collapsed
-            if (size <= 4) setRightPanelCollapsed(true);
-            else if (size > 10) setRightPanelCollapsed(false);
-          }}
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="h-full overflow-hidden"
         >
-          <div className="flex flex-col h-full relative">
-            {/* ── Always-visible header bar with toggle button ── */}
-            <div className="px-3 pt-2 pb-2 border-b border-border bg-card shrink-0">
-              <div className="flex items-center gap-2">
-                {/* BP badge */}
-                <div className="w-7 h-7 rounded-lg bg-[#F5C518]/15 flex items-center justify-center shrink-0">
-                  <span className="font-bold text-[#F5C518] text-[10px]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>HB</span>
-                </div>
-                {/* Project name + page — only when expanded */}
-                {!rightPanelCollapsed && (
-                  <>
-                    <div className="flex-1 min-w-0">
-                      <h1 className="text-sm font-bold text-foreground truncate" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                        {projectName}
-                      </h1>
-                    </div>
-                    <span className="shrink-0 text-xs font-mono px-2 py-0.5 rounded bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30">
-                      Page {activePage}
+          {/* ── Plan Panel — always gets at least 55% so the right panel can never cover the PDF ── */}
+          <ResizablePanel defaultSize={60} minSize={55} maxSize={80}>
+            <PlanPanel
+              tabKey={`unified_${projectId}`}
+              projectId={parseInt(projectId, 10)}
+              onPushDistance={(
+                ft,
+                runName,
+                conduitSize,
+                pageNumber,
+                segmentFeet
+              ) =>
+                handlePush(ft, runName, conduitSize, pageNumber, segmentFeet)
+              }
+              onDeleteRun={(name, page) => handleDeleteRun(name, page)}
+              onCurrentPageChange={page => setActivePage(page)}
+              activeCountSession={activeCountSession}
+              allCountSessions={countSessions}
+              onPinAdded={handleCountPinAdded}
+              onPinRemoved={handleCountPinRemoved}
+              onClearPagePins={handleClearPageCountPins}
+              onClearPageAll={page => {
+                handleClearPageRuns(page);
+                handleClearPageAllCounts(page);
+              }}
+              onPdfReplaced={() => {
+                // Silently clear all runs and count pins when PDF is replaced
+                const clearedSessions = countSessions.map(cs => ({
+                  ...cs,
+                  pins: [],
+                }));
+                syncRuns([]);
+                setCivilState({
+                  ...s,
+                  runs: [],
+                  countSessions: clearedSessions,
+                  activeCountSessionId,
+                });
+              }}
+              onUnitCountToggle={open => {
+                setCountSessionsOpen(open);
+                // When Unit Count opens, collapse Runs to give it space
+              }}
+              countModeRequest={countModeRequest}
+              measureModeRequest={measureModeRequest}
+              onMeasureStart={() => {
+                setActiveSection("runs");
+                if (rightPanelCollapsed) toggleRightPanel();
+              }}
+              onRequestCountSession={() => {
+                // Bootstrap a session if none exists (mirrors right-panel Start Counting behavior)
+                if (countSessions.length === 0) {
+                  const defaultSession: CountSession = {
+                    id: `cs-${Date.now().toString(36)}`,
+                    name: "Count 1",
+                    iconId: DEFAULT_ICON_ID,
+                    color: DEFAULT_PIN_COLOR,
+                    pins: [],
+                  };
+                  updateSessions([defaultSession], defaultSession.id);
+                  toast.success(
+                    'Session "Count 1" created — click to place pins.'
+                  );
+                } else if (!activeCountSessionId && countSessions.length > 0) {
+                  updateSessions(countSessions, countSessions[0].id);
+                }
+                setCountSessionsOpen(true);
+              }}
+            />
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          {/* ── Calculator / Runs — max 45% so it stays to the right of the PDF ── */}
+          <ResizablePanel
+            ref={rightPanelRef}
+            defaultSize={40}
+            minSize={20}
+            maxSize={45}
+            collapsible
+            collapsedSize={3}
+            onCollapse={() => setRightPanelCollapsed(true)}
+            onExpand={() => setRightPanelCollapsed(false)}
+            onResize={size => {
+              setRightPanelSize(size);
+              // Treat anything at or below collapsedSize+1 as collapsed
+              if (size <= 4) setRightPanelCollapsed(true);
+              else if (size > 10) setRightPanelCollapsed(false);
+            }}
+          >
+            <div className="flex flex-col h-full relative">
+              {/* ── Always-visible header bar with toggle button ── */}
+              <div className="px-3 pt-2 pb-2 border-b border-border bg-card shrink-0">
+                <div className="flex items-center gap-2">
+                  {/* BP badge */}
+                  <div className="w-7 h-7 rounded-lg bg-[#F5C518]/15 flex items-center justify-center shrink-0">
+                    <span
+                      className="font-bold text-[#F5C518] text-[10px]"
+                      style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                    >
+                      HB
                     </span>
-                  </>
-                )}
-                {/* Export CSV button — only visible when expanded and there are runs */}
-                {!rightPanelCollapsed && runs.length > 0 && (
-                  <button
-                    onClick={() => {
-                      // Build a focused CSV for this project's runs + count sessions
-                      const rows: string[][] = [];
-                      rows.push(["HelixBid — Material Export", "", "", "", "", "", ""]);
-                      rows.push([`Generated: ${new Date().toLocaleString()}`, "", "", "", "", "", ""]);
-                      rows.push([`Project: ${projectName}`, "", "", "", "", "", ""]);
-                      rows.push([]);
-                      rows.push(["Run Name", "Page", "Conduit Type", "Conduit Size", "Distance (ft)", "Pipe Sticks", "Wire (ft)"]);
-                      for (const run of runs) {
-                        rows.push([
-                          run.name,
-                          run.pageNumber != null ? String(run.pageNumber) : "",
-                          run.conduitType ?? "EMT",
-                          `${run.conduitSize}"`,
-                          String(run.feet),
-                          String(Math.ceil(run.feet / 10)),
-                          String(parseFloat((run.feet * (run.conductors || 1) * 1.1).toFixed(1))),
-                        ]);
-                      }
-                      const totalFt = runs.reduce((a, r) => a + r.feet, 0);
-                      const totalSticks = runs.reduce((a, r) => a + Math.ceil(r.feet / 10), 0);
-                      rows.push(["TOTAL", "", "", "", String(totalFt.toFixed(0)), String(totalSticks), ""]);
-                      // Count sessions
-                      const activeSessions = countSessions.filter((cs) => cs.pins.length > 0);
-                      if (activeSessions.length > 0) {
-                        rows.push([]);
-                        rows.push(["Unit Count", "", "", "", "", "", ""]);
-                        rows.push(["Session", "EA", "Count", "", "", "", ""]);
-                        for (const cs of activeSessions) {
-                          rows.push([cs.name, "EA", String(cs.pins.length), "", "", "", ""]);
-                        }
-                      }
-                      const csv = rows.map((row) => row.map((v) => {
-                        const s = String(v);
-                        return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
-                      }).join(",")).join("\n");
-                      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = `${projectName.replace(/[^a-z0-9]/gi, "_")}_Export_${new Date().toISOString().slice(0, 10)}.csv`;
-                      document.body.appendChild(a);
-                      a.click();
-                      document.body.removeChild(a);
-                      URL.revokeObjectURL(url);
-                      toast.success("Exported as CSV.");
-                    }}
-                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
-                    title="Export runs as CSV"
-                  >
-                    <Download size={12} />
-                  </button>
-                )}
-                {/* Reset-size button — only visible when expanded, snaps panel back to 40% */}
-                {!rightPanelCollapsed && (
-                  <button
-                    onClick={() => rightPanelRef.current?.resize(40)}
-                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
-                    title="Reset panel to default size"
-                  >
-                    <Maximize2 size={12} />
-                  </button>
-                )}
-                {/* Toggle button — collapse when expanded, expand when collapsed */}
-                <button
-                  onClick={toggleRightPanel}
-                  className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
-                  title={rightPanelCollapsed ? "Expand panel" : "Collapse panel"}
-                >
-                  {rightPanelCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
-                </button>
-              </div>
-            </div>
-
-            {/* ── Full panel content — hidden when collapsed ── */}
-            {!rightPanelCollapsed && (
-              <>
-
-                {/* ── Scrollable accordion body ── */}
-                <div className="flex-1 overflow-auto">
-
-                  {/* ── UNIT COUNT accordion ── */}
-                  <div className="bp-card overflow-hidden">
+                  </div>
+                  {/* Project name + page — only when expanded */}
+                  {!rightPanelCollapsed && (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <h1
+                          className="text-sm font-bold text-foreground truncate"
+                          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                        >
+                          {projectName}
+                        </h1>
+                      </div>
+                      <span className="shrink-0 text-xs font-mono px-2 py-0.5 rounded bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30">
+                        Page {activePage}
+                      </span>
+                    </>
+                  )}
+                  {/* Export CSV button — only visible when expanded and there are runs */}
+                  {!rightPanelCollapsed && runs.length > 0 && (
                     <button
                       onClick={() => {
-                        const opening = activeSection !== "count";
-                        setActiveSection(opening ? "count" : "runs");
-                        if (opening) {
-                          if (countSessions.length === 0) {
-                            const defaultSession: CountSession = {
-                              id: `cs-${Date.now().toString(36)}`,
-                              name: "Count 1",
-                              iconId: DEFAULT_ICON_ID,
-                              color: DEFAULT_PIN_COLOR,
-                              pins: [],
-                            };
-                            updateSessions([defaultSession], defaultSession.id);
-                            toast.success('Session "Count 1" created — click to place pins.');
-                          } else if (!activeCountSessionId && countSessions.length > 0) {
-                            updateSessions(countSessions, countSessions[0].id);
-                          }
-                          setCountModeRequest((v) => v + 1);
+                        // Build a focused CSV for this project's runs + count sessions
+                        const rows: string[][] = [];
+                        rows.push([
+                          "HelixBid — Material Export",
+                          "",
+                          "",
+                          "",
+                          "",
+                          "",
+                          "",
+                        ]);
+                        rows.push([
+                          `Generated: ${new Date().toLocaleString()}`,
+                          "",
+                          "",
+                          "",
+                          "",
+                          "",
+                          "",
+                        ]);
+                        rows.push([
+                          `Project: ${projectName}`,
+                          "",
+                          "",
+                          "",
+                          "",
+                          "",
+                          "",
+                        ]);
+                        rows.push([]);
+                        rows.push([
+                          "Run Name",
+                          "Page",
+                          "Conduit Type",
+                          "Conduit Size",
+                          "Distance (ft)",
+                          "Pipe Sticks",
+                          "Wire (ft)",
+                        ]);
+                        for (const run of runs) {
+                          rows.push([
+                            run.name,
+                            run.pageNumber != null
+                              ? String(run.pageNumber)
+                              : "",
+                            run.conduitType ?? "EMT",
+                            `${run.conduitSize}"`,
+                            String(run.feet),
+                            String(Math.ceil(run.feet / 10)),
+                            String(
+                              parseFloat(
+                                (
+                                  run.feet *
+                                  (run.conductors || 1) *
+                                  1.1
+                                ).toFixed(1)
+                              )
+                            ),
+                          ]);
                         }
+                        const totalFt = runs.reduce((a, r) => a + r.feet, 0);
+                        const totalSticks = runs.reduce(
+                          (a, r) => a + Math.ceil(r.feet / 10),
+                          0
+                        );
+                        rows.push([
+                          "TOTAL",
+                          "",
+                          "",
+                          "",
+                          String(totalFt.toFixed(0)),
+                          String(totalSticks),
+                          "",
+                        ]);
+                        // Count sessions
+                        const activeSessions = countSessions.filter(
+                          cs => cs.pins.length > 0
+                        );
+                        if (activeSessions.length > 0) {
+                          rows.push([]);
+                          rows.push(["Unit Count", "", "", "", "", "", ""]);
+                          rows.push(["Session", "EA", "Count", "", "", "", ""]);
+                          for (const cs of activeSessions) {
+                            rows.push([
+                              cs.name,
+                              "EA",
+                              String(cs.pins.length),
+                              "",
+                              "",
+                              "",
+                              "",
+                            ]);
+                          }
+                        }
+                        const csv = rows
+                          .map(row =>
+                            row
+                              .map(v => {
+                                const s = String(v);
+                                return s.includes(",") ||
+                                  s.includes('"') ||
+                                  s.includes("\n")
+                                  ? `"${s.replace(/"/g, '""')}"`
+                                  : s;
+                              })
+                              .join(",")
+                          )
+                          .join("\n");
+                        const blob = new Blob([csv], {
+                          type: "text/csv;charset=utf-8;",
+                        });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `${projectName.replace(/[^a-z0-9]/gi, "_")}_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        toast.success("Exported as CSV.");
                       }}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
+                      title="Export runs as CSV"
                     >
-                      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                        Unit Count
-                        {countSessions.length > 0 && (
-                          <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{countSessions.length} session{countSessions.length !== 1 ? 's' : ''} · {countSessions.reduce((a, cs) => a + cs.pins.length, 0)} pins</span>
-                        )}
-                      </h2>
-                      {activeSection === "count" ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
+                      <Download size={12} />
                     </button>
-                    {activeSection === "count" && (
-                      <div className="px-4 pb-4 space-y-3">
-                        {/* Material search — always visible at top of Unit Count */}
-                        <div className="space-y-1">
-                          <Label className="text-xs font-medium text-muted-foreground">
-                            {activeCountSessionId
-                              ? <span>Search material — <span className="text-[#F5C518]">updates active count</span></span>
-                              : "Search material to create a count"}
-                          </Label>
-                          <CatalogPicker
-                            value={null}
-                            onChange={handleAddCountSessionFromCatalog}
-                            placeholder={activeCountSessionId ? "Search to update active count…" : "Search catalog…"}
+                  )}
+                  {/* Reset-size button — only visible when expanded, snaps panel back to 40% */}
+                  {!rightPanelCollapsed && (
+                    <button
+                      onClick={() => rightPanelRef.current?.resize(40)}
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
+                      title="Reset panel to default size"
+                    >
+                      <Maximize2 size={12} />
+                    </button>
+                  )}
+                  {/* Toggle button — collapse when expanded, expand when collapsed */}
+                  <button
+                    onClick={toggleRightPanel}
+                    className="shrink-0 w-7 h-7 flex items-center justify-center rounded-md bg-[#F5C518]/10 border border-[#F5C518]/30 text-[#F5C518] hover:bg-[#F5C518]/20 transition-colors"
+                    title={
+                      rightPanelCollapsed ? "Expand panel" : "Collapse panel"
+                    }
+                  >
+                    {rightPanelCollapsed ? (
+                      <ChevronLeft size={14} />
+                    ) : (
+                      <ChevronRight size={14} />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Full panel content — hidden when collapsed ── */}
+              {!rightPanelCollapsed && (
+                <>
+                  {/* ── Scrollable accordion body ── */}
+                  <div className="flex-1 overflow-auto">
+                    {/* ── UNIT COUNT accordion ── */}
+                    <div className="bp-card overflow-hidden">
+                      <button
+                        onClick={() => {
+                          const opening = activeSection !== "count";
+                          setActiveSection(opening ? "count" : "runs");
+                          if (opening) {
+                            if (countSessions.length === 0) {
+                              const defaultSession: CountSession = {
+                                id: `cs-${Date.now().toString(36)}`,
+                                name: "Count 1",
+                                iconId: DEFAULT_ICON_ID,
+                                color: DEFAULT_PIN_COLOR,
+                                pins: [],
+                              };
+                              updateSessions(
+                                [defaultSession],
+                                defaultSession.id
+                              );
+                              toast.success(
+                                'Session "Count 1" created — click to place pins.'
+                              );
+                            } else if (
+                              !activeCountSessionId &&
+                              countSessions.length > 0
+                            ) {
+                              updateSessions(
+                                countSessions,
+                                countSessions[0].id
+                              );
+                            }
+                            setCountModeRequest(v => v + 1);
+                          }
+                        }}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+                      >
+                        <h2
+                          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+                          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                        >
+                          Unit Count
+                          {countSessions.length > 0 && (
+                            <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">
+                              {countSessions.length} session
+                              {countSessions.length !== 1 ? "s" : ""} ·{" "}
+                              {countSessions.reduce(
+                                (a, cs) => a + cs.pins.length,
+                                0
+                              )}{" "}
+                              pins
+                            </span>
+                          )}
+                        </h2>
+                        {activeSection === "count" ? (
+                          <ChevronUp
+                            size={14}
+                            className="text-muted-foreground shrink-0"
                           />
-                        </div>
-                        {countSessions.length === 0 ? (
-                          <p className="text-xs text-muted-foreground italic">No sessions yet. Search a material above or tap New Count Session to start.</p>
                         ) : (
-                          <div className="space-y-1.5">
-                            {countSessions.map((cs) => {
-                              const isActive = cs.id === activeCountSessionId;
-                              const isEditing = editingSessionId === cs.id;
-                              return (
-                                <div
-                                  key={cs.id}
-                                  onClick={() => !isEditing && updateSessions(countSessions, cs.id)}
-                                  className={cn(
-                                    "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-all",
-                                    isActive ? "border-[#F5C518] bg-[#F5C518]/8" : "border-border bg-muted/5 hover:border-border/80"
-                                  )}
-                                >
-                                  <PinShapeSwatch shape={cs.iconId as PinShape} color={cs.color} size={16} />
-                                  {isEditing ? (
-                                    <input autoFocus value={editingName} onChange={(e) => setEditingName(e.target.value)}
-                                      onKeyDown={(e) => { if (e.key === "Enter") handleRenameCountSession(cs.id); if (e.key === "Escape") setEditingSessionId(null); }}
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="flex-1 bg-transparent border-b border-[#F5C518] text-xs text-foreground outline-none font-mono" />
-                                  ) : (
-                                    // Click the name directly to start editing
-                                    <span
-                                      className="flex-1 text-xs text-foreground font-medium truncate cursor-text hover:text-[#F5C518] transition-colors"
-                                      title="Click to rename"
-                                      onClick={(e) => { e.stopPropagation(); setEditingSessionId(cs.id); setEditingName(cs.name); }}
-                                    >{cs.name}</span>
-                                  )}
-                                  {/* Assembly badge — prominent pill showing the linked assembly name */}
-                                  {cs.assemblyId && (
-                                    <span
-                                      className="shrink-0 flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#F5C518] text-black font-mono uppercase tracking-wide"
-                                      title={`Assembly: ${cs.assemblyName}`}
+                          <ChevronDown
+                            size={14}
+                            className="text-muted-foreground shrink-0"
+                          />
+                        )}
+                      </button>
+                      {activeSection === "count" && (
+                        <div className="px-4 pb-4 space-y-3">
+                          {/* Material search — always visible at top of Unit Count */}
+                          <div className="space-y-1">
+                            <Label className="text-xs font-medium text-muted-foreground">
+                              {activeCountSessionId ? (
+                                <span>
+                                  Search material —{" "}
+                                  <span className="text-[#F5C518]">
+                                    updates active count
+                                  </span>
+                                </span>
+                              ) : (
+                                "Search material to create a count"
+                              )}
+                            </Label>
+                            <CatalogPicker
+                              value={null}
+                              onChange={handleAddCountSessionFromCatalog}
+                              placeholder={
+                                activeCountSessionId
+                                  ? "Search to update active count…"
+                                  : "Search catalog…"
+                              }
+                            />
+                          </div>
+                          {countSessions.length === 0 ? (
+                            <p className="text-xs text-muted-foreground italic">
+                              No sessions yet. Search a material above or tap
+                              New Count Session to start.
+                            </p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {countSessions.map(cs => {
+                                const isActive = cs.id === activeCountSessionId;
+                                const isEditing = editingSessionId === cs.id;
+                                return (
+                                  <div
+                                    key={cs.id}
+                                    onClick={() =>
+                                      !isEditing &&
+                                      updateSessions(countSessions, cs.id)
+                                    }
+                                    className={cn(
+                                      "flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-all",
+                                      isActive
+                                        ? "border-[#F5C518] bg-[#F5C518]/8"
+                                        : "border-border bg-muted/5 hover:border-border/80"
+                                    )}
+                                  >
+                                    <PinShapeSwatch
+                                      shape={cs.iconId as PinShape}
+                                      color={cs.color}
+                                      size={16}
+                                    />
+                                    {isEditing ? (
+                                      <input
+                                        autoFocus
+                                        value={editingName}
+                                        onChange={e =>
+                                          setEditingName(e.target.value)
+                                        }
+                                        onKeyDown={e => {
+                                          if (e.key === "Enter")
+                                            handleRenameCountSession(cs.id);
+                                          if (e.key === "Escape")
+                                            setEditingSessionId(null);
+                                        }}
+                                        onClick={e => e.stopPropagation()}
+                                        className="flex-1 bg-transparent border-b border-[#F5C518] text-xs text-foreground outline-none font-mono"
+                                      />
+                                    ) : (
+                                      // Click the name directly to start editing
+                                      <span
+                                        className="flex-1 text-xs text-foreground font-medium truncate cursor-text hover:text-[#F5C518] transition-colors"
+                                        title="Click to rename"
+                                        onClick={e => {
+                                          e.stopPropagation();
+                                          setEditingSessionId(cs.id);
+                                          setEditingName(cs.name);
+                                        }}
+                                      >
+                                        {cs.name}
+                                      </span>
+                                    )}
+                                    {/* Assembly badge — prominent pill showing the linked assembly name */}
+                                    {cs.assemblyId && (
+                                      <span
+                                        className="shrink-0 flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#F5C518] text-black font-mono uppercase tracking-wide"
+                                        title={`Assembly: ${cs.assemblyName}`}
+                                      >
+                                        <Layers size={9} />
+                                        {cs.assemblyName
+                                          ? cs.assemblyName.slice(0, 12)
+                                          : "ASM"}
+                                      </span>
+                                    )}
+                                    {/* Inline price-per-item field — hidden for assembly sessions */}
+                                    {!cs.assemblyId && (
+                                      <div
+                                        className="flex items-center gap-0.5 shrink-0"
+                                        onClick={e => e.stopPropagation()}
+                                        title="Custom price per item — blur to sync to Material Database"
+                                      >
+                                        <span className="text-[9px] text-muted-foreground font-mono">
+                                          $
+                                        </span>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          step={0.01}
+                                          value={cs.unitCost ?? ""}
+                                          onChange={e => {
+                                            const val = parseFloat(
+                                              e.target.value
+                                            );
+                                            updateSessions(
+                                              countSessions.map(s2 =>
+                                                s2.id === cs.id
+                                                  ? {
+                                                      ...s2,
+                                                      unitCost: isNaN(val)
+                                                        ? undefined
+                                                        : val,
+                                                      priceMode:
+                                                        "per-unit" as const,
+                                                    }
+                                                  : s2
+                                              )
+                                            );
+                                          }}
+                                          onBlur={e => {
+                                            const val = parseFloat(
+                                              e.target.value
+                                            );
+                                            if (isNaN(val) || val <= 0) return;
+                                            // Check if this price differs from what's in the Material Database
+                                            const needle = cs.name
+                                              .toLowerCase()
+                                              .trim();
+                                            const dbRow = userMaterials.find(
+                                              m =>
+                                                m.description
+                                                  .toLowerCase()
+                                                  .includes(needle) ||
+                                                needle.includes(
+                                                  m.description.toLowerCase()
+                                                )
+                                            );
+                                            const dbPrice =
+                                              dbRow?.userPrice ??
+                                              dbRow?.defaultPrice ??
+                                              null;
+                                            if (
+                                              dbPrice === null ||
+                                              Math.abs(val - dbPrice) > 0.001
+                                            ) {
+                                              // Price differs (or not in DB yet) — prompt user
+                                              setPriceSyncDialog({
+                                                open: true,
+                                                description: cs.name,
+                                                newPrice: val,
+                                                category:
+                                                  dbRow?.category ?? undefined,
+                                                unit: dbRow?.unit ?? "EA",
+                                              });
+                                            }
+                                          }}
+                                          placeholder="0.00"
+                                          className="w-14 h-5 text-[9px] font-mono bg-transparent border-b border-border/40 focus:border-[#F5C518] outline-none text-muted-foreground focus:text-foreground text-right px-0.5"
+                                        />
+                                        <span className="text-[9px] text-muted-foreground font-mono">
+                                          /ea
+                                        </span>
+                                      </div>
+                                    )}
+                                    <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                                      {cs.pins.length} pin
+                                      {cs.pins.length !== 1 ? "s" : ""}
+                                    </span>
+                                    {isEditing ? (
+                                      <>
+                                        <button
+                                          onClick={e => {
+                                            e.stopPropagation();
+                                            handleRenameCountSession(cs.id);
+                                          }}
+                                          className="text-[#F5C518] hover:opacity-70"
+                                        >
+                                          <Check size={12} />
+                                        </button>
+                                        <button
+                                          onClick={e => {
+                                            e.stopPropagation();
+                                            setEditingSessionId(null);
+                                          }}
+                                          className="text-muted-foreground hover:text-foreground"
+                                        >
+                                          <X size={12} />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        {/* Save to L&M button — only shown when session has pins */}
+                                        {cs.pins.length > 0 && (
+                                          <button
+                                            onClick={e => {
+                                              e.stopPropagation();
+                                              handleSaveCountToLM(cs);
+                                            }}
+                                            className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30 hover:bg-[#F5C518]/30 transition-colors"
+                                            title="Save count to Labor & Material list"
+                                          >
+                                            <Download size={9} /> L&amp;M
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={e => {
+                                            e.stopPropagation();
+                                            if (
+                                              cs.pins.length > 0 &&
+                                              !window.confirm(
+                                                `Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? "s" : ""}?`
+                                              )
+                                            )
+                                              return;
+                                            handleDeleteCountSession(cs.id);
+                                          }}
+                                          className="text-muted-foreground hover:text-destructive"
+                                          title="Delete session"
+                                        >
+                                          <Trash2 size={11} />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {/* New session button */}
+                          <button
+                            onClick={handleAddCountSession}
+                            className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-md bg-[#F5C518]/15 text-[#F5C518] text-xs font-semibold hover:bg-[#F5C518]/25 active:scale-[0.98] transition-all border border-[#F5C518]/20"
+                          >
+                            <Plus size={13} /> New Count Session
+                          </button>
+                          {/* Active session config */}
+                          {activeCountSession && (
+                            <div className="pt-2 border-t border-border space-y-3">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                                Active:{" "}
+                                <span className="text-foreground">
+                                  {activeCountSession.name}
+                                </span>
+                              </p>
+                              <CompactCountConfig
+                                color={activeCountSession.color}
+                                iconId={activeCountSession.iconId}
+                                onColorChange={hex =>
+                                  updateSessions(
+                                    countSessions.map(cs =>
+                                      cs.id === activeCountSession.id
+                                        ? { ...cs, color: hex }
+                                        : cs
+                                    )
+                                  )
+                                }
+                                onShapeChange={id =>
+                                  updateSessions(
+                                    countSessions.map(cs =>
+                                      cs.id === activeCountSession.id
+                                        ? { ...cs, iconId: id }
+                                        : cs
+                                    )
+                                  )
+                                }
+                              />
+
+                              {/* ── Assembly link for this count session ── */}
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                  Count as Assembly
+                                </Label>
+                                {activeCountSession.assemblyId ? (
+                                  <div className="flex items-center gap-2 rounded-md border border-[#F5C518]/40 bg-[#F5C518]/10 px-2.5 py-2">
+                                    <Layers
+                                      size={12}
+                                      className="text-[#F5C518] shrink-0"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-[11px] font-bold text-[#F5C518] truncate">
+                                        {activeCountSession.assemblyName ??
+                                          "Assembly"}
+                                      </div>
+                                      <div className="text-[9px] text-muted-foreground font-mono">
+                                        {activeCountSession.assemblyItems
+                                          ?.length ?? 0}{" "}
+                                        items per pin
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        const updated = countSessions.map(cs =>
+                                          cs.id === activeCountSession.id
+                                            ? {
+                                                ...cs,
+                                                assemblyId: undefined,
+                                                assemblyName: undefined,
+                                                assemblyItems: undefined,
+                                              }
+                                            : cs
+                                        );
+                                        updateSessions(
+                                          updated,
+                                          activeCountSession.id
+                                        );
+                                      }}
+                                      className="text-muted-foreground/50 hover:text-destructive transition-colors p-0.5 rounded"
+                                      title="Unlink assembly"
                                     >
-                                      <Layers size={9} />
-                                      {cs.assemblyName ? cs.assemblyName.slice(0, 12) : "ASM"}
+                                      <X size={12} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="relative">
+                                    <div className="relative">
+                                      <Search
+                                        size={10}
+                                        className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none"
+                                      />
+                                      <input
+                                        type="text"
+                                        value={assemblySearch}
+                                        onChange={e =>
+                                          setAssemblySearch(e.target.value)
+                                        }
+                                        onFocus={() =>
+                                          setAssemblyDropdownOpen(true)
+                                        }
+                                        onBlur={() =>
+                                          setTimeout(
+                                            () =>
+                                              setAssemblyDropdownOpen(false),
+                                            150
+                                          )
+                                        }
+                                        placeholder={
+                                          masterAssemblies.length === 0
+                                            ? "No assemblies yet"
+                                            : `Search ${masterAssemblies.length} assembl${masterAssemblies.length === 1 ? "y" : "ies"}…`
+                                        }
+                                        className="w-full h-8 pl-6 pr-2 text-[11px] font-mono bg-input border border-border rounded text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#F5C518]/60 transition-colors"
+                                      />
+                                    </div>
+                                    {assemblyDropdownOpen &&
+                                      masterAssemblies.length > 0 && (
+                                        <div className="absolute z-50 top-full left-0 right-0 mt-0.5 max-h-48 overflow-y-auto rounded-md border border-[#F5C518]/30 bg-popover shadow-lg">
+                                          {masterAssemblies
+                                            .filter(
+                                              a =>
+                                                assemblySearch.trim().length ===
+                                                  0 ||
+                                                a.name
+                                                  .toLowerCase()
+                                                  .includes(
+                                                    assemblySearch.toLowerCase()
+                                                  )
+                                            )
+                                            .map(a => (
+                                              <button
+                                                key={a.id}
+                                                onMouseDown={e => {
+                                                  e.preventDefault();
+                                                  pendingTargetSessionRef.current =
+                                                    activeCountSessionId ??
+                                                    null;
+                                                  setPendingAssemblyId(a.id);
+                                                  setAssemblyDropdownOpen(
+                                                    false
+                                                  );
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-[11px] text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors font-mono border-b border-border/30 last:border-0 flex items-center gap-2"
+                                              >
+                                                <Layers
+                                                  size={10}
+                                                  className="text-[#F5C518]/60 shrink-0"
+                                                />
+                                                <span className="truncate">
+                                                  {a.name}
+                                                </span>
+                                              </button>
+                                            ))}
+                                          {masterAssemblies.filter(
+                                            a =>
+                                              assemblySearch.trim().length ===
+                                                0 ||
+                                              a.name
+                                                .toLowerCase()
+                                                .includes(
+                                                  assemblySearch.toLowerCase()
+                                                )
+                                          ).length === 0 && (
+                                            <p className="px-3 py-2 text-[10px] text-muted-foreground italic">
+                                              No assemblies match
+                                            </p>
+                                          )}
+                                        </div>
+                                      )}
+                                    <p className="mt-1 text-[9px] text-muted-foreground/60">
+                                      Click to browse all assemblies. Each pin =
+                                      1 full assembly instance when saved to
+                                      L&amp;M.
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="pt-1 border-t border-border/50">
+                                <button
+                                  onClick={handleUndoLastPin}
+                                  disabled={
+                                    !activeCountSession ||
+                                    activeCountSession.pins.filter(
+                                      p => (p.pageNumber ?? 1) === activePage
+                                    ).length === 0
+                                  }
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                  title="Remove last dropped pin on this page (U key also works)"
+                                >
+                                  <Undo2 size={12} />
+                                  Undo last pin
+                                  {activeCountSession.pins.filter(
+                                    p => (p.pageNumber ?? 1) === activePage
+                                  ).length > 0 && (
+                                    <span className="ml-auto font-mono text-[10px] text-[#F5C518]">
+                                      {
+                                        activeCountSession.pins.filter(
+                                          p =>
+                                            (p.pageNumber ?? 1) === activePage
+                                        ).length
+                                      }{" "}
+                                      on pg {activePage}
                                     </span>
                                   )}
-                                  {/* Inline price-per-item field — hidden for assembly sessions */}
-                                  {!cs.assemblyId && (
-                                    <div
-                                      className="flex items-center gap-0.5 shrink-0"
-                                      onClick={(e) => e.stopPropagation()}
-                                      title="Custom price per item — blur to sync to Material Database"
-                                    >
-                                      <span className="text-[9px] text-muted-foreground font-mono">$</span>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        step={0.01}
-                                        value={cs.unitCost ?? ""}
-                                        onChange={(e) => {
-                                          const val = parseFloat(e.target.value);
-                                          updateSessions(
-                                            countSessions.map((s2) =>
-                                              s2.id === cs.id
-                                                ? { ...s2, unitCost: isNaN(val) ? undefined : val, priceMode: "per-unit" as const }
-                                                : s2
-                                            )
-                                          );
-                                        }}
-                                        onBlur={(e) => {
-                                          const val = parseFloat(e.target.value);
-                                          if (isNaN(val) || val <= 0) return;
-                                          // Check if this price differs from what's in the Material Database
-                                          const needle = cs.name.toLowerCase().trim();
-                                          const dbRow = userMaterials.find(
-                                            (m) => m.description.toLowerCase().includes(needle) ||
-                                                   needle.includes(m.description.toLowerCase())
-                                          );
-                                          const dbPrice = dbRow?.userPrice ?? dbRow?.defaultPrice ?? null;
-                                          if (dbPrice === null || Math.abs(val - dbPrice) > 0.001) {
-                                            // Price differs (or not in DB yet) — prompt user
-                                            setPriceSyncDialog({
-                                              open: true,
-                                              description: cs.name,
-                                              newPrice: val,
-                                              category: dbRow?.category ?? undefined,
-                                              unit: dbRow?.unit ?? "EA",
-                                            });
-                                          }
-                                        }}
-                                        placeholder="0.00"
-                                        className="w-14 h-5 text-[9px] font-mono bg-transparent border-b border-border/40 focus:border-[#F5C518] outline-none text-muted-foreground focus:text-foreground text-right px-0.5"
-                                      />
-                                      <span className="text-[9px] text-muted-foreground font-mono">/ea</span>
-                                    </div>
-                                  )}
-                                  <span className="font-mono text-[10px] text-muted-foreground shrink-0">{cs.pins.length} pin{cs.pins.length !== 1 ? "s" : ""}</span>
-                                  {isEditing ? (
-                                    <>
-                                      <button onClick={(e) => { e.stopPropagation(); handleRenameCountSession(cs.id); }} className="text-[#F5C518] hover:opacity-70"><Check size={12} /></button>
-                                      <button onClick={(e) => { e.stopPropagation(); setEditingSessionId(null); }} className="text-muted-foreground hover:text-foreground"><X size={12} /></button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {/* Save to L&M button — only shown when session has pins */}
-                                      {cs.pins.length > 0 && (
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); handleSaveCountToLM(cs); }}
-                                          className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#F5C518]/15 text-[#F5C518] border border-[#F5C518]/30 hover:bg-[#F5C518]/30 transition-colors"
-                                          title="Save count to Labor & Material list"
-                                        >
-                                          <Download size={9} /> L&amp;M
-                                        </button>
-                                      )}
-                                      <button onClick={(e) => { e.stopPropagation(); if (cs.pins.length > 0 && !window.confirm(`Delete "${cs.name}" and its ${cs.pins.length} pin${cs.pins.length !== 1 ? 's' : ''}?`)) return; handleDeleteCountSession(cs.id); }} className="text-muted-foreground hover:text-destructive" title="Delete session"><Trash2 size={11} /></button>
-                                    </>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                        {/* New session button */}
-                        <button
-                          onClick={handleAddCountSession}
-                          className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-md bg-[#F5C518]/15 text-[#F5C518] text-xs font-semibold hover:bg-[#F5C518]/25 active:scale-[0.98] transition-all border border-[#F5C518]/20">
-                          <Plus size={13} /> New Count Session
-                        </button>
-                        {/* Active session config */}
-                        {activeCountSession && (
-                          <div className="pt-2 border-t border-border space-y-3">
-                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                              Active: <span className="text-foreground">{activeCountSession.name}</span>
-                            </p>
-                            <CompactCountConfig
-                              color={activeCountSession.color}
-                              iconId={activeCountSession.iconId}
-                              onColorChange={(hex) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, color: hex } : cs))}
-                              onShapeChange={(id) => updateSessions(countSessions.map((cs) => cs.id === activeCountSession.id ? { ...cs, iconId: id } : cs))}
-                            />
-
-                            {/* ── Assembly link for this count session ── */}
-                            <div className="space-y-1.5">
-                              <Label className="text-[10px] text-muted-foreground uppercase tracking-wide">Count as Assembly</Label>
-                              {activeCountSession.assemblyId ? (
-                                <div className="flex items-center gap-2 rounded-md border border-[#F5C518]/40 bg-[#F5C518]/10 px-2.5 py-2">
-                                  <Layers size={12} className="text-[#F5C518] shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-[11px] font-bold text-[#F5C518] truncate">{activeCountSession.assemblyName ?? "Assembly"}</div>
-                                    <div className="text-[9px] text-muted-foreground font-mono">{(activeCountSession.assemblyItems?.length ?? 0)} items per pin</div>
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      const updated = countSessions.map((cs) =>
-                                        cs.id === activeCountSession.id
-                                          ? { ...cs, assemblyId: undefined, assemblyName: undefined, assemblyItems: undefined }
-                                          : cs
-                                      );
-                                      updateSessions(updated, activeCountSession.id);
-                                    }}
-                                    className="text-muted-foreground/50 hover:text-destructive transition-colors p-0.5 rounded"
-                                    title="Unlink assembly">
-                                    <X size={12} />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="relative">
-                                  <div className="relative">
-                                    <Search size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 pointer-events-none" />
-                                    <input
-                                      type="text"
-                                      value={assemblySearch}
-                                      onChange={(e) => setAssemblySearch(e.target.value)}
-                                      onFocus={() => setAssemblyDropdownOpen(true)}
-                                      onBlur={() => setTimeout(() => setAssemblyDropdownOpen(false), 150)}
-                                      placeholder={masterAssemblies.length === 0 ? "No assemblies yet" : `Search ${masterAssemblies.length} assembl${masterAssemblies.length === 1 ? 'y' : 'ies'}…`}
-                                      className="w-full h-8 pl-6 pr-2 text-[11px] font-mono bg-input border border-border rounded text-foreground placeholder:text-muted-foreground/50 outline-none focus:border-[#F5C518]/60 transition-colors"
-                                    />
-                                  </div>
-                                  {assemblyDropdownOpen && masterAssemblies.length > 0 && (
-                                    <div className="absolute z-50 top-full left-0 right-0 mt-0.5 max-h-48 overflow-y-auto rounded-md border border-[#F5C518]/30 bg-popover shadow-lg">
-                                      {masterAssemblies
-                                        .filter((a) => assemblySearch.trim().length === 0 || a.name.toLowerCase().includes(assemblySearch.toLowerCase()))
-                                        .map((a) => (
-                                          <button
-                                            key={a.id}
-                                            onMouseDown={(e) => { e.preventDefault(); pendingTargetSessionRef.current = activeCountSessionId ?? null; setPendingAssemblyId(a.id); setAssemblyDropdownOpen(false); }}
-                                            className="w-full text-left px-3 py-2 text-[11px] text-foreground hover:bg-[#F5C518]/15 hover:text-[#F5C518] transition-colors font-mono border-b border-border/30 last:border-0 flex items-center gap-2"
-                                          >
-                                            <Layers size={10} className="text-[#F5C518]/60 shrink-0" />
-                                            <span className="truncate">{a.name}</span>
-                                          </button>
-                                        ))}
-                                      {masterAssemblies.filter((a) => assemblySearch.trim().length === 0 || a.name.toLowerCase().includes(assemblySearch.toLowerCase())).length === 0 && (
-                                        <p className="px-3 py-2 text-[10px] text-muted-foreground italic">No assemblies match</p>
-                                      )}
-                                    </div>
-                                  )}
-                                  <p className="mt-1 text-[9px] text-muted-foreground/60">Click to browse all assemblies. Each pin = 1 full assembly instance when saved to L&amp;M.</p>
-                                </div>
-                              )}
+                                </button>
+                              </div>
                             </div>
-
-                            <div className="pt-1 border-t border-border/50">
-                              <button
-                                onClick={handleUndoLastPin}
-                                disabled={!activeCountSession || activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length === 0}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                                title="Remove last dropped pin on this page (U key also works)"
-                              >
-                                <Undo2 size={12} />
-                                Undo last pin
-                                {activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length > 0 && (
-                                  <span className="ml-auto font-mono text-[10px] text-[#F5C518]">
-                                    {activeCountSession.pins.filter((p) => (p.pageNumber ?? 1) === activePage).length} on pg {activePage}
-                                  </span>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ── RUNS accordion ── */}
-                  <div className="bp-card overflow-hidden">
-                    <button
-                      onClick={() => {
-                        const opening = activeSection !== "runs";
-                        setActiveSection(opening ? "runs" : null);
-                        if (opening) {
-                          // Re-enter measure mode for the active run when Runs tab is opened
-                          setMeasureModeRequest((v) => v + 1);
-                        }
-                      }}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
-                    >
-                      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                        Runs — Page {activePage}
-                        {pageRuns.length > 0 && (
-                          <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">{pageRuns.length} run{pageRuns.length !== 1 ? 's' : ''}</span>
-                        )}
-                      </h2>
-                      {activeSection === "runs" ? <ChevronUp size={14} className="text-muted-foreground shrink-0" /> : <ChevronDown size={14} className="text-muted-foreground shrink-0" />}
-                    </button>
-                    {activeSection === "runs" && (
-                      <div className="pb-2">
-                        {pageRuns.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center h-32 text-center gap-3 px-4">
-                            <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
-                              <Link2 size={20} className="text-muted-foreground" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-muted-foreground">No runs on page {activePage}</p>
-                              <p className="text-xs text-muted-foreground/60 mt-1">Measure a conduit run on this page, then push it here.</p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-2 px-2 pb-2">
-                            {pageRuns.map((run, i) => (
-                              <RunCard
-                                key={run.id}
-                                run={run}
-                                index={i}
-                                onUpdate={updateRun}
-                                onRemove={removeRun}
-                                userMaterials={userMaterials}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ── MATERIAL SUMMARY — inline below Runs, always visible, grows with content ── */}
-                  <div className="bp-card overflow-hidden border-t border-border/40">
-                    <div className="px-4 py-3 space-y-3">
-                      <CrossPageTotals runs={runs} countSessions={countSessions} userMaterials={userMaterials} />
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {/* ── Export button — full-width prominent yellow button with CSV / PDF options ── */}
-                    {runs.length > 0 && (
-                      <ExportButton runs={runs} countSessions={countSessions} projectName={projectName} />
-                    )}
+
+                    {/* ── RUNS accordion ── */}
+                    <div className="bp-card overflow-hidden">
+                      <button
+                        onClick={() => {
+                          const opening = activeSection !== "runs";
+                          setActiveSection(opening ? "runs" : null);
+                          if (opening) {
+                            // Re-enter measure mode for the active run when Runs tab is opened
+                            setMeasureModeRequest(v => v + 1);
+                          }
+                        }}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors"
+                      >
+                        <h2
+                          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider"
+                          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                        >
+                          Runs — Page {activePage}
+                          {pageRuns.length > 0 && (
+                            <span className="ml-2 text-[#F5C518] normal-case tracking-normal font-mono">
+                              {pageRuns.length} run
+                              {pageRuns.length !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </h2>
+                        {activeSection === "runs" ? (
+                          <ChevronUp
+                            size={14}
+                            className="text-muted-foreground shrink-0"
+                          />
+                        ) : (
+                          <ChevronDown
+                            size={14}
+                            className="text-muted-foreground shrink-0"
+                          />
+                        )}
+                      </button>
+                      {activeSection === "runs" && (
+                        <div className="pb-2">
+                          {pageRuns.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-32 text-center gap-3 px-4">
+                              <div className="w-12 h-12 rounded-xl bg-muted/30 flex items-center justify-center">
+                                <Link2
+                                  size={20}
+                                  className="text-muted-foreground"
+                                />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-muted-foreground">
+                                  No runs on page {activePage}
+                                </p>
+                                <p className="text-xs text-muted-foreground/60 mt-1">
+                                  Measure a conduit run on this page, then push
+                                  it here.
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 px-2 pb-2">
+                              {pageRuns.map((run, i) => (
+                                <RunCard
+                                  key={run.id}
+                                  run={run}
+                                  index={i}
+                                  onUpdate={updateRun}
+                                  onRemove={removeRun}
+                                  userMaterials={userMaterials}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── MATERIAL SUMMARY — inline below Runs, always visible, grows with content ── */}
+                    <div className="bp-card overflow-hidden border-t border-border/40">
+                      <div className="px-4 py-3 space-y-3">
+                        <CrossPageTotals
+                          runs={runs}
+                          countSessions={countSessions}
+                          userMaterials={userMaterials}
+                        />
+                      </div>
+                      {/* ── Export button — full-width prominent yellow button with CSV / PDF options ── */}
+                      {runs.length > 0 && (
+                        <ExportButton
+                          runs={runs}
+                          countSessions={countSessions}
+                          projectName={projectName}
+                        />
+                      )}
+                    </div>
+
+                    {/* Bottom padding so content isn't hidden behind any fixed UI */}
+                    <div className="h-6" />
                   </div>
-
-                  {/* Bottom padding so content isn't hidden behind any fixed UI */}
-                  <div className="h-6" />
-
-                </div>{/* end scrollable accordion area */}
-              </>
-            )}{/* end !rightPanelCollapsed */}
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-      </div>{/* end relative wrapper */}
+                  {/* end scrollable accordion area */}
+                </>
+              )}
+              {/* end !rightPanelCollapsed */}
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
+      {/* end relative wrapper */}
 
       {/* ── Confirmation dialog for destructive clear actions ──────────────────────── */}
       {confirmClear && (
@@ -2883,25 +4464,40 @@ function CivilEditor({
           <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
             {confirmClear.type === "page-runs" && (
               <>
-                <h3 className="font-semibold text-foreground mb-2">Clear all runs on page {activePage}?</h3>
+                <h3 className="font-semibold text-foreground mb-2">
+                  Clear all runs on page {activePage}?
+                </h3>
                 <p className="text-sm text-muted-foreground mb-5">
-                  This will remove all <span className="font-medium text-foreground">{pageRuns.length} run{pageRuns.length !== 1 ? "s" : ""}</span> from page {activePage}. This cannot be undone.
+                  This will remove all{" "}
+                  <span className="font-medium text-foreground">
+                    {pageRuns.length} run{pageRuns.length !== 1 ? "s" : ""}
+                  </span>{" "}
+                  from page {activePage}. This cannot be undone.
                 </p>
               </>
             )}
             {confirmClear.type === "page-counts" && (
               <>
-                <h3 className="font-semibold text-foreground mb-2">Clear all count pins on page {activePage}?</h3>
+                <h3 className="font-semibold text-foreground mb-2">
+                  Clear all count pins on page {activePage}?
+                </h3>
                 <p className="text-sm text-muted-foreground mb-5">
-                  This will remove all count pins on page {activePage} across all count sessions. This cannot be undone.
+                  This will remove all count pins on page {activePage} across
+                  all count sessions. This cannot be undone.
                 </p>
               </>
             )}
             {confirmClear.type === "total-reset" && (
               <>
-                <h3 className="font-semibold text-destructive mb-2">⚠️ Total Reset — are you sure?</h3>
+                <h3 className="font-semibold text-destructive mb-2">
+                  ⚠️ Total Reset — are you sure?
+                </h3>
                 <p className="text-sm text-muted-foreground mb-5">
-                  This will clear <span className="font-medium text-foreground">all runs and all count pins across every page</span> of this project. You’ll have 10 seconds to undo.
+                  This will clear{" "}
+                  <span className="font-medium text-foreground">
+                    all runs and all count pins across every page
+                  </span>{" "}
+                  of this project. You’ll have 10 seconds to undo.
                 </p>
               </>
             )}
@@ -2915,13 +4511,17 @@ function CivilEditor({
               <button
                 onClick={() => {
                   if (confirmClear.type === "page-runs") handleClearPageRuns();
-                  else if (confirmClear.type === "page-counts") handleClearPageAllCounts();
-                  else if (confirmClear.type === "total-reset") handleTotalReset();
+                  else if (confirmClear.type === "page-counts")
+                    handleClearPageAllCounts();
+                  else if (confirmClear.type === "total-reset")
+                    handleTotalReset();
                   setConfirmClear(null);
                 }}
                 className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium"
               >
-                {confirmClear.type === "total-reset" ? "Yes, Reset Everything" : "Clear"}
+                {confirmClear.type === "total-reset"
+                  ? "Yes, Reset Everything"
+                  : "Clear"}
               </button>
             </div>
           </div>
@@ -2946,16 +4546,34 @@ function CivilEditor({
 }
 
 // ─── Pin shape swatch (inline SVG preview) ──────────────────────────────────
-function PinShapeSwatch({ shape, color, size = 16 }: { shape: PinShape; color: string; size?: number }) {
-  const icon = COUNT_ICONS.find((ic) => ic.id === shape) ?? COUNT_ICONS[0];
+function PinShapeSwatch({
+  shape,
+  color,
+  size = 16,
+}: {
+  shape: PinShape;
+  color: string;
+  size?: number;
+}) {
+  const icon = COUNT_ICONS.find(ic => ic.id === shape) ?? COUNT_ICONS[0];
   return (
-    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" className="shrink-0">
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      className="shrink-0"
+    >
       {icon.paths.map((seg, pi) => (
-        <path key={pi} d={seg.d}
+        <path
+          key={pi}
+          d={seg.d}
           fill={seg.strokeOnly ? "none" : color}
           stroke={color}
           strokeWidth={seg.strokeWidth ?? 1.5}
-          strokeLinecap="round" strokeLinejoin="round" />
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       ))}
     </svg>
   );
@@ -2963,7 +4581,12 @@ function PinShapeSwatch({ shape, color, size = 16 }: { shape: PinShape; color: s
 
 // ─── Grouped 4×4 shape picker ────────────────────────────────────────────────
 // Size labels for the 4 variants within each family
-const SIZE_LABELS: Record<string, string> = { sm: "S", md: "M", lg: "L", xl: "XL" };
+const SIZE_LABELS: Record<string, string> = {
+  sm: "S",
+  md: "M",
+  lg: "L",
+  xl: "XL",
+};
 
 function CivilShapeSelector({
   activeIconId,
@@ -2977,25 +4600,27 @@ function CivilShapeSelector({
   // Only one family expanded at a time; null = all collapsed
   const [expandedCat, setExpandedCat] = React.useState<string | null>(() => {
     // Auto-expand the family of the currently active icon
-    const active = COUNT_ICONS.find((ic) => ic.id === activeIconId);
+    const active = COUNT_ICONS.find(ic => ic.id === activeIconId);
     return active?.category ?? null;
   });
 
   const toggleCat = (cat: string) =>
-    setExpandedCat((prev) => (prev === cat ? null : cat));
+    setExpandedCat(prev => (prev === cat ? null : cat));
 
   return (
     <div className="space-y-1.5">
-      <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Pin Shape</Label>
+      <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+        Pin Shape
+      </Label>
 
       {/* Row of 4 family icons side-by-side */}
       <div className="flex gap-1.5">
-        {ICON_CATEGORIES.map((cat) => {
-          const icons = COUNT_ICONS.filter((ic) => ic.category === cat);
+        {ICON_CATEGORIES.map(cat => {
+          const icons = COUNT_ICONS.filter(ic => ic.category === cat);
           // Representative icon for this family (medium size)
-          const repIcon = icons.find((ic) => ic.id.endsWith("-md")) ?? icons[0];
+          const repIcon = icons.find(ic => ic.id.endsWith("-md")) ?? icons[0];
           const isExpanded = expandedCat === cat;
-          const activeInCat = icons.some((ic) => ic.id === activeIconId);
+          const activeInCat = icons.some(ic => ic.id === activeIconId);
           return (
             <button
               key={cat}
@@ -3012,59 +4637,94 @@ function CivilShapeSelector({
             >
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
                 {repIcon.paths.map((seg, pi) => (
-                  <path key={pi} d={seg.d}
-                    fill={seg.strokeOnly ? "none" : (activeInCat ? activeColor : "currentColor")}
+                  <path
+                    key={pi}
+                    d={seg.d}
+                    fill={
+                      seg.strokeOnly
+                        ? "none"
+                        : activeInCat
+                          ? activeColor
+                          : "currentColor"
+                    }
                     stroke={activeInCat ? activeColor : "currentColor"}
-                    strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                    strokeWidth={seg.strokeWidth ?? 1.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 ))}
               </svg>
-              <span className={cn(
-                "text-[8px] font-medium leading-none",
-                isExpanded ? "text-[#F5C518]" : activeInCat ? "text-[#F5C518]/70" : "text-muted-foreground"
-              )}>{cat.slice(0, 3).toUpperCase()}</span>
+              <span
+                className={cn(
+                  "text-[8px] font-medium leading-none",
+                  isExpanded
+                    ? "text-[#F5C518]"
+                    : activeInCat
+                      ? "text-[#F5C518]/70"
+                      : "text-muted-foreground"
+                )}
+              >
+                {cat.slice(0, 3).toUpperCase()}
+              </span>
             </button>
           );
         })}
       </div>
 
       {/* Expanded size row — shown inline below the family row */}
-      {expandedCat && (() => {
-        const icons = COUNT_ICONS.filter((ic) => ic.category === expandedCat);
-        return (
-          <div className="flex gap-1.5 px-0.5">
-            {icons.map((icon) => {
-              const sizeKey = icon.id.split("-")[1] ?? "md";
-              const isActive = activeIconId === icon.id;
-              return (
-                <button
-                  key={icon.id}
-                  onClick={() => onSelect(icon.id)}
-                  title={`${expandedCat} ${SIZE_LABELS[sizeKey]}`}
-                  className={cn(
-                    "flex-1 flex flex-col items-center gap-1 py-2 rounded border transition-all",
-                    isActive
-                      ? "border-[#F5C518] bg-[#F5C518]/15"
-                      : "border-border/50 bg-muted/10 hover:border-[#F5C518]/40 hover:bg-[#F5C518]/5"
-                  )}
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-                    {icon.paths.map((seg, pi) => (
-                      <path key={pi} d={seg.d}
-                        fill={seg.strokeOnly ? "none" : (isActive ? activeColor : "currentColor")}
-                        stroke={isActive ? activeColor : "currentColor"}
-                        strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
-                    ))}
-                  </svg>
-                  <span className={cn(
-                    "text-[8px] font-medium leading-none",
-                    isActive ? "text-[#F5C518]" : "text-muted-foreground"
-                  )}>{SIZE_LABELS[sizeKey]}</span>
-                </button>
-              );
-            })}
-          </div>
-        );
-      })()}
+      {expandedCat &&
+        (() => {
+          const icons = COUNT_ICONS.filter(ic => ic.category === expandedCat);
+          return (
+            <div className="flex gap-1.5 px-0.5">
+              {icons.map(icon => {
+                const sizeKey = icon.id.split("-")[1] ?? "md";
+                const isActive = activeIconId === icon.id;
+                return (
+                  <button
+                    key={icon.id}
+                    onClick={() => onSelect(icon.id)}
+                    title={`${expandedCat} ${SIZE_LABELS[sizeKey]}`}
+                    className={cn(
+                      "flex-1 flex flex-col items-center gap-1 py-2 rounded border transition-all",
+                      isActive
+                        ? "border-[#F5C518] bg-[#F5C518]/15"
+                        : "border-border/50 bg-muted/10 hover:border-[#F5C518]/40 hover:bg-[#F5C518]/5"
+                    )}
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
+                      {icon.paths.map((seg, pi) => (
+                        <path
+                          key={pi}
+                          d={seg.d}
+                          fill={
+                            seg.strokeOnly
+                              ? "none"
+                              : isActive
+                                ? activeColor
+                                : "currentColor"
+                          }
+                          stroke={isActive ? activeColor : "currentColor"}
+                          strokeWidth={seg.strokeWidth ?? 1.5}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      ))}
+                    </svg>
+                    <span
+                      className={cn(
+                        "text-[8px] font-medium leading-none",
+                        isActive ? "text-[#F5C518]" : "text-muted-foreground"
+                      )}
+                    >
+                      {SIZE_LABELS[sizeKey]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
     </div>
   );
 }
@@ -3083,44 +4743,55 @@ function CompactCountConfig({
   onShapeChange: (id: PinShape) => void;
 }) {
   const [expandedCat, setExpandedCat] = React.useState<string | null>(() => {
-    const active = COUNT_ICONS.find((ic) => ic.id === iconId);
+    const active = COUNT_ICONS.find(ic => ic.id === iconId);
     return active?.category ?? null;
   });
 
   const toggleCat = (cat: string) =>
-    setExpandedCat((prev) => (prev === cat ? null : cat));
+    setExpandedCat(prev => (prev === cat ? null : cat));
 
   return (
     <div className="space-y-1.5">
       {/* Row 1: Color swatches */}
       <div className="flex flex-wrap items-center gap-1">
-        {PIN_COLORS.map((c) => (
+        {PIN_COLORS.map(c => (
           <button
             key={c.hex}
             title={c.label}
             onClick={() => onColorChange(c.hex)}
             className={cn(
               "w-4 h-4 rounded-full border-2 transition-all shrink-0",
-              color === c.hex ? "border-white scale-110" : "border-transparent hover:border-white/50"
+              color === c.hex
+                ? "border-white scale-110"
+                : "border-transparent hover:border-white/50"
             )}
             style={{ backgroundColor: c.hex }}
           />
         ))}
         {/* Custom color */}
-        <label className="relative w-4 h-4 rounded-full overflow-hidden border border-dashed border-border hover:border-white/50 cursor-pointer shrink-0" title="Custom color">
-          <input type="color" value={color} onChange={(e) => onColorChange(e.target.value)}
-            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
-          <span className="flex items-center justify-center w-full h-full text-[7px] text-muted-foreground">+</span>
+        <label
+          className="relative w-4 h-4 rounded-full overflow-hidden border border-dashed border-border hover:border-white/50 cursor-pointer shrink-0"
+          title="Custom color"
+        >
+          <input
+            type="color"
+            value={color}
+            onChange={e => onColorChange(e.target.value)}
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+          />
+          <span className="flex items-center justify-center w-full h-full text-[7px] text-muted-foreground">
+            +
+          </span>
         </label>
       </div>
 
       {/* Row 2: Shape family icons — always on their own line so all 4 stay together */}
       <div className="flex items-center gap-1">
-        {ICON_CATEGORIES.map((cat) => {
-          const icons = COUNT_ICONS.filter((ic) => ic.category === cat);
-          const repIcon = icons.find((ic) => ic.id.endsWith("-md")) ?? icons[0];
+        {ICON_CATEGORIES.map(cat => {
+          const icons = COUNT_ICONS.filter(ic => ic.category === cat);
+          const repIcon = icons.find(ic => ic.id.endsWith("-md")) ?? icons[0];
           const isExpanded = expandedCat === cat;
-          const activeInCat = icons.some((ic) => ic.id === iconId);
+          const activeInCat = icons.some(ic => ic.id === iconId);
           return (
             <button
               key={cat}
@@ -3137,57 +4808,82 @@ function CompactCountConfig({
             >
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
                 {repIcon.paths.map((seg, pi) => (
-                  <path key={pi} d={seg.d}
-                    fill={seg.strokeOnly ? "none" : (activeInCat ? color : "currentColor")}
+                  <path
+                    key={pi}
+                    d={seg.d}
+                    fill={
+                      seg.strokeOnly
+                        ? "none"
+                        : activeInCat
+                          ? color
+                          : "currentColor"
+                    }
                     stroke={activeInCat ? color : "currentColor"}
-                    strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
+                    strokeWidth={seg.strokeWidth ?? 1.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 ))}
               </svg>
             </button>
           );
         })}
-
-
       </div>
 
       {/* Expanded size row */}
-      {expandedCat && (() => {
-        const icons = COUNT_ICONS.filter((ic) => ic.category === expandedCat);
-        return (
-          <div className="flex gap-1 px-0.5">
-            {icons.map((icon) => {
-              const sizeKey = icon.id.split("-")[1] ?? "md";
-              const isActive = iconId === icon.id;
-              return (
-                <button
-                  key={icon.id}
-                  onClick={() => onShapeChange(icon.id)}
-                  title={`${expandedCat} ${SIZE_LABELS[sizeKey]}`}
-                  className={cn(
-                    "flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded border transition-all",
-                    isActive
-                      ? "border-[#F5C518] bg-[#F5C518]/15"
-                      : "border-border/50 bg-muted/10 hover:border-[#F5C518]/40 hover:bg-[#F5C518]/5"
-                  )}
-                >
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
-                    {icon.paths.map((seg, pi) => (
-                      <path key={pi} d={seg.d}
-                        fill={seg.strokeOnly ? "none" : (isActive ? color : "currentColor")}
-                        stroke={isActive ? color : "currentColor"}
-                        strokeWidth={seg.strokeWidth ?? 1.5} strokeLinecap="round" strokeLinejoin="round" />
-                    ))}
-                  </svg>
-                  <span className={cn(
-                    "text-[7px] font-medium leading-none",
-                    isActive ? "text-[#F5C518]" : "text-muted-foreground"
-                  )}>{SIZE_LABELS[sizeKey]}</span>
-                </button>
-              );
-            })}
-          </div>
-        );
-      })()}
+      {expandedCat &&
+        (() => {
+          const icons = COUNT_ICONS.filter(ic => ic.category === expandedCat);
+          return (
+            <div className="flex gap-1 px-0.5">
+              {icons.map(icon => {
+                const sizeKey = icon.id.split("-")[1] ?? "md";
+                const isActive = iconId === icon.id;
+                return (
+                  <button
+                    key={icon.id}
+                    onClick={() => onShapeChange(icon.id)}
+                    title={`${expandedCat} ${SIZE_LABELS[sizeKey]}`}
+                    className={cn(
+                      "flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded border transition-all",
+                      isActive
+                        ? "border-[#F5C518] bg-[#F5C518]/15"
+                        : "border-border/50 bg-muted/10 hover:border-[#F5C518]/40 hover:bg-[#F5C518]/5"
+                    )}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none">
+                      {icon.paths.map((seg, pi) => (
+                        <path
+                          key={pi}
+                          d={seg.d}
+                          fill={
+                            seg.strokeOnly
+                              ? "none"
+                              : isActive
+                                ? color
+                                : "currentColor"
+                          }
+                          stroke={isActive ? color : "currentColor"}
+                          strokeWidth={seg.strokeWidth ?? 1.5}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      ))}
+                    </svg>
+                    <span
+                      className={cn(
+                        "text-[7px] font-medium leading-none",
+                        isActive ? "text-[#F5C518]" : "text-muted-foreground"
+                      )}
+                    >
+                      {SIZE_LABELS[sizeKey]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
     </div>
   );
 }
@@ -3195,7 +4891,11 @@ function CompactCountConfig({
 // ─── Main ─────────────────────────────────────────────────────────────────────
 // Category labels removed — projects are no longer categorized in the UI
 const CATEGORY_LABELS: Record<string, string> = {};
-export default function UnifiedProjects({ category = "civil" }: { category?: "civil" | "commercial" | "residential" | "industrial" }) {
+export default function UnifiedProjects({
+  category = "civil",
+}: {
+  category?: "civil" | "commercial" | "residential" | "industrial";
+}) {
   const {
     civilCatProjects,
     activeCivilCatId,
@@ -3227,14 +4927,63 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
     switchIndustrialCatProject,
   } = useApp();
   // Pick the right store based on category
-  const civilProjects = category === "civil" ? civilCatProjects : category === "commercial" ? commercialCatProjects : category === "industrial" ? industrialCatProjects : residentialCatProjects;
-  const activeCivilId = category === "civil" ? activeCivilCatId : category === "commercial" ? activeCommercialCatId : category === "industrial" ? activeIndustrialCatId : activeResidentialCatId;
-  const activeCivilProject = category === "civil" ? activeCivilCatProject : category === "commercial" ? activeCommercialCatProject : category === "industrial" ? activeIndustrialCatProject : activeResidentialCatProject;
-  const addCivilProject = category === "civil" ? addCivilCatProject : category === "commercial" ? addCommercialCatProject : category === "industrial" ? addIndustrialCatProject : addResidentialCatProject;
-  const renameCivilProject = category === "civil" ? renameCivilCatProject : category === "commercial" ? renameCommercialCatProject : category === "industrial" ? renameIndustrialCatProject : renameResidentialCatProject;
-  const deleteCivilProject = category === "civil" ? deleteCivilCatProject : category === "commercial" ? deleteCommercialCatProject : category === "industrial" ? deleteIndustrialCatProject : deleteResidentialCatProject;
-  const switchCivilProject = category === "civil" ? switchCivilCatProject : category === "commercial" ? switchCommercialCatProject : category === "industrial" ? switchIndustrialCatProject : switchResidentialCatProject;
-    const categoryLabel = "Projects";
+  const civilProjects =
+    category === "civil"
+      ? civilCatProjects
+      : category === "commercial"
+        ? commercialCatProjects
+        : category === "industrial"
+          ? industrialCatProjects
+          : residentialCatProjects;
+  const activeCivilId =
+    category === "civil"
+      ? activeCivilCatId
+      : category === "commercial"
+        ? activeCommercialCatId
+        : category === "industrial"
+          ? activeIndustrialCatId
+          : activeResidentialCatId;
+  const activeCivilProject =
+    category === "civil"
+      ? activeCivilCatProject
+      : category === "commercial"
+        ? activeCommercialCatProject
+        : category === "industrial"
+          ? activeIndustrialCatProject
+          : activeResidentialCatProject;
+  const addCivilProject =
+    category === "civil"
+      ? addCivilCatProject
+      : category === "commercial"
+        ? addCommercialCatProject
+        : category === "industrial"
+          ? addIndustrialCatProject
+          : addResidentialCatProject;
+  const renameCivilProject =
+    category === "civil"
+      ? renameCivilCatProject
+      : category === "commercial"
+        ? renameCommercialCatProject
+        : category === "industrial"
+          ? renameIndustrialCatProject
+          : renameResidentialCatProject;
+  const deleteCivilProject =
+    category === "civil"
+      ? deleteCivilCatProject
+      : category === "commercial"
+        ? deleteCommercialCatProject
+        : category === "industrial"
+          ? deleteIndustrialCatProject
+          : deleteResidentialCatProject;
+  const switchCivilProject =
+    category === "civil"
+      ? switchCivilCatProject
+      : category === "commercial"
+        ? switchCommercialCatProject
+        : category === "industrial"
+          ? switchIndustrialCatProject
+          : switchResidentialCatProject;
+  const categoryLabel = "Projects";
 
   // ── Hash-based sub-routing so browser back/forward works ──────────────────
   // Hash format: #/residential/project-id  (project list = #/residential)
@@ -3246,7 +4995,9 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
     return null;
   }
 
-  const [openProjectId, setOpenProjectId] = useState<string | null>(() => getProjectIdFromHash());
+  const [openProjectId, setOpenProjectId] = useState<string | null>(() =>
+    getProjectIdFromHash()
+  );
 
   // Listen for browser back/forward to sync openProjectId
   useEffect(() => {
@@ -3255,7 +5006,7 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
   const handleOpen = (id: string) => {
@@ -3295,7 +5046,8 @@ export default function UnifiedProjects({ category = "civil" }: { category?: "ci
     );
   }
 
-  const proj = civilProjects.find((p) => p.id === resolvedOpenId) ?? activeCivilProject;
+  const proj =
+    civilProjects.find(p => p.id === resolvedOpenId) ?? activeCivilProject;
 
   return (
     <CivilEditor

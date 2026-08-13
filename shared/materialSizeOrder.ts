@@ -40,9 +40,29 @@
  * people to pull. Add new sizes in position rather than at the end.
  */
 export const CONDUCTOR_SIZES = [
-  "18", "16", "14", "12", "10", "8", "6", "4", "3", "2", "1",
-  "1/0", "2/0", "3/0", "4/0",
-  "250", "300", "350", "400", "500", "600", "750", "1000",
+  "18",
+  "16",
+  "14",
+  "12",
+  "10",
+  "8",
+  "6",
+  "4",
+  "3",
+  "2",
+  "1",
+  "1/0",
+  "2/0",
+  "3/0",
+  "4/0",
+  "250",
+  "300",
+  "350",
+  "400",
+  "500",
+  "600",
+  "750",
+  "1000",
 ] as const;
 
 const CONDUCTOR_RANK = new Map<string, number>(
@@ -56,7 +76,19 @@ const CONDUCTOR_RANK = new Map<string, number>(
  * "1-1/4" sorts before "1/2".
  */
 export const TRADE_SIZE_ORDER = [
-  '3/8"', '1/2"', '3/4"', '1"', '1-1/4"', '1-1/2"', '2"', '2-1/2"', '3"', '3-1/2"', '4"', '5"', '6"',
+  '3/8"',
+  '1/2"',
+  '3/4"',
+  '1"',
+  '1-1/4"',
+  '1-1/2"',
+  '2"',
+  '2-1/2"',
+  '3"',
+  '3-1/2"',
+  '4"',
+  '5"',
+  '6"',
 ] as const;
 
 const TRADE_SIZE_RANK = new Map<string, number>(
@@ -86,7 +118,9 @@ type SizeKey = {
 
 const conductor = (size: string): SizeKey | null => {
   const rank = CONDUCTOR_RANK.get(size);
-  return rank === undefined ? null : { scale: SCALE.conductor, value: rank, count: 0 };
+  return rank === undefined
+    ? null
+    : { scale: SCALE.conductor, value: rank, count: 0 };
 };
 
 /** "1-1/4" -> 1.25, "3/4" -> 0.75, "6" -> 6. */
@@ -143,15 +177,18 @@ function readSize(name: string): SizeKey | null {
   const inch = name.match(/^(\d+(?:-\d+\/\d+)?(?:\/\d+)?)"/);
   if (inch) {
     const trade = TRADE_SIZE_RANK.get(`${inch[1]}"`);
-    if (trade !== undefined) return { scale: SCALE.tradeSize, value: trade, count: 0 };
+    if (trade !== undefined)
+      return { scale: SCALE.tradeSize, value: trade, count: 0 };
     const inches = inchesOf(inch[1]);
-    if (inches !== null) return { scale: SCALE.length, value: inches, count: 0 };
+    if (inches !== null)
+      return { scale: SCALE.length, value: inches, count: 0 };
   }
 
   // Feet — "4 ft LED strip fixture", "8 ft ground rod". Normalised to inches so
   // a fixture named in inches and one named in feet compare correctly.
   const feet = name.match(/^([\d.]+)\s*ft\b/i);
-  if (feet) return { scale: SCALE.length, value: Number(feet[1]) * 12, count: 0 };
+  if (feet)
+    return { scale: SCALE.length, value: Number(feet[1]) * 12, count: 0 };
 
   // An amperage — "20A breaker", "100A main panel", "20/2 breaker". For a
   // two-pole breaker the "/2" is poles, not size, so 20/2 sorts with 20A.
@@ -178,7 +215,9 @@ function cableCount(name: string): number {
  * name: a category holding "Wire nuts" and "#12 THHN" should lead with the
  * sized rows in size order rather than interleaving on alphabetical accident.
  */
-export function materialSizeKey(name: string): [number, number, number, string] {
+export function materialSizeKey(
+  name: string
+): [number, number, number, string] {
   const trimmed = name.trim();
   const size = readSize(trimmed);
   return [

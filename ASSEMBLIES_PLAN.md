@@ -22,7 +22,7 @@ Project Type exists to **filter** the library, nothing more. It does not fork th
 - **Materials, Labor Rates, and Modifiers stay fully shared** across residential and commercial. There is no residential copy and commercial copy of anything.
 - Where labor genuinely differs by context, that is handled through the existing fork/customize system (see [CUSTOMIZATION MODEL](#customization-model)) — a user forks the one assembly and adjusts it. The library is never duplicated wholesale.
 
-**Not the same thing as Trade.** Trade separates electrical from plumbing/HVAC for unlock gating; Project Type separates residential from commercial work *within* a trade. Two independent axes — every starter assembly in [STARTER_LIBRARY.md](STARTER_LIBRARY.md) already carries this tag.
+**Not the same thing as Trade.** Trade separates electrical from plumbing/HVAC for unlock gating; Project Type separates residential from commercial work _within_ a trade. Two independent axes — every starter assembly in [STARTER_LIBRARY.md](STARTER_LIBRARY.md) already carries this tag.
 
 ### Where labor hours come from
 
@@ -32,7 +32,7 @@ The CORE assemblies in [STARTER_LIBRARY.md](STARTER_LIBRARY.md) ship with materi
 
 ### Modifiers replace difficulty tiers — don't build both
 
-NECA expresses job difficulty as **Normal / Difficult / Very Difficult** columns. The [Modifiers](#data-model) system already does that job, additively and with more granularity: height, outdoor, retrofit, tight space, and so on stack to describe *why* a particular install is harder, rather than collapsing it into one of three buckets.
+NECA expresses job difficulty as **Normal / Difficult / Very Difficult** columns. The [Modifiers](#data-model) system already does that job, additively and with more granularity: height, outdoor, retrofit, tight space, and so on stack to describe _why_ a particular install is harder, rather than collapsing it into one of three buckets.
 
 So:
 
@@ -55,7 +55,7 @@ Conduit and wire labor is conventionally quoted per 100 ft or per 1000 ft rather
 ## PRICING FLOW
 
 1. **Direct Cost** = Materials + (Labor hours × modifiers, summed not compounded) × Labor Rate
-2. **+ Overhead** — optional, on/off, percentage or flat amount. Applied *before* profit.
+2. **+ Overhead** — optional, on/off, percentage or flat amount. Applied _before_ profit.
 3. **+ Profit** — explicit choice between:
    - **Markup %** → `price = cost × (1 + markup%)`
    - **Target Margin %** → `price = cost / (1 - margin%)`
@@ -63,13 +63,14 @@ Conduit and wire labor is conventionally quoted per 100 ft or per 1000 ft rather
 4. **= Final Bid Price**
 
 Settings exist at two levels:
+
 - **Company-default level** — auto-fills new estimates.
 - **Per-project override level.**
 
 ## PROJECT ESTIMATES
 
 - When an assembly is added to a project, **snapshot its current costs into the project record** rather than linking live to master pricing — so a submitted bid never silently changes if master rates update later.
-- **Snapshot timing is unconditional.** Costs snapshot the moment an assembly is added to *any* bid, regardless of that bid's status. There is no live-linked mode.
+- **Snapshot timing is unconditional.** Costs snapshot the moment an assembly is added to _any_ bid, regardless of that bid's status. There is no live-linked mode.
 - **The "update available" nudge is status-gated.** It appears only on bids still in **Draft**. Once a bid is **Submitted**, it is fully frozen — no nudge at all, even if the underlying baseline or the user's own library item changes.
   - Corollary: the nudge is a Draft-only affordance. Won / Lost / Complete bids inherit Submitted's frozen behavior.
 - **Bids carry a Project Type tag too** — the same optional Residential / Commercial / Both value used on assemblies (see [DATA MODEL](#data-model)). This is what lets the [DASHBOARD](#dashboard) split reporting by residential vs. commercial later: win rate, average margin, and outstanding value per project type.
@@ -81,7 +82,7 @@ Settings exist at two levels:
 The tracing tool supports two kinds of run, chosen per path:
 
 1. **Conduit + pulled wire** — EMT, PVC, rigid. Conduit and wire are calculated **separately**, per the rules below.
-2. **Cable run** — Romex/NM-B, MC cable. **Cable footage only**, because the cable *is* the raceway. There is no separate conduit quantity to count.
+2. **Cable run** — Romex/NM-B, MC cable. **Cable footage only**, because the cable _is_ the raceway. There is no separate conduit quantity to count.
 
 The rules that follow describe path type 1. A cable run still gets length, termination allowance, live tally, and waste factor — but the conduit-specific rules (shared-run conductor multiplication, conduit fill) simply do not apply to it.
 
@@ -90,12 +91,13 @@ The rules that follow describe path type 1. A cable run still gets length, termi
 - **Shared conduit runs** — trace the physical path once, assign multiple circuits to it. Conduit counted once; wire multiplies correctly by total conductors sharing it.
 - **AI-suggested home run routing** — proposes a starting path from device to panel. Always editable/draggable, never a locked black-box number.
 - **Live running tally** of footage by conduit size and wire type as runs are traced.
-- **Conduit fill** — soft reference warning only, *not* a certified code-compliance guarantee.
+- **Conduit fill** — soft reference warning only, _not_ a certified code-compliance guarantee.
 - **Adjustable waste factor %** per material/job.
 
 ## APP LAYOUT
 
 Four main areas:
+
 - **Dashboard** — active bids, due dates, win rate, business overview.
 - **Bids** — list of all projects.
 - **Library** — Materials / Labor Rates / Assemblies.
@@ -104,6 +106,7 @@ Four main areas:
 Inside a bid: **Overview → Takeoff → Pricing → Proposal** (running total always visible everywhere).
 
 Design principles:
+
 - New estimates pre-fill from saved defaults.
 - Search beats browsing.
 - Advanced options hidden behind a toggle by default.
@@ -134,12 +137,13 @@ Underlying PDF rendering engine **stays as-is**. This redesigns the surrounding 
 5. **Live synced running list** — counted/measured items appear instantly; clicking highlights location on drawing.
 6. **Visual marking of already-counted items** — avoids double-counts or misses.
 7. **Stamp tool** — pick an assembly **once**, then click multiple locations on the plan to drop it repeatedly without re-selecting each time. Each drop feeds the live running list (5) and visual marking (6) already described. The behavior is identical for residential (fewer, spread-out drops) and commercial (many drops per sheet) — only the volume differs. Clicking an existing pin selects it, so it can be moved or deleted.
-8. **AI auto-fill** — AI drives the *same* stamp tool to detect and drop pins automatically for a chosen symbol type, color-coded by confidence (matching the existing AI review-queue pattern). Every AI-dropped pin behaves **identically to a manually placed one**: same live list, same visual marking, same editability. And the same rule applies — once a human touches a pin, AI never silently overwrites it again.
-9. **Symbol-to-assembly linking** — clicking or circling a symbol in the persistent legend panel (4) loads that assembly for stamping, instead of searching for it by name. The first click on an unlinked symbol prompts a one-time *"which assembly does this match?"*; every future click loads it instantly.
+8. **AI auto-fill** — AI drives the _same_ stamp tool to detect and drop pins automatically for a chosen symbol type, color-coded by confidence (matching the existing AI review-queue pattern). Every AI-dropped pin behaves **identically to a manually placed one**: same live list, same visual marking, same editability. And the same rule applies — once a human touches a pin, AI never silently overwrites it again.
+9. **Symbol-to-assembly linking** — clicking or circling a symbol in the persistent legend panel (4) loads that assembly for stamping, instead of searching for it by name. The first click on an unlinked symbol prompts a one-time _"which assembly does this match?"_; every future click loads it instantly.
    - This link table is also **what AI auto-fill (8) reads to interpret the plan**, rather than guessing generically. Unlinked symbols get proposed at lower confidence for the user to confirm.
    - Ties directly into the **legend memory per architect** feature — links learned on one job carry forward to the next set of plans from the same architect.
 
 **Priority order:**
+
 1. Sheet index + split-screen
 2. Auto scale + legend panel
 3. Live list + visual marking + stamp tool
@@ -150,7 +154,7 @@ Stamp tool sits in tier 3 because the live list and visual marking are what a dr
 
 ## LAYERS
 
-*Revised design — supersedes the earlier single-grouping-plus-custom-tags approach.*
+_Revised design — supersedes the earlier single-grouping-plus-custom-tags approach._
 
 **Two independent, toggleable layer groups** rather than one.
 
@@ -189,10 +193,12 @@ The Location list is **shared across all trades** — "Underground" means the sa
 ## MULTI-TRADE STRUCTURE
 
 **Trade-gated per unlock:**
+
 - Baseline assembly library
 - Symbol recognition on takeoff
 
 **Shared across all trades regardless of unlock:**
+
 - Dashboard, Bids, Settings
 - Takeoff page tools
 - Labor rate structure
@@ -212,6 +218,7 @@ Future trade expansion (plumbing, HVAC, etc.) will involve **real trade experts*
 ## AI CO-PILOT (plan interpretation assistant)
 
 Chat panel on the takeoff page. Helps interpret dense/confusing plan sheets:
+
 - Explains what a sheet shows
 - Decodes symbols/abbreviations
 - Answers questions about notes
@@ -233,9 +240,9 @@ Chat panel on the takeoff page. Helps interpret dense/confusing plan sheets:
 
 ## BUILD ORDER (foundation-first rubric)
 
-1. **Foundation** — data model, customization model, pricing math. *This must exist before anything else can be built or shown.*
+1. **Foundation** — data model, customization model, pricing math. _This must exist before anything else can be built or shown._
 2. **Library screens** — immediately after Foundation, so the data becomes visible/usable right away.
-   - **Open question for the Assemblies screen:** consider whether it should carry a *"show labor hours to contractors"* visibility toggle. An `enable_labor_units` feature flag already exists and does exactly this for the **old** Assembly Builder screen, which the Library screens replace. Decide when that screen is actually being designed — whether the behavior gets rebuilt here, moved into Settings, or dropped. Not a reason to touch the existing flag now.
+   - **Open question for the Assemblies screen:** consider whether it should carry a _"show labor hours to contractors"_ visibility toggle. An `enable_labor_units` feature flag already exists and does exactly this for the **old** Assembly Builder screen, which the Library screens replace. Decide when that screen is actually being designed — whether the behavior gets rebuilt here, moved into Settings, or dropped. Not a reason to touch the existing flag now.
 3. **Bid/Project structure** — status flow, cost-snapshot behavior.
 4. **Quick-bid (no plans) flow** — fast quantity-based bidding on top of Foundation + Library. Useful for smaller/residential jobs.
 
@@ -245,11 +252,11 @@ Chat panel on the takeoff page. Helps interpret dense/confusing plan sheets:
 >
 > An **outside electrician — not the app's builder** — must be able to run a **complete real bid end-to-end** using only the Quick-bid flow, **with no assistance**.
 >
-> This is the first point in the build order where that's possible: Foundation + Library + Bid structure + Quick-bid together make a usable product without plans or takeoff. Everything from step 5 on is expansion on top of a foundation that has *not* yet been proven with a real user.
+> This is the first point in the build order where that's possible: Foundation + Library + Bid structure + Quick-bid together make a usable product without plans or takeoff. Everything from step 5 on is expansion on top of a foundation that has _not_ yet been proven with a real user.
 >
-> Enforces the [STRATEGY_NOTES.md](STRATEGY_NOTES.md) verdict: *validate with real outside users before expanding scope.*
+> Enforces the [STRATEGY_NOTES.md](STRATEGY_NOTES.md) verdict: _validate with real outside users before expanding scope._
 >
-> **Blocker to clear first — login is not usable by anyone but the builder.** With `VITE_OAUTH_PORTAL_URL` unset, `getLoginUrl` throws `TypeError: Invalid URL` inside `AuthGuard`, which is a whole-app error boundary rather than a login screen — *no* page renders. Local dev currently only works by hand-setting throwaway OAuth/JWT env vars. Real user accounts have to work end-to-end before an outside electrician is handed the app, so this needs fixing before the gate, not after. Not urgent for solo development today.
+> **Blocker to clear first — login is not usable by anyone but the builder.** With `VITE_OAUTH_PORTAL_URL` unset, `getLoginUrl` throws `TypeError: Invalid URL` inside `AuthGuard`, which is a whole-app error boundary rather than a login screen — _no_ page renders. Local dev currently only works by hand-setting throwaway OAuth/JWT env vars. Real user accounts have to work end-to-end before an outside electrician is handed the app, so this needs fixing before the gate, not after. Not urgent for solo development today.
 
 5. **Dashboard**
 6. **Takeoff page redesign**

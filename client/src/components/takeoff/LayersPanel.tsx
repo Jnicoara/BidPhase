@@ -16,11 +16,22 @@ import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Layers as LayersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  layerColor, layerLabel, setAxis, toggleLayer,
-  type LayerKey, type LayerState,
+  layerColor,
+  layerLabel,
+  setAxis,
+  toggleLayer,
+  type LayerKey,
+  type LayerState,
 } from "@shared/takeoffLayers";
 
-function Axis({ title, entries, active, onToggle, onAll, onNone }: {
+function Axis({
+  title,
+  entries,
+  active,
+  onToggle,
+  onAll,
+  onNone,
+}: {
   title: string;
   entries: { key: LayerKey; count: number }[];
   active: Set<LayerKey>;
@@ -33,16 +44,22 @@ function Axis({ title, entries, active, onToggle, onAll, onNone }: {
   return (
     <div className="px-3 py-2 border-t border-border/60">
       <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[0.7rem] uppercase tracking-wide text-muted-foreground">{title}</span>
+        <span className="text-[0.7rem] uppercase tracking-wide text-muted-foreground">
+          {title}
+        </span>
         <div className="ml-auto flex items-center gap-1">
           <Button
-            size="sm" variant="ghost" className="h-5 px-1.5 text-[0.7rem] text-muted-foreground"
+            size="sm"
+            variant="ghost"
+            className="h-5 px-1.5 text-[0.7rem] text-muted-foreground"
             onClick={onAll}
           >
             All
           </Button>
           <Button
-            size="sm" variant="ghost" className="h-5 px-1.5 text-[0.7rem] text-muted-foreground"
+            size="sm"
+            variant="ghost"
+            className="h-5 px-1.5 text-[0.7rem] text-muted-foreground"
             onClick={onNone}
           >
             None
@@ -70,11 +87,17 @@ function Axis({ title, entries, active, onToggle, onAll, onNone }: {
                   border: `1.5px solid ${layerColor(entry.key)}`,
                 }}
               />
-              <span className="flex-1 min-w-0 truncate text-left">{layerLabel(entry.key)}</span>
-              <span className="font-mono text-[0.7rem] text-muted-foreground">{entry.count}</span>
-              {on
-                ? <Eye className="w-3 h-3 text-muted-foreground/50" />
-                : <EyeOff className="w-3 h-3 text-muted-foreground/50" />}
+              <span className="flex-1 min-w-0 truncate text-left">
+                {layerLabel(entry.key)}
+              </span>
+              <span className="font-mono text-[0.7rem] text-muted-foreground">
+                {entry.count}
+              </span>
+              {on ? (
+                <Eye className="w-3 h-3 text-muted-foreground/50" />
+              ) : (
+                <EyeOff className="w-3 h-3 text-muted-foreground/50" />
+              )}
             </button>
           );
         })}
@@ -83,8 +106,17 @@ function Axis({ title, entries, active, onToggle, onAll, onNone }: {
   );
 }
 
-export function LayersPanel({ present, state, onChange, filtered, hiddenCount }: {
-  present: { systems: { key: LayerKey; count: number }[]; locations: { key: LayerKey; count: number }[] };
+export function LayersPanel({
+  present,
+  state,
+  onChange,
+  filtered,
+  hiddenCount,
+}: {
+  present: {
+    systems: { key: LayerKey; count: number }[];
+    locations: { key: LayerKey; count: number }[];
+  };
   state: LayerState;
   /**
    * Takes an UPDATER, not a value.
@@ -98,7 +130,8 @@ export function LayersPanel({ present, state, onChange, filtered, hiddenCount }:
   filtered: boolean;
   hiddenCount: number;
 }) {
-  if (present.systems.length === 0 && present.locations.length === 0) return null;
+  if (present.systems.length === 0 && present.locations.length === 0)
+    return null;
 
   return (
     <div className="border-t border-border shrink-0">
@@ -115,25 +148,66 @@ export function LayersPanel({ present, state, onChange, filtered, hiddenCount }:
         title="System"
         entries={present.systems}
         active={state.systems}
-        onToggle={key => onChange(previous => toggleLayer(previous, "systems", key))}
-        onAll={() => onChange(previous => setAxis(previous, "systems", present.systems.map(s => s.key), true))}
-        onNone={() => onChange(previous => setAxis(previous, "systems", present.systems.map(s => s.key), false))}
+        onToggle={key =>
+          onChange(previous => toggleLayer(previous, "systems", key))
+        }
+        onAll={() =>
+          onChange(previous =>
+            setAxis(
+              previous,
+              "systems",
+              present.systems.map(s => s.key),
+              true
+            )
+          )
+        }
+        onNone={() =>
+          onChange(previous =>
+            setAxis(
+              previous,
+              "systems",
+              present.systems.map(s => s.key),
+              false
+            )
+          )
+        }
       />
 
       <Axis
         title="Location"
         entries={present.locations}
         active={state.locations}
-        onToggle={key => onChange(previous => toggleLayer(previous, "locations", key))}
-        onAll={() => onChange(previous => setAxis(previous, "locations", present.locations.map(l => l.key), true))}
-        onNone={() => onChange(previous => setAxis(previous, "locations", present.locations.map(l => l.key), false))}
+        onToggle={key =>
+          onChange(previous => toggleLayer(previous, "locations", key))
+        }
+        onAll={() =>
+          onChange(previous =>
+            setAxis(
+              previous,
+              "locations",
+              present.locations.map(l => l.key),
+              true
+            )
+          )
+        }
+        onNone={() =>
+          onChange(previous =>
+            setAxis(
+              previous,
+              "locations",
+              present.locations.map(l => l.key),
+              false
+            )
+          )
+        }
       />
 
       {/* Said plainly, because a filtered takeoff that looks complete is how a
           job gets quoted missing half its devices. */}
       {filtered && (
         <p className="px-3 pb-2 text-[0.7rem] text-[#F5C518]">
-          Showing part of this sheet. Totals below cover the whole bid regardless.
+          Showing part of this sheet. Totals below cover the whole bid
+          regardless.
         </p>
       )}
     </div>

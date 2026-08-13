@@ -13,7 +13,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { LABOR_RATE_TYPES, type LaborRate } from "../../drizzle/schema";
-import { DEFAULT_ANNUAL_HOURS, effectiveHourlyRate } from "../../shared/pricing";
+import {
+  DEFAULT_ANNUAL_HOURS,
+  effectiveHourlyRate,
+} from "../../shared/pricing";
 import * as db from "../db";
 
 /** decimal(10,4) on hourlyCost — must stay under 10 total digits. */
@@ -59,7 +62,10 @@ function toView(row: LaborRate): LaborRateView {
     return {
       ...row,
       effectiveHourlyRate: 0,
-      rateError: error instanceof Error ? error.message : "Cannot compute an hourly rate.",
+      rateError:
+        error instanceof Error
+          ? error.message
+          : "Cannot compute an hourly rate.",
     };
   }
 }
@@ -109,7 +115,11 @@ export const laborRatesRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const row = await db.getLaborRateById(input.id, ctx.user.id);
-      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Labor rate not found." });
+      if (!row)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Labor rate not found.",
+        });
       return toView(row);
     }),
 
@@ -117,7 +127,9 @@ export const laborRatesRouter = router({
     .input(rateBodySchema.extend({ name: nameSchema }))
     .mutation(async ({ input, ctx }) => {
       const existing = await db.getLibraryLaborRates(ctx.user.id);
-      const clash = existing.find(r => r.name.toLowerCase() === input.name.toLowerCase());
+      const clash = existing.find(
+        r => r.name.toLowerCase() === input.name.toLowerCase()
+      );
       if (clash) {
         throw new TRPCError({
           code: "CONFLICT",
@@ -140,18 +152,26 @@ export const laborRatesRouter = router({
    * input id when that happened, so callers should use what comes back.
    */
   update: protectedProcedure
-    .input(rateBodySchema.partial().extend({
-      id: z.number().int().positive(),
-      name: nameSchema.optional(),
-    }))
+    .input(
+      rateBodySchema.partial().extend({
+        id: z.number().int().positive(),
+        name: nameSchema.optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const { id, ...rest } = input;
 
       const target = await db.getLaborRateById(id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Labor rate not found." });
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Labor rate not found.",
+        });
 
       const isBaseline = target.userId === null;
-      const editableId = isBaseline ? await db.forkLaborRate(id, ctx.user.id) : id;
+      const editableId = isBaseline
+        ? await db.forkLaborRate(id, ctx.user.id)
+        : id;
 
       // Rate fields are normalised as a set, against the type the row will END
       // UP with — a partial edit that only moves the salary must not be scored
@@ -161,16 +181,29 @@ export const laborRatesRouter = router({
       if (rest.name !== undefined) patch.name = rest.name;
 
       const touchesRate =
-        rest.rateType !== undefined || rest.hourlyCost !== undefined ||
-        rest.annualSalary !== undefined || rest.annualHours !== undefined;
+        rest.rateType !== undefined ||
+        rest.hourlyCost !== undefined ||
+        rest.annualSalary !== undefined ||
+        rest.annualHours !== undefined;
 
       if (touchesRate) {
-        Object.assign(patch, normalizeForRateType({
-          rateType: nextType,
-          hourlyCost: rest.hourlyCost ?? Number(target.hourlyCost),
-          annualSalary: rest.annualSalary ?? (target.annualSalary != null ? Number(target.annualSalary) : undefined),
-          annualHours: rest.annualHours ?? (target.annualHours != null ? Number(target.annualHours) : undefined),
-        }));
+        Object.assign(
+          patch,
+          normalizeForRateType({
+            rateType: nextType,
+            hourlyCost: rest.hourlyCost ?? Number(target.hourlyCost),
+            annualSalary:
+              rest.annualSalary ??
+              (target.annualSalary != null
+                ? Number(target.annualSalary)
+                : undefined),
+            annualHours:
+              rest.annualHours ??
+              (target.annualHours != null
+                ? Number(target.annualHours)
+                : undefined),
+          })
+        );
       }
 
       await db.updateLaborRate(editableId, ctx.user.id, patch);
@@ -184,7 +217,11 @@ export const laborRatesRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getLaborRateById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Labor rate not found." });
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Labor rate not found.",
+        });
       if (target.userId !== null) return toView(target);
 
       const forkId = await db.forkLaborRate(input.id, ctx.user.id);
@@ -198,12 +235,16 @@ export const laborRatesRouter = router({
     .mutation(async ({ input, ctx }) => {
       const target = await db.getLaborRateById(input.id, ctx.user.id);
       if (!target || target.userId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Labor rate not found." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Labor rate not found.",
+        });
       }
       if (target.baselineId == null) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "This role was created from scratch, so there is no original to restore.",
+          message:
+            "This role was created from scratch, so there is no original to restore.",
         });
       }
 
@@ -217,7 +258,11 @@ export const laborRatesRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getLaborRateById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Labor rate not found." });
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Labor rate not found.",
+        });
       if (target.userId === null) {
         throw new TRPCError({
           code: "BAD_REQUEST",

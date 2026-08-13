@@ -23,7 +23,10 @@ interface ProjectLike {
 export default function CategoryLanding({
   onSelect,
 }: {
-  onSelect?: (cat: "civil" | "commercial" | "residential" | "industrial", projectId?: string) => void;
+  onSelect?: (
+    cat: "civil" | "commercial" | "residential" | "industrial",
+    projectId?: string
+  ) => void;
 } = {}) {
   const {
     civilCatProjects,
@@ -59,10 +62,19 @@ export default function CategoryLanding({
 
   // Merge all projects into one flat list with category tag
   const allProjects: ProjectLike[] = [
-    ...civilCatProjects.map((p) => ({ ...p, category: "civil" as const })),
-    ...commercialCatProjects.map((p) => ({ ...p, category: "commercial" as const })),
-    ...residentialCatProjects.map((p) => ({ ...p, category: "residential" as const })),
-    ...industrialCatProjects.map((p) => ({ ...p, category: "industrial" as const })),
+    ...civilCatProjects.map(p => ({ ...p, category: "civil" as const })),
+    ...commercialCatProjects.map(p => ({
+      ...p,
+      category: "commercial" as const,
+    })),
+    ...residentialCatProjects.map(p => ({
+      ...p,
+      category: "residential" as const,
+    })),
+    ...industrialCatProjects.map(p => ({
+      ...p,
+      category: "industrial" as const,
+    })),
   ].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)); // newest first
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -71,11 +83,15 @@ export default function CategoryLanding({
   const [newName, setNewName] = useState("");
   const [pendingTrashId, setPendingTrashId] = useState<string | null>(null);
   const [undoId, setUndoId] = useState<string | null>(null);
-  const [undoTimer, setUndoTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [undoTimer, setUndoTimer] = useState<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   const now = Date.now();
   const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-  const visibleTrash = trashedProjects.filter((t) => now - t.deletedAt < THIRTY_DAYS);
+  const visibleTrash = trashedProjects.filter(
+    t => now - t.deletedAt < THIRTY_DAYS
+  );
 
   // Helper: get the right store actions for a category
   function getRenameAction(cat: ProjectLike["category"]) {
@@ -116,7 +132,8 @@ export default function CategoryLanding({
   }
 
   function handleRename(proj: ProjectLike) {
-    if (editName.trim()) getRenameAction(proj.category)(proj.id, editName.trim());
+    if (editName.trim())
+      getRenameAction(proj.category)(proj.id, editName.trim());
     setEditingId(null);
   }
 
@@ -131,7 +148,7 @@ export default function CategoryLanding({
   }
 
   function confirmTrash(id: string) {
-    const proj = allProjects.find((p) => p.id === id);
+    const proj = allProjects.find(p => p.id === id);
     if (!proj) return;
     trashProject(proj as unknown as CivilProject, proj.category);
     getDeleteAction(proj.category)(id);
@@ -150,10 +167,12 @@ export default function CategoryLanding({
   }
 
   useEffect(() => {
-    return () => { if (undoTimer) clearTimeout(undoTimer); };
+    return () => {
+      if (undoTimer) clearTimeout(undoTimer);
+    };
   }, [undoTimer]);
 
-  const pendingProj = allProjects.find((p) => p.id === pendingTrashId);
+  const pendingProj = allProjects.find(p => p.id === pendingTrashId);
 
   return (
     <div className="flex flex-col h-full bg-background relative overflow-hidden">
@@ -175,7 +194,7 @@ export default function CategoryLanding({
           {/* Trash shortcut — only shown when there are trashed projects */}
           {visibleTrash.length > 0 && (
             <button
-              onClick={() => window.location.hash = "/trash"}
+              onClick={() => (window.location.hash = "/trash")}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-lg hover:bg-muted/20 border border-border/50 shrink-0"
             >
               <Trash2 size={13} />
@@ -194,10 +213,13 @@ export default function CategoryLanding({
               <input
                 autoFocus
                 value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => {
                   if (e.key === "Enter") handleNew();
-                  if (e.key === "Escape") { setShowNew(false); setNewName(""); }
+                  if (e.key === "Escape") {
+                    setShowNew(false);
+                    setNewName("");
+                  }
                 }}
                 placeholder="Project name…"
                 className="flex-1 h-9 text-sm bg-background border border-border rounded-md px-3 text-foreground focus:border-[#F5C518]/60 outline-none"
@@ -209,7 +231,10 @@ export default function CategoryLanding({
                 Create
               </button>
               <button
-                onClick={() => { setShowNew(false); setNewName(""); }}
+                onClick={() => {
+                  setShowNew(false);
+                  setNewName("");
+                }}
                 className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors"
               >
                 <X size={14} />
@@ -226,10 +251,17 @@ export default function CategoryLanding({
             /* Empty state */
             <div className="flex flex-col items-center justify-center py-24 gap-5 text-center">
               <div className="w-16 h-16 rounded-2xl bg-[#F5C518]/10 flex items-center justify-center">
-                <span className="font-bold text-[#F5C518] text-2xl" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>HB</span>
+                <span
+                  className="font-bold text-[#F5C518] text-2xl"
+                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                >
+                  HB
+                </span>
               </div>
               <div>
-                <p className="text-base font-semibold text-foreground">No projects yet</p>
+                <p className="text-base font-semibold text-foreground">
+                  No projects yet
+                </p>
                 <p className="text-sm text-muted-foreground mt-1">
                   Upload a PDF plan and start measuring in under a minute.
                 </p>
@@ -244,13 +276,15 @@ export default function CategoryLanding({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {allProjects.map((proj) => {
+              {allProjects.map(proj => {
                 const isActive = proj.id === getActiveId(proj.category);
                 const isEditing = editingId === proj.id;
                 return (
                   <div
                     key={proj.id}
-                    onClick={() => { if (!isEditing) handleOpen(proj); }}
+                    onClick={() => {
+                      if (!isEditing) handleOpen(proj);
+                    }}
                     className={cn(
                       "group relative rounded-xl border bg-card flex flex-col cursor-pointer min-h-[160px]",
                       "transition-all duration-150 hover:shadow-lg",
@@ -263,12 +297,15 @@ export default function CategoryLanding({
                     <div className="flex-1 px-5 pt-6 pb-4">
                       <div className="flex-1 min-w-0">
                         {isEditing ? (
-                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <div
+                            className="flex items-center gap-1.5"
+                            onClick={e => e.stopPropagation()}
+                          >
                             <input
                               autoFocus
                               value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                              onKeyDown={(e) => {
+                              onChange={e => setEditName(e.target.value)}
+                              onKeyDown={e => {
                                 if (e.key === "Enter") handleRename(proj);
                                 if (e.key === "Escape") setEditingId(null);
                               }}
@@ -276,17 +313,29 @@ export default function CategoryLanding({
                               className="flex-1 min-w-0 bg-transparent border-b border-[#F5C518] text-lg text-foreground outline-none font-bold pb-0.5"
                             />
                             <button
-                              onMouseDown={(e) => { e.preventDefault(); handleRename(proj); }}
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                handleRename(proj);
+                              }}
                               className="text-[#F5C518] text-xs px-1.5 py-0.5 rounded hover:bg-[#F5C518]/10 shrink-0"
-                            >✓</button>
+                            >
+                              ✓
+                            </button>
                           </div>
                         ) : (
-                          <h3 className="text-xl font-bold text-foreground leading-snug" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                          <h3
+                            className="text-xl font-bold text-foreground leading-snug"
+                            style={{
+                              fontFamily: "'Space Grotesk', sans-serif",
+                            }}
+                          >
                             {proj.name}
                           </h3>
                         )}
                         <p className="text-[11px] text-muted-foreground mt-2">
-                          {proj.createdAt ? new Date(proj.createdAt).toLocaleDateString() : ""}
+                          {proj.createdAt
+                            ? new Date(proj.createdAt).toLocaleDateString()
+                            : ""}
                         </p>
                       </div>
                     </div>
@@ -294,7 +343,7 @@ export default function CategoryLanding({
                     {/* Action row */}
                     <div
                       className="flex items-center justify-between px-4 py-3 border-t border-border/50 gap-2"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
                     >
                       <button
                         onClick={() => handleOpen(proj)}
@@ -344,7 +393,10 @@ export default function CategoryLanding({
                   )}
                 >
                   <Plus size={24} />
-                  <span className="text-sm font-medium" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <span
+                    className="text-sm font-medium"
+                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                  >
                     New Project
                   </span>
                 </button>
@@ -365,13 +417,29 @@ export default function CategoryLanding({
       {pendingTrashId && pendingProj && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-card border border-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
-            <h3 className="font-semibold text-foreground mb-2">Move to Trash?</h3>
+            <h3 className="font-semibold text-foreground mb-2">
+              Move to Trash?
+            </h3>
             <p className="text-sm text-muted-foreground mb-5">
-              Move <span className="font-medium text-foreground">"{pendingProj.name}"</span> to trash? You can restore it within 30 days.
+              Move{" "}
+              <span className="font-medium text-foreground">
+                "{pendingProj.name}"
+              </span>{" "}
+              to trash? You can restore it within 30 days.
             </p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setPendingTrashId(null)} className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-              <button onClick={() => confirmTrash(pendingTrashId)} className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium">Move to Trash</button>
+              <button
+                onClick={() => setPendingTrashId(null)}
+                className="px-4 py-2 text-sm rounded-md border border-border text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => confirmTrash(pendingTrashId)}
+                className="px-4 py-2 text-sm rounded-md bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium"
+              >
+                Move to Trash
+              </button>
             </div>
           </div>
         </div>
@@ -380,7 +448,9 @@ export default function CategoryLanding({
       {/* ── Undo toast ───────────────────────────────────────────────────────── */}
       {undoId && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl bg-card border border-border shadow-2xl">
-          <span className="text-sm text-foreground">Project moved to trash</span>
+          <span className="text-sm text-foreground">
+            Project moved to trash
+          </span>
           <button
             onClick={handleUndo}
             className="flex items-center gap-1.5 text-sm font-semibold text-[#F5C518] hover:text-[#F5C518]/80 transition-colors"

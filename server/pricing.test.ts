@@ -46,9 +46,14 @@ describe("resolveBidPricingSettings", () => {
 
   it("treats explicit nulls as inherit, not as off", () => {
     const resolved = resolveBidPricingSettings(company, {
-      overheadEnabled: null, profitMethod: null,
+      overheadEnabled: null,
+      profitMethod: null,
     });
-    expect(resolved.overhead).toEqual({ enabled: true, mode: "percentage", value: 0.1 });
+    expect(resolved.overhead).toEqual({
+      enabled: true,
+      mode: "percentage",
+      value: 0.1,
+    });
     expect(resolved.profitSource).toBe("company");
   });
 
@@ -56,7 +61,8 @@ describe("resolveBidPricingSettings", () => {
     // The group rule: a bid can never end up with its own percentage under the
     // company's method, which would re-price it when the company setting moves.
     const resolved = resolveBidPricingSettings(company, {
-      profitMethod: "margin", profitValue: 0.3,
+      profitMethod: "margin",
+      profitValue: 0.3,
     });
     expect(resolved.profit).toEqual({ method: "margin", value: 0.3 });
     expect(resolved.profitSource).toBe("bid");
@@ -64,7 +70,9 @@ describe("resolveBidPricingSettings", () => {
   });
 
   it("lets a bid switch overhead off while the company has it on", () => {
-    const resolved = resolveBidPricingSettings(company, { overheadEnabled: false });
+    const resolved = resolveBidPricingSettings(company, {
+      overheadEnabled: false,
+    });
     expect(resolved.overhead).toEqual({ enabled: false });
     expect(resolved.overheadSource).toBe("bid");
   });
@@ -74,14 +82,23 @@ describe("resolveBidPricingSettings", () => {
       { ...company, overheadEnabled: false },
       { overheadEnabled: true, overheadMode: "flat", overheadValue: 750 }
     );
-    expect(resolved.overhead).toEqual({ enabled: true, mode: "flat", value: 750 });
+    expect(resolved.overhead).toEqual({
+      enabled: true,
+      mode: "flat",
+      value: 750,
+    });
   });
 
   it("falls back to the company mode when the bid overrides value but not mode", () => {
     const resolved = resolveBidPricingSettings(company, {
-      overheadEnabled: true, overheadValue: 0.25,
+      overheadEnabled: true,
+      overheadValue: 0.25,
     });
-    expect(resolved.overhead).toEqual({ enabled: true, mode: "percentage", value: 0.25 });
+    expect(resolved.overhead).toEqual({
+      enabled: true,
+      mode: "percentage",
+      value: 0.25,
+    });
   });
 
   it("feeds straight into calculateBidPrice", () => {
@@ -97,7 +114,10 @@ describe("resolveBidPricingSettings", () => {
 describe("effectiveHourlyRate", () => {
   it("converts the starter project manager at the payroll year", () => {
     // $60,000 ÷ 2,080 h = $28.846… → $28.85
-    expect(effectiveHourlyRate(60000, DEFAULT_ANNUAL_HOURS)).toBeCloseTo(28.85, 10);
+    expect(effectiveHourlyRate(60000, DEFAULT_ANNUAL_HOURS)).toBeCloseTo(
+      28.85,
+      10
+    );
   });
 
   it("defaults to a 2,080-hour year", () => {
@@ -128,7 +148,9 @@ describe("effectiveHourlyRate", () => {
   });
 
   it("refuses negative hours", () => {
-    expect(() => effectiveHourlyRate(60000, -100)).toThrow(/greater than zero/i);
+    expect(() => effectiveHourlyRate(60000, -100)).toThrow(
+      /greater than zero/i
+    );
   });
 
   it("refuses a negative salary", () => {
@@ -137,14 +159,20 @@ describe("effectiveHourlyRate", () => {
 
   it("rejects non-finite inputs", () => {
     expect(() => effectiveHourlyRate(Number.NaN, 2080)).toThrow(/finite/i);
-    expect(() => effectiveHourlyRate(60000, Number.POSITIVE_INFINITY)).toThrow(/finite/i);
+    expect(() => effectiveHourlyRate(60000, Number.POSITIVE_INFINITY)).toThrow(
+      /finite/i
+    );
   });
 
   it("feeds a line item exactly like an hourly rate does", () => {
     // The point of deriving a rate: downstream pricing cannot tell the
     // difference between a salaried role and an hourly one.
     const rate = effectiveHourlyRate(60000, 2080);
-    const line = calculateLineItem({ materials: [], baseLaborHours: 10, laborRate: rate });
+    const line = calculateLineItem({
+      materials: [],
+      baseLaborHours: 10,
+      laborRate: rate,
+    });
     expect(line.laborCost).toBeCloseTo(288.5, 10);
   });
 });
@@ -153,7 +181,9 @@ describe("effectiveHourlyRate", () => {
 
 describe("modifiers add rather than compound", () => {
   it("sums modifier percentages", () => {
-    expect(sumModifiers([{ laborAdjustmentPct: 0.15 }, { laborAdjustmentPct: 0.1 }])).toBeCloseTo(0.25, 10);
+    expect(
+      sumModifiers([{ laborAdjustmentPct: 0.15 }, { laborAdjustmentPct: 0.1 }])
+    ).toBeCloseTo(0.25, 10);
   });
 
   it("applies +15% and +10% as +25%, NOT as 1.15 x 1.10", () => {
@@ -188,13 +218,17 @@ describe("modifiers add rather than compound", () => {
   });
 
   it("clamps to zero and flags when modifiers drop below -100%", () => {
-    const { hours, clamped } = applyModifiersToHours(1, [{ laborAdjustmentPct: -1.5 }]);
+    const { hours, clamped } = applyModifiersToHours(1, [
+      { laborAdjustmentPct: -1.5 },
+    ]);
     expect(hours).toBe(0);
     expect(clamped).toBe(true);
   });
 
   it("does not flag a clamp on ordinary modifiers", () => {
-    expect(applyModifiersToHours(1, [{ laborAdjustmentPct: 0.15 }]).clamped).toBe(false);
+    expect(
+      applyModifiersToHours(1, [{ laborAdjustmentPct: 0.15 }]).clamped
+    ).toBe(false);
   });
 
   it("rejects negative base hours", () => {
@@ -277,14 +311,26 @@ describe("line item direct cost", () => {
   });
 
   it("rejects negative quantity and negative labor rate", () => {
-    expect(() => calculateLineItem({ ...receptacle, quantity: -1 })).toThrow(/cannot be negative/);
-    expect(() => calculateLineItem({ ...receptacle, laborRate: -85 })).toThrow(/cannot be negative/);
+    expect(() => calculateLineItem({ ...receptacle, quantity: -1 })).toThrow(
+      /cannot be negative/
+    );
+    expect(() => calculateLineItem({ ...receptacle, laborRate: -85 })).toThrow(
+      /cannot be negative/
+    );
   });
 
   it("sums several lines into one direct cost", () => {
     const lines = [
-      calculateLineItem({ materials: [{ costPerUnit: 10, qty: 1 }], baseLaborHours: 1, laborRate: 50 }),
-      calculateLineItem({ materials: [{ costPerUnit: 20, qty: 2 }], baseLaborHours: 0.5, laborRate: 50 }),
+      calculateLineItem({
+        materials: [{ costPerUnit: 10, qty: 1 }],
+        baseLaborHours: 1,
+        laborRate: 50,
+      }),
+      calculateLineItem({
+        materials: [{ costPerUnit: 20, qty: 2 }],
+        baseLaborHours: 0.5,
+        laborRate: 50,
+      }),
     ];
     // (10 + 50) + (40 + 25)
     expect(sumDirectCost(lines)).toBe(125);
@@ -300,18 +346,24 @@ describe("overhead", () => {
   });
 
   it("applies a percentage of cost", () => {
-    expect(calculateOverhead(1000, { enabled: true, mode: "percentage", value: 0.1 })).toBe(100);
+    expect(
+      calculateOverhead(1000, { enabled: true, mode: "percentage", value: 0.1 })
+    ).toBe(100);
   });
 
   it("applies a flat amount regardless of cost", () => {
-    expect(calculateOverhead(1000, { enabled: true, mode: "flat", value: 250 })).toBe(250);
-    expect(calculateOverhead(50000, { enabled: true, mode: "flat", value: 250 })).toBe(250);
+    expect(
+      calculateOverhead(1000, { enabled: true, mode: "flat", value: 250 })
+    ).toBe(250);
+    expect(
+      calculateOverhead(50000, { enabled: true, mode: "flat", value: 250 })
+    ).toBe(250);
   });
 
   it("rejects a negative overhead value", () => {
-    expect(() => calculateOverhead(1000, { enabled: true, mode: "flat", value: -5 })).toThrow(
-      /cannot be negative/
-    );
+    expect(() =>
+      calculateOverhead(1000, { enabled: true, mode: "flat", value: -5 })
+    ).toThrow(/cannot be negative/);
   });
 });
 
@@ -352,12 +404,18 @@ describe("profit method is never interchangeable", () => {
   });
 
   it("rejects a margin of 100% or more, which has no finite price", () => {
-    expect(() => calculateProfit(100, { method: "margin", value: 1 })).toThrow(/margin must be below/i);
-    expect(() => calculateProfit(100, { method: "margin", value: 1.5 })).toThrow(/margin must be below/i);
+    expect(() => calculateProfit(100, { method: "margin", value: 1 })).toThrow(
+      /margin must be below/i
+    );
+    expect(() =>
+      calculateProfit(100, { method: "margin", value: 1.5 })
+    ).toThrow(/margin must be below/i);
   });
 
   it("rejects a negative profit value", () => {
-    expect(() => calculateProfit(100, { method: "markup", value: -0.1 })).toThrow(/cannot be negative/);
+    expect(() =>
+      calculateProfit(100, { method: "markup", value: -0.1 })
+    ).toThrow(/cannot be negative/);
   });
 
   it("rejects an unknown profit method", () => {
@@ -399,18 +457,34 @@ describe("full bid price pipeline", () => {
   });
 
   it("records which profit method produced the price", () => {
-    expect(calculateBidPrice({ directCost: 100, profit: { method: "margin", value: 0.2 } }).profitMethod).toBe("margin");
-    expect(calculateBidPrice({ directCost: 100, profit: { method: "markup", value: 0.2 } }).profitMethod).toBe("markup");
+    expect(
+      calculateBidPrice({
+        directCost: 100,
+        profit: { method: "margin", value: 0.2 },
+      }).profitMethod
+    ).toBe("margin");
+    expect(
+      calculateBidPrice({
+        directCost: 100,
+        profit: { method: "markup", value: 0.2 },
+      }).profitMethod
+    ).toBe("markup");
   });
 
   it("rejects a negative direct cost", () => {
     expect(() =>
-      calculateBidPrice({ directCost: -1, profit: { method: "markup", value: 0.2 } })
+      calculateBidPrice({
+        directCost: -1,
+        profit: { method: "markup", value: 0.2 },
+      })
     ).toThrow(/cannot be negative/);
   });
 
   it("handles a zero-cost bid without dividing by anything", () => {
-    const result = calculateBidPrice({ directCost: 0, profit: { method: "margin", value: 0.2 } });
+    const result = calculateBidPrice({
+      directCost: 0,
+      profit: { method: "margin", value: 0.2 },
+    });
     expect(result.finalPrice).toBe(0);
     expect(result.profitAmount).toBe(0);
   });
@@ -426,8 +500,12 @@ describe("breakdowns always reconcile to the cent", () => {
       profit: { method: "margin", value: 0.33 },
     });
 
-    expect(roundMoney(result.directCost + result.overheadAmount)).toBe(result.costWithOverhead);
-    expect(roundMoney(result.costWithOverhead + result.profitAmount)).toBe(result.finalPrice);
+    expect(roundMoney(result.directCost + result.overheadAmount)).toBe(
+      result.costWithOverhead
+    );
+    expect(roundMoney(result.costWithOverhead + result.profitAmount)).toBe(
+      result.finalPrice
+    );
   });
 
   it("reconciles across a spread of messy inputs", () => {
@@ -445,8 +523,12 @@ describe("breakdowns always reconcile to the cent", () => {
           profit,
         });
 
-        expect(roundMoney(result.directCost + result.overheadAmount)).toBe(result.costWithOverhead);
-        expect(roundMoney(result.costWithOverhead + result.profitAmount)).toBe(result.finalPrice);
+        expect(roundMoney(result.directCost + result.overheadAmount)).toBe(
+          result.costWithOverhead
+        );
+        expect(roundMoney(result.costWithOverhead + result.profitAmount)).toBe(
+          result.finalPrice
+        );
       }
     }
   });
@@ -464,9 +546,9 @@ describe("breakdowns always reconcile to the cent", () => {
     expect(toCents(result.directCost) + toCents(result.overheadAmount)).toBe(
       toCents(result.costWithOverhead)
     );
-    expect(toCents(result.costWithOverhead) + toCents(result.profitAmount)).toBe(
-      toCents(result.finalPrice)
-    );
+    expect(
+      toCents(result.costWithOverhead) + toCents(result.profitAmount)
+    ).toBe(toCents(result.finalPrice));
     expect(result.finalPrice).toBe(10.88);
   });
 
@@ -542,7 +624,9 @@ describe("priceLineItems end to end", () => {
 
     // 20% target margin -> 1226.50 / 0.8 = 1533.125 -> 1533.13
     expect(result.finalPrice).toBe(1533.13);
-    expect(result.costWithOverhead + result.profitAmount).toBe(result.finalPrice);
+    expect(result.costWithOverhead + result.profitAmount).toBe(
+      result.finalPrice
+    );
   });
 
   it("surfaces a clamped line so the UI can warn about bad modifiers", () => {

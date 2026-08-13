@@ -38,9 +38,12 @@ export function originKindOf(row: LibraryOrigin): OriginKind {
 /** What the badge says. Never "Starter" for something the user made. */
 export function originLabel(row: LibraryOrigin): string {
   switch (originKindOf(row)) {
-    case "starter": return "Starter";
-    case "fork": return "Your copy";
-    case "custom": return "Yours";
+    case "starter":
+      return "Starter";
+    case "fork":
+      return "Your copy";
+    case "custom":
+      return "Yours";
   }
 }
 
@@ -59,11 +62,16 @@ export function isOwnedByUser(row: LibraryOrigin): boolean {
  */
 export type LibraryScope = "all" | "mine";
 
-export function filterByScope<T extends LibraryOrigin>(rows: T[], scope: LibraryScope): T[] {
+export function filterByScope<T extends LibraryOrigin>(
+  rows: T[],
+  scope: LibraryScope
+): T[] {
   return scope === "mine" ? rows.filter(isOwnedByUser) : rows;
 }
 
 /** Counts for the scope control, so it can say how many "mine" would show. */
-export function scopeCounts<T extends LibraryOrigin>(rows: T[]): { all: number; mine: number } {
+export function scopeCounts<T extends LibraryOrigin>(
+  rows: T[]
+): { all: number; mine: number } {
   return { all: rows.length, mine: rows.filter(isOwnedByUser).length };
 }

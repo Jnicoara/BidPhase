@@ -60,7 +60,8 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
     id: "kits",
     label: "Kits",
     path: "#/library/kits",
-    purpose: "Groups of assemblies bundled together to drop onto a bid in one go.",
+    purpose:
+      "Groups of assemblies bundled together to drop onto a bid in one go.",
   },
   {
     id: "modifiers",
@@ -94,7 +95,8 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
     id: "dashboard",
     label: "Dashboard",
     path: "#/dashboard",
-    purpose: "The overview of recent bids and where things stand. The home screen.",
+    purpose:
+      "The overview of recent bids and where things stand. The home screen.",
   },
   {
     id: "material-database",
@@ -125,7 +127,9 @@ export const NAVIGATION_TARGET_IDS = NAVIGATION_TARGETS.map(t => t.id);
  * than a working link and a far better one than sending a lost user to a route
  * that does not exist.
  */
-export function resolveNavigationTarget(id: string | null | undefined): NavigationTarget | null {
+export function resolveNavigationTarget(
+  id: string | null | undefined
+): NavigationTarget | null {
   if (!id) return null;
   return BY_ID.get(id.trim()) ?? null;
 }

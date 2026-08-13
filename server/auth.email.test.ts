@@ -27,7 +27,9 @@ vi.mock("./_core/sdk", () => ({
   sdk: {
     createSessionToken: vi.fn(async () => "mock-session-token"),
     verifySession: vi.fn(async () => null),
-    authenticateRequest: vi.fn(async () => { throw new Error("No session"); }),
+    authenticateRequest: vi.fn(async () => {
+      throw new Error("No session");
+    }),
   },
 }));
 
@@ -36,9 +38,17 @@ vi.mock("./_core/sdk", () => ({
 import * as dbMod from "./db";
 import { appRouter } from "./routers";
 
-type SetCookieCall = { name: string; value: string; options: Record<string, unknown> };
+type SetCookieCall = {
+  name: string;
+  value: string;
+  options: Record<string, unknown>;
+};
 
-function makeCtx(): { ctx: TrpcContext; cookies: SetCookieCall[]; cleared: string[] } {
+function makeCtx(): {
+  ctx: TrpcContext;
+  cookies: SetCookieCall[];
+  cleared: string[];
+} {
   const cookies: SetCookieCall[] = [];
   const cleared: string[] = [];
   const ctx: TrpcContext = {
@@ -63,7 +73,8 @@ describe("auth.signup", () => {
     vi.mocked(dbMod.upsertUser).mockResolvedValue(undefined);
     vi.mocked(dbMod.getUserByEmail)
       .mockResolvedValueOnce(undefined) // first call: check existing
-      .mockResolvedValueOnce({          // second call: fetch after insert
+      .mockResolvedValueOnce({
+        // second call: fetch after insert
         id: 1,
         openId: "email_abc",
         email: "test@example.com",
@@ -113,7 +124,10 @@ describe("auth.signup", () => {
     const caller = appRouter.createCaller(ctx);
 
     await expect(
-      caller.auth.signup({ email: "existing@example.com", password: "Password1!" })
+      caller.auth.signup({
+        email: "existing@example.com",
+        password: "Password1!",
+      })
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 });
@@ -179,7 +193,10 @@ describe("auth.login", () => {
     const caller = appRouter.createCaller(ctx);
 
     await expect(
-      caller.auth.login({ email: "nobody@example.com", password: "anypassword" })
+      caller.auth.login({
+        email: "nobody@example.com",
+        password: "anypassword",
+      })
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 });

@@ -33,7 +33,8 @@ export function NavigationHelper({ className }: { className?: string }) {
     // sidebar is right there. Say so quietly rather than raising an error.
     onError: () =>
       setAnswer({
-        message: "Couldn't reach the helper just now. The sidebar has everything too.",
+        message:
+          "Couldn't reach the helper just now. The sidebar has everything too.",
         target: null,
       }),
   });
@@ -68,7 +69,11 @@ export function NavigationHelper({ className }: { className?: string }) {
           onClick={submit}
           disabled={ask.isPending || !question.trim()}
         >
-          {ask.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Ask"}
+          {ask.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            "Ask"
+          )}
         </Button>
       </div>
 

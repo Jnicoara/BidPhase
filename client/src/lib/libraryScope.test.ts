@@ -109,7 +109,10 @@ describe("filtering a library by scope", () => {
   });
 
   it("returns nothing on Mine when the user has customised nothing", () => {
-    const onlyStarters = [{ id: 1, ...STARTER }, { id: 2, ...STARTER }];
+    const onlyStarters = [
+      { id: 1, ...STARTER },
+      { id: 2, ...STARTER },
+    ];
     expect(filterByScope(onlyStarters, "mine")).toEqual([]);
     expect(scopeCounts(onlyStarters)).toEqual({ all: 2, mine: 0 });
   });

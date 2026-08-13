@@ -87,7 +87,9 @@ const NAVIGATE_TOOL: Tool = {
 };
 
 function systemPrompt(): string {
-  const screens = NAVIGATION_TARGETS.map(t => `- ${t.id} (${t.label}): ${t.purpose}`).join("\n");
+  const screens = NAVIGATION_TARGETS.map(
+    t => `- ${t.id} (${t.label}): ${t.purpose}`
+  ).join("\n");
   return [
     "You help a contractor find their way around an electrical estimating app.",
     "",
@@ -172,7 +174,10 @@ export const navigationRouter = router({
           args = JSON.parse(call.function.arguments || "{}");
         } catch {
           // Malformed arguments are the model's problem, not the user's.
-          return fallbackAfter("tool arguments were not valid JSON", call.function.arguments);
+          return fallbackAfter(
+            "tool arguments were not valid JSON",
+            call.function.arguments
+          );
         }
 
         // The gate. An id outside the list resolves to null and the answer
@@ -180,7 +185,9 @@ export const navigationRouter = router({
         // sent somewhere that does not exist.
         const target = resolveNavigationTarget(args.target);
         if (!target) {
-          return fallbackAfter(`model named an unknown target "${args.target}"`);
+          return fallbackAfter(
+            `model named an unknown target "${args.target}"`
+          );
         }
 
         return {
@@ -189,7 +196,8 @@ export const navigationRouter = router({
         };
       }
 
-      const text = typeof choice?.content === "string" ? choice.content.trim() : "";
+      const text =
+        typeof choice?.content === "string" ? choice.content.trim() : "";
       if (text) return { message: text, target: null };
 
       // Reached the model, got neither a tool call nor prose. Rare, and worth

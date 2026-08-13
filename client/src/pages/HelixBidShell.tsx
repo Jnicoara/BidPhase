@@ -30,7 +30,12 @@
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import UnifiedProjects, { CivilIcon, CommercialIcon, ResidentialIcon, IndustrialIcon } from "@/components/tabs/UnifiedProjects";
+import UnifiedProjects, {
+  CivilIcon,
+  CommercialIcon,
+  ResidentialIcon,
+  IndustrialIcon,
+} from "@/components/tabs/UnifiedProjects";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import MaterialListPage from "@/pages/MaterialListPage";
 import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
@@ -52,7 +57,21 @@ import BidArchivePage from "@/pages/BidArchivePage";
 import KitsPage from "@/pages/KitsPage";
 import FirstRunPage from "@/pages/FirstRunPage";
 import { trpc } from "@/lib/trpc";
-import { Settings, ChevronRight, Database, Package, Shield, Boxes, HardHat, SlidersHorizontal, Layers, FileText, Zap, LayoutDashboard, Archive as ArchiveIcon } from "lucide-react";
+import {
+  Settings,
+  ChevronRight,
+  Database,
+  Package,
+  Shield,
+  Boxes,
+  HardHat,
+  SlidersHorizontal,
+  Layers,
+  FileText,
+  Zap,
+  LayoutDashboard,
+  Archive as ArchiveIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@shared/version";
 
@@ -85,7 +104,11 @@ type Route =
 
 // ── Path ↔ Route mapping ────────────────────────────────────────────────────
 function pathToRoute(path: string): { route: Route; projectId?: number } {
-  const full = path.replace(/^#\/?/, "").replace(/^\//, "").split("?")[0].split("#")[0];
+  const full = path
+    .replace(/^#\/?/, "")
+    .replace(/^\//, "")
+    .split("?")[0]
+    .split("#")[0];
   const parts = full.split("/");
   const p = parts[0];
 
@@ -128,7 +151,8 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
     if (parts[1] === "modifiers") return { route: "library-modifiers" };
     if (parts[1] === "assemblies") return { route: "library-assemblies" };
     if (parts[1] === "kits") return { route: "library-kits" };
-    if (!parts[1] || parts[1] === "materials") return { route: "library-materials" };
+    if (!parts[1] || parts[1] === "materials")
+      return { route: "library-materials" };
   }
   if (p === "admin") return { route: "admin" };
   // Default: show homepage
@@ -143,19 +167,22 @@ function getCurrentRouteState(): { route: Route; projectId?: number } {
 
 export default function HelixBidShell() {
   const {
-    activeTab, setActiveTab,
+    activeTab,
+    setActiveTab,
     uiFontScale,
     setShowMaterialList,
-    activeCategory, setActiveCategory,
+    activeCategory,
+    setActiveCategory,
   } = useApp();
 
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
   // ── URL-based routing using hash ──────────────────────────────────────────
-  const [routeState, setRouteState] = useState<{ route: Route; projectId?: number }>(
-    () => getCurrentRouteState()
-  );
+  const [routeState, setRouteState] = useState<{
+    route: Route;
+    projectId?: number;
+  }>(() => getCurrentRouteState());
   const [previousRoute, setPreviousRoute] = useState<Route>("home");
 
   const { route, projectId: activeProjectId } = routeState;
@@ -204,7 +231,12 @@ export default function HelixBidShell() {
         return state;
       });
       const r = state.route;
-      if (r === "civil" || r === "commercial" || r === "residential" || r === "industrial") {
+      if (
+        r === "civil" ||
+        r === "commercial" ||
+        r === "residential" ||
+        r === "industrial"
+      ) {
         setActiveCategory(r);
         setActiveTab("projects");
       } else if (r === "settings") {
@@ -225,27 +257,31 @@ export default function HelixBidShell() {
   }, [setActiveCategory, setActiveTab, setShowMaterialList]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
-  const isOnHome          = route === "home";
-  const isOnDashboard     = route === "dashboard";
+  const isOnHome = route === "home";
+  const isOnDashboard = route === "dashboard";
   const isOnProjectDetail = route === "project-detail";
-  const isInCategory      = route === "civil" || route === "commercial" || route === "residential" || route === "industrial";
-  const isInSettings      = route === "settings";
-  const isInTrash         = route === "trash";
-  const isInEstimate      = route === "estimate";
-  const isInMaterial      = route === "material";
-  const isInMatDb         = route === "matdb";
-  const isInAssemblies    = route === "assemblies";
-  const isInLibraryMats   = route === "library-materials";
-  const isInLaborRates    = route === "library-labor-rates";
-  const isInModifiers     = route === "library-modifiers";
-  const isInLibraryAsms   = route === "library-assemblies";
-  const isInLibraryKits   = route === "library-kits";
-  const isInBids          = route === "bids";
-  const isInTakeoff       = route === "takeoff";
-  const isInBidArchive    = route === "bid-archive";
-  const isInQuickBid      = route === "quickbid";
-  const isOnWelcome       = route === "welcome";
-  const isInAdmin         = route === "admin";
+  const isInCategory =
+    route === "civil" ||
+    route === "commercial" ||
+    route === "residential" ||
+    route === "industrial";
+  const isInSettings = route === "settings";
+  const isInTrash = route === "trash";
+  const isInEstimate = route === "estimate";
+  const isInMaterial = route === "material";
+  const isInMatDb = route === "matdb";
+  const isInAssemblies = route === "assemblies";
+  const isInLibraryMats = route === "library-materials";
+  const isInLaborRates = route === "library-labor-rates";
+  const isInModifiers = route === "library-modifiers";
+  const isInLibraryAsms = route === "library-assemblies";
+  const isInLibraryKits = route === "library-kits";
+  const isInBids = route === "bids";
+  const isInTakeoff = route === "takeoff";
+  const isInBidArchive = route === "bid-archive";
+  const isInQuickBid = route === "quickbid";
+  const isOnWelcome = route === "welcome";
+  const isInAdmin = route === "admin";
 
   /**
    * Send a brand-new account to the welcome screen instead of the Dashboard.
@@ -276,33 +312,42 @@ export default function HelixBidShell() {
 
   // ── Content renderer ───────────────────────────────────────────────────────
   const renderContent = () => {
-    if (isInMaterial)       return <MaterialListPage onBack={closeMaterialList} />;
-    if (isInMatDb)          return <MaterialDatabasePage onBack={goBack} />;
-    if (isOnHome)           return <HelixBidHomePage onGoToProjects={() => navigate("dashboard")} />;
-    if (isOnDashboard)      return (
-      <DashboardPage
-        onOpenBid={id => navigate("bids", id)}
-        onOpenArchive={() => navigate("bid-archive")}
-      />
-    );
-    if (isOnProjectDetail && activeProjectId) return (
-      <ProjectDetailPage
-        projectId={activeProjectId}
-        onBack={() => navigate("dashboard")}
-        onOpenMaterialList={openMaterialList}
-      />
-    );
-    if (isInTrash)       return <TrashPage onBack={goBack} />;
-    if (isInSettings)    return <SettingsTab onBack={goBack} />;
-    if (isInEstimate)    return <EstimateEnginePage onBack={goBack} />;
-    if (isInAssemblies)  return <AssemblyBuilderPage />;
+    if (isInMaterial) return <MaterialListPage onBack={closeMaterialList} />;
+    if (isInMatDb) return <MaterialDatabasePage onBack={goBack} />;
+    if (isOnHome)
+      return <HelixBidHomePage onGoToProjects={() => navigate("dashboard")} />;
+    if (isOnDashboard)
+      return (
+        <DashboardPage
+          onOpenBid={id => navigate("bids", id)}
+          onOpenArchive={() => navigate("bid-archive")}
+        />
+      );
+    if (isOnProjectDetail && activeProjectId)
+      return (
+        <ProjectDetailPage
+          projectId={activeProjectId}
+          onBack={() => navigate("dashboard")}
+          onOpenMaterialList={openMaterialList}
+        />
+      );
+    if (isInTrash) return <TrashPage onBack={goBack} />;
+    if (isInSettings) return <SettingsTab onBack={goBack} />;
+    if (isInEstimate) return <EstimateEnginePage onBack={goBack} />;
+    if (isInAssemblies) return <AssemblyBuilderPage />;
     if (isInLibraryMats) return <MaterialsLibraryPage />;
-    if (isInLaborRates)  return <LaborRatesPage />;
-    if (isInModifiers)   return <ModifiersPage />;
+    if (isInLaborRates) return <LaborRatesPage />;
+    if (isInModifiers) return <ModifiersPage />;
     if (isInLibraryAsms) return <AssembliesLibraryPage />;
     if (isInLibraryKits) return <KitsPage />;
     // Keyed on the id so a fresh /bids/:id remounts into that bid.
-    if (isInBids)        return <BidsPage key={activeProjectId ?? "list"} initialBidId={activeProjectId} />;
+    if (isInBids)
+      return (
+        <BidsPage
+          key={activeProjectId ?? "list"}
+          initialBidId={activeProjectId}
+        />
+      );
     if (isInTakeoff && activeProjectId) {
       return (
         <TakeoffPage
@@ -312,24 +357,30 @@ export default function HelixBidShell() {
         />
       );
     }
-    if (isInBidArchive)  return (
-      <BidArchivePage
-        onBack={() => navigate("dashboard")}
-        onOpenBid={id => navigate("bids", id)}
-      />
-    );
-    if (isInQuickBid)    return <QuickBidPage />;
-    if (isOnWelcome)     return <FirstRunPage />;
-    if (isInAdmin)       return <AdminSettingsPage />;
+    if (isInBidArchive)
+      return (
+        <BidArchivePage
+          onBack={() => navigate("dashboard")}
+          onOpenBid={id => navigate("bids", id)}
+        />
+      );
+    if (isInQuickBid) return <QuickBidPage />;
+    if (isOnWelcome) return <FirstRunPage />;
+    if (isInAdmin) return <AdminSettingsPage />;
     // Legacy category workspace
     return <UnifiedProjects category={currentCategory} />;
   };
 
-  const routeKey = route === "project-detail" ? `project-${activeProjectId}` : route;
+  const routeKey =
+    route === "project-detail" ? `project-${activeProjectId}` : route;
 
   // ── Sidebar nav item helper ────────────────────────────────────────────────
   const NavBtn = ({
-    onClick, isActive, icon: Icon, label, title,
+    onClick,
+    isActive,
+    icon: Icon,
+    label,
+    title,
   }: {
     onClick: () => void;
     isActive: boolean;
@@ -346,7 +397,10 @@ export default function HelixBidShell() {
         isActive ? "bp-tab-active text-foreground" : "text-muted-foreground"
       )}
     >
-      <Icon size={20} className={cn("shrink-0", isActive ? "text-[#F5C518]" : "")} />
+      <Icon
+        size={20}
+        className={cn("shrink-0", isActive ? "text-[#F5C518]" : "")}
+      />
       <span
         className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 truncate text-xs"
         style={{ fontFamily: "'Space Grotesk', sans-serif" }}
@@ -371,7 +425,8 @@ export default function HelixBidShell() {
    * daily tools from building blocks from things they touch twice a year.
    */
   const NavSection = ({
-    label, children,
+    label,
+    children,
   }: {
     label: string;
     children: React.ReactNode;
@@ -396,7 +451,10 @@ export default function HelixBidShell() {
   );
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background" style={{ zoom: uiFontScale }}>
+    <div
+      className="flex h-screen w-screen overflow-hidden bg-background"
+      style={{ zoom: uiFontScale }}
+    >
       {/* ── Desktop Sidebar ─────────────────────────────────────── */}
       <aside
         className="hidden md:flex flex-col shrink-0 w-16 hover:w-56 transition-[width] duration-200 ease-out
@@ -418,7 +476,8 @@ export default function HelixBidShell() {
             className="font-bold text-base whitespace-nowrap hidden group-hover:block transition-opacity duration-150"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
           >
-            <span className="text-foreground">Helix</span><span className="text-[#F5C518]">Bid</span>
+            <span className="text-foreground">Helix</span>
+            <span className="text-[#F5C518]">Bid</span>
           </span>
         </div>
 
@@ -554,9 +613,7 @@ export default function HelixBidShell() {
 
         {/* Version tag */}
         <div className="px-3 py-2 border-t border-sidebar-border shrink-0">
-          <span
-            className="text-[10px] text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 font-mono"
-          >
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 font-mono">
             {APP_VERSION_LABEL}
           </span>
         </div>
@@ -576,26 +633,33 @@ export default function HelixBidShell() {
           <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground font-mono">
             <ChevronRight size={12} />
             <span className="capitalize">
-              {isOnHome          ? "Home"
-                : isOnDashboard      ? "Dashboard"
-                : isOnProjectDetail  ? "Project"
-                : isInTrash          ? "Trash"
-                : isInSettings       ? "Settings"
-                : isInEstimate       ? "Estimate Engine"
-                : isInMaterial       ? "Labor & Material"
-                : isInAssemblies     ? "Assembly Builder"
-                : isInLibraryMats    ? "Materials"
-                : isInAdmin          ? "Admin Settings"
-                : "Workspace"}
+              {isOnHome
+                ? "Home"
+                : isOnDashboard
+                  ? "Dashboard"
+                  : isOnProjectDetail
+                    ? "Project"
+                    : isInTrash
+                      ? "Trash"
+                      : isInSettings
+                        ? "Settings"
+                        : isInEstimate
+                          ? "Estimate Engine"
+                          : isInMaterial
+                            ? "Labor & Material"
+                            : isInAssemblies
+                              ? "Assembly Builder"
+                              : isInLibraryMats
+                                ? "Materials"
+                                : isInAdmin
+                                  ? "Admin Settings"
+                                  : "Workspace"}
             </span>
           </div>
         </header>
 
         {/* Tab content */}
-        <div
-          className="flex-1 overflow-hidden tab-enter"
-          key={routeKey}
-        >
+        <div className="flex-1 overflow-hidden tab-enter" key={routeKey}>
           {renderContent()}
         </div>
       </main>
@@ -616,13 +680,40 @@ export default function HelixBidShell() {
         className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex bg-sidebar border-t border-border"
         aria-label="Main"
       >
-        {([
-          { label: "Dashboard", icon: LayoutDashboard, active: isOnDashboard || isOnProjectDetail, go: () => navigate("dashboard") },
-          { label: "Quick bid", icon: Zap, active: isInQuickBid, go: () => navigate("quickbid") },
-          { label: "Bids", icon: FileText, active: isInBids || isInTakeoff, go: () => navigate("bids") },
-          { label: "Materials", icon: Boxes, active: isInLibraryMats, go: () => navigate("library-materials") },
-          { label: "Settings", icon: Settings, active: isInSettings, go: () => navigate("settings") },
-        ] as const).map(item => (
+        {(
+          [
+            {
+              label: "Dashboard",
+              icon: LayoutDashboard,
+              active: isOnDashboard || isOnProjectDetail,
+              go: () => navigate("dashboard"),
+            },
+            {
+              label: "Quick bid",
+              icon: Zap,
+              active: isInQuickBid,
+              go: () => navigate("quickbid"),
+            },
+            {
+              label: "Bids",
+              icon: FileText,
+              active: isInBids || isInTakeoff,
+              go: () => navigate("bids"),
+            },
+            {
+              label: "Materials",
+              icon: Boxes,
+              active: isInLibraryMats,
+              go: () => navigate("library-materials"),
+            },
+            {
+              label: "Settings",
+              icon: Settings,
+              active: isInSettings,
+              go: () => navigate("settings"),
+            },
+          ] as const
+        ).map(item => (
           <button
             key={item.label}
             onClick={item.go}
@@ -633,7 +724,10 @@ export default function HelixBidShell() {
               item.active ? "text-[#F5C518]" : "text-muted-foreground"
             )}
           >
-            <item.icon size={18} className={item.active ? "text-[#F5C518]" : ""} />
+            <item.icon
+              size={18}
+              className={item.active ? "text-[#F5C518]" : ""}
+            />
             {item.active && (
               <span className="absolute top-0 left-0 right-0 h-0.5 bg-[#F5C518] rounded-b" />
             )}

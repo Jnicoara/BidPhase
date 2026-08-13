@@ -72,7 +72,9 @@ const track: BaselineMaterial[] = [
   {
     ...fixture,
     name: "Track light head",
-    searchAliases: aliases("fixture lamp holder gimbal spot can par gu10 accent rail"),
+    searchAliases: aliases(
+      "fixture lamp holder gimbal spot can par gu10 accent rail"
+    ),
     // Several heads to a section is the normal case, so the builder should not
     // start at one and make the estimator correct it every time.
     defaultQty: 4,

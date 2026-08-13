@@ -27,7 +27,13 @@ import {
   seedBaselineMaterials,
   seedBaselineModifiers,
 } from "./db";
-import { assemblies, bids, laborRates, pricingDefaults, users } from "../drizzle/schema";
+import {
+  assemblies,
+  bids,
+  laborRates,
+  pricingDefaults,
+  users,
+} from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
 import {
   applyProductivityToHours,
@@ -126,7 +132,10 @@ describe("productivity factor", () => {
 
 describe("resolving productivity between company and bid", () => {
   it("inherits the company factor when the bid says nothing", () => {
-    const settings = resolveBidPricingSettings({ ...COMPANY, productivityPct: 0.15 }, {});
+    const settings = resolveBidPricingSettings(
+      { ...COMPANY, productivityPct: 0.15 },
+      {}
+    );
     expect(settings.productivityPct).toBeCloseTo(0.15, 10);
     expect(settings.productivitySource).toBe("company");
   });
@@ -153,7 +162,13 @@ describe("resolving productivity between company and bid", () => {
 
   it("resolves on its own, without disturbing overhead or profit", () => {
     const settings = resolveBidPricingSettings(
-      { ...COMPANY, overheadEnabled: true, overheadValue: 0.1, profitValue: 0.2, productivityPct: 0.15 },
+      {
+        ...COMPANY,
+        overheadEnabled: true,
+        overheadValue: 0.1,
+        profitValue: 0.2,
+        productivityPct: 0.15,
+      },
       { productivityPct: 0.5 }
     );
     expect(settings.productivitySource).toBe("bid");
@@ -169,10 +184,16 @@ describe.skipIf(!hasDb)("changing a company default", () => {
 
   beforeAll(async () => {
     const db = await getDb();
-    const [existing] = await db!.select().from(users).where(eq(users.id, USER)).limit(1);
+    const [existing] = await db!
+      .select()
+      .from(users)
+      .where(eq(users.id, USER))
+      .limit(1);
     if (!existing) {
       await db!.insert(users).values({
-        id: USER, openId: `test-company-defaults-${USER}`, name: "Company defaults test user",
+        id: USER,
+        openId: `test-company-defaults-${USER}`,
+        name: "Company defaults test user",
       });
     }
     await seedBaselineMaterials();
@@ -191,15 +212,20 @@ describe.skipIf(!hasDb)("changing a company default", () => {
     // A priced material and a real rate, so the numbers below are not all zero.
     const material = await caller().materials.create({
       name: `Company defaults probe ${Date.now()}${Math.random()}`,
-      unitOfSale: "each", costPerUnit: 100, category: "Receptacles",
+      unitOfSale: "each",
+      costPerUnit: 100,
+      category: "Receptacles",
     });
     const rates = await caller().laborRates.list();
     const journeyman = await caller().laborRates.update({
-      id: rates.find(r => r.name === "Journeyman")!.id, hourlyCost: 50,
+      id: rates.find(r => r.name === "Journeyman")!.id,
+      hourlyCost: 50,
     });
     const created = await caller().assemblies.create({
       name: `Company defaults assembly ${Date.now()}${Math.random()}`,
-      category: "Devices", trade: "electrical", projectType: null,
+      category: "Devices",
+      trade: "electrical",
+      projectType: null,
       baseLaborHours: 2,
       laborRateId: journeyman.laborRate!.id,
       materials: [{ materialId: material!.id, qty: 1 }],
@@ -225,8 +251,11 @@ describe.skipIf(!hasDb)("changing a company default", () => {
     const line = before.lines[0];
 
     await caller().bids.setPricingDefaults({
-      overheadEnabled: true, overheadMode: "percentage", overheadValue: 0.25,
-      profitMethod: "margin", profitValue: 0.3,
+      overheadEnabled: true,
+      overheadMode: "percentage",
+      overheadValue: 0.25,
+      profitMethod: "margin",
+      profitValue: 0.3,
       productivityPct: 0.5,
     });
 
@@ -252,7 +281,8 @@ describe.skipIf(!hasDb)("changing a company default", () => {
     const after = await caller().bids.get({ id: bid.id });
     expect(after.settings.productivitySource).toBe("company");
     expect(after.totals.totalLaborHours).toBeCloseTo(
-      before.totals.totalLaborHours * 1.5, 4
+      before.totals.totalLaborHours * 1.5,
+      4
     );
     expect(after.totals.directCost).toBeGreaterThan(before.totals.directCost);
   });
@@ -289,7 +319,8 @@ describe.skipIf(!hasDb)("changing a company default", () => {
     expect(detail.totals.laborHoursBeforeProductivity).toBeCloseTo(2, 4);
     expect(detail.totals.totalLaborHours).toBeCloseTo(2.5, 4);
     expect(detail.totals.totalLaborHours).toBeCloseTo(
-      detail.totals.laborHoursBeforeProductivity * 1.25, 4
+      detail.totals.laborHoursBeforeProductivity * 1.25,
+      4
     );
   });
 
@@ -300,7 +331,8 @@ describe.skipIf(!hasDb)("changing a company default", () => {
     const detail = await caller().bids.get({ id: bid.id });
     expect(detail.settings.productivityPct).toBe(0);
     expect(detail.totals.laborHoursBeforeProductivity).toBeCloseTo(
-      detail.totals.totalLaborHours, 6
+      detail.totals.totalLaborHours,
+      6
     );
   });
 
@@ -308,7 +340,8 @@ describe.skipIf(!hasDb)("changing a company default", () => {
     // hoursAfterModifiers is per-unit on the engine's breakdown; the total has
     // to multiply it out or the comparison is wrong by the line quantity.
     const bid = await caller().bids.create({
-      name: `Qty bid ${Date.now()}${Math.random()}`, trades: ["electrical"],
+      name: `Qty bid ${Date.now()}${Math.random()}`,
+      trades: ["electrical"],
     });
     await caller().bids.addAssembly({ bidId: bid!.id, assemblyId, qty: 3 });
     await caller().bids.setPricingDefaults({ productivityPct: 0.5 });
@@ -323,13 +356,17 @@ describe.skipIf(!hasDb)("changing a company default", () => {
     const before = await caller().bids.get({ id: bid.id });
 
     await caller().bids.setPricingDefaults({
-      overheadEnabled: true, overheadMode: "percentage", overheadValue: 0.1,
+      overheadEnabled: true,
+      overheadMode: "percentage",
+      overheadValue: 0.1,
     });
 
     const after = await caller().bids.get({ id: bid.id });
     // Direct cost is the sum of the snapshots, so it must not move at all —
     // overhead applies on top of it, not inside it.
     expect(after.totals.directCost).toBeCloseTo(before.totals.directCost, 4);
-    expect(after.totals.costWithOverhead).toBeGreaterThan(before.totals.costWithOverhead);
+    expect(after.totals.costWithOverhead).toBeGreaterThan(
+      before.totals.costWithOverhead
+    );
   });
 });

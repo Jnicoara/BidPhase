@@ -73,28 +73,32 @@ export function buildChecklist(facts: OnboardingFacts): OnboardingStep[] {
     {
       id: "labor-rates",
       title: "Set your labor rates",
-      detail: "Every hour on every bid is priced from these, so nothing else is right until they are.",
+      detail:
+        "Every hour on every bid is priced from these, so nothing else is right until they are.",
       href: "#/library/labor-rates",
       done: facts.hasRealLaborRate,
     },
     {
       id: "price-material",
       title: "Price your first material",
-      detail: "Start with what you buy most. The rest can wait until a job needs them.",
+      detail:
+        "Start with what you buy most. The rest can wait until a job needs them.",
       href: "#/library/materials",
       done: facts.hasPricedMaterial,
     },
     {
       id: "build-assembly",
       title: "Build your first assembly",
-      detail: "A receptacle, a switch — the things you install over and over, priced once.",
+      detail:
+        "A receptacle, a switch — the things you install over and over, priced once.",
       href: "#/library/assemblies",
       done: facts.hasOwnAssembly,
     },
     {
       id: "complete-bid",
       title: "Complete your first bid",
-      detail: "Put the pieces together on a real job and see the number come out.",
+      detail:
+        "Put the pieces together on a real job and see the number come out.",
       href: "#/quickbid",
       done: facts.hasBidWithLines,
     },

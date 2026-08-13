@@ -44,10 +44,10 @@ describe("never aliasing one material to another", () => {
 
   it("refuses a suggestion containing a distinctive word from another material", () => {
     // "plate" alone does the same damage as the full phrase.
-    const kept = filterAliasSuggestions(
-      ["plug", "cover plate"],
-      { name: "Duplex receptacle", otherMaterialNames: CATALOG }
-    );
+    const kept = filterAliasSuggestions(["plug", "cover plate"], {
+      name: "Duplex receptacle",
+      otherMaterialNames: CATALOG,
+    });
     expect(kept).not.toContain("cover plate");
   });
 
@@ -55,24 +55,28 @@ describe("never aliasing one material to another", () => {
     // "receptacle" appears in other catalog names too, but it is this
     // material's own word — treating that as a collision would strip
     // legitimate aliases from every similarly-named item.
-    const kept = filterAliasSuggestions(
-      ["receptacle outlet"],
-      { name: "Duplex receptacle", otherMaterialNames: CATALOG }
-    );
+    const kept = filterAliasSuggestions(["receptacle outlet"], {
+      name: "Duplex receptacle",
+      otherMaterialNames: CATALOG,
+    });
     expect(kept).toContain("receptacle outlet");
   });
 
   it("still filters when no catalog is supplied", () => {
     // A missing catalog must not turn the safety rule into a silent no-op that
     // waves everything through.
-    const kept = filterAliasSuggestions(["duplex", "plug"], { name: "Duplex receptacle" });
+    const kept = filterAliasSuggestions(["duplex", "plug"], {
+      name: "Duplex receptacle",
+    });
     expect(kept).toEqual(["plug"]);
   });
 });
 
 describe("not wasting the reviewer's attention", () => {
   it("drops terms already in the material's name", () => {
-    const kept = filterAliasSuggestions(["dimmer", "rheostat"], { name: "Dimmer" });
+    const kept = filterAliasSuggestions(["dimmer", "rheostat"], {
+      name: "Dimmer",
+    });
     expect(kept).toEqual(["rheostat"]);
   });
 
@@ -118,7 +122,9 @@ describe("not wasting the reviewer's attention", () => {
 
   it("caps how many come back", () => {
     const many = Array.from({ length: 40 }, (_, i) => `term${i}`);
-    expect(filterAliasSuggestions(many, { name: "Thing", limit: 5 })).toHaveLength(5);
+    expect(
+      filterAliasSuggestions(many, { name: "Thing", limit: 5 })
+    ).toHaveLength(5);
   });
 
   it("keeps a useful set for a real material", () => {
@@ -147,8 +153,9 @@ describe("reading the words of a name", () => {
 
 describe("merging what the user accepted", () => {
   it("appends to existing aliases without duplicating", () => {
-    expect(mergeAliases("gem box", ["switch box", "gem box"]))
-      .toBe("gem box switch box");
+    expect(mergeAliases("gem box", ["switch box", "gem box"])).toBe(
+      "gem box switch box"
+    );
   });
 
   it("keeps the user's own words first", () => {
@@ -167,16 +174,23 @@ describe("merging what the user accepted", () => {
 
 describe("reading the model's reply", () => {
   it("parses a plain JSON array", () => {
-    expect(parseAliasResponse('["plug", "outlet"]')).toEqual(["plug", "outlet"]);
+    expect(parseAliasResponse('["plug", "outlet"]')).toEqual([
+      "plug",
+      "outlet",
+    ]);
   });
 
   it("parses one wrapped in a code fence", () => {
-    expect(parseAliasResponse('```json\n["plug","outlet"]\n```')).toEqual(["plug", "outlet"]);
+    expect(parseAliasResponse('```json\n["plug","outlet"]\n```')).toEqual([
+      "plug",
+      "outlet",
+    ]);
   });
 
   it("parses one with a sentence around it", () => {
-    expect(parseAliasResponse('Sure! Here you go:\n["plug"]\nHope that helps.'))
-      .toEqual(["plug"]);
+    expect(
+      parseAliasResponse('Sure! Here you go:\n["plug"]\nHope that helps.')
+    ).toEqual(["plug"]);
   });
 
   it("invents nothing from unparseable output", () => {
@@ -188,7 +202,10 @@ describe("reading the model's reply", () => {
   });
 
   it("drops non-string entries rather than coercing them", () => {
-    expect(parseAliasResponse('["plug", 42, null, "outlet"]')).toEqual(["plug", "outlet"]);
+    expect(parseAliasResponse('["plug", 42, null, "outlet"]')).toEqual([
+      "plug",
+      "outlet",
+    ]);
   });
 });
 

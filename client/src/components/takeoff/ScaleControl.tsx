@@ -31,7 +31,11 @@ import { Check, Ruler, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { COMMON_SCALES, parseScaleText } from "@shared/planScale";
 
 const FLASH_MS = 1100;
@@ -45,7 +49,12 @@ export type ScaleSheet = {
   detectedScaleText: string | null;
 };
 
-export function ScaleControl({ sheet, onSet, onClear, notToScale }: {
+export function ScaleControl({
+  sheet,
+  onSet,
+  onClear,
+  notToScale,
+}: {
   sheet: ScaleSheet;
   onSet: (scaleText: string) => void;
   onClear: () => void;
@@ -58,9 +67,12 @@ export function ScaleControl({ sheet, onSet, onClear, notToScale }: {
   const flashTimer = useRef<number | null>(null);
   const isSet = sheet.scaleRatio !== null;
 
-  useEffect(() => () => {
-    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    },
+    []
+  );
 
   const showFlash = () => {
     setFlash(true);
@@ -71,13 +83,22 @@ export function ScaleControl({ sheet, onSet, onClear, notToScale }: {
   /** Commit the typed scale. Unreadable or unchanged input writes nothing. */
   const commit = () => {
     const text = draft.trim();
-    if (!text) { setDraft(""); return; }
+    if (!text) {
+      setDraft("");
+      return;
+    }
     const parsed = parseScaleText(text);
     // Invalid reverts rather than erroring — there is nowhere here to put a
     // message, and leaving a bad draft on screen is how someone comes to
     // believe they set a scale they did not.
-    if (!parsed) { setDraft(""); return; }
-    if (parsed.text === sheet.scaleText) { setDraft(""); return; }
+    if (!parsed) {
+      setDraft("");
+      return;
+    }
+    if (parsed.text === sheet.scaleText) {
+      setDraft("");
+      return;
+    }
     onSet(text);
     setDraft("");
     showFlash();
@@ -92,14 +113,21 @@ export function ScaleControl({ sheet, onSet, onClear, notToScale }: {
 
   return (
     <div className="flex items-center gap-1.5">
-      <Popover open={open} onOpenChange={next => { setOpen(next); if (!next) setDraft(""); }}>
+      <Popover
+        open={open}
+        onOpenChange={next => {
+          setOpen(next);
+          if (!next) setDraft("");
+        }}
+      >
         <PopoverTrigger asChild>
           <Button
             size="sm"
             variant="ghost"
             className={cn(
               "h-7 gap-1.5 text-xs transition-colors",
-              flash && "border border-emerald-500 bg-emerald-500/10 text-emerald-300",
+              flash &&
+                "border border-emerald-500 bg-emerald-500/10 text-emerald-300",
               !isSet && !flash && "text-[#F5C518] hover:text-[#F5C518]"
             )}
             title="Set the drawing scale for this sheet"
@@ -119,7 +147,8 @@ export function ScaleControl({ sheet, onSet, onClear, notToScale }: {
           <div>
             <div className="text-sm font-medium">Scale for {sheet.name}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Stored for this sheet alone — other sheets in the same PDF keep their own.
+              Stored for this sheet alone — other sheets in the same PDF keep
+              their own.
             </p>
           </div>
 
@@ -129,8 +158,10 @@ export function ScaleControl({ sheet, onSet, onClear, notToScale }: {
             <div className="rounded-lg border border-[#F5C518]/40 bg-[#F5C518]/5 p-2.5">
               <p className="text-xs text-muted-foreground">
                 This sheet mentions{" "}
-                <span className="font-mono text-foreground">{sheet.detectedScaleText}</span>, but
-                not clearly enough to use it without asking.
+                <span className="font-mono text-foreground">
+                  {sheet.detectedScaleText}
+                </span>
+                , but not clearly enough to use it without asking.
               </p>
               <Button
                 size="sm"
@@ -144,20 +175,26 @@ export function ScaleControl({ sheet, onSet, onClear, notToScale }: {
 
           {notToScale && !isSet && (
             <p className="text-xs text-muted-foreground">
-              This sheet is marked <span className="text-foreground">not to scale</span>. Set one
+              This sheet is marked{" "}
+              <span className="text-foreground">not to scale</span>. Set one
               only if you intend to measure against it anyway.
             </p>
           )}
 
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Type a scale</label>
+            <label className="text-xs text-muted-foreground">
+              Type a scale
+            </label>
             <Input
               value={draft}
               onChange={e => setDraft(e.target.value)}
               onFocus={selectOnFocus}
               onBlur={commit}
               onKeyDown={e => {
-                if (e.key === "Enter") { e.preventDefault(); commit(); }
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit();
+                }
                 if (e.key === "Escape") {
                   e.preventDefault();
                   e.stopPropagation();
@@ -176,7 +213,9 @@ export function ScaleControl({ sheet, onSet, onClear, notToScale }: {
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Or pick a common one</label>
+            <label className="text-xs text-muted-foreground">
+              Or pick a common one
+            </label>
             <div className="max-h-44 overflow-y-auto grid grid-cols-2 gap-1">
               {COMMON_SCALES.map(scale => (
                 <button
@@ -197,9 +236,13 @@ export function ScaleControl({ sheet, onSet, onClear, notToScale }: {
 
           {isSet && (
             <Button
-              size="sm" variant="ghost"
+              size="sm"
+              variant="ghost"
               className="h-7 w-full gap-1.5 text-xs text-muted-foreground"
-              onClick={() => { onClear(); setOpen(false); }}
+              onClick={() => {
+                onClear();
+                setOpen(false);
+              }}
             >
               <X className="w-3 h-3" /> Clear the scale
             </Button>

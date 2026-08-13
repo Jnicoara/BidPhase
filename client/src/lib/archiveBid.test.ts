@@ -33,7 +33,9 @@ describe("an accidental click cannot archive anything", () => {
   it("dismissing archives nothing", () => {
     // Escape, or a click outside the dialog. Both mean no, and both used to be
     // the only thing standing between a stray click and a vanished bid.
-    expect(resolveArchiveAnswer(PENDING, "dismiss")).toEqual({ action: "none" });
+    expect(resolveArchiveAnswer(PENDING, "dismiss")).toEqual({
+      action: "none",
+    });
   });
 
   it("confirming with nothing pending archives nothing", () => {
@@ -53,7 +55,10 @@ describe("an accidental click cannot archive anything", () => {
 
 describe("confirming archives the right bid", () => {
   it("returns an archive instruction carrying that bid's id", () => {
-    expect(resolveArchiveAnswer(PENDING, "confirm")).toEqual({ action: "archive", id: 42 });
+    expect(resolveArchiveAnswer(PENDING, "confirm")).toEqual({
+      action: "archive",
+      id: 42,
+    });
   });
 
   it("never returns a delete instruction — archive is the only outcome", () => {

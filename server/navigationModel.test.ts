@@ -53,18 +53,23 @@ describe("navigation helper model", () => {
     ).toContain(NAVIGATION_MODEL);
   });
 
-  it.skipIf(!hasGateway)("the gateway offers at least one Claude model", async () => {
-    // Separate from the check above so a failure says which problem it is: the
-    // id being wrong, or the gateway not carrying Claude at all. Those need
-    // completely different fixes and the distinction is invisible otherwise.
-    const models = await listLLMModels();
-    const claude = models.data.map(m => m.id).filter(id => id.toLowerCase().includes("claude"));
-
-    expect(
-      claude.length,
-      `This gateway offers no Claude models at all. Available ids:\n  ${models.data
+  it.skipIf(!hasGateway)(
+    "the gateway offers at least one Claude model",
+    async () => {
+      // Separate from the check above so a failure says which problem it is: the
+      // id being wrong, or the gateway not carrying Claude at all. Those need
+      // completely different fixes and the distinction is invisible otherwise.
+      const models = await listLLMModels();
+      const claude = models.data
         .map(m => m.id)
-        .join("\n  ")}`
-    ).toBeGreaterThan(0);
-  });
+        .filter(id => id.toLowerCase().includes("claude"));
+
+      expect(
+        claude.length,
+        `This gateway offers no Claude models at all. Available ids:\n  ${models.data
+          .map(m => m.id)
+          .join("\n  ")}`
+      ).toBeGreaterThan(0);
+    }
+  );
 });

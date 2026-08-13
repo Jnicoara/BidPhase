@@ -14,12 +14,18 @@ import { Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 
 export function DuplicateUnitPanel({
-  bidId, units, onDone,
+  bidId,
+  units,
+  onDone,
 }: {
   bidId: number;
   units: string[];
@@ -41,7 +47,9 @@ export function DuplicateUnitPanel({
         made === 0
           ? "Nothing generated — every label already existed."
           : `Generated ${made} cop${made === 1 ? "y" : "ies"}` +
-            (result.skipped.length ? `, skipped ${result.skipped.length} existing` : "")
+              (result.skipped.length
+                ? `, skipped ${result.skipped.length} existing`
+                : "")
       );
       onDone();
     },
@@ -50,8 +58,8 @@ export function DuplicateUnitPanel({
   if (units.length === 0) {
     return (
       <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
-        Give some line items a unit label (e.g. “Room 101”) to build a repeating unit, then you can
-        generate numbered copies of it here.
+        Give some line items a unit label (e.g. “Room 101”) to build a repeating
+        unit, then you can generate numbered copies of it here.
       </div>
     );
   }
@@ -63,9 +71,15 @@ export function DuplicateUnitPanel({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Select value={effectiveSource} onValueChange={setSource}>
-          <SelectTrigger className="h-8 w-44 text-sm" aria-label="Source unit"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-8 w-44 text-sm" aria-label="Source unit">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
-            {units.map(unit => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}
+            {units.map(unit => (
+              <SelectItem key={unit} value={unit}>
+                {unit}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">→</span>
@@ -94,19 +108,33 @@ export function DuplicateUnitPanel({
           aria-label="How many copies"
         />
         <Button
-          size="sm" className="h-8 gap-1.5 text-xs"
+          size="sm"
+          className="h-8 gap-1.5 text-xs"
           onClick={() => {
             const n = Number(count);
             const start = Number(startNumber);
-            if (!effectiveSource) { toast.error("Pick a unit to copy."); return; }
-            if (!baseName.trim()) { toast.error("Give the copies a name."); return; }
-            if (!Number.isInteger(n) || n < 1 || n > 200) {
-              toast.error("Choose between 1 and 200 copies."); return;
+            if (!effectiveSource) {
+              toast.error("Pick a unit to copy.");
+              return;
             }
-            if (!Number.isInteger(start) || start < 0) { toast.error("Start number must be a whole number."); return; }
+            if (!baseName.trim()) {
+              toast.error("Give the copies a name.");
+              return;
+            }
+            if (!Number.isInteger(n) || n < 1 || n > 200) {
+              toast.error("Choose between 1 and 200 copies.");
+              return;
+            }
+            if (!Number.isInteger(start) || start < 0) {
+              toast.error("Start number must be a whole number.");
+              return;
+            }
             duplicate.mutate({
-              bidId, sourceUnitLabel: effectiveSource, baseName: baseName.trim(),
-              startNumber: start, count: n,
+              bidId,
+              sourceUnitLabel: effectiveSource,
+              baseName: baseName.trim(),
+              startNumber: start,
+              count: n,
             });
           }}
         >
@@ -114,8 +142,9 @@ export function DuplicateUnitPanel({
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Copies are numbered from the start number and carry {effectiveSource || "the source"}’s frozen costs,
-        so every copy prices the same. Each one is independently editable afterwards.
+        Copies are numbered from the start number and carry{" "}
+        {effectiveSource || "the source"}’s frozen costs, so every copy prices
+        the same. Each one is independently editable afterwards.
       </p>
     </div>
   );

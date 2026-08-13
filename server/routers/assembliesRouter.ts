@@ -14,7 +14,11 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { ASSEMBLY_CATEGORIES, LIBRARY_STATUSES, PROJECT_TYPES } from "../../drizzle/schema";
+import {
+  ASSEMBLY_CATEGORIES,
+  LIBRARY_STATUSES,
+  PROJECT_TYPES,
+} from "../../drizzle/schema";
 import { calculateLineItem, calculateBidPrice } from "../../shared/pricing";
 import { hourlyCostOf, resolveLaborRate } from "../../shared/laborRateLookup";
 import * as db from "../db";
@@ -71,9 +75,16 @@ const toDecimal = (value: number) => value.toFixed(4);
 export const assembliesRouter = router({
   /** The working list, or the archive. Never returns `deleted` tombstones. */
   list: protectedProcedure
-    .input(z.object({
-      status: z.enum(LIBRARY_STATUSES).exclude(["deleted"]).default("active"),
-    }).optional())
+    .input(
+      z
+        .object({
+          status: z
+            .enum(LIBRARY_STATUSES)
+            .exclude(["deleted"])
+            .default("active"),
+        })
+        .optional()
+    )
     .query(async ({ input, ctx }) => {
       return db.getLibraryAssemblies(ctx.user.id, input?.status ?? "active");
     }),
@@ -83,7 +94,11 @@ export const assembliesRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const detail = await db.getAssemblyDetail(input.id, ctx.user.id);
-      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      if (!detail)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
       return detail;
     }),
 
@@ -91,7 +106,9 @@ export const assembliesRouter = router({
     .input(createSchema)
     .mutation(async ({ input, ctx }) => {
       const existing = await db.getLibraryAssemblies(ctx.user.id);
-      const clash = existing.find(a => a.name.toLowerCase() === input.name.toLowerCase());
+      const clash = existing.find(
+        a => a.name.toLowerCase() === input.name.toLowerCase()
+      );
       if (clash) {
         throw new TRPCError({
           code: "CONFLICT",
@@ -111,7 +128,10 @@ export const assembliesRouter = router({
 
       await db.setAssemblyMaterials(
         id,
-        input.materials.map(line => ({ materialId: line.materialId, qty: toDecimal(line.qty) }))
+        input.materials.map(line => ({
+          materialId: line.materialId,
+          qty: toDecimal(line.qty),
+        }))
       );
       await db.setAssemblyModifiers(id, input.modifierIds);
 
@@ -129,10 +149,16 @@ export const assembliesRouter = router({
       const { id, materials, modifierIds, ...rest } = input;
 
       const target = await db.getAssemblyById(id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
 
       const isBaseline = target.userId === null;
-      const editableId = isBaseline ? await db.forkAssembly(id, ctx.user.id) : id;
+      const editableId = isBaseline
+        ? await db.forkAssembly(id, ctx.user.id)
+        : id;
 
       const patch: Record<string, unknown> = {};
       if (rest.name !== undefined) patch.name = rest.name;
@@ -140,7 +166,8 @@ export const assembliesRouter = router({
       if (rest.trade !== undefined) patch.trade = rest.trade;
       if (rest.projectType !== undefined) patch.projectType = rest.projectType;
       if (rest.laborRateId !== undefined) patch.laborRateId = rest.laborRateId;
-      if (rest.baseLaborHours !== undefined) patch.baseLaborHours = toDecimal(rest.baseLaborHours);
+      if (rest.baseLaborHours !== undefined)
+        patch.baseLaborHours = toDecimal(rest.baseLaborHours);
 
       if (Object.keys(patch).length > 0) {
         await db.updateAssembly(editableId, ctx.user.id, patch);
@@ -151,7 +178,10 @@ export const assembliesRouter = router({
       if (materials !== undefined) {
         await db.setAssemblyMaterials(
           editableId,
-          materials.map(line => ({ materialId: line.materialId, qty: toDecimal(line.qty) }))
+          materials.map(line => ({
+            materialId: line.materialId,
+            qty: toDecimal(line.qty),
+          }))
         );
       }
       if (modifierIds !== undefined) {
@@ -167,8 +197,13 @@ export const assembliesRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getAssemblyById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
-      if (target.userId !== null) return db.getAssemblyDetail(input.id, ctx.user.id);
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
+      if (target.userId !== null)
+        return db.getAssemblyDetail(input.id, ctx.user.id);
 
       const forkId = await db.forkAssembly(input.id, ctx.user.id);
       return db.getAssemblyDetail(forkId, ctx.user.id);
@@ -186,7 +221,9 @@ export const assembliesRouter = router({
     .input(z.object({ id: z.number().int().positive(), name: nameSchema }))
     .mutation(async ({ input, ctx }) => {
       const existing = await db.getLibraryAssemblies(ctx.user.id);
-      const clash = existing.find(a => a.name.toLowerCase() === input.name.toLowerCase());
+      const clash = existing.find(
+        a => a.name.toLowerCase() === input.name.toLowerCase()
+      );
       if (clash) {
         throw new TRPCError({
           code: "CONFLICT",
@@ -204,12 +241,16 @@ export const assembliesRouter = router({
     .mutation(async ({ input, ctx }) => {
       const target = await db.getAssemblyById(input.id, ctx.user.id);
       if (!target || target.userId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
       }
       if (target.baselineId == null) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "This assembly was built from scratch, so there is no original to restore.",
+          message:
+            "This assembly was built from scratch, so there is no original to restore.",
         });
       }
 
@@ -226,14 +267,19 @@ export const assembliesRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getAssemblyById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
       if (target.userId === null) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Starter assemblies cannot be removed.",
         });
       }
-      if (target.status === "archived") return { id: input.id, alreadyArchived: true };
+      if (target.status === "archived")
+        return { id: input.id, alreadyArchived: true };
 
       const archivedId = await db.archiveAssembly(input.id, ctx.user.id);
       return { id: archivedId, alreadyArchived: false };
@@ -244,9 +290,16 @@ export const assembliesRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getAssemblyById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
       if (target.status !== "archived") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "That assembly is not archived." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That assembly is not archived.",
+        });
       }
       await db.restoreAssembly(input.id, ctx.user.id);
       return { success: true };
@@ -260,11 +313,16 @@ export const assembliesRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getAssemblyById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      if (!target)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
       if (target.status !== "archived") {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Only archived assemblies can be deleted permanently. Archive it first.",
+          message:
+            "Only archived assemblies can be deleted permanently. Archive it first.",
         });
       }
       await db.deleteAssemblyForever(input.id, ctx.user.id);
@@ -280,22 +338,32 @@ export const assembliesRouter = router({
    * never capture an unsaved draft.
    */
   price: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      quantity: z.number().min(0).max(100000).default(1),
-      overhead: z.object({
-        enabled: z.boolean(),
-        mode: z.enum(["percentage", "flat"]).default("percentage"),
-        value: z.number().min(0).default(0),
-      }).optional(),
-      profit: z.object({
-        method: z.enum(["markup", "margin"]),
-        value: z.number().min(0).max(0.99),
-      }).optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        quantity: z.number().min(0).max(100000).default(1),
+        overhead: z
+          .object({
+            enabled: z.boolean(),
+            mode: z.enum(["percentage", "flat"]).default("percentage"),
+            value: z.number().min(0).default(0),
+          })
+          .optional(),
+        profit: z
+          .object({
+            method: z.enum(["markup", "margin"]),
+            value: z.number().min(0).max(0.99),
+          })
+          .optional(),
+      })
+    )
     .query(async ({ input, ctx }) => {
       const detail = await db.getAssemblyDetail(input.id, ctx.user.id);
-      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "Assembly not found." });
+      if (!detail)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Assembly not found.",
+        });
 
       const [allModifiers, laborRates] = await Promise.all([
         db.getLibraryModifiers(ctx.user.id, "active"),
@@ -304,7 +372,10 @@ export const assembliesRouter = router({
 
       const applied = allModifiers
         .filter(m => detail.modifierIds.includes(m.id))
-        .map(m => ({ name: m.name, laborAdjustmentPct: Number(m.laborAdjustmentPct) }));
+        .map(m => ({
+          name: m.name,
+          laborAdjustmentPct: Number(m.laborAdjustmentPct),
+        }));
 
       // Follows a fork: editing a starter role gives it a new id, and the
       // assembly is still pointing at the old one. See shared/laborRateLookup.
@@ -328,7 +399,11 @@ export const assembliesRouter = router({
         ? calculateBidPrice({
             directCost: line.directCost,
             overhead: input.overhead?.enabled
-              ? { enabled: true, mode: input.overhead.mode, value: input.overhead.value }
+              ? {
+                  enabled: true,
+                  mode: input.overhead.mode,
+                  value: input.overhead.value,
+                }
               : { enabled: false },
             profit: input.profit,
           })

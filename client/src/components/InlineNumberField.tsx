@@ -21,7 +21,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-  commitNumericEdit, formatForEdit, planFieldKey, revertToSaved,
+  commitNumericEdit,
+  formatForEdit,
+  planFieldKey,
+  revertToSaved,
   type NumericFieldRules,
 } from "@/lib/inlineEdit";
 
@@ -76,9 +79,12 @@ export function InlineNumberField({
     setDraft(formatForEdit(value));
   }, [value]);
 
-  useEffect(() => () => {
-    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    },
+    []
+  );
 
   const showFlash = useCallback(() => {
     setFlash(true);
@@ -165,7 +171,9 @@ export function InlineNumberField({
           className
         )}
       />
-      {suffix && <span className="ml-1 text-xs text-muted-foreground">{suffix}</span>}
+      {suffix && (
+        <span className="ml-1 text-xs text-muted-foreground">{suffix}</span>
+      )}
       {/* Announce the save to assistive tech, which cannot see the colour. */}
       <span className="sr-only" role="status" aria-live="polite">
         {flash ? `${ariaLabel} saved` : ""}

@@ -36,7 +36,11 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { storagePresignPut } from "../storage";
-import { detectScaleFromText, isAutoApplicable, parseScaleText } from "../../shared/planScale";
+import {
+  detectScaleFromText,
+  isAutoApplicable,
+  parseScaleText,
+} from "../../shared/planScale";
 import { checkPdfUpload } from "../../shared/uploadLimits";
 import * as db from "../db";
 
@@ -45,13 +49,15 @@ const filenameSchema = z.string().trim().min(1).max(512);
 
 async function requireBid(bidId: number, userId: number) {
   const bid = await db.getBidById(bidId, userId);
-  if (!bid) throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
+  if (!bid)
+    throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
   return bid;
 }
 
 async function requirePdf(bidPdfId: number, userId: number) {
   const pdf = await db.getBidPdf(bidPdfId, userId);
-  if (!pdf) throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found." });
+  if (!pdf)
+    throw new TRPCError({ code: "NOT_FOUND", message: "Plan not found." });
   return pdf;
 }
 
@@ -109,15 +115,20 @@ export const bidPdfsRouter = router({
    * bounded before a signed URL is issued for it.
    */
   createUploadTicket: protectedProcedure
-    .input(z.object({
-      bidId: z.number().int().positive(),
-      filename: filenameSchema,
-      byteSize: z.number().int().min(1),
-    }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        filename: filenameSchema,
+        byteSize: z.number().int().min(1),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
 
-      const check = checkPdfUpload({ filename: input.filename, byteSize: input.byteSize });
+      const check = checkPdfUpload({
+        filename: input.filename,
+        byteSize: input.byteSize,
+      });
       if (!check.ok) {
         throw new TRPCError({ code: "BAD_REQUEST", message: check.message });
       }
@@ -139,16 +150,21 @@ export const bidPdfsRouter = router({
    * naming its key.
    */
   confirmAttach: protectedProcedure
-    .input(z.object({
-      bidId: z.number().int().positive(),
-      filename: filenameSchema,
-      storageKey: z.string().min(1).max(1024),
-      byteSize: z.number().int().min(1),
-    }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        filename: filenameSchema,
+        storageKey: z.string().min(1).max(1024),
+        byteSize: z.number().int().min(1),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
 
-      const check = checkPdfUpload({ filename: input.filename, byteSize: input.byteSize });
+      const check = checkPdfUpload({
+        filename: input.filename,
+        byteSize: input.byteSize,
+      });
       if (!check.ok) {
         throw new TRPCError({ code: "BAD_REQUEST", message: check.message });
       }
@@ -172,7 +188,11 @@ export const bidPdfsRouter = router({
       });
 
       const row = await db.getBidPdf(id, ctx.user.id);
-      if (!row) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Attach failed." });
+      if (!row)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Attach failed.",
+        });
       return toView(row);
     }),
 
@@ -183,13 +203,16 @@ export const bidPdfsRouter = router({
    * number the client already has the moment it opens the file.
    */
   setPageCount: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      pageCount: z.number().int().min(1).max(10000),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        pageCount: z.number().int().min(1).max(10000),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const row = await db.getBidPdf(input.id, ctx.user.id);
-      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
+      if (!row)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
       await db.setBidPdfPageCount(input.id, ctx.user.id, input.pageCount);
       return { success: true };
     }),
@@ -205,7 +228,8 @@ export const bidPdfsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const row = await db.getBidPdf(input.id, ctx.user.id);
-      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
+      if (!row)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
       await db.deleteBidPdf(input.id, ctx.user.id);
       return { success: true };
     }),
@@ -236,15 +260,22 @@ export const bidPdfsRouter = router({
    * is the whole reason renaming exists.
    */
   ensureSheets: protectedProcedure
-    .input(z.object({
-      bidPdfId: z.number().int().positive(),
-      pageCount: z.number().int().min(1).max(10000),
-      /** Titles from the PDF outline, where it has one. */
-      outline: z.array(z.object({
-        pageNumber: z.number().int().min(1),
-        title: z.string().trim().min(1).max(255),
-      })).max(10000).default([]),
-    }))
+    .input(
+      z.object({
+        bidPdfId: z.number().int().positive(),
+        pageCount: z.number().int().min(1).max(10000),
+        /** Titles from the PDF outline, where it has one. */
+        outline: z
+          .array(
+            z.object({
+              pageNumber: z.number().int().min(1),
+              title: z.string().trim().min(1).max(255),
+            })
+          )
+          .max(10000)
+          .default([]),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requirePdf(input.bidPdfId, ctx.user.id);
 
@@ -256,7 +287,8 @@ export const bidPdfsRouter = router({
       const titleByPage = new Map<number, string>();
       for (const entry of input.outline) {
         if (entry.pageNumber > input.pageCount) continue;
-        if (!titleByPage.has(entry.pageNumber)) titleByPage.set(entry.pageNumber, entry.title);
+        if (!titleByPage.has(entry.pageNumber))
+          titleByPage.set(entry.pageNumber, entry.title);
       }
 
       const toInsert = [];
@@ -281,18 +313,23 @@ export const bidPdfsRouter = router({
 
   /** Rename a sheet. Marks the name as the user's, so nothing overwrites it. */
   renameSheet: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      name: z.string().trim().min(1).max(255),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        name: z.string().trim().min(1).max(255),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const sheet = await db.getBidPdfSheet(input.id, ctx.user.id);
-      if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
+      if (!sheet)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
       await db.updateBidPdfSheet(input.id, ctx.user.id, {
         name: input.name,
         nameSource: "user",
       });
-      return { ...toSheetView({ ...sheet, name: input.name, nameSource: "user" }) };
+      return {
+        ...toSheetView({ ...sheet, name: input.name, nameSource: "user" }),
+      };
     }),
 
   /**
@@ -303,14 +340,17 @@ export const bidPdfsRouter = router({
    * produce an identical ratio and only `source` differs.
    */
   setSheetScale: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      /** As written: `1/4" = 1'-0"`, `1" = 20'`, `1:100`. */
-      scaleText: z.string().trim().min(1).max(64),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        /** As written: `1/4" = 1'-0"`, `1" = 20'`, `1:100`. */
+        scaleText: z.string().trim().min(1).max(64),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const sheet = await db.getBidPdfSheet(input.id, ctx.user.id);
-      if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
+      if (!sheet)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
 
       const parsed = parseScaleText(input.scaleText);
       if (!parsed) {
@@ -334,9 +374,12 @@ export const bidPdfsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const sheet = await db.getBidPdfSheet(input.id, ctx.user.id);
-      if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
+      if (!sheet)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
       await db.updateBidPdfSheet(input.id, ctx.user.id, {
-        scaleRatio: null, scaleText: null, scaleSource: "none",
+        scaleRatio: null,
+        scaleText: null,
+        scaleSource: "none",
       });
       const updated = await db.getBidPdfSheet(input.id, ctx.user.id);
       return toSheetView(updated!);
@@ -355,18 +398,25 @@ export const bidPdfsRouter = router({
    * Never touches a scale the user set by hand.
    */
   detectSheetScale: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      /** Raw text extracted from the page by the viewer. */
-      sheetText: z.string().max(200000),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        /** Raw text extracted from the page by the viewer. */
+        sheetText: z.string().max(200000),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const sheet = await db.getBidPdfSheet(input.id, ctx.user.id);
-      if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
+      if (!sheet)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
 
       // A hand-set scale is the user's answer and outranks anything read.
       if (sheet.scaleSource === "manual") {
-        return { applied: false, reason: "manual" as const, sheet: toSheetView(sheet) };
+        return {
+          applied: false,
+          reason: "manual" as const,
+          sheet: toSheetView(sheet),
+        };
       }
 
       const detection = detectScaleFromText(input.sheetText);
@@ -391,7 +441,10 @@ export const bidPdfsRouter = router({
         applied: Boolean(suggestion) && isAutoApplicable(detection),
         confidence: detection.confidence,
         notToScale: detection.notToScale,
-        candidates: detection.candidates.map(c => ({ text: c.text, ratio: c.ratio })),
+        candidates: detection.candidates.map(c => ({
+          text: c.text,
+          ratio: c.ratio,
+        })),
         sheet: toSheetView(updated!),
       };
     }),

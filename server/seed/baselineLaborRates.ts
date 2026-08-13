@@ -34,10 +34,34 @@ export type BaselineLaborRate = {
 export const UNRATED = "0.0000";
 
 export const BASELINE_LABOR_RATES: BaselineLaborRate[] = [
-  { name: "Apprentice", rateType: "hourly", hourlyCost: UNRATED, annualSalary: null, annualHours: null },
-  { name: "Journeyman", rateType: "hourly", hourlyCost: UNRATED, annualSalary: null, annualHours: null },
-  { name: "Foreman/Master Electrician", rateType: "hourly", hourlyCost: UNRATED, annualSalary: null, annualHours: null },
-  { name: "Supervisor", rateType: "hourly", hourlyCost: UNRATED, annualSalary: null, annualHours: null },
+  {
+    name: "Apprentice",
+    rateType: "hourly",
+    hourlyCost: UNRATED,
+    annualSalary: null,
+    annualHours: null,
+  },
+  {
+    name: "Journeyman",
+    rateType: "hourly",
+    hourlyCost: UNRATED,
+    annualSalary: null,
+    annualHours: null,
+  },
+  {
+    name: "Foreman/Master Electrician",
+    rateType: "hourly",
+    hourlyCost: UNRATED,
+    annualSalary: null,
+    annualHours: null,
+  },
+  {
+    name: "Supervisor",
+    rateType: "hourly",
+    hourlyCost: UNRATED,
+    annualSalary: null,
+    annualHours: null,
+  },
 
   // The one salaried starter, present so the salary path is exercised out of
   // the box. hourlyCost stays 0 because for a salary role the rate is DERIVED

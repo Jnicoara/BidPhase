@@ -73,32 +73,44 @@ describe("commit on Enter or blur", () => {
   });
 
   it("accepts blank as zero only when the field opts in", () => {
-    expect(commitNumericEdit("", 6, { allowEmpty: true }))
-      .toEqual({ action: "save", value: 0 });
-    expect(commitNumericEdit("", 0, { allowEmpty: true })).toEqual({ action: "none" });
+    expect(commitNumericEdit("", 6, { allowEmpty: true })).toEqual({
+      action: "save",
+      value: 0,
+    });
+    expect(commitNumericEdit("", 0, { allowEmpty: true })).toEqual({
+      action: "none",
+    });
   });
 
   it("reverts a value outside the field's bounds", () => {
     expect(commitNumericEdit("-5", 6, { min: 0 }).action).toBe("revert");
     expect(commitNumericEdit("150", 20, { max: 98.99 }).action).toBe("revert");
-    expect(commitNumericEdit("50", 20, { min: 0, max: 98.99 }))
-      .toEqual({ action: "save", value: 50 });
+    expect(commitNumericEdit("50", 20, { min: 0, max: 98.99 })).toEqual({
+      action: "save",
+      value: 50,
+    });
   });
 
   it("gives a reason on every revert, so a caller can explain itself", () => {
     for (const draft of ["", "abc", "-1"]) {
       const outcome = commitNumericEdit(draft, 6, { min: 0 });
       expect(outcome.action).toBe("revert");
-      if (outcome.action === "revert") expect(outcome.reason.length).toBeGreaterThan(0);
+      if (outcome.action === "revert")
+        expect(outcome.reason.length).toBeGreaterThan(0);
     }
   });
 
   it("treats a float that differs only by rounding noise as unchanged", () => {
-    expect(commitNumericEdit(String(0.1 + 0.2), 0.3)).toEqual({ action: "none" });
+    expect(commitNumericEdit(String(0.1 + 0.2), 0.3)).toEqual({
+      action: "none",
+    });
   });
 
   it("accepts a genuinely tiny but real change", () => {
-    expect(commitNumericEdit("0.3001", 0.3)).toEqual({ action: "save", value: 0.3001 });
+    expect(commitNumericEdit("0.3001", 0.3)).toEqual({
+      action: "save",
+      value: 0.3001,
+    });
   });
 });
 
@@ -114,9 +126,13 @@ describe("percent conversion at the edges", () => {
     const shown = formatForEdit(asPercent(storedFraction));
     expect(shown).toBe("20");
 
-    const outcome = commitNumericEdit("35", asPercent(storedFraction), { min: 0, max: 98.99 });
+    const outcome = commitNumericEdit("35", asPercent(storedFraction), {
+      min: 0,
+      max: 98.99,
+    });
     expect(outcome).toEqual({ action: "save", value: 35 });
-    if (outcome.action === "save") expect(fromPercent(outcome.value)).toBeCloseTo(0.35, 10);
+    if (outcome.action === "save")
+      expect(fromPercent(outcome.value)).toBeCloseTo(0.35, 10);
   });
 });
 
@@ -144,7 +160,10 @@ describe("Enter in a panel saves AND closes it (rule 5)", () => {
 
     // ...and the commit half writes the new rate rather than swallowing it.
     if (plan.action !== "commit") throw new Error("Enter must commit");
-    expect(commitNumericEdit("44", 38, { min: 0 })).toEqual({ action: "save", value: 44 });
+    expect(commitNumericEdit("44", 38, { min: 0 })).toEqual({
+      action: "save",
+      value: 44,
+    });
   });
 
   it("does not close on an Enter that wrote nothing — but still does not hang around", () => {
@@ -158,7 +177,10 @@ describe("Enter in a panel saves AND closes it (rule 5)", () => {
   it("closes on a reverted Enter too, rather than trapping the user behind a bad draft", () => {
     // A negative rate reverts and writes nothing. The panel must not stay open
     // as if something were still owed.
-    expect(commitNumericEdit("-5", 38, { min: 0 })).toEqual({ action: "revert", reason: "below 0" });
+    expect(commitNumericEdit("-5", 38, { min: 0 })).toEqual({
+      action: "revert",
+      reason: "below 0",
+    });
     expect(planFieldKey("Enter", "panel")).toHaveProperty("dismiss", true);
   });
 
@@ -166,7 +188,9 @@ describe("Enter in a panel saves AND closes it (rule 5)", () => {
     // Rule 2's original case must not regress: bid line quantities, kit
     // quantities and the rest are inline and commit without going anywhere.
     expect(planFieldKey("Enter", "inline")).toEqual({
-      action: "commit", keepFocus: true, dismiss: false,
+      action: "commit",
+      keepFocus: true,
+      dismiss: false,
     });
   });
 
@@ -181,11 +205,17 @@ describe("Enter in a panel saves AND closes it (rule 5)", () => {
 
 describe("Escape settles the field, and on a panel leaves as well", () => {
   it("abandons and closes on a panel", () => {
-    expect(planFieldKey("Escape", "panel")).toEqual({ action: "abandon", dismiss: true });
+    expect(planFieldKey("Escape", "panel")).toEqual({
+      action: "abandon",
+      dismiss: true,
+    });
   });
 
   it("abandons without closing anything on a row", () => {
-    expect(planFieldKey("Escape", "inline")).toEqual({ action: "abandon", dismiss: false });
+    expect(planFieldKey("Escape", "inline")).toEqual({
+      action: "abandon",
+      dismiss: false,
+    });
   });
 
   it("abandons rather than commits, on either surface — Escape never writes", () => {

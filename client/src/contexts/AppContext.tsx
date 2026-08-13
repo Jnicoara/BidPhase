@@ -34,76 +34,94 @@ export interface TrashedProject {
 // ─── Labor line type ────────────────────────────────────────────────────────
 export interface LaborLine {
   id: string;
-  description: string;  // e.g. "Rough-in", "Panel install"
+  description: string; // e.g. "Rough-in", "Panel install"
   hours: number;
 }
 
 // ─── Conduit types ──────────────────────────────────────────────────────────
 export const CONDUIT_TYPES = [
-  { value: "EMT",  label: "EMT"  },
-  { value: "IMC",  label: "IMC"  },
-  { value: "RMC",  label: "RMC"  },
-  { value: "PVC",  label: "PVC"  },
+  { value: "EMT", label: "EMT" },
+  { value: "IMC", label: "IMC" },
+  { value: "RMC", label: "RMC" },
+  { value: "PVC", label: "PVC" },
   { value: "LFMC", label: "LFMC" },
 ] as const;
-export type ConduitType = typeof CONDUIT_TYPES[number]["value"];
+export type ConduitType = (typeof CONDUIT_TYPES)[number]["value"];
 
 // ─── Conduit sizes ────────────────────────────────────────────────────────────
 export const CONDUIT_SIZES = [
-  { value: "1/2",   label: '½"'  },
-  { value: "3/4",   label: '¾"'  },
-  { value: "1",     label: '1"'  },
+  { value: "1/2", label: '½"' },
+  { value: "3/4", label: '¾"' },
+  { value: "1", label: '1"' },
   { value: "1-1/4", label: '1¼"' },
   { value: "1-1/2", label: '1½"' },
-  { value: "2",     label: '2"'  },
+  { value: "2", label: '2"' },
   { value: "2-1/2", label: '2½"' },
-  { value: "3",     label: '3"'  },
+  { value: "3", label: '3"' },
   { value: "3-1/2", label: '3½"' },
-  { value: "4",     label: '4"'  },
+  { value: "4", label: '4"' },
 ] as const;
 
-export type ConduitSize = typeof CONDUIT_SIZES[number]["value"];
+export type ConduitSize = (typeof CONDUIT_SIZES)[number]["value"];
 
 // ─── Civil run types (shared between CivilCalculator and ExportButton) ────────
 // These are defined here so CivilState can reference RunItem[] without
 // a circular import. CivilCalculator imports and re-uses these types.
 
 export const CONDUCTOR_MATERIALS = [
-  { id: "CU", label: "Copper",   short: "Cu" },
+  { id: "CU", label: "Copper", short: "Cu" },
   { id: "AL", label: "Aluminum", short: "Al" },
 ] as const;
-export type ConductorMaterial = typeof CONDUCTOR_MATERIALS[number]["id"];
+export type ConductorMaterial = (typeof CONDUCTOR_MATERIALS)[number]["id"];
 
 // Standard AWG + kcmil conductor sizes (NEC Table 310.12)
 export const CONDUCTOR_SIZES = [
-  "14", "12", "10", "8", "6", "4", "3", "2", "1",
-  "1/0", "2/0", "3/0", "4/0",
-  "250", "300", "350", "400", "500", "600", "750", "1000",
+  "14",
+  "12",
+  "10",
+  "8",
+  "6",
+  "4",
+  "3",
+  "2",
+  "1",
+  "1/0",
+  "2/0",
+  "3/0",
+  "4/0",
+  "250",
+  "300",
+  "350",
+  "400",
+  "500",
+  "600",
+  "750",
+  "1000",
 ] as const;
-export type ConductorSize = typeof CONDUCTOR_SIZES[number];
+export type ConductorSize = (typeof CONDUCTOR_SIZES)[number];
 
 // Conduit material types used in Civil runs (superset of the AppContext CONDUIT_TYPES)
 export const CIVIL_CONDUIT_TYPES = [
-  { id: "EMT",  label: "EMT"  },
-  { id: "IMC",  label: "IMC"  },
-  { id: "RMC",  label: "RMC"  },
-  { id: "PVC",  label: "PVC"  },
+  { id: "EMT", label: "EMT" },
+  { id: "IMC", label: "IMC" },
+  { id: "RMC", label: "RMC" },
+  { id: "PVC", label: "PVC" },
   { id: "LFMC", label: "LFMC" },
   { id: "LFNC", label: "LFNC" },
 ] as const;
-export type CivilConduitType = typeof CIVIL_CONDUIT_TYPES[number]["id"];
+export type CivilConduitType = (typeof CIVIL_CONDUIT_TYPES)[number]["id"];
 
 // Fitting types used in Civil runs
 export const FITTING_TYPES = [
-  { id: "connector",  label: "Connectors",   short: "CONN" },
-  { id: "coupling",   label: "Couplings",    short: "COUP" },
-  { id: "lb",         label: "LBs",          short: "LB"   },
-  { id: "elbow90",    label: "90° Elbows",   short: "90°"  },
-  { id: "elbow45",    label: "45° Elbows",   short: "45°"  },
-  { id: "sweep",      label: "Sweeps",       short: "SWP"  },
-  { id: "offset",     label: "Offsets",      short: "OFF"  },
+  { id: "connector", label: "Connectors", short: "CONN" },
+  { id: "coupling", label: "Couplings", short: "COUP" },
+  { id: "lb", label: "LBs", short: "LB" },
+  { id: "elbow90", label: "90° Elbows", short: "90°" },
+  { id: "elbow45", label: "45° Elbows", short: "45°" },
+  { id: "sweep", label: "Sweeps", short: "SWP" },
+  { id: "offset", label: "Offsets", short: "OFF" },
 ] as const;
-export type FittingId = typeof FITTING_TYPES[number]["id"];
+export type FittingId = (typeof FITTING_TYPES)[number]["id"];
 
 export interface FittingCounts {
   connector: number;
@@ -119,12 +137,12 @@ export interface FittingCounts {
 export interface RunItem {
   id: string;
   name: string;
-  pageNumber?: number;        // which PDF page this run came from
-  feet: number;              // Measured Takeoff (base linear footage from plan)
-  segmentFeet?: number[];     // Per-segment footage breakdown (when run has multiple pen-lift segments)
+  pageNumber?: number; // which PDF page this run came from
+  feet: number; // Measured Takeoff (base linear footage from plan)
+  segmentFeet?: number[]; // Per-segment footage breakdown (when run has multiple pen-lift segments)
   /** "conduit" = EMT/IMC/RMC/PVC etc. with pipe sticks + fittings; "wire" = Jacketed/Romex bare conductor */
   runType?: "conduit" | "wire";
-  conduitSize: string;        // e.g. "1/2"
+  conduitSize: string; // e.g. "1/2"
   conduitType: CivilConduitType;
   conductors: number;
   conductorMaterial: ConductorMaterial;
@@ -167,8 +185,8 @@ export interface RunItem {
    * The scalar fields remain for backward compatibility with old saved data.
    */
   conductorGroups?: Array<{
-    id: string;                    // stable key for React lists
-    conductors: number;            // number of current-carrying conductors in this group
+    id: string; // stable key for React lists
+    conductors: number; // number of current-carrying conductors in this group
     conductorMaterial: ConductorMaterial;
     conductorSize: ConductorSize;
   }>;
@@ -196,12 +214,12 @@ export interface RunItem {
 // ─── Saved material row (count session saved to L&M) ───────────────────────
 export interface SavedMaterialRow {
   id: string;
-  sessionId: string;    // source count session id
-  description: string;  // item name
-  qty: number;          // pin count at save time
-  unitCost: number;     // price per unit
-  unit: string;         // e.g. "EA"
-  savedAt: number;      // timestamp
+  sessionId: string; // source count session id
+  description: string; // item name
+  qty: number; // pin count at save time
+  unitCost: number; // price per unit
+  unit: string; // e.g. "EA"
+  savedAt: number; // timestamp
 }
 
 // ─── Civil / Underground ─────────────────────────────────────────────────────
@@ -234,7 +252,7 @@ export interface CivilProject {
   // Optional project metadata
   customerName?: string;
   address?: string;
-  bidDate?: string;   // ISO date string e.g. "2026-07-15"
+  bidDate?: string; // ISO date string e.g. "2026-07-15"
   status?: "bidding" | "won" | "in-progress" | "lost";
 }
 
@@ -249,8 +267,8 @@ export interface AssemblyMaterialLine {
 /** A single count pin dropped in Count Mode. Carries page number so totals span all pages. */
 export interface CountPin {
   id: string;
-  nx: number;       // normalised x ∈ [0,1] relative to page width
-  ny: number;       // normalised y ∈ [0,1] relative to page height
+  nx: number; // normalised x ∈ [0,1] relative to page width
+  ny: number; // normalised y ∈ [0,1] relative to page height
   pageNumber: number; // 1-indexed page where the pin was placed
 }
 
@@ -261,9 +279,9 @@ export interface CountPin {
  */
 export interface CountSession {
   id: string;
-  name: string;     // user-set label, e.g. "Outlets - Room 101"
-  iconId: string;   // SVG icon id from COUNT_ICONS
-  color: string;    // hex pin color
+  name: string; // user-set label, e.g. "Outlets - Room 101"
+  iconId: string; // SVG icon id from COUNT_ICONS
+  color: string; // hex pin color
   pins: CountPin[];
   /** Optional unit cost per pin — used to calculate extended cost in the BOM */
   unitCost?: number;
@@ -277,12 +295,13 @@ export interface CountSession {
    * Optional assembly link — when set, each pin represents one instance of this assembly.
    * The BOM expands each pin into the assembly's item list × qty.
    */
-  assemblyId?: number;           // master_assembly.id
-  assemblyName?: string;         // display name (cached to avoid extra query)
-  assemblyItems?: Array<{        // cached item list for BOM expansion
+  assemblyId?: number; // master_assembly.id
+  assemblyName?: string; // display name (cached to avoid extra query)
+  assemblyItems?: Array<{
+    // cached item list for BOM expansion
     description: string;
     unit: string;
-    qty: number;                 // per-assembly qty
+    qty: number; // per-assembly qty
     masterMaterialCost: number;
     masterLaborHours: number;
   }>;
@@ -343,16 +362,27 @@ export function defaultCivilProject(name = "New Project"): CivilProject {
   };
 }
 
-export function defaultCommercialProject(name = "New Project"): CommercialProject {
+export function defaultCommercialProject(
+  name = "New Project"
+): CommercialProject {
   return {
     id: nanoid(8),
     name,
     createdAt: Date.now(),
-    state: { assemblyId: "receptacle-20a", quantity: 1, materials: [], totalLaborHours: 0, iconId: "dot", pinColor: "#39FF14" },
+    state: {
+      assemblyId: "receptacle-20a",
+      quantity: 1,
+      materials: [],
+      totalLaborHours: 0,
+      iconId: "dot",
+      pinColor: "#39FF14",
+    },
   };
 }
 
-export function defaultResidentialProject(name = "New Project"): ResidentialProject {
+export function defaultResidentialProject(
+  name = "New Project"
+): ResidentialProject {
   return {
     id: nanoid(8),
     name,
@@ -367,7 +397,9 @@ interface AppContextValue {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   activeCategory: "civil" | "commercial" | "residential" | "industrial";
-  setActiveCategory: (c: "civil" | "commercial" | "residential" | "industrial") => void;
+  setActiveCategory: (
+    c: "civil" | "commercial" | "residential" | "industrial"
+  ) => void;
   // Per-category project stores (all use CivilProject/CivilState type)
   civilCatProjects: CivilProject[];
   activeCivilCatId: string;
@@ -404,7 +436,12 @@ interface AppContextValue {
   switchIndustrialCatProject: (id: string) => void;
 
   // ── Project meta update (works across all cat stores by id) ────────────────
-  updateProjectMeta: (id: string, meta: Partial<Pick<CivilProject, "customerName" | "address" | "bidDate" | "status">>) => void;
+  updateProjectMeta: (
+    id: string,
+    meta: Partial<
+      Pick<CivilProject, "customerName" | "address" | "bidDate" | "status">
+    >
+  ) => void;
 
   // ── Civil projects ──────────────────────────────────────────────────────────
   civilProjects: CivilProject[];
@@ -437,7 +474,7 @@ interface AppContextValue {
   switchResidentialProject: (id: string) => void;
 
   // ── UI settings ────────────────────────────────────────────────────────────
-  uiFontScale: number;           // 0.8 – 1.4, default 1.1
+  uiFontScale: number; // 0.8 – 1.4, default 1.1
   setUiFontScale: (v: number) => void;
 
   // ── Material List page toggle ───────────────────────────────────────────────
@@ -495,7 +532,10 @@ interface AppContextValue {
 
   // ── Trash ──────────────────────────────────────────────────────────────────
   trashedProjects: TrashedProject[];
-  trashProject: (project: CivilProject, category: "civil" | "commercial" | "residential" | "industrial") => void;
+  trashProject: (
+    project: CivilProject,
+    category: "civil" | "commercial" | "residential" | "industrial"
+  ) => void;
   restoreProject: (id: string) => void;
   permanentlyDeleteProject: (id: string) => void;
   emptyTrash: () => void;
@@ -526,7 +566,10 @@ export function useApp(): AppContextValue {
 // ─── Helper: ensure at least one project exists ───────────────────────────────
 // NOTE: We no longer enforce a minimum of 1. Users can delete all projects.
 // The UI will show a "New Project" CTA when the list is empty.
-function ensureOne<T extends { id: string }>(list: T[], _makeDefault: () => T): T[] {
+function ensureOne<T extends { id: string }>(
+  list: T[],
+  _makeDefault: () => T
+): T[] {
   return list;
 }
 
@@ -543,7 +586,10 @@ function ensureOne<T extends { id: string }>(list: T[], _makeDefault: () => T): 
  * @param setActiveId    localStorage setter for the active id
  * @param makeDefault    Factory that creates a blank project with a given name
  */
-function makeProjectStore<TProject extends { id: string; name: string; state: TState }, TState>(
+function makeProjectStore<
+  TProject extends { id: string; name: string; state: TState },
+  TState,
+>(
   projects: TProject[],
   activeId: string,
   setProjects: (updater: (prev: TProject[]) => TProject[]) => void,
@@ -551,24 +597,24 @@ function makeProjectStore<TProject extends { id: string; name: string; state: TS
   makeDefault: (name?: string) => TProject
 ) {
   const setState = (s: TState) => {
-    setProjects((prev) =>
-      prev.map((p) => (p.id === activeId ? { ...p, state: s } : p))
+    setProjects(prev =>
+      prev.map(p => (p.id === activeId ? { ...p, state: s } : p))
     );
   };
 
   const add = (name?: string) => {
     const proj = makeDefault(name ?? `Job ${projects.length + 1}`);
-    setProjects((prev) => [...prev, proj]);
+    setProjects(prev => [...prev, proj]);
     setActiveId(proj.id);
   };
 
   const rename = (id: string, name: string) => {
-    setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)));
+    setProjects(prev => prev.map(p => (p.id === id ? { ...p, name } : p)));
   };
 
   const remove = (id: string) => {
-    setProjects((prev) => {
-      const next = prev.filter((p) => p.id !== id);
+    setProjects(prev => {
+      const next = prev.filter(p => p.id !== id);
       // If the deleted project was active, switch to another or clear the active id
       if (activeId === id) {
         setActiveId(next.length > 0 ? next[next.length - 1].id : "");
@@ -584,8 +630,14 @@ function makeProjectStore<TProject extends { id: string; name: string; state: TS
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [activeTab, setActiveTab] = useLocalStorage<string>("bp_active_tab", "residential");
-  const [uiFontScale, setUiFontScale] = useLocalStorage<number>("bp_ui_font_scale", 1.0);
+  const [activeTab, setActiveTab] = useLocalStorage<string>(
+    "bp_active_tab",
+    "residential"
+  );
+  const [uiFontScale, setUiFontScale] = useLocalStorage<number>(
+    "bp_ui_font_scale",
+    1.0
+  );
   const [showMaterialList, _setShowMaterialList] = useState(false);
   // Intercept setShowMaterialList(true) to also push the #/material hash so
   // HelixBidShell's hashchange listener picks it up and the sidebar stays
@@ -601,14 +653,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
   };
-  const [laborHours, setLaborHours] = useLocalStorage<number>("bp_labor_hours", 0);
-  const [laborRate, setLaborRate] = useLocalStorage<number>("bp_labor_rate", 85);
+  const [laborHours, setLaborHours] = useLocalStorage<number>(
+    "bp_labor_hours",
+    0
+  );
+  const [laborRate, setLaborRate] = useLocalStorage<number>(
+    "bp_labor_rate",
+    85
+  );
   const [markupPct, setMarkupPct] = useLocalStorage<number>("bp_markup_pct", 0);
-  const [journeymanLines, setJourneymanLines] = useLocalStorage<LaborLine[]>("bp_journeyman_lines", []);
-  const [traineeLines, setTraineeLines] = useLocalStorage<LaborLine[]>("bp_trainee_lines", []);
-  const [journeymanRate, setJourneymanRate] = useLocalStorage<number>("bp_journeyman_rate", 95);
-  const [traineeRate, setTraineeRate] = useLocalStorage<number>("bp_trainee_rate", 55);
-  const [trashedProjects, setTrashedProjects] = useLocalStorage<TrashedProject[]>("bp_trash", []);
+  const [journeymanLines, setJourneymanLines] = useLocalStorage<LaborLine[]>(
+    "bp_journeyman_lines",
+    []
+  );
+  const [traineeLines, setTraineeLines] = useLocalStorage<LaborLine[]>(
+    "bp_trainee_lines",
+    []
+  );
+  const [journeymanRate, setJourneymanRate] = useLocalStorage<number>(
+    "bp_journeyman_rate",
+    95
+  );
+  const [traineeRate, setTraineeRate] = useLocalStorage<number>(
+    "bp_trainee_rate",
+    55
+  );
+  const [trashedProjects, setTrashedProjects] = useLocalStorage<
+    TrashedProject[]
+  >("bp_trash", []);
 
   // ── Unified projects (single list, uses CivilProject/CivilState type) ──────
   const [unifiedProjects, setUnifiedProjects] = useLocalStorage<CivilProject[]>(
@@ -620,55 +692,136 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     "bp_active_unified",
     safeUP[0]?.id ?? ""
   );
-  const activeUnifiedProject = safeUP.find((p) => p.id === activeUnifiedId) ?? safeUP[0] ?? defaultCivilProject();
+  const activeUnifiedProject =
+    safeUP.find(p => p.id === activeUnifiedId) ??
+    safeUP[0] ??
+    defaultCivilProject();
 
   const unifiedStore = useCallback(
-    () => makeProjectStore(safeUP, activeUnifiedId, setUnifiedProjects, setActiveUnifiedId, defaultCivilProject),
+    () =>
+      makeProjectStore(
+        safeUP,
+        activeUnifiedId,
+        setUnifiedProjects,
+        setActiveUnifiedId,
+        defaultCivilProject
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeUnifiedId, safeUP.length, setUnifiedProjects, setActiveUnifiedId]
   );
 
   // ── Active category (landing page selection) ──────────────────────────────
-  const [activeCategory, setActiveCategory] = useLocalStorage<"civil" | "commercial" | "residential" | "industrial">("bp_active_category", "civil");
+  const [activeCategory, setActiveCategory] = useLocalStorage<
+    "civil" | "commercial" | "residential" | "industrial"
+  >("bp_active_category", "civil");
   // ── Industrial category store ─────────────────────────────────────────────
-  const [industrialCatProjects, setIndustrialCatProjects] = useLocalStorage<CivilProject[]>("bp_industrial_cat_projects", []);
+  const [industrialCatProjects, setIndustrialCatProjects] = useLocalStorage<
+    CivilProject[]
+  >("bp_industrial_cat_projects", []);
   const safeICP = ensureOne(industrialCatProjects, defaultCivilProject);
-  const [activeIndustrialCatId, setActiveIndustrialCatId] = useLocalStorage<string>("bp_active_industrial_cat", safeICP[0]?.id ?? "");
-  const activeIndustrialCatProject = safeICP.find((p) => p.id === activeIndustrialCatId) ?? safeICP[0] ?? defaultCivilProject();
+  const [activeIndustrialCatId, setActiveIndustrialCatId] =
+    useLocalStorage<string>("bp_active_industrial_cat", safeICP[0]?.id ?? "");
+  const activeIndustrialCatProject =
+    safeICP.find(p => p.id === activeIndustrialCatId) ??
+    safeICP[0] ??
+    defaultCivilProject();
   const industrialCatStore = useCallback(
-    () => makeProjectStore(safeICP, activeIndustrialCatId, setIndustrialCatProjects, setActiveIndustrialCatId, defaultCivilProject),
+    () =>
+      makeProjectStore(
+        safeICP,
+        activeIndustrialCatId,
+        setIndustrialCatProjects,
+        setActiveIndustrialCatId,
+        defaultCivilProject
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeIndustrialCatId, safeICP.length, setIndustrialCatProjects, setActiveIndustrialCatId]
+    [
+      activeIndustrialCatId,
+      safeICP.length,
+      setIndustrialCatProjects,
+      setActiveIndustrialCatId,
+    ]
   );
   // ── Civil category store ──────────────────────────────────────────────────
-  const [civilCatProjects, setCivilCatProjects] = useLocalStorage<CivilProject[]>("bp_civil_cat_projects", []);
+  const [civilCatProjects, setCivilCatProjects] = useLocalStorage<
+    CivilProject[]
+  >("bp_civil_cat_projects", []);
   const safeCCP = ensureOne(civilCatProjects, defaultCivilProject);
-  const [activeCivilCatId, setActiveCivilCatId] = useLocalStorage<string>("bp_active_civil_cat", safeCCP[0]?.id ?? "");
-  const activeCivilCatProject = safeCCP.find((p) => p.id === activeCivilCatId) ?? safeCCP[0] ?? defaultCivilProject();
+  const [activeCivilCatId, setActiveCivilCatId] = useLocalStorage<string>(
+    "bp_active_civil_cat",
+    safeCCP[0]?.id ?? ""
+  );
+  const activeCivilCatProject =
+    safeCCP.find(p => p.id === activeCivilCatId) ??
+    safeCCP[0] ??
+    defaultCivilProject();
   const civilCatStore = useCallback(
-    () => makeProjectStore(safeCCP, activeCivilCatId, setCivilCatProjects, setActiveCivilCatId, defaultCivilProject),
+    () =>
+      makeProjectStore(
+        safeCCP,
+        activeCivilCatId,
+        setCivilCatProjects,
+        setActiveCivilCatId,
+        defaultCivilProject
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeCivilCatId, safeCCP.length, setCivilCatProjects, setActiveCivilCatId]
   );
   // ── Commercial category store ─────────────────────────────────────────────
-  const [commercialCatProjects, setCommercialCatProjects] = useLocalStorage<CivilProject[]>("bp_commercial_cat_projects", []);
+  const [commercialCatProjects, setCommercialCatProjects] = useLocalStorage<
+    CivilProject[]
+  >("bp_commercial_cat_projects", []);
   const safeCmCP = ensureOne(commercialCatProjects, defaultCivilProject);
-  const [activeCommercialCatId, setActiveCommercialCatId] = useLocalStorage<string>("bp_active_commercial_cat", safeCmCP[0]?.id ?? "");
-  const activeCommercialCatProject = safeCmCP.find((p) => p.id === activeCommercialCatId) ?? safeCmCP[0] ?? defaultCivilProject();
+  const [activeCommercialCatId, setActiveCommercialCatId] =
+    useLocalStorage<string>("bp_active_commercial_cat", safeCmCP[0]?.id ?? "");
+  const activeCommercialCatProject =
+    safeCmCP.find(p => p.id === activeCommercialCatId) ??
+    safeCmCP[0] ??
+    defaultCivilProject();
   const commercialCatStore = useCallback(
-    () => makeProjectStore(safeCmCP, activeCommercialCatId, setCommercialCatProjects, setActiveCommercialCatId, defaultCivilProject),
+    () =>
+      makeProjectStore(
+        safeCmCP,
+        activeCommercialCatId,
+        setCommercialCatProjects,
+        setActiveCommercialCatId,
+        defaultCivilProject
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeCommercialCatId, safeCmCP.length, setCommercialCatProjects, setActiveCommercialCatId]
+    [
+      activeCommercialCatId,
+      safeCmCP.length,
+      setCommercialCatProjects,
+      setActiveCommercialCatId,
+    ]
   );
   // ── Residential category store ────────────────────────────────────────────
-  const [residentialCatProjects, setResidentialCatProjects] = useLocalStorage<CivilProject[]>("bp_residential_cat_projects", []);
+  const [residentialCatProjects, setResidentialCatProjects] = useLocalStorage<
+    CivilProject[]
+  >("bp_residential_cat_projects", []);
   const safeRCP = ensureOne(residentialCatProjects, defaultCivilProject);
-  const [activeResidentialCatId, setActiveResidentialCatId] = useLocalStorage<string>("bp_active_residential_cat", safeRCP[0]?.id ?? "");
-  const activeResidentialCatProject = safeRCP.find((p) => p.id === activeResidentialCatId) ?? safeRCP[0] ?? defaultCivilProject();
+  const [activeResidentialCatId, setActiveResidentialCatId] =
+    useLocalStorage<string>("bp_active_residential_cat", safeRCP[0]?.id ?? "");
+  const activeResidentialCatProject =
+    safeRCP.find(p => p.id === activeResidentialCatId) ??
+    safeRCP[0] ??
+    defaultCivilProject();
   const residentialCatStore = useCallback(
-    () => makeProjectStore(safeRCP, activeResidentialCatId, setResidentialCatProjects, setActiveResidentialCatId, defaultCivilProject),
+    () =>
+      makeProjectStore(
+        safeRCP,
+        activeResidentialCatId,
+        setResidentialCatProjects,
+        setActiveResidentialCatId,
+        defaultCivilProject
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeResidentialCatId, safeRCP.length, setResidentialCatProjects, setActiveResidentialCatId]
+    [
+      activeResidentialCatId,
+      safeRCP.length,
+      setResidentialCatProjects,
+      setActiveResidentialCatId,
+    ]
   );
   // ── Civil ─────────────────────────────────────────────────────────────────
   const [civilProjects, setCivilProjects] = useLocalStorage<CivilProject[]>(
@@ -680,48 +833,86 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     "bp_active_civil",
     safeCP[0]?.id ?? ""
   );
-  const activeCivilProject = safeCP.find((p) => p.id === activeCivilId) ?? safeCP[0] ?? defaultCivilProject();
+  const activeCivilProject =
+    safeCP.find(p => p.id === activeCivilId) ??
+    safeCP[0] ??
+    defaultCivilProject();
 
   const civilStore = useCallback(
-    () => makeProjectStore(safeCP, activeCivilId, setCivilProjects, setActiveCivilId, defaultCivilProject),
+    () =>
+      makeProjectStore(
+        safeCP,
+        activeCivilId,
+        setCivilProjects,
+        setActiveCivilId,
+        defaultCivilProject
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeCivilId, safeCP.length, setCivilProjects, setActiveCivilId]
   );
 
   // ── Commercial ────────────────────────────────────────────────────────────
-  const [commercialProjects, setCommercialProjects] = useLocalStorage<CommercialProject[]>(
-    "bp_commercial_projects",
-    []
-  );
+  const [commercialProjects, setCommercialProjects] = useLocalStorage<
+    CommercialProject[]
+  >("bp_commercial_projects", []);
   const safeCmP = ensureOne(commercialProjects, defaultCommercialProject);
   const [activeCommercialId, setActiveCommercialId] = useLocalStorage<string>(
     "bp_active_commercial",
     safeCmP[0]?.id ?? ""
   );
-  const activeCommercialProject = safeCmP.find((p) => p.id === activeCommercialId) ?? safeCmP[0] ?? defaultCommercialProject();
+  const activeCommercialProject =
+    safeCmP.find(p => p.id === activeCommercialId) ??
+    safeCmP[0] ??
+    defaultCommercialProject();
 
   const commercialStore = useCallback(
-    () => makeProjectStore(safeCmP, activeCommercialId, setCommercialProjects, setActiveCommercialId, defaultCommercialProject),
+    () =>
+      makeProjectStore(
+        safeCmP,
+        activeCommercialId,
+        setCommercialProjects,
+        setActiveCommercialId,
+        defaultCommercialProject
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeCommercialId, safeCmP.length, setCommercialProjects, setActiveCommercialId]
+    [
+      activeCommercialId,
+      safeCmP.length,
+      setCommercialProjects,
+      setActiveCommercialId,
+    ]
   );
 
   // ── Residential ───────────────────────────────────────────────────────────
-  const [residentialProjects, setResidentialProjects] = useLocalStorage<ResidentialProject[]>(
-    "bp_residential_projects",
-    []
-  );
+  const [residentialProjects, setResidentialProjects] = useLocalStorage<
+    ResidentialProject[]
+  >("bp_residential_projects", []);
   const safeRP = ensureOne(residentialProjects, defaultResidentialProject);
   const [activeResidentialId, setActiveResidentialId] = useLocalStorage<string>(
     "bp_active_residential",
     safeRP[0]?.id ?? ""
   );
-  const activeResidentialProject = safeRP.find((p) => p.id === activeResidentialId) ?? safeRP[0] ?? defaultResidentialProject();
+  const activeResidentialProject =
+    safeRP.find(p => p.id === activeResidentialId) ??
+    safeRP[0] ??
+    defaultResidentialProject();
 
   const residentialStore = useCallback(
-    () => makeProjectStore(safeRP, activeResidentialId, setResidentialProjects, setActiveResidentialId, defaultResidentialProject),
+    () =>
+      makeProjectStore(
+        safeRP,
+        activeResidentialId,
+        setResidentialProjects,
+        setActiveResidentialId,
+        defaultResidentialProject
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeResidentialId, safeRP.length, setResidentialProjects, setActiveResidentialId]
+    [
+      activeResidentialId,
+      safeRP.length,
+      setResidentialProjects,
+      setActiveResidentialId,
+    ]
   );
 
   // ── Legacy push helper (no longer called internally) ─────────────────────
@@ -734,12 +925,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [activeCivilProject.state, civilStore]
   );
 
-
   // ── Master totals ──────────────────────────────────────────────────────────
   // Aggregates BOM materials + labor hours across ALL commercial projects.
   // Re-computed on every render where safeCmP changes (cheap — just array reduce).
   const masterTotals: MasterTotals = (() => {
-    const lineMap = new Map<string, { description: string; unit: string; totalQty: number; unitCost: number; extCost: number }>();
+    const lineMap = new Map<
+      string,
+      {
+        description: string;
+        unit: string;
+        totalQty: number;
+        unitCost: number;
+        extCost: number;
+      }
+    >();
     let totalLaborHours = 0;
     let totalMaterialCost = 0;
     for (const proj of safeCmP) {
@@ -750,7 +949,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const existing = lineMap.get(key);
         if (existing) {
           existing.totalQty += m.quantity;
-          existing.extCost  += m.unitCost * m.quantity;
+          existing.extCost += m.unitCost * m.quantity;
         } else {
           lineMap.set(key, {
             description: m.description,
@@ -771,27 +970,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   })();
 
   // ── Trash helpers ────────────────────────────────────────────────────────
-  const trashProject = useCallback((project: CivilProject, category: "civil" | "commercial" | "residential" | "industrial") => {
-    setTrashedProjects((prev) => [...prev, { project, category, deletedAt: Date.now() }]);
-  }, [setTrashedProjects]);
-  const restoreProject = useCallback((id: string) => {
-    const item = trashedProjects.find((t) => t.project.id === id);
-    if (!item) return;
-    // Re-add to the correct category store
-    if (item.category === "civil") {
-      setCivilCatProjects((prev) => [...prev, item.project]);
-    } else if (item.category === "commercial") {
-      setCommercialCatProjects((prev) => [...prev, item.project]);
-    } else if (item.category === "industrial") {
-      setIndustrialCatProjects((prev) => [...prev, item.project]);
-    } else {
-      setResidentialCatProjects((prev) => [...prev, item.project]);
-    }
-    setTrashedProjects((prev) => prev.filter((t) => t.project.id !== id));
-  }, [trashedProjects, setTrashedProjects, setCivilCatProjects, setCommercialCatProjects, setResidentialCatProjects, setIndustrialCatProjects]);
-  const permanentlyDeleteProject = useCallback((id: string) => {
-    setTrashedProjects((prev) => prev.filter((t) => t.project.id !== id));
-  }, [setTrashedProjects]);
+  const trashProject = useCallback(
+    (
+      project: CivilProject,
+      category: "civil" | "commercial" | "residential" | "industrial"
+    ) => {
+      setTrashedProjects(prev => [
+        ...prev,
+        { project, category, deletedAt: Date.now() },
+      ]);
+    },
+    [setTrashedProjects]
+  );
+  const restoreProject = useCallback(
+    (id: string) => {
+      const item = trashedProjects.find(t => t.project.id === id);
+      if (!item) return;
+      // Re-add to the correct category store
+      if (item.category === "civil") {
+        setCivilCatProjects(prev => [...prev, item.project]);
+      } else if (item.category === "commercial") {
+        setCommercialCatProjects(prev => [...prev, item.project]);
+      } else if (item.category === "industrial") {
+        setIndustrialCatProjects(prev => [...prev, item.project]);
+      } else {
+        setResidentialCatProjects(prev => [...prev, item.project]);
+      }
+      setTrashedProjects(prev => prev.filter(t => t.project.id !== id));
+    },
+    [
+      trashedProjects,
+      setTrashedProjects,
+      setCivilCatProjects,
+      setCommercialCatProjects,
+      setResidentialCatProjects,
+      setIndustrialCatProjects,
+    ]
+  );
+  const permanentlyDeleteProject = useCallback(
+    (id: string) => {
+      setTrashedProjects(prev => prev.filter(t => t.project.id !== id));
+    },
+    [setTrashedProjects]
+  );
   const emptyTrash = useCallback(() => {
     // Only permanently remove items older than 30 days or all if user confirms
     setTrashedProjects([]);
@@ -809,40 +1030,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         civilCatProjects: safeCCP,
         activeCivilCatId,
         activeCivilCatProject,
-        setCivilCatState:        civilCatStore().setState,
-        addCivilCatProject:      civilCatStore().add,
-        renameCivilCatProject:   civilCatStore().rename,
-        deleteCivilCatProject:   civilCatStore().remove,
-        switchCivilCatProject:   civilCatStore().switchTo,
+        setCivilCatState: civilCatStore().setState,
+        addCivilCatProject: civilCatStore().add,
+        renameCivilCatProject: civilCatStore().rename,
+        deleteCivilCatProject: civilCatStore().remove,
+        switchCivilCatProject: civilCatStore().switchTo,
         commercialCatProjects: safeCmCP,
         activeCommercialCatId,
         activeCommercialCatProject,
-        setCommercialCatState:        commercialCatStore().setState,
-        addCommercialCatProject:      commercialCatStore().add,
-        renameCommercialCatProject:   commercialCatStore().rename,
-        deleteCommercialCatProject:   commercialCatStore().remove,
-        switchCommercialCatProject:   commercialCatStore().switchTo,
+        setCommercialCatState: commercialCatStore().setState,
+        addCommercialCatProject: commercialCatStore().add,
+        renameCommercialCatProject: commercialCatStore().rename,
+        deleteCommercialCatProject: commercialCatStore().remove,
+        switchCommercialCatProject: commercialCatStore().switchTo,
         residentialCatProjects: safeRCP,
         activeResidentialCatId,
         activeResidentialCatProject,
-        setResidentialCatState:        residentialCatStore().setState,
-        addResidentialCatProject:      residentialCatStore().add,
-        renameResidentialCatProject:   residentialCatStore().rename,
-        deleteResidentialCatProject:   residentialCatStore().remove,
-                switchResidentialCatProject:   residentialCatStore().switchTo,
+        setResidentialCatState: residentialCatStore().setState,
+        addResidentialCatProject: residentialCatStore().add,
+        renameResidentialCatProject: residentialCatStore().rename,
+        deleteResidentialCatProject: residentialCatStore().remove,
+        switchResidentialCatProject: residentialCatStore().switchTo,
         // Industrial category store
         industrialCatProjects: safeICP,
         activeIndustrialCatId,
         activeIndustrialCatProject,
-        setIndustrialCatState:        industrialCatStore().setState,
-        addIndustrialCatProject:      industrialCatStore().add,
-        renameIndustrialCatProject:   industrialCatStore().rename,
-        deleteIndustrialCatProject:   industrialCatStore().remove,
-        switchIndustrialCatProject:   industrialCatStore().switchTo,
+        setIndustrialCatState: industrialCatStore().setState,
+        addIndustrialCatProject: industrialCatStore().add,
+        renameIndustrialCatProject: industrialCatStore().rename,
+        deleteIndustrialCatProject: industrialCatStore().remove,
+        switchIndustrialCatProject: industrialCatStore().switchTo,
         // Project meta update — patches meta fields across all cat stores by project id
-        updateProjectMeta: (id: string, meta: Partial<Pick<CivilProject, "customerName" | "address" | "bidDate" | "status">>) => {
+        updateProjectMeta: (
+          id: string,
+          meta: Partial<
+            Pick<
+              CivilProject,
+              "customerName" | "address" | "bidDate" | "status"
+            >
+          >
+        ) => {
           const patcher = (prev: CivilProject[]) =>
-            prev.map((p) => (p.id === id ? { ...p, ...meta } : p));
+            prev.map(p => (p.id === id ? { ...p, ...meta } : p));
           setCivilCatProjects(patcher);
           setCommercialCatProjects(patcher);
           setResidentialCatProjects(patcher);
@@ -852,28 +1081,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         unifiedProjects: safeUP,
         activeUnifiedId,
         activeUnifiedProject,
-        setUnifiedState:        unifiedStore().setState,
-        addUnifiedProject:      unifiedStore().add,
-        renameUnifiedProject:   unifiedStore().rename,
-        deleteUnifiedProject:   unifiedStore().remove,
-        switchUnifiedProject:   unifiedStore().switchTo,
+        setUnifiedState: unifiedStore().setState,
+        addUnifiedProject: unifiedStore().add,
+        renameUnifiedProject: unifiedStore().rename,
+        deleteUnifiedProject: unifiedStore().remove,
+        switchUnifiedProject: unifiedStore().switchTo,
 
         // Civil
         civilProjects: safeCP,
         activeCivilId,
         activeCivilProject,
-        setCivilState:        civilStore().setState,
-        addCivilProject:      civilStore().add,
-        renameCivilProject:   civilStore().rename,
-        deleteCivilProject:   civilStore().remove,
-        switchCivilProject:   civilStore().switchTo,
+        setCivilState: civilStore().setState,
+        addCivilProject: civilStore().add,
+        renameCivilProject: civilStore().rename,
+        deleteCivilProject: civilStore().remove,
+        switchCivilProject: civilStore().switchTo,
 
         // Commercial
         commercialProjects: safeCmP,
         activeCommercialId,
         activeCommercialProject,
-        setAssemblyState:        commercialStore().setState,
-        addCommercialProject:    commercialStore().add,
+        setAssemblyState: commercialStore().setState,
+        addCommercialProject: commercialStore().add,
         renameCommercialProject: commercialStore().rename,
         deleteCommercialProject: commercialStore().remove,
         switchCommercialProject: commercialStore().switchTo,
@@ -882,11 +1111,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         residentialProjects: safeRP,
         activeResidentialId,
         activeResidentialProject,
-        setRoomState:              residentialStore().setState,
-        addResidentialProject:     residentialStore().add,
-        renameResidentialProject:  residentialStore().rename,
-        deleteResidentialProject:  residentialStore().remove,
-        switchResidentialProject:  residentialStore().switchTo,
+        setRoomState: residentialStore().setState,
+        addResidentialProject: residentialStore().add,
+        renameResidentialProject: residentialStore().rename,
+        deleteResidentialProject: residentialStore().remove,
+        switchResidentialProject: residentialStore().switchTo,
 
         // Master totals (aggregate across all commercial projects)
         masterTotals,
@@ -927,9 +1156,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         emptyTrash,
 
         // Legacy single-state accessors for ExportButton
-        civilState:      activeCivilProject.state,
-        assemblyState:   activeCommercialProject.state,
-        roomState:       activeResidentialProject.state,
+        civilState: activeCivilProject.state,
+        assemblyState: activeCommercialProject.state,
+        roomState: activeResidentialProject.state,
       }}
     >
       {children}

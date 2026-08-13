@@ -29,13 +29,13 @@ describe("masterItems router", () => {
 
   it("creates a master item", async () => {
     const caller = appRouter.createCaller(createAdminCtx());
-    const result = await caller.masterItems.create({
+    const result = (await caller.masterItems.create({
       itemCode: "TEST-001",
       description: "Test Item v545",
       unit: "EA",
       masterMaterialCost: 10.5,
       masterLaborHours: 0.25,
-    }) as { id?: number; description?: string };
+    })) as { id?: number; description?: string };
     expect(result.id).toBeTypeOf("number");
     expect(result.description).toBe("Test Item v545");
     createdId = result.id!;
@@ -45,24 +45,28 @@ describe("masterItems router", () => {
     const caller = appRouter.createCaller(createAdminCtx());
     const items = await caller.masterItems.list();
     expect(Array.isArray(items)).toBe(true);
-    const found = items.find((i) => i.id === createdId);
+    const found = items.find(i => i.id === createdId);
     expect(found).toBeDefined();
   });
 
   it("updates a master item", async () => {
     if (!createdId) return;
     const caller = appRouter.createCaller(createAdminCtx());
-    await expect(caller.masterItems.update({
-      id: createdId,
-      description: "Updated Test Item v545",
-      masterMaterialCost: 12.0,
-    })).resolves.not.toThrow();
+    await expect(
+      caller.masterItems.update({
+        id: createdId,
+        description: "Updated Test Item v545",
+        masterMaterialCost: 12.0,
+      })
+    ).resolves.not.toThrow();
   });
 
   it("deletes a master item", async () => {
     if (!createdId) return;
     const caller = appRouter.createCaller(createAdminCtx());
-    await expect(caller.masterItems.delete({ id: createdId })).resolves.not.toThrow();
+    await expect(
+      caller.masterItems.delete({ id: createdId })
+    ).resolves.not.toThrow();
   });
 });
 
@@ -71,10 +75,10 @@ describe("masterLaborRates router", () => {
 
   it("creates a labor rate", async () => {
     const caller = appRouter.createCaller(createAdminCtx());
-    const result = await caller.masterLaborRates.create({
+    const result = (await caller.masterLaborRates.create({
       name: "Journeyman v545",
       ratePerHour: 85.0,
-    }) as { id?: number; name?: string };
+    })) as { id?: number; name?: string };
     expect(result.id).toBeTypeOf("number");
     expect(result.name).toBe("Journeyman v545");
     rateId = result.id!;
@@ -85,13 +89,15 @@ describe("masterLaborRates router", () => {
     const caller = appRouter.createCaller(createAdminCtx());
     const rates = await caller.masterLaborRates.list();
     expect(Array.isArray(rates)).toBe(true);
-    expect(rates.some((r) => r.id === rateId)).toBe(true);
+    expect(rates.some(r => r.id === rateId)).toBe(true);
   });
 
   it("deletes a labor rate", async () => {
     if (!rateId) return;
     const caller = appRouter.createCaller(createAdminCtx());
-    await expect(caller.masterLaborRates.delete({ id: rateId })).resolves.not.toThrow();
+    await expect(
+      caller.masterLaborRates.delete({ id: rateId })
+    ).resolves.not.toThrow();
   });
 });
 
@@ -100,10 +106,10 @@ describe("masterAssemblies router", () => {
 
   it("creates a master assembly", async () => {
     const caller = appRouter.createCaller(createAdminCtx());
-    const result = await caller.masterAssemblies.create({
+    const result = (await caller.masterAssemblies.create({
       name: "Test Assembly v545",
       description: "A test assembly",
-    }) as { id?: number; name?: string };
+    })) as { id?: number; name?: string };
     expect(result.id).toBeTypeOf("number");
     expect(result.name).toBe("Test Assembly v545");
     assemblyId = result.id!;
@@ -114,13 +120,15 @@ describe("masterAssemblies router", () => {
     const caller = appRouter.createCaller(createAdminCtx());
     const list = await caller.masterAssemblies.list();
     expect(Array.isArray(list)).toBe(true);
-    expect(list.some((a) => a.id === assemblyId)).toBe(true);
+    expect(list.some(a => a.id === assemblyId)).toBe(true);
   });
 
   it("deletes a master assembly", async () => {
     if (!assemblyId) return;
     const caller = appRouter.createCaller(createAdminCtx());
-    await expect(caller.masterAssemblies.delete({ id: assemblyId })).resolves.not.toThrow();
+    await expect(
+      caller.masterAssemblies.delete({ id: assemblyId })
+    ).resolves.not.toThrow();
   });
 });
 
@@ -160,6 +168,8 @@ describe("bidSummary router", () => {
 
   it("cleans up test project", async () => {
     const caller = appRouter.createCaller(createAdminCtx());
-    await expect(caller.projects.delete({ id: testProjectId })).resolves.not.toThrow();
+    await expect(
+      caller.projects.delete({ id: testProjectId })
+    ).resolves.not.toThrow();
   });
 });

@@ -74,19 +74,29 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
     // Seed default feature flags (no-op if already seeded)
-    seedDefaultFeatureFlags().catch(err => console.warn("[FeatureFlags] Seed failed:", err));
+    seedDefaultFeatureFlags().catch(err =>
+      console.warn("[FeatureFlags] Seed failed:", err)
+    );
     // Library seeds. Assemblies MUST run last: their recipes are resolved by
     // name against the material and modifier catalogs, and an assembly whose
     // materials have not landed yet is skipped rather than half-built.
     Promise.all([
-      seedBaselineMaterials().catch(err => console.warn("[BaselineMaterials] Seed failed:", err)),
-      seedBaselineLaborRates().catch(err => console.warn("[BaselineLaborRates] Seed failed:", err)),
-      seedBaselineModifiers().catch(err => console.warn("[BaselineModifiers] Seed failed:", err)),
+      seedBaselineMaterials().catch(err =>
+        console.warn("[BaselineMaterials] Seed failed:", err)
+      ),
+      seedBaselineLaborRates().catch(err =>
+        console.warn("[BaselineLaborRates] Seed failed:", err)
+      ),
+      seedBaselineModifiers().catch(err =>
+        console.warn("[BaselineModifiers] Seed failed:", err)
+      ),
     ])
       .then(() => seedBaselineAssemblies())
       // Kits reference assemblies by name, so they come last of all.
       .then(() => seedBaselineKits())
-      .catch(err => console.warn("[BaselineAssemblies/Kits] Seed failed:", err));
+      .catch(err =>
+        console.warn("[BaselineAssemblies/Kits] Seed failed:", err)
+      );
   });
 }
 

@@ -58,26 +58,36 @@ export function useIndexedDB<T>(key: string, initialValue: T) {
   useEffect(() => {
     let cancelled = false;
     const t0 = performance.now();
-    idbGet<T>(key).then((stored) => {
-      const elapsed = (performance.now() - t0).toFixed(0);
-      console.log(`[HB] IndexedDB read "${key}": ${elapsed}ms, found=${stored !== undefined}`);
-      if (!cancelled && stored !== undefined) {
-        setValueState(stored);
-      }
-      if (!cancelled) setLoading(false);
-    }).catch(() => {
-      if (!cancelled) setLoading(false);
-    });
-    return () => { cancelled = true; };
+    idbGet<T>(key)
+      .then(stored => {
+        const elapsed = (performance.now() - t0).toFixed(0);
+        console.log(
+          `[HB] IndexedDB read "${key}": ${elapsed}ms, found=${stored !== undefined}`
+        );
+        if (!cancelled && stored !== undefined) {
+          setValueState(stored);
+        }
+        if (!cancelled) setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [key]);
 
-  const setValue = useCallback((newVal: T | ((prev: T) => T)) => {
-    setValueState((prev) => {
-      const next = typeof newVal === "function" ? (newVal as (p: T) => T)(prev) : newVal;
-      idbSet(key, next).catch(console.error);
-      return next;
-    });
-  }, [key]);
+  const setValue = useCallback(
+    (newVal: T | ((prev: T) => T)) => {
+      setValueState(prev => {
+        const next =
+          typeof newVal === "function" ? (newVal as (p: T) => T)(prev) : newVal;
+        idbSet(key, next).catch(console.error);
+        return next;
+      });
+    },
+    [key]
+  );
 
   return { value, setValue, loading };
 }

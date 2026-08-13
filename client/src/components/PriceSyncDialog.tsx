@@ -54,7 +54,7 @@ export function PriceSyncDialog({
   const utils = trpc.useUtils();
 
   const upsert = trpc.data.materials.upsertPriceByDescription.useMutation({
-    onSuccess: (result) => {
+    onSuccess: result => {
       utils.data.materials.list.invalidate();
       const msg = result.updated
         ? `Price updated in Material Database.`
@@ -63,7 +63,7 @@ export function PriceSyncDialog({
       onSynced?.(result.updated);
       onOpenChange(false);
     },
-    onError: (err) => {
+    onError: err => {
       toast.error(`Failed to sync price: ${err.message}`);
     },
   });
@@ -91,9 +91,7 @@ export function PriceSyncDialog({
               ${newPrice.toFixed(2)}
             </span>{" "}
             for{" "}
-            <span className="font-semibold text-foreground">
-              {description}
-            </span>
+            <span className="font-semibold text-foreground">{description}</span>
             .
             <br />
             <br />

@@ -21,7 +21,11 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { RUN_PATH_TYPES, RUN_STATUSES, TAKEOFF_LOCATIONS } from "../../drizzle/schema";
+import {
+  RUN_PATH_TYPES,
+  RUN_STATUSES,
+  TAKEOFF_LOCATIONS,
+} from "../../drizzle/schema";
 import { pathRealInches, toBillableFeet } from "../../shared/takeoffGeometry";
 import {
   measurabilityOf,
@@ -50,18 +54,22 @@ const pointsSchema = z.array(pointSchema).max(5000);
 
 async function requireSheet(sheetId: number, userId: number) {
   const sheet = await db.getBidPdfSheet(sheetId, userId);
-  if (!sheet) throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
+  if (!sheet)
+    throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
   return sheet;
 }
 
 async function requireRun(id: number, userId: number) {
   const run = await db.getRunById(id, userId);
-  if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Run not found." });
+  if (!run)
+    throw new TRPCError({ code: "NOT_FOUND", message: "Run not found." });
   return run;
 }
 
 /** The sheet's scale as the pure functions want it. */
-function sheetScale(sheet: Awaited<ReturnType<typeof db.getBidPdfSheet>> & object) {
+function sheetScale(
+  sheet: Awaited<ReturnType<typeof db.getBidPdfSheet>> & object
+) {
   return {
     scaleRatio: sheet.scaleRatio === null ? null : Number(sheet.scaleRatio),
     scaleSource: sheet.scaleSource,
@@ -80,7 +88,10 @@ async function requireMeasurableSheet(sheetId: number, userId: number) {
   const sheet = await requireSheet(sheetId, userId);
   const measurability = measurabilityOf(sheetScale(sheet));
   if (!measurability.ok) {
-    throw new TRPCError({ code: "PRECONDITION_FAILED", message: measurability.message });
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: measurability.message,
+    });
   }
   return { sheet, ratio: measurability.ratio };
 }
@@ -109,14 +120,24 @@ export const takeoffRunsRouter = router({
       const ratio = measurability.ok ? measurability.ratio : null;
 
       const runs = await db.getRunsForSheet(input.sheetId, ctx.user.id);
-      const circuits = await db.getCircuitsForRuns(runs.map(r => r.id), ctx.user.id);
+      const circuits = await db.getCircuitsForRuns(
+        runs.map(r => r.id),
+        ctx.user.id
+      );
 
       return runs.map(run => {
         const runCircuits = circuits
           .filter(c => c.runId === run.id)
-          .map(c => ({ id: c.id, name: c.name, conductorCount: c.conductorCount }));
+          .map(c => ({
+            id: c.id,
+            name: c.name,
+            conductorCount: c.conductorCount,
+          }));
 
-        const traced = { pathType: run.pathType as RunPathType, points: run.points ?? [] };
+        const traced = {
+          pathType: run.pathType as RunPathType,
+          points: run.points ?? [],
+        };
         return {
           id: run.id,
           name: run.name,
@@ -134,7 +155,8 @@ export const takeoffRunsRouter = router({
            * from what the user saw when they drew it.
            */
           scaleChangedSinceTraced:
-            run.scaleRatioUsed != null && ratio != null &&
+            run.scaleRatioUsed != null &&
+            ratio != null &&
             Math.abs(Number(run.scaleRatioUsed) - ratio) > 1e-6,
         };
       });
@@ -149,29 +171,33 @@ export const takeoffRunsRouter = router({
    * work would defeat the point of having one.
    */
   save: protectedProcedure
-    .input(z.object({
-      bidId: z.number().int().positive(),
-      sheetId: z.number().int().positive(),
-      /** Omitted to create; supplied to update an existing run in place. */
-      id: z.number().int().positive().optional(),
-      name: nameSchema,
-      pathType: z.enum(RUN_PATH_TYPES),
-      points: pointsSchema,
-      status: z.enum(RUN_STATUSES).default("draft"),
-      isSuggestion: z.boolean().default(false),
-      /** Where the raceway sits — the Location layer. Taggable later too. */
-      location: z.enum(TAKEOFF_LOCATIONS).nullable().default(null),
-    }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        sheetId: z.number().int().positive(),
+        /** Omitted to create; supplied to update an existing run in place. */
+        id: z.number().int().positive().optional(),
+        name: nameSchema,
+        pathType: z.enum(RUN_PATH_TYPES),
+        points: pointsSchema,
+        status: z.enum(RUN_STATUSES).default("draft"),
+        isSuggestion: z.boolean().default(false),
+        /** Where the raceway sits — the Location layer. Taggable later too. */
+        location: z.enum(TAKEOFF_LOCATIONS).nullable().default(null),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const sheet = await requireSheet(input.sheetId, ctx.user.id);
       const bid = await db.getBidById(input.bidId, ctx.user.id);
-      if (!bid) throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
+      if (!bid)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
 
       // Measure if we legitimately can; otherwise store the points with NO
       // length rather than refusing the save. The user's clicking is real work.
       const measurability = measurabilityOf(sheetScale(sheet));
       const ratio = measurability.ok ? measurability.ratio : null;
-      const inches = ratio === null ? null : pathRealInches(input.points, ratio);
+      const inches =
+        ratio === null ? null : pathRealInches(input.points, ratio);
 
       const values = {
         bidId: input.bidId,
@@ -190,14 +216,25 @@ export const takeoffRunsRouter = router({
       if (input.id) {
         const existing = await requireRun(input.id, ctx.user.id);
         if (existing.sheetId !== input.sheetId) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "That run belongs to another sheet." });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "That run belongs to another sheet.",
+          });
         }
         await db.updateRun(input.id, ctx.user.id, values);
-        return { id: input.id, measured: inches !== null, lengthFeet: inches === null ? null : toBillableFeet(inches) };
+        return {
+          id: input.id,
+          measured: inches !== null,
+          lengthFeet: inches === null ? null : toBillableFeet(inches),
+        };
       }
 
       const id = await db.createRun(values);
-      return { id, measured: inches !== null, lengthFeet: inches === null ? null : toBillableFeet(inches) };
+      return {
+        id,
+        measured: inches !== null,
+        lengthFeet: inches === null ? null : toBillableFeet(inches),
+      };
     }),
 
   /**
@@ -223,7 +260,10 @@ export const takeoffRunsRouter = router({
 
       const inches = pathRealInches(points, ratio);
       if (inches === null) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "That path could not be measured." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That path could not be measured.",
+        });
       }
 
       await db.updateRun(input.id, ctx.user.id, {
@@ -246,19 +286,27 @@ export const takeoffRunsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const run = await requireRun(input.id, ctx.user.id);
       if (!run.isSuggestion) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "That run is not a suggestion." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That run is not a suggestion.",
+        });
       }
       await requireMeasurableSheet(run.sheetId, ctx.user.id);
-      await db.updateRun(input.id, ctx.user.id, { isSuggestion: false, status: "draft" });
+      await db.updateRun(input.id, ctx.user.id, {
+        isSuggestion: false,
+        status: "draft",
+      });
       return { success: true };
     }),
 
   /** Tag a run's Location without disturbing its geometry. */
   setLocation: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      location: z.enum(TAKEOFF_LOCATIONS).nullable(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        location: z.enum(TAKEOFF_LOCATIONS).nullable(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireRun(input.id, ctx.user.id);
       await db.updateRun(input.id, ctx.user.id, { location: input.location });
@@ -276,18 +324,21 @@ export const takeoffRunsRouter = router({
   // ── Circuits on a run ──────────────────────────────────────────────────────
 
   addCircuit: protectedProcedure
-    .input(z.object({
-      runId: z.number().int().positive(),
-      name: nameSchema,
-      /** Bounded at 60: a raceway with more conductors is a data-entry slip. */
-      conductorCount: z.number().int().min(1).max(60),
-    }))
+    .input(
+      z.object({
+        runId: z.number().int().positive(),
+        name: nameSchema,
+        /** Bounded at 60: a raceway with more conductors is a data-entry slip. */
+        conductorCount: z.number().int().min(1).max(60),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const run = await requireRun(input.runId, ctx.user.id);
       if (run.pathType !== "conduit") {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "A cable run carries its own conductors — circuits are only assigned to conduit runs.",
+          message:
+            "A cable run carries its own conductors — circuits are only assigned to conduit runs.",
         });
       }
       const id = await db.createRunCircuit({
@@ -300,11 +351,13 @@ export const takeoffRunsRouter = router({
     }),
 
   updateCircuit: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      name: nameSchema.optional(),
-      conductorCount: z.number().int().min(1).max(60).optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        name: nameSchema.optional(),
+        conductorCount: z.number().int().min(1).max(60).optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const { id, ...patch } = input;
       await db.updateRunCircuit(id, ctx.user.id, patch);
@@ -330,11 +383,17 @@ export const takeoffRunsRouter = router({
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const bid = await db.getBidById(input.bidId, ctx.user.id);
-      if (!bid) throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
+      if (!bid)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
 
       const allRuns = await db.getRunsForBid(input.bidId, ctx.user.id);
-      const runs = allRuns.filter(r => r.status === "committed" && !r.isSuggestion);
-      const circuits = await db.getCircuitsForRuns(runs.map(r => r.id), ctx.user.id);
+      const runs = allRuns.filter(
+        r => r.status === "committed" && !r.isSuggestion
+      );
+      const circuits = await db.getCircuitsForRuns(
+        runs.map(r => r.id),
+        ctx.user.id
+      );
 
       // Each run measures against ITS OWN sheet's scale — a bid can hold a site
       // plan at 1" = 40' and a floor plan at 1/4" = 1'-0".
@@ -342,17 +401,28 @@ export const takeoffRunsRouter = router({
       const ratioBySheet = new Map<number, number | null>();
       for (const sheetId of sheetIds) {
         const sheet = await db.getBidPdfSheet(sheetId, ctx.user.id);
-        if (!sheet) { ratioBySheet.set(sheetId, null); continue; }
+        if (!sheet) {
+          ratioBySheet.set(sheetId, null);
+          continue;
+        }
         const measurability = measurabilityOf(sheetScale(sheet));
-        ratioBySheet.set(sheetId, measurability.ok ? measurability.ratio : null);
+        ratioBySheet.set(
+          sheetId,
+          measurability.ok ? measurability.ratio : null
+        );
       }
 
-      return totalQuantities(runs.map(run => ({
-        run: { pathType: run.pathType as RunPathType, points: run.points ?? [] },
-        circuits: circuits
-          .filter(c => c.runId === run.id)
-          .map(c => ({ name: c.name, conductorCount: c.conductorCount })),
-        ratio: ratioBySheet.get(run.sheetId) ?? null,
-      })));
+      return totalQuantities(
+        runs.map(run => ({
+          run: {
+            pathType: run.pathType as RunPathType,
+            points: run.points ?? [],
+          },
+          circuits: circuits
+            .filter(c => c.runId === run.id)
+            .map(c => ({ name: c.name, conductorCount: c.conductorCount })),
+          ratio: ratioBySheet.get(run.sheetId) ?? null,
+        }))
+      );
     }),
 });

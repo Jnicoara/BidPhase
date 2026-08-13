@@ -51,7 +51,8 @@ const MB = 1024 * 1024;
 
 async function newBid(userId = USER) {
   const bid = await callerFor(userId).bids.create({
-    name: `Upload test ${Date.now()}${Math.random()}`, trades: ["electrical"],
+    name: `Upload test ${Date.now()}${Math.random()}`,
+    trades: ["electrical"],
   });
   return bid!;
 }
@@ -65,10 +66,16 @@ beforeAll(async () => {
   const database = await getDb();
   if (!database) return;
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await database.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await database
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await database.insert(users).values({
-        id, openId: `test-pdf-upload-${id}`, name: `Upload test user ${id}`,
+        id,
+        openId: `test-pdf-upload-${id}`,
+        name: `Upload test user ${id}`,
       });
     }
   }
@@ -89,22 +96,31 @@ describe("the size limit", () => {
   });
 
   it("accepts a file one byte under the limit", () => {
-    expect(checkPdfUpload({ filename: "E1.pdf", byteSize: MAX_PDF_BYTES - 1 }).ok).toBe(true);
+    expect(
+      checkPdfUpload({ filename: "E1.pdf", byteSize: MAX_PDF_BYTES - 1 }).ok
+    ).toBe(true);
   });
 
   it("accepts a file exactly at the limit", () => {
     // The limit is inclusive: "up to 150MB" has to mean 150MB works.
-    expect(checkPdfUpload({ filename: "E1.pdf", byteSize: MAX_PDF_BYTES }).ok).toBe(true);
+    expect(
+      checkPdfUpload({ filename: "E1.pdf", byteSize: MAX_PDF_BYTES }).ok
+    ).toBe(true);
   });
 
   it("refuses a file one byte over the limit", () => {
-    const result = checkPdfUpload({ filename: "E1.pdf", byteSize: MAX_PDF_BYTES + 1 });
+    const result = checkPdfUpload({
+      filename: "E1.pdf",
+      byteSize: MAX_PDF_BYTES + 1,
+    });
     expect(result.ok).toBe(false);
   });
 
   it("accepts the large sets the old 30MB ceiling turned away", () => {
     for (const size of [40 * MB, 80 * MB, 120 * MB, 149 * MB]) {
-      expect(checkPdfUpload({ filename: "Scanned set.pdf", byteSize: size }).ok).toBe(true);
+      expect(
+        checkPdfUpload({ filename: "Scanned set.pdf", byteSize: size }).ok
+      ).toBe(true);
     }
   });
 
@@ -117,7 +133,10 @@ describe("the size limit", () => {
 
 describe("what the refusal says", () => {
   it("names the file, its size, the limit, and what to do", () => {
-    const result = checkPdfUpload({ filename: "Tower A - Electrical.pdf", byteSize: 200 * MB });
+    const result = checkPdfUpload({
+      filename: "Tower A - Electrical.pdf",
+      byteSize: 200 * MB,
+    });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a refusal");
 
@@ -141,7 +160,14 @@ describe("what the refusal says", () => {
   it("does not read like a validation error", () => {
     const result = checkPdfUpload({ filename: "E1.pdf", byteSize: 500 * MB });
     if (result.ok) throw new Error("expected a refusal");
-    for (const jargon of ["invalid", "failed", "error", "exceeded maximum", "null", "undefined"]) {
+    for (const jargon of [
+      "invalid",
+      "failed",
+      "error",
+      "exceeded maximum",
+      "null",
+      "undefined",
+    ]) {
       expect(result.message.toLowerCase()).not.toContain(jargon);
     }
   });
@@ -198,7 +224,9 @@ describe.skipIf(!hasDb)("asking for an upload ticket", () => {
     const bid = await newBid();
     await expect(
       caller().bidPdfs.createUploadTicket({
-        bidId: bid.id, filename: "Huge.pdf", byteSize: 200 * MB,
+        bidId: bid.id,
+        filename: "Huge.pdf",
+        byteSize: 200 * MB,
       })
     ).rejects.toThrow(/over the 150MB limit/i);
   });
@@ -207,7 +235,9 @@ describe.skipIf(!hasDb)("asking for an upload ticket", () => {
     const bid = await newBid();
     await expect(
       caller().bidPdfs.createUploadTicket({
-        bidId: bid.id, filename: "Plans.dwg", byteSize: 4 * MB,
+        bidId: bid.id,
+        filename: "Plans.dwg",
+        byteSize: 4 * MB,
       })
     ).rejects.toThrow(/have to be PDFs/i);
   });
@@ -219,7 +249,9 @@ describe.skipIf(!hasDb)("asking for an upload ticket", () => {
     const bid = await newBid();
     await expect(
       caller().bidPdfs.createUploadTicket({
-        bidId: bid.id, filename: "Big but fine.pdf", byteSize: MAX_PDF_BYTES - 1,
+        bidId: bid.id,
+        filename: "Big but fine.pdf",
+        byteSize: MAX_PDF_BYTES - 1,
       })
     ).rejects.toThrow(/storage/i);
   });
@@ -228,7 +260,9 @@ describe.skipIf(!hasDb)("asking for an upload ticket", () => {
     const bid = await newBid();
     await expect(
       callerFor(OTHER_USER).bidPdfs.createUploadTicket({
-        bidId: bid.id, filename: "E1.pdf", byteSize: MB,
+        bidId: bid.id,
+        filename: "E1.pdf",
+        byteSize: MB,
       })
     ).rejects.toThrow(/not found/i);
   });

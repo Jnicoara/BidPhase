@@ -692,7 +692,9 @@ export default function MaterialsLibraryPage() {
     return [...CATEGORIES, "Uncategorized"]
       .map(label => ({
         label,
-        items: (byCategory.get(label) ?? []).sort((a, b) => compareBySize(a.name, b.name)),
+        items: (byCategory.get(label) ?? []).sort((a, b) =>
+          compareBySize(a.name, b.name)
+        ),
       }))
       .filter(group => group.items.length > 0);
   }, [visible, searching]);
@@ -707,10 +709,17 @@ export default function MaterialsLibraryPage() {
    */
   const listItems = useMemo((): ListItem[] => {
     if (searching) {
-      return (visible as Material[]).map(material => ({ kind: "row" as const, material }));
+      return (visible as Material[]).map(material => ({
+        kind: "row" as const,
+        material,
+      }));
     }
     return groups.flatMap(group => [
-      { kind: "header" as const, label: group.label, count: group.items.length },
+      {
+        kind: "header" as const,
+        label: group.label,
+        count: group.items.length,
+      },
       ...group.items.map(material => ({ kind: "row" as const, material })),
     ]);
   }, [groups, visible, searching]);

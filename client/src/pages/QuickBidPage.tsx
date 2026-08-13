@@ -26,9 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import {
-  ArrowLeft, Check, Copy, Plus, Search, X, Zap,
-} from "lucide-react";
+import { ArrowLeft, Check, Copy, Plus, Search, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -39,8 +37,10 @@ import { smartSearch } from "@/lib/smartSearch";
 
 const money = (value: number) =>
   value.toLocaleString("en-US", {
-    style: "currency", currency: "USD",
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 
 const round = (value: number, places = 2) => {
@@ -83,7 +83,7 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     onSuccess: result => {
       toast.success(
         `Added ${result.kitName} — ${result.lineIds.length} line${result.lineIds.length === 1 ? "" : "s"}` +
-        (result.skipped.length ? `, skipped ${result.skipped.length}` : "")
+          (result.skipped.length ? `, skipped ${result.skipped.length}` : "")
       );
     },
     onSettled: refresh,
@@ -93,18 +93,23 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     onMutate: async vars => {
       await utils.bids.get.cancel({ id: bidId });
       const previous = utils.bids.get.getData({ id: bidId });
-      utils.bids.get.setData({ id: bidId }, old => old && ({
-        ...old,
-        lines: old.lines.map(line =>
-          line.id === vars.id && vars.qty !== undefined
-            ? { ...line, qty: String(vars.qty) }
-            : line
-        ),
-      }));
+      utils.bids.get.setData(
+        { id: bidId },
+        old =>
+          old && {
+            ...old,
+            lines: old.lines.map(line =>
+              line.id === vars.id && vars.qty !== undefined
+                ? { ...line, qty: String(vars.qty) }
+                : line
+            ),
+          }
+      );
       return { previous };
     },
     onError: (error, _vars, context) => {
-      if (context?.previous) utils.bids.get.setData({ id: bidId }, context.previous);
+      if (context?.previous)
+        utils.bids.get.setData({ id: bidId }, context.previous);
       toast.error(error.message);
     },
     onSettled: refresh,
@@ -114,14 +119,19 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     onMutate: async vars => {
       await utils.bids.get.cancel({ id: bidId });
       const previous = utils.bids.get.getData({ id: bidId });
-      utils.bids.get.setData({ id: bidId }, old => old && ({
-        ...old,
-        lines: old.lines.filter(line => line.id !== vars.id),
-      }));
+      utils.bids.get.setData(
+        { id: bidId },
+        old =>
+          old && {
+            ...old,
+            lines: old.lines.filter(line => line.id !== vars.id),
+          }
+      );
       return { previous };
     },
     onError: (error, _vars, context) => {
-      if (context?.previous) utils.bids.get.setData({ id: bidId }, context.previous);
+      if (context?.previous)
+        utils.bids.get.setData({ id: bidId }, context.previous);
       toast.error(error.message);
     },
     onSettled: refresh,
@@ -131,7 +141,12 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
   // Assemblies get the same trade-slang matching as materials, so "recep" finds
   // "Duplex receptacle standard" without typing it out.
   const searchable = useMemo(
-    () => assemblies.map(a => ({ id: String(a.id), description: a.name, category: a.category })),
+    () =>
+      assemblies.map(a => ({
+        id: String(a.id),
+        description: a.name,
+        category: a.category,
+      })),
     [assemblies]
   );
 
@@ -145,30 +160,35 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
   }, [query, searchable, assemblies]);
 
   // Keep the highlight inside the result list as it shrinks under typing.
-  useEffect(() => { setHighlight(0); }, [query]);
+  useEffect(() => {
+    setHighlight(0);
+  }, [query]);
 
   const focusSearch = useCallback(() => {
     // rAF so focus lands after React has committed the re-render.
     requestAnimationFrame(() => searchRef.current?.focus());
   }, []);
 
-  const add = useCallback((assemblyId: number) => {
-    const amount = Number(qty);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter a quantity greater than zero.");
-      return;
-    }
-    addAssembly.mutate({
-      bidId,
-      assemblyId,
-      qty: amount,
-      unitLabel: unitLabel.trim() || null,
-      // Count more of the same thing onto one line instead of stacking rows.
-      merge: true,
-    });
-    setQuery("");
-    focusSearch();
-  }, [addAssembly, bidId, qty, unitLabel, focusSearch]);
+  const add = useCallback(
+    (assemblyId: number) => {
+      const amount = Number(qty);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error("Enter a quantity greater than zero.");
+        return;
+      }
+      addAssembly.mutate({
+        bidId,
+        assemblyId,
+        qty: amount,
+        unitLabel: unitLabel.trim() || null,
+        // Count more of the same thing onto one line instead of stacking rows.
+        merge: true,
+      });
+      setQuery("");
+      focusSearch();
+    },
+    [addAssembly, bidId, qty, unitLabel, focusSearch]
+  );
 
   const onSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
@@ -202,7 +222,12 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     <div className="flex flex-col h-full bg-background">
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-center gap-3">
-          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={onBack}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 text-xs"
+            onClick={onBack}
+          >
             <ArrowLeft className="w-3.5 h-3.5" /> Bids
           </Button>
           <Zap className="w-5 h-5 text-primary shrink-0" />
@@ -270,32 +295,50 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                     onClick={() => add(assembly.id)}
                     className={cn(
                       "w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors border-b border-border last:border-0",
-                      index === highlight ? "bg-[#F5C518]/10 text-foreground" : "hover:bg-muted/40"
+                      index === highlight
+                        ? "bg-[#F5C518]/10 text-foreground"
+                        : "hover:bg-muted/40"
                     )}
                   >
-                    <Plus className={cn(
-                      "w-3.5 h-3.5 shrink-0",
-                      index === highlight ? "text-[#F5C518]" : "text-muted-foreground"
-                    )} />
+                    <Plus
+                      className={cn(
+                        "w-3.5 h-3.5 shrink-0",
+                        index === highlight
+                          ? "text-[#F5C518]"
+                          : "text-muted-foreground"
+                      )}
+                    />
                     <span className="flex-1 truncate">{assembly.name}</span>
-                    <span className="text-xs text-muted-foreground">{assembly.category}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {assembly.category}
+                    </span>
                     <span className="font-mono text-xs text-muted-foreground">
                       {round(Number(assembly.baseLaborHours), 2)} h
                     </span>
                     {index === highlight && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">Enter</Badge>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0"
+                      >
+                        Enter
+                      </Badge>
                     )}
                   </button>
                 ))}
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                {query.trim()
-                  ? <>Nothing matches “{query}”.</>
-                  : <>Type to search. <span className="text-foreground">↑↓</span> to choose,{" "}
-                     <span className="text-foreground">Enter</span> to add,{" "}
-                     <span className="text-foreground">Esc</span> to clear. The quantity sticks
-                     between adds, and counting the same assembly again adds to its line.</>}
+                {query.trim() ? (
+                  <>Nothing matches “{query}”.</>
+                ) : (
+                  <>
+                    Type to search. <span className="text-foreground">↑↓</span>{" "}
+                    to choose, <span className="text-foreground">Enter</span> to
+                    add, <span className="text-foreground">Esc</span> to clear.
+                    The quantity sticks between adds, and counting the same
+                    assembly again adds to its line.
+                  </>
+                )}
               </p>
             )}
           </div>
@@ -327,8 +370,9 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                A kit lands as separate line items, each frozen and each editable — so one room
-                being different is just an edit to that line.
+                A kit lands as separate line items, each frozen and each
+                editable — so one room being different is just an edit to that
+                line.
               </p>
             </div>
           )}
@@ -342,11 +386,17 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               <Copy className="w-3.5 h-3.5" />
               {showDuplicate ? "Hide" : "Repeat a unit"}
               {units.length > 0 && (
-                <span className="text-muted-foreground/70">({units.length} on this bid)</span>
+                <span className="text-muted-foreground/70">
+                  ({units.length} on this bid)
+                </span>
               )}
             </button>
             {showDuplicate && (
-              <DuplicateUnitPanel bidId={bidId} units={units} onDone={refresh} />
+              <DuplicateUnitPanel
+                bidId={bidId}
+                units={units}
+                onDone={refresh}
+              />
             )}
           </div>
 
@@ -360,7 +410,9 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
             </div>
 
             {!detail ? (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading…</div>
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                Loading…
+              </div>
             ) : recent.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                 Nothing counted yet. Search above and press Enter.
@@ -374,12 +426,16 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   <div className="flex-1 min-w-0">
                     <span className="text-sm truncate">{line.name}</span>
                     {line.unitLabel && (
-                      <span className="ml-2 text-xs text-muted-foreground">{line.unitLabel}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {line.unitLabel}
+                      </span>
                     )}
                   </div>
                   <InlineNumberField
                     value={Number(line.qty)}
-                    onSave={next => updateLine.mutate({ bidId, id: line.id, qty: next })}
+                    onSave={next =>
+                      updateLine.mutate({ bidId, id: line.id, qty: next })
+                    }
                     rules={{ min: 0, max: 999999 }}
                     className="h-7 w-16 text-sm"
                     ariaLabel={`Quantity of ${line.name}`}
@@ -388,7 +444,8 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                     {money(line.breakdown.directCost)}
                   </span>
                   <Button
-                    size="sm" variant="ghost"
+                    size="sm"
+                    variant="ghost"
                     className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                     onClick={() => removeLine.mutate({ bidId, id: line.id })}
                     aria-label={`Remove ${line.name}`}
@@ -404,7 +461,9 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
             <div className="rounded-xl border border-border bg-card p-4 flex flex-wrap items-baseline gap-x-6 gap-y-2">
               <div>
                 <div className="text-xs text-muted-foreground">Direct cost</div>
-                <div className="font-mono text-sm">{money(detail.totals.directCost)}</div>
+                <div className="font-mono text-sm">
+                  {money(detail.totals.directCost)}
+                </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">
@@ -417,7 +476,8 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                     <span className="ml-1 text-muted-foreground/70">
                       ({round(detail.totals.laborHoursBeforeProductivity, 2)} h
                       {detail.settings.productivityPct > 0 ? " +" : " "}
-                      {round(detail.settings.productivityPct * 100, 2)}% productivity)
+                      {round(detail.settings.productivityPct * 100, 2)}%
+                      productivity)
                     </span>
                   )}
                 </div>
@@ -427,13 +487,21 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">
-                  {detail.settings.profit.method === "markup" ? "Markup" : "Target margin"}{" "}
+                  {detail.settings.profit.method === "markup"
+                    ? "Markup"
+                    : "Target margin"}{" "}
                   {round(detail.settings.profit.value * 100, 2)}%
                   <span className="ml-1 text-muted-foreground/70">
-                    ({detail.settings.profitSource === "bid" ? "this bid" : "company"})
+                    (
+                    {detail.settings.profitSource === "bid"
+                      ? "this bid"
+                      : "company"}
+                    )
                   </span>
                 </div>
-                <div className="font-mono text-sm">{money(detail.totals.profitAmount)}</div>
+                <div className="font-mono text-sm">
+                  {money(detail.totals.profitAmount)}
+                </div>
               </div>
               <div className="ml-auto text-right">
                 <div className="text-xs text-muted-foreground">Bid price</div>
@@ -460,8 +528,12 @@ export default function QuickBidPage() {
 
   const createBid = trpc.bids.create.useMutation({
     onError: error => toast.error(error.message),
-    onSuccess: bid => { if (bid) setBidId(bid.id); },
-    onSettled: () => { void utils.bids.list.invalidate(); },
+    onSuccess: bid => {
+      if (bid) setBidId(bid.id);
+    },
+    onSettled: () => {
+      void utils.bids.list.invalidate();
+    },
   });
 
   if (bidId !== null) {
@@ -469,7 +541,10 @@ export default function QuickBidPage() {
   }
 
   const start = () => {
-    if (!name.trim()) { toast.error("Give the bid a name."); return; }
+    if (!name.trim()) {
+      toast.error("Give the bid a name.");
+      return;
+    }
     createBid.mutate({ name: name.trim() });
     setName("");
   };
@@ -482,8 +557,8 @@ export default function QuickBidPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold">Quick bid</h1>
             <p className="text-xs text-muted-foreground">
-              Build a bid by counting, with no plan takeoff — for jobs where you already know the
-              numbers.
+              Build a bid by counting, with no plan takeoff — for jobs where you
+              already know the numbers.
             </p>
           </div>
         </div>
@@ -499,7 +574,9 @@ export default function QuickBidPage() {
               <Input
                 value={name}
                 onChange={e => setName(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") start(); }}
+                onKeyDown={e => {
+                  if (e.key === "Enter") start();
+                }}
                 placeholder="Bid name — e.g. Oak Street remodel"
                 className="h-9 flex-1 min-w-[14rem] text-sm"
                 autoFocus
@@ -515,7 +592,9 @@ export default function QuickBidPage() {
               Or carry on with an existing bid
             </div>
             {isLoading ? (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">Loading bids…</div>
+              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                Loading bids…
+              </div>
             ) : bids.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                 No bids yet — name one above to begin.
@@ -527,8 +606,12 @@ export default function QuickBidPage() {
                   onClick={() => setBidId(bid.id)}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
                 >
-                  <span className="flex-1 min-w-0 text-sm font-medium truncate">{bid.name}</span>
-                  <Badge variant="outline" className="text-xs">{bid.status}</Badge>
+                  <span className="flex-1 min-w-0 text-sm font-medium truncate">
+                    {bid.name}
+                  </span>
+                  <Badge variant="outline" className="text-xs">
+                    {bid.status}
+                  </Badge>
                 </button>
               ))
             )}

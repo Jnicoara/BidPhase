@@ -79,9 +79,7 @@
       "indexes": {
         "projects_userId_idx": {
           "name": "projects_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -90,12 +88,8 @@
           "name": "projects_userId_users_id_fk",
           "tableFrom": "projects",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -103,9 +97,7 @@
       "compositePrimaryKeys": {
         "projects_id": {
           "name": "projects_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -217,9 +209,7 @@
       "indexes": {
         "user_materials_db_userId_idx": {
           "name": "user_materials_db_userId_idx",
-          "columns": [
-            "userId"
-          ],
+          "columns": ["userId"],
           "isUnique": false
         }
       },
@@ -228,12 +218,8 @@
           "name": "user_materials_db_userId_users_id_fk",
           "tableFrom": "user_materials_db",
           "tableTo": "users",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -241,9 +227,7 @@
       "compositePrimaryKeys": {
         "user_materials_db_id": {
           "name": "user_materials_db_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -341,17 +325,13 @@
       "compositePrimaryKeys": {
         "users_id": {
           "name": "users_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "users_openId_unique": {
           "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ]
+          "columns": ["openId"]
         }
       },
       "checkConstraint": {}

@@ -28,15 +28,19 @@ import { toast } from "sonner";
 import { Pencil, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Popover, PopoverContent, PopoverTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
 } from "@/components/ui/popover";
 import { InlineNumberField } from "@/components/InlineNumberField";
 import { DEFAULT_ANNUAL_HOURS } from "@shared/pricing";
 
 const money = (value: number) =>
   value.toLocaleString("en-US", {
-    style: "currency", currency: "USD",
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 
 export type QuickEditableRate = {
@@ -52,7 +56,8 @@ export type QuickEditableRate = {
 };
 
 export function LaborRateQuickEdit({
-  rate, onSaved,
+  rate,
+  onSaved,
 }: {
   rate: QuickEditableRate;
   /** Called after a successful save, so the caller can refetch what it shows. */
@@ -62,9 +67,11 @@ export function LaborRateQuickEdit({
   const utils = trpc.useUtils();
 
   /** Assemblies pointing at this role — the blast radius, stated up front. */
-  const { data: assemblies = [] } = trpc.assemblies.list.useQuery(undefined, { enabled: open });
-  const usedBy = assemblies.filter(a =>
-    a.laborRateId === rate.id || a.laborRateId === rate.baselineId
+  const { data: assemblies = [] } = trpc.assemblies.list.useQuery(undefined, {
+    enabled: open,
+  });
+  const usedBy = assemblies.filter(
+    a => a.laborRateId === rate.id || a.laborRateId === rate.baselineId
   ).length;
 
   const update = trpc.laborRates.update.useMutation({
@@ -87,7 +94,8 @@ export function LaborRateQuickEdit({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          size="sm" variant="ghost"
+          size="sm"
+          variant="ghost"
           className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
           title={`Edit the ${rate.name} rate — shared across your whole library`}
           aria-label={`Edit ${rate.name} rate`}
@@ -98,12 +106,14 @@ export function LaborRateQuickEdit({
 
       <PopoverContent align="start" className="w-80 space-y-3">
         <div>
-          <div className="text-sm font-medium">Editing the {rate.name} rate</div>
+          <div className="text-sm font-medium">
+            Editing the {rate.name} rate
+          </div>
           <div className="flex items-start gap-1.5 mt-1 text-xs text-[#F5C518]">
             <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-px" />
             <span>
-              This is the one shared rate for {rate.name}, used across your whole library — not a
-              rate for this assembly alone.
+              This is the one shared rate for {rate.name}, used across your
+              whole library — not a rate for this assembly alone.
             </span>
           </div>
         </div>
@@ -111,12 +121,16 @@ export function LaborRateQuickEdit({
         {isSalary ? (
           <div className="space-y-2">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground w-20 shrink-0">Salary</span>
+              <span className="text-xs text-muted-foreground w-20 shrink-0">
+                Salary
+              </span>
               {/* No onDismiss: closing here would strand the user outside a
                   panel they had not finished — hours is still below. */}
               <InlineNumberField
                 value={Number(rate.annualSalary ?? 0)}
-                onSave={annualSalary => update.mutate({ id: rate.id, annualSalary })}
+                onSave={annualSalary =>
+                  update.mutate({ id: rate.id, annualSalary })
+                }
                 rules={{ min: 0 }}
                 className="h-8 w-32 text-sm"
                 ariaLabel={`${rate.name} annual salary`}
@@ -124,10 +138,14 @@ export function LaborRateQuickEdit({
               />
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-xs text-muted-foreground w-20 shrink-0">Hours/yr</span>
+              <span className="text-xs text-muted-foreground w-20 shrink-0">
+                Hours/yr
+              </span>
               <InlineNumberField
                 value={Number(rate.annualHours ?? DEFAULT_ANNUAL_HOURS)}
-                onSave={annualHours => update.mutate({ id: rate.id, annualHours })}
+                onSave={annualHours =>
+                  update.mutate({ id: rate.id, annualHours })
+                }
                 rules={{ min: 0.01, max: 8760 }}
                 className="h-8 w-32 text-sm"
                 ariaLabel={`${rate.name} working hours per year`}
@@ -145,7 +163,9 @@ export function LaborRateQuickEdit({
           </div>
         ) : (
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground w-20 shrink-0">Rate</span>
+            <span className="text-xs text-muted-foreground w-20 shrink-0">
+              Rate
+            </span>
             <InlineNumberField
               value={Number(rate.hourlyCost)}
               onSave={hourlyCost => update.mutate({ id: rate.id, hourlyCost })}

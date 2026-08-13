@@ -28,7 +28,10 @@ describe("the navigation allowlist", () => {
     // to the model must resolve — or the model can be handed an option that
     // the validator then rejects, and the helper silently never works.
     for (const id of NAVIGATION_TARGET_IDS) {
-      expect(resolveNavigationTarget(id), `${id} does not resolve`).not.toBeNull();
+      expect(
+        resolveNavigationTarget(id),
+        `${id} does not resolve`
+      ).not.toBeNull();
     }
     expect(NAVIGATION_TARGET_IDS).toHaveLength(NAVIGATION_TARGETS.length);
   });
@@ -55,7 +58,10 @@ describe("the navigation allowlist", () => {
       // Note "labor-rates " with a trailing space IS accepted — the resolver
       // trims — so it is excluded from the expectation below on purpose.
       if (id.trim() === "labor-rates") continue;
-      expect(resolveNavigationTarget(id), `${JSON.stringify(id)} was accepted`).toBeNull();
+      expect(
+        resolveNavigationTarget(id),
+        `${JSON.stringify(id)} was accepted`
+      ).toBeNull();
     }
   });
 
@@ -78,7 +84,9 @@ describe("the navigation allowlist", () => {
   it("only ever points inside the app", () => {
     // Nothing in the list may send a user off-site or outside the hash router.
     for (const target of NAVIGATION_TARGETS) {
-      expect(target.path, `${target.id} leaves the app`).toMatch(/^#\/[a-z0-9/-]*$/);
+      expect(target.path, `${target.id} leaves the app`).toMatch(
+        /^#\/[a-z0-9/-]*$/
+      );
       expect(target.path).not.toContain("..");
     }
   });
@@ -96,7 +104,10 @@ describe("the navigation allowlist", () => {
     // The purpose text is what the model actually matches a question against.
     // A thin one is a screen the helper can never find.
     for (const target of NAVIGATION_TARGETS) {
-      expect(target.label.trim().length, `${target.id} has no label`).toBeGreaterThan(0);
+      expect(
+        target.label.trim().length,
+        `${target.id} has no label`
+      ).toBeGreaterThan(0);
       expect(
         target.purpose.trim().length,
         `${target.id} needs a fuller purpose`
@@ -107,7 +118,13 @@ describe("the navigation allowlist", () => {
   it("covers the screens a lost user actually asks for", () => {
     // A regression guard on coverage rather than mechanism: these are the
     // destinations the feature exists to reach.
-    for (const id of ["labor-rates", "materials", "assemblies", "quick-bid", "bids"]) {
+    for (const id of [
+      "labor-rates",
+      "materials",
+      "assemblies",
+      "quick-bid",
+      "bids",
+    ]) {
       expect(NAVIGATION_TARGET_IDS, `no target for ${id}`).toContain(id);
     }
   });
@@ -131,13 +148,17 @@ vi.mock("./_core/llm", () => ({
 
 describe("when the helper cannot reach a model", () => {
   const caller = () =>
-    appRouter.createCaller({ user: { id: 1, role: "user" } } as unknown as TrpcContext);
+    appRouter.createCaller({
+      user: { id: 1, role: "user" },
+    } as unknown as TrpcContext);
 
   afterEach(() => vi.restoreAllMocks());
 
   it("says nothing alarming to the user", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    const answer = await caller().navigation.ask({ question: "where are labor rates" });
+    const answer = await caller().navigation.ask({
+      question: "where are labor rates",
+    });
 
     // A missed navigation hint is not worth an error banner — the sidebar is
     // right there. The user gets the ordinary "not sure" and no target.

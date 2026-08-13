@@ -31,7 +31,11 @@ const OTHER_USER = 9999;
 
 describe("mergeLibraryRows", () => {
   const baseline = (id: number) => ({ id, userId: null, baselineId: null });
-  const owned = (id: number, baselineId: number | null) => ({ id, userId: USER, baselineId });
+  const owned = (id: number, baselineId: number | null) => ({
+    id,
+    userId: USER,
+    baselineId,
+  });
 
   it("returns baseline rows untouched when the user has forked nothing", () => {
     const rows = [baseline(1), baseline(2)];
@@ -74,7 +78,11 @@ beforeAll(async () => {
   if (!db) return;
 
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await db.insert(users).values({
         id,
@@ -84,7 +92,9 @@ beforeAll(async () => {
     }
   }
 
-  await db.delete(materials).where(inArray(materials.userId, [USER, OTHER_USER]));
+  await db
+    .delete(materials)
+    .where(inArray(materials.userId, [USER, OTHER_USER]));
 });
 
 describe.skipIf(!hasDb)("baseline material seeding", () => {
@@ -103,7 +113,9 @@ describe.skipIf(!hasDb)("baseline material seeding", () => {
   it("is idempotent — running it twice does not duplicate rows", async () => {
     await seedBaselineMaterials();
     const rows = await getLibraryMaterials(USER);
-    const duplicated = rows.filter(r => r.userId === null && r.name === "20A breaker");
+    const duplicated = rows.filter(
+      r => r.userId === null && r.name === "20A breaker"
+    );
     expect(duplicated).toHaveLength(1);
   });
 
@@ -113,8 +125,10 @@ describe.skipIf(!hasDb)("baseline material seeding", () => {
     // began shipping every row unpriced — and an assertion that 0 is exactly 0
     // would not have caught a rounding bug anyway. An awkward decimal does.
     const id = await createMaterial({
-      userId: USER, name: `Decimal probe ${Date.now()}`,
-      unitOfSale: "each", costPerUnit: "0.0800",
+      userId: USER,
+      name: `Decimal probe ${Date.now()}`,
+      unitOfSale: "each",
+      costPerUnit: "0.0800",
     });
     const row = await getMaterialById(id, USER);
     expect(row?.costPerUnit).toBe("0.0800");
@@ -131,7 +145,9 @@ describe.skipIf(!hasDb)("material categories", () => {
     const rows = await getLibraryMaterials(USER);
     for (const seeded of BASELINE_MATERIALS) {
       const found = rows.find(r => r.name === seeded.name && r.userId === null);
-      expect(found?.category, `wrong category for ${seeded.name}`).toBe(seeded.category);
+      expect(found?.category, `wrong category for ${seeded.name}`).toBe(
+        seeded.category
+      );
     }
   });
 
@@ -144,9 +160,14 @@ describe.skipIf(!hasDb)("material categories", () => {
   it("re-stamps a baseline row whose category was lost, so the seed file stays the authority", async () => {
     const db = await getDb();
     const before = await getLibraryMaterials(USER);
-    const target = before.find(r => r.userId === null && r.name === "EMT strap")!;
+    const target = before.find(
+      r => r.userId === null && r.name === "EMT strap"
+    )!;
 
-    await db!.update(materials).set({ category: null }).where(eq(materials.id, target.id));
+    await db!
+      .update(materials)
+      .set({ category: null })
+      .where(eq(materials.id, target.id));
     await seedBaselineMaterials();
 
     const after = await getMaterialById(target.id, USER);
@@ -155,12 +176,17 @@ describe.skipIf(!hasDb)("material categories", () => {
 
   it("backfills a fork that predates the column from the baseline it came from", async () => {
     const rows = await getLibraryMaterials(USER);
-    const baseline = rows.find(r => r.userId === null && r.name === "3-way switch")!;
+    const baseline = rows.find(
+      r => r.userId === null && r.name === "3-way switch"
+    )!;
     const forkId = await forkMaterial(baseline.id, USER);
 
     // Simulate a row forked before `category` existed.
     const db = await getDb();
-    await db!.update(materials).set({ category: null }).where(eq(materials.id, forkId));
+    await db!
+      .update(materials)
+      .set({ category: null })
+      .where(eq(materials.id, forkId));
 
     await seedBaselineMaterials();
 
@@ -170,7 +196,9 @@ describe.skipIf(!hasDb)("material categories", () => {
 
   it("does not overwrite a category the user chose for their own copy", async () => {
     const rows = await getLibraryMaterials(USER);
-    const baseline = rows.find(r => r.userId === null && r.name === "Fan-rated ceiling box")!;
+    const baseline = rows.find(
+      r => r.userId === null && r.name === "Fan-rated ceiling box"
+    )!;
     const forkId = await forkMaterial(baseline.id, USER);
 
     await updateMaterial(forkId, USER, { category: "Wall Plates & Misc" });
@@ -182,7 +210,9 @@ describe.skipIf(!hasDb)("material categories", () => {
 
   it("carries the category onto a fresh fork without any category-specific code", async () => {
     const rows = await getLibraryMaterials(USER);
-    const baseline = rows.find(r => r.userId === null && r.name === "GFCI receptacle")!;
+    const baseline = rows.find(
+      r => r.userId === null && r.name === "GFCI receptacle"
+    )!;
     const forkId = await forkMaterial(baseline.id, USER);
     const fork = await getMaterialById(forkId, USER);
     expect(fork?.category).toBe("Receptacles");
@@ -190,14 +220,18 @@ describe.skipIf(!hasDb)("material categories", () => {
 
   it("restores the starter category on revert", async () => {
     const rows = await getLibraryMaterials(USER);
-    const baseline = rows.find(r => r.userId === null && r.name === "6ft MC whip")!;
+    const baseline = rows.find(
+      r => r.userId === null && r.name === "6ft MC whip"
+    )!;
     const forkId = await forkMaterial(baseline.id, USER);
 
     await updateMaterial(forkId, USER, { category: "Boxes" });
     expect((await getMaterialById(forkId, USER))?.category).toBe("Boxes");
 
     await revertMaterialToBaseline(forkId, USER);
-    expect((await getMaterialById(forkId, USER))?.category).toBe("Lighting Hardware");
+    expect((await getMaterialById(forkId, USER))?.category).toBe(
+      "Lighting Hardware"
+    );
   });
 });
 
@@ -210,10 +244,16 @@ describe.skipIf(!hasDb)("material search aliases", () => {
     // Read baselines straight from the table, not through getLibraryMaterials:
     // the merged list hides any baseline an earlier test forked.
     const db = await getDb();
-    const rows = await db!.select().from(materials).where(isNull(materials.userId));
+    const rows = await db!
+      .select()
+      .from(materials)
+      .where(isNull(materials.userId));
     for (const seeded of BASELINE_MATERIALS) {
       const found = rows.find(r => r.name === seeded.name);
-      expect(found?.searchAliases, `no aliases for ${seeded.name}`).toBeTruthy();
+      expect(
+        found?.searchAliases,
+        `no aliases for ${seeded.name}`
+      ).toBeTruthy();
     }
   });
 
@@ -222,20 +262,32 @@ describe.skipIf(!hasDb)("material search aliases", () => {
     // and at a higher tier than alias text can reach.
     for (const seeded of BASELINE_MATERIALS) {
       const nameWords = new Set(
-        seeded.name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(w => w.length > 2)
+        seeded.name
+          .toLowerCase()
+          .replace(/[^a-z0-9 ]/g, " ")
+          .split(/\s+/)
+          .filter(w => w.length > 2)
       );
       const aliasWords = seeded.searchAliases.toLowerCase().split(/\s+/);
       const restated = aliasWords.filter(w => w.length > 2 && nameWords.has(w));
-      expect(restated, `${seeded.name} restates: ${restated.join(", ")}`).toHaveLength(0);
+      expect(
+        restated,
+        `${seeded.name} restates: ${restated.join(", ")}`
+      ).toHaveLength(0);
     }
   });
 
   it("re-stamps aliases that were lost, so the seed file stays the authority", async () => {
     const db = await getDb();
     const before = await getLibraryMaterials(USER);
-    const target = before.find(r => r.userId === null && r.name === '4" square box')!;
+    const target = before.find(
+      r => r.userId === null && r.name === '4" square box'
+    )!;
 
-    await db!.update(materials).set({ searchAliases: null }).where(eq(materials.id, target.id));
+    await db!
+      .update(materials)
+      .set({ searchAliases: null })
+      .where(eq(materials.id, target.id));
     await seedBaselineMaterials();
 
     const after = await getMaterialById(target.id, USER);
@@ -244,11 +296,16 @@ describe.skipIf(!hasDb)("material search aliases", () => {
 
   it("backfills a fork that predates the column from its baseline", async () => {
     const rows = await getLibraryMaterials(USER);
-    const baseline = rows.find(r => r.userId === null && r.name === "Wire nuts")!;
+    const baseline = rows.find(
+      r => r.userId === null && r.name === "Wire nuts"
+    )!;
     const forkId = await forkMaterial(baseline.id, USER);
 
     const db = await getDb();
-    await db!.update(materials).set({ searchAliases: null }).where(eq(materials.id, forkId));
+    await db!
+      .update(materials)
+      .set({ searchAliases: null })
+      .where(eq(materials.id, forkId));
     await seedBaselineMaterials();
 
     const fork = await getMaterialById(forkId, USER);
@@ -257,7 +314,9 @@ describe.skipIf(!hasDb)("material search aliases", () => {
 
   it("does not overwrite aliases the user wrote themselves", async () => {
     const rows = await getLibraryMaterials(USER);
-    const baseline = rows.find(r => r.userId === null && r.name === "EMT strap")!;
+    const baseline = rows.find(
+      r => r.userId === null && r.name === "EMT strap"
+    )!;
     const forkId = await forkMaterial(baseline.id, USER);
 
     await updateMaterial(forkId, USER, { searchAliases: "my own words" });
@@ -289,7 +348,9 @@ describe.skipIf(!hasDb)("fork and revert", () => {
   beforeAll(async () => {
     await seedBaselineMaterials();
     const rows = await getLibraryMaterials(USER);
-    const baseline = rows.find(r => r.userId === null && r.name === "Duplex receptacle");
+    const baseline = rows.find(
+      r => r.userId === null && r.name === "Duplex receptacle"
+    );
     baselineId = baseline!.id;
   });
 
@@ -320,7 +381,10 @@ describe.skipIf(!hasDb)("fork and revert", () => {
     const original = await getMaterialById(baselineId, USER);
 
     const forkId = await forkMaterial(baselineId, USER);
-    await updateMaterial(forkId, USER, { costPerUnit: "99.0000", name: "My edited receptacle" });
+    await updateMaterial(forkId, USER, {
+      costPerUnit: "99.0000",
+      name: "My edited receptacle",
+    });
 
     const edited = await getMaterialById(forkId, USER);
     expect(edited?.name).toBe("My edited receptacle");
@@ -333,8 +397,15 @@ describe.skipIf(!hasDb)("fork and revert", () => {
   });
 
   it("refuses to revert a fully custom material", async () => {
-    const customId = await createMaterial({ userId: USER, name: "Custom widget", unitOfSale: "each", costPerUnit: "3.0000" });
-    await expect(revertMaterialToBaseline(customId, USER)).rejects.toThrow(/no original/i);
+    const customId = await createMaterial({
+      userId: USER,
+      name: "Custom widget",
+      unitOfSale: "each",
+      costPerUnit: "3.0000",
+    });
+    await expect(revertMaterialToBaseline(customId, USER)).rejects.toThrow(
+      /no original/i
+    );
   });
 });
 
@@ -374,28 +445,51 @@ describe.skipIf(!hasDb)("ownership", () => {
   });
 
   it("one user cannot read another user's material", async () => {
-    const id = await createMaterial({ userId: OTHER_USER, name: "Private to other user", unitOfSale: "each", costPerUnit: "1.0000" });
+    const id = await createMaterial({
+      userId: OTHER_USER,
+      name: "Private to other user",
+      unitOfSale: "each",
+      costPerUnit: "1.0000",
+    });
     expect(await getMaterialById(id, USER)).toBeUndefined();
     expect(await getMaterialById(id, OTHER_USER)).toBeDefined();
   });
 
   it("one user cannot edit another user's material", async () => {
-    const id = await createMaterial({ userId: OTHER_USER, name: "Not yours", unitOfSale: "each", costPerUnit: "1.0000" });
+    const id = await createMaterial({
+      userId: OTHER_USER,
+      name: "Not yours",
+      unitOfSale: "each",
+      costPerUnit: "1.0000",
+    });
     await updateMaterial(id, USER, { name: "hijacked" });
     const row = await getMaterialById(id, OTHER_USER);
     expect(row?.name).toBe("Not yours");
   });
 
   it("ownership columns in an update payload are ignored", async () => {
-    const id = await createMaterial({ userId: USER, name: "Stays mine", unitOfSale: "each", costPerUnit: "1.0000" });
-    await updateMaterial(id, USER, { name: "Renamed", userId: OTHER_USER } as never);
+    const id = await createMaterial({
+      userId: USER,
+      name: "Stays mine",
+      unitOfSale: "each",
+      costPerUnit: "1.0000",
+    });
+    await updateMaterial(id, USER, {
+      name: "Renamed",
+      userId: OTHER_USER,
+    } as never);
     const row = await getMaterialById(id, USER);
     expect(row?.name).toBe("Renamed");
     expect(row?.userId).toBe(USER);
   });
 
   it("archiving a user's own material removes it from the list", async () => {
-    const id = await createMaterial({ userId: USER, name: "Temporary", unitOfSale: "each", costPerUnit: "1.0000" });
+    const id = await createMaterial({
+      userId: USER,
+      name: "Temporary",
+      unitOfSale: "each",
+      costPerUnit: "1.0000",
+    });
     await archiveMaterial(id, USER);
     const rows = await getLibraryMaterials(USER);
     expect(rows.some(r => r.id === id)).toBe(false);

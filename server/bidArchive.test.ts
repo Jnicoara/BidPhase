@@ -51,7 +51,8 @@ const callerFor = (userId: number) =>
 const caller = () => callerFor(USER);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const at = (base: Date, days: number) => new Date(base.getTime() + days * DAY_MS);
+const at = (base: Date, days: number) =>
+  new Date(base.getTime() + days * DAY_MS);
 
 async function newBid(name = `Archive test ${Date.now()}${Math.random()}`) {
   const bid = await caller().bids.create({ name, trades: ["electrical"] });
@@ -69,10 +70,16 @@ beforeAll(async () => {
   if (!database) return;
 
   for (const id of [USER, OTHER_USER]) {
-    const [existing] = await database.select().from(users).where(eq(users.id, id)).limit(1);
+    const [existing] = await database
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
     if (!existing) {
       await database.insert(users).values({
-        id, openId: `test-bid-archive-${id}`, name: `Archive test user ${id}`,
+        id,
+        openId: `test-bid-archive-${id}`,
+        name: `Archive test user ${id}`,
       });
     }
   }
@@ -107,7 +114,9 @@ describe("the retention countdown", () => {
   it("rounds UP, so anything still restorable reads as at least a day", () => {
     // Six hours short of the deadline. "0 days left" would read as already
     // gone and stop someone bothering to restore something they still can.
-    const almostGone = new Date(purgeDueAt(archived).getTime() - 6 * 60 * 60 * 1000);
+    const almostGone = new Date(
+      purgeDueAt(archived).getTime() - 6 * 60 * 60 * 1000
+    );
     expect(daysRemaining(archived, almostGone)).toBe(1);
     expect(retentionLabel(archived, almostGone)).toBe("1 day left");
   });
@@ -262,9 +271,12 @@ describe.skipIf(!hasDb)("restoring before the deadline", () => {
     const bid = await newBid();
     const database = await getDb();
     await database!.insert(bidPdfs).values({
-      bidId: bid.id, userId: USER,
-      filename: "E1 Power plan.pdf", storageKey: `test/${bid.id}/e1.pdf`,
-      byteSize: 2048, sortOrder: 0,
+      bidId: bid.id,
+      userId: USER,
+      filename: "E1 Power plan.pdf",
+      storageKey: `test/${bid.id}/e1.pdf`,
+      byteSize: 2048,
+      sortOrder: 0,
     });
 
     await caller().bids.archive({ id: bid.id });
@@ -326,7 +338,9 @@ describe.skipIf(!hasDb)("the purge sweep", () => {
     const result = await purgeExpiredBids(justAfter);
     expect(result.ids).toContain(bid.id);
     expect(await caller().bids.archived()).toHaveLength(0);
-    await expect(caller().bids.get({ id: bid.id })).rejects.toThrow(/not found/i);
+    await expect(caller().bids.get({ id: bid.id })).rejects.toThrow(
+      /not found/i
+    );
   });
 
   it("never touches a live bid, however old", async () => {
@@ -341,15 +355,21 @@ describe.skipIf(!hasDb)("the purge sweep", () => {
     const bid = await newBid();
     const database = await getDb();
     await database!.insert(bidPdfs).values({
-      bidId: bid.id, userId: USER,
-      filename: "doomed.pdf", storageKey: `test/${bid.id}/doomed.pdf`,
-      byteSize: 1024, sortOrder: 0,
+      bidId: bid.id,
+      userId: USER,
+      filename: "doomed.pdf",
+      storageKey: `test/${bid.id}/doomed.pdf`,
+      byteSize: 1024,
+      sortOrder: 0,
     });
     await archiveAt(bid.id, at(now, -(RETENTION_DAYS + 1)));
 
     await purgeExpiredBids(now);
 
-    const orphans = await database!.select().from(bidPdfs).where(eq(bidPdfs.bidId, bid.id));
+    const orphans = await database!
+      .select()
+      .from(bidPdfs)
+      .where(eq(bidPdfs.bidId, bid.id));
     expect(orphans).toHaveLength(0);
   });
 
@@ -357,7 +377,8 @@ describe.skipIf(!hasDb)("the purge sweep", () => {
     const now = new Date();
     const mine = await newBid();
     const theirs = await callerFor(OTHER_USER).bids.create({
-      name: "Their expired bid", trades: ["electrical"],
+      name: "Their expired bid",
+      trades: ["electrical"],
     });
     await archiveAt(mine.id, at(now, -(RETENTION_DAYS + 1)));
     await archiveAt(theirs!.id, at(now, -(RETENTION_DAYS + 1)), OTHER_USER);
@@ -429,9 +450,9 @@ describe.skipIf(!hasDb)("removing a bid never destroys it", () => {
     // there is no path from a list — confirmed or not — straight to
     // destruction. A mis-click can cost at most a trip to the Archive.
     const bid = await newBid();
-    await expect(
-      caller().bids.deleteForever({ id: bid.id })
-    ).rejects.toThrow(/archived/i);
+    await expect(caller().bids.deleteForever({ id: bid.id })).rejects.toThrow(
+      /archived/i
+    );
 
     const still = await caller().bids.get({ id: bid.id });
     expect(still.bid.id).toBe(bid.id);
@@ -455,16 +476,18 @@ describe.skipIf(!hasDb)("deleting from the archive by hand", () => {
     await caller().bids.deleteForever({ id: bid.id });
 
     expect(await caller().bids.archived()).toHaveLength(0);
-    await expect(caller().bids.get({ id: bid.id })).rejects.toThrow(/not found/i);
+    await expect(caller().bids.get({ id: bid.id })).rejects.toThrow(
+      /not found/i
+    );
   });
 
   it("refuses a live bid — there is no path straight to destruction", async () => {
     // The user must archive first, then confirm again from the archive. Same
     // rule the modifiers archive follows.
     const bid = await newBid();
-    await expect(
-      caller().bids.deleteForever({ id: bid.id })
-    ).rejects.toThrow(/archived/i);
+    await expect(caller().bids.deleteForever({ id: bid.id })).rejects.toThrow(
+      /archived/i
+    );
     expect(await caller().bids.list()).toHaveLength(1);
   });
 

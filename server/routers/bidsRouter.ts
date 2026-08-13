@@ -23,7 +23,11 @@ import {
   sumDirectCost,
   type CompanyPricingDefaults,
 } from "../../shared/pricing";
-import { daysRemaining, purgeDueAt, retentionUrgency } from "../../shared/retention";
+import {
+  daysRemaining,
+  purgeDueAt,
+  retentionUrgency,
+} from "../../shared/retention";
 import * as db from "../db";
 
 const nameSchema = z.string().trim().min(1).max(255);
@@ -48,7 +52,8 @@ const toDecimal4 = (value: number) => value.toFixed(4);
 /** Assert the bid belongs to the caller before anything touches its children. */
 async function requireBid(id: number, userId: number) {
   const bid = await db.getBidById(id, userId);
-  if (!bid) throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
+  if (!bid)
+    throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
   return bid;
 }
 
@@ -56,7 +61,9 @@ async function requireBid(id: number, userId: number) {
  * Resolve a user's company defaults into the shape the pricing engine wants.
  * Shared by `get` and `dashboard` so one bid cannot price two ways.
  */
-async function companyDefaultsFor(userId: number): Promise<CompanyPricingDefaults> {
+async function companyDefaultsFor(
+  userId: number
+): Promise<CompanyPricingDefaults> {
   const defaults = await db.getPricingDefaults(userId);
   return {
     overheadEnabled: defaults?.overheadEnabled ?? false,
@@ -77,13 +84,17 @@ function rollUpBid(
   const settings = resolveBidPricingSettings(company, {
     overheadEnabled: bid.overheadEnabled,
     overheadMode: bid.overheadMode,
-    overheadValue: bid.overheadValue === null ? null : Number(bid.overheadValue),
+    overheadValue:
+      bid.overheadValue === null ? null : Number(bid.overheadValue),
     profitMethod: bid.profitMethod,
     profitValue: bid.profitValue === null ? null : Number(bid.profitValue),
-    productivityPct: bid.productivityPct === null ? null : Number(bid.productivityPct),
+    productivityPct:
+      bid.productivityPct === null ? null : Number(bid.productivityPct),
   });
 
-  const breakdowns = lines.map(line => priceLine(line, settings.productivityPct));
+  const breakdowns = lines.map(line =>
+    priceLine(line, settings.productivityPct)
+  );
   const directCost = sumDirectCost(breakdowns);
   const bidPrice = calculateBidPrice({
     directCost,
@@ -144,25 +155,36 @@ export const bidsRouter = router({
       companyDefaultsFor(ctx.user.id),
     ]);
 
-    return Promise.all(bids.map(async bid => {
-      const lines = await db.getBidLineItems(bid.id);
-      const { directCost, bidPrice } = rollUpBid(bid, lines, company);
-      return {
-        ...bid,
-        lineCount: lines.length,
-        directCost,
-        finalPrice: bidPrice.finalPrice,
-      };
-    }));
+    return Promise.all(
+      bids.map(async bid => {
+        const lines = await db.getBidLineItems(bid.id);
+        const { directCost, bidPrice } = rollUpBid(bid, lines, company);
+        return {
+          ...bid,
+          lineCount: lines.length,
+          directCost,
+          finalPrice: bidPrice.finalPrice,
+        };
+      })
+    );
   }),
 
   create: protectedProcedure
-    .input(z.object({
-      name: nameSchema,
-      status: z.enum(BID_STATUSES).default("Draft"),
-      trades: z.array(z.string().trim().min(1).max(64)).max(20).default(["electrical"]),
-      dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null),
-    }))
+    .input(
+      z.object({
+        name: nameSchema,
+        status: z.enum(BID_STATUSES).default("Draft"),
+        trades: z
+          .array(z.string().trim().min(1).max(64))
+          .max(20)
+          .default(["electrical"]),
+        dueDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .nullable()
+          .default(null),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const id = await db.createBid({
         userId: ctx.user.id,
@@ -175,22 +197,28 @@ export const bidsRouter = router({
     }),
 
   update: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      name: nameSchema.optional(),
-      status: z.enum(BID_STATUSES).optional(),
-      trades: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
-      /** "YYYY-MM-DD", or null to clear the deadline. */
-      dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-      // Passing null clears an override and returns the group to the company
-      // default; omitting the key leaves it as it is.
-      overheadEnabled: z.boolean().nullable().optional(),
-      overheadMode: overheadModeSchema.nullable().optional(),
-      overheadValue: z.number().min(0).nullable().optional(),
-      profitMethod: profitMethodSchema.nullable().optional(),
-      profitValue: z.number().min(0).max(0.99).nullable().optional(),
-      productivityPct: productivitySchema.nullable().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        name: nameSchema.optional(),
+        status: z.enum(BID_STATUSES).optional(),
+        trades: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
+        /** "YYYY-MM-DD", or null to clear the deadline. */
+        dueDate: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .nullable()
+          .optional(),
+        // Passing null clears an override and returns the group to the company
+        // default; omitting the key leaves it as it is.
+        overheadEnabled: z.boolean().nullable().optional(),
+        overheadMode: overheadModeSchema.nullable().optional(),
+        overheadValue: z.number().min(0).nullable().optional(),
+        profitMethod: profitMethodSchema.nullable().optional(),
+        profitValue: z.number().min(0).max(0.99).nullable().optional(),
+        productivityPct: productivitySchema.nullable().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const { id, ...rest } = input;
       await requireBid(id, ctx.user.id);
@@ -200,21 +228,29 @@ export const bidsRouter = router({
       if (rest.status !== undefined) patch.status = rest.status;
       if (rest.trades !== undefined) patch.trades = rest.trades;
       if (rest.dueDate !== undefined) patch.dueDate = rest.dueDate;
-      if (rest.overheadEnabled !== undefined) patch.overheadEnabled = rest.overheadEnabled;
-      if (rest.overheadMode !== undefined) patch.overheadMode = rest.overheadMode;
+      if (rest.overheadEnabled !== undefined)
+        patch.overheadEnabled = rest.overheadEnabled;
+      if (rest.overheadMode !== undefined)
+        patch.overheadMode = rest.overheadMode;
       if (rest.overheadValue !== undefined) {
-        patch.overheadValue = rest.overheadValue === null ? null : toDecimal4(rest.overheadValue);
+        patch.overheadValue =
+          rest.overheadValue === null ? null : toDecimal4(rest.overheadValue);
       }
-      if (rest.profitMethod !== undefined) patch.profitMethod = rest.profitMethod;
+      if (rest.profitMethod !== undefined)
+        patch.profitMethod = rest.profitMethod;
       if (rest.profitValue !== undefined) {
-        patch.profitValue = rest.profitValue === null ? null : toDecimal4(rest.profitValue);
+        patch.profitValue =
+          rest.profitValue === null ? null : toDecimal4(rest.profitValue);
       }
       if (rest.productivityPct !== undefined) {
         patch.productivityPct =
-          rest.productivityPct === null ? null : toDecimal4(rest.productivityPct);
+          rest.productivityPct === null
+            ? null
+            : toDecimal4(rest.productivityPct);
       }
 
-      if (Object.keys(patch).length > 0) await db.updateBid(id, ctx.user.id, patch);
+      if (Object.keys(patch).length > 0)
+        await db.updateBid(id, ctx.user.id, patch);
       return db.getBidById(id, ctx.user.id);
     }),
 
@@ -236,7 +272,11 @@ export const bidsRouter = router({
         // Already counting down. Returning the ORIGINAL date rather than
         // re-archiving is the point: a double-click must not buy another 30
         // days and strand the bid in the archive indefinitely.
-        return { success: true, archivedAt: bid.archivedAt, alreadyArchived: true };
+        return {
+          success: true,
+          archivedAt: bid.archivedAt,
+          alreadyArchived: true,
+        };
       }
       const now = new Date();
       await db.archiveBid(input.id, ctx.user.id, now);
@@ -267,24 +307,26 @@ export const bidsRouter = router({
       companyDefaultsFor(ctx.user.id),
     ]);
 
-    return Promise.all(rows.map(async bid => {
-      // Priced through the same rollUpBid as the dashboard, so a bid's value
-      // reads the same whether it is archived or not — someone deciding what to
-      // rescue is looking at exactly the number they saw before archiving it.
-      const lines = await db.getBidLineItems(bid.id);
-      const { bidPrice } = rollUpBid(bid, lines, company);
-      // Non-null by construction: getArchivedBids filters on archivedAt.
-      const archivedAt = bid.archivedAt as Date;
-      return {
-        ...bid,
-        archivedAt,
-        lineCount: lines.length,
-        finalPrice: bidPrice.finalPrice,
-        purgeDueAt: purgeDueAt(archivedAt),
-        daysRemaining: daysRemaining(archivedAt, now),
-        urgency: retentionUrgency(archivedAt, now),
-      };
-    }));
+    return Promise.all(
+      rows.map(async bid => {
+        // Priced through the same rollUpBid as the dashboard, so a bid's value
+        // reads the same whether it is archived or not — someone deciding what to
+        // rescue is looking at exactly the number they saw before archiving it.
+        const lines = await db.getBidLineItems(bid.id);
+        const { bidPrice } = rollUpBid(bid, lines, company);
+        // Non-null by construction: getArchivedBids filters on archivedAt.
+        const archivedAt = bid.archivedAt as Date;
+        return {
+          ...bid,
+          archivedAt,
+          lineCount: lines.length,
+          finalPrice: bidPrice.finalPrice,
+          purgeDueAt: purgeDueAt(archivedAt),
+          daysRemaining: daysRemaining(archivedAt, now),
+          urgency: retentionUrgency(archivedAt, now),
+        };
+      })
+    );
   }),
 
   /**
@@ -301,7 +343,8 @@ export const bidsRouter = router({
       if (!bid.archivedAt) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Only archived bids can be deleted permanently. Archive it first.",
+          message:
+            "Only archived bids can be deleted permanently. Archive it first.",
         });
       }
       await db.deleteBidForever(input.id, ctx.user.id);
@@ -324,14 +367,27 @@ export const bidsRouter = router({
         companyDefaultsFor(ctx.user.id),
       ]);
 
-      const { settings, breakdowns, directCost, bidPrice } = rollUpBid(bid, lines, company);
-      const priced = lines.map((line, index) => ({ line, breakdown: breakdowns[index] }));
+      const { settings, breakdowns, directCost, bidPrice } = rollUpBid(
+        bid,
+        lines,
+        company
+      );
+      const priced = lines.map((line, index) => ({
+        line,
+        breakdown: breakdowns[index],
+      }));
 
       // Unit subtotals, so a hotel bid can answer "what does one room cost?"
-      const unitTotals = new Map<string, { directCost: number; lines: number }>();
+      const unitTotals = new Map<
+        string,
+        { directCost: number; lines: number }
+      >();
       for (const { line, breakdown } of priced) {
         if (!line.unitLabel) continue;
-        const current = unitTotals.get(line.unitLabel) ?? { directCost: 0, lines: 0 };
+        const current = unitTotals.get(line.unitLabel) ?? {
+          directCost: 0,
+          lines: 0,
+        };
         current.directCost += breakdown.directCost;
         current.lines += 1;
         unitTotals.set(line.unitLabel, current);
@@ -340,12 +396,18 @@ export const bidsRouter = router({
       return {
         bid,
         lines: priced.map(({ line, breakdown }) => ({ ...line, breakdown })),
-        units: Array.from(unitTotals, ([label, totals]) => ({ label, ...totals })),
+        units: Array.from(unitTotals, ([label, totals]) => ({
+          label,
+          ...totals,
+        })),
         totals: {
           // bidPrice carries its own directCost (identical, rounded through the
           // engine) — spread it first so the authoritative one wins.
           ...bidPrice,
-          totalLaborHours: priced.reduce((sum, p) => sum + p.breakdown.totalLaborHours, 0),
+          totalLaborHours: priced.reduce(
+            (sum, p) => sum + p.breakdown.totalLaborHours,
+            0
+          ),
           /**
            * The same hours BEFORE the productivity factor, at quantity.
            *
@@ -356,10 +418,14 @@ export const bidsRouter = router({
            * is the whole point, and they have to be on the same footing.
            */
           laborHoursBeforeProductivity: priced.reduce(
-            (sum, p) => sum + p.breakdown.hoursAfterModifiers * Number(p.line.qty),
+            (sum, p) =>
+              sum + p.breakdown.hoursAfterModifiers * Number(p.line.qty),
             0
           ),
-          materialCost: priced.reduce((sum, p) => sum + p.breakdown.materialCost, 0),
+          materialCost: priced.reduce(
+            (sum, p) => sum + p.breakdown.materialCost,
+            0
+          ),
           laborCost: priced.reduce((sum, p) => sum + p.breakdown.laborCost, 0),
         },
         settings,
@@ -369,22 +435,28 @@ export const bidsRouter = router({
 
   /** Add an assembly to the bid, freezing its costs as they are right now. */
   addAssembly: protectedProcedure
-    .input(z.object({
-      bidId: z.number().int().positive(),
-      assemblyId: z.number().int().positive(),
-      qty: qtySchema.default(1),
-      unitLabel: labelSchema.nullable().default(null),
-      /**
-       * Quick-bid sets this so repeat counts of one assembly stack onto a
-       * single line, keeping that line's original snapshot. Off by default:
-       * the Bids screen wants a new line, freshly snapshotted, every time.
-       */
-      merge: z.boolean().default(false),
-    }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        assemblyId: z.number().int().positive(),
+        qty: qtySchema.default(1),
+        unitLabel: labelSchema.nullable().default(null),
+        /**
+         * Quick-bid sets this so repeat counts of one assembly stack onto a
+         * single line, keeping that line's original snapshot. Off by default:
+         * the Bids screen wants a new line, freshly snapshotted, every time.
+         */
+        merge: z.boolean().default(false),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
       const { id, merged } = await db.addAssemblyToBid(
-        input.bidId, ctx.user.id, input.assemblyId, input.qty, input.unitLabel,
+        input.bidId,
+        ctx.user.id,
+        input.assemblyId,
+        input.qty,
+        input.unitLabel,
         { merge: input.merge }
       );
       const line = await db.getBidLineItem(id, input.bidId);
@@ -401,34 +473,43 @@ export const bidsRouter = router({
    * containing 4 receptacles lands 8.
    */
   addKit: protectedProcedure
-    .input(z.object({
-      bidId: z.number().int().positive(),
-      kitId: z.number().int().positive(),
-      qty: qtySchema.default(1),
-      unitLabel: labelSchema.nullable().default(null),
-    }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        kitId: z.number().int().positive(),
+        qty: qtySchema.default(1),
+        unitLabel: labelSchema.nullable().default(null),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
       try {
         return await db.addKitToBid(
-          input.bidId, ctx.user.id, input.kitId, input.qty, input.unitLabel
+          input.bidId,
+          ctx.user.id,
+          input.kitId,
+          input.qty,
+          input.unitLabel
         );
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: error instanceof Error ? error.message : "Could not add that kit.",
+          message:
+            error instanceof Error ? error.message : "Could not add that kit.",
         });
       }
     }),
 
   updateLine: protectedProcedure
-    .input(z.object({
-      bidId: z.number().int().positive(),
-      id: z.number().int().positive(),
-      qty: qtySchema.optional(),
-      name: nameSchema.optional(),
-      unitLabel: labelSchema.nullable().optional(),
-    }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        id: z.number().int().positive(),
+        qty: qtySchema.optional(),
+        name: nameSchema.optional(),
+        unitLabel: labelSchema.nullable().optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
 
@@ -447,7 +528,12 @@ export const bidsRouter = router({
     }),
 
   removeLine: protectedProcedure
-    .input(z.object({ bidId: z.number().int().positive(), id: z.number().int().positive() }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        id: z.number().int().positive(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
       await db.deleteBidLineItem(input.id, input.bidId);
@@ -469,24 +555,33 @@ export const bidsRouter = router({
    * every generated room prices identically no matter when it was made.
    */
   duplicateUnit: protectedProcedure
-    .input(z.object({
-      bidId: z.number().int().positive(),
-      sourceUnitLabel: labelSchema,
-      baseName: labelSchema,
-      startNumber: z.number().int().min(0).max(100000).default(101),
-      // 200 rooms is a big hotel; beyond that this is a mistake, not a bid.
-      count: z.number().int().min(1).max(200),
-    }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        sourceUnitLabel: labelSchema,
+        baseName: labelSchema,
+        startNumber: z.number().int().min(0).max(100000).default(101),
+        // 200 rooms is a big hotel; beyond that this is a mistake, not a bid.
+        count: z.number().int().min(1).max(200),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       await requireBid(input.bidId, ctx.user.id);
       try {
         return await db.duplicateBidUnit(
-          input.bidId, input.sourceUnitLabel, input.baseName, input.startNumber, input.count
+          input.bidId,
+          input.sourceUnitLabel,
+          input.baseName,
+          input.startNumber,
+          input.count
         );
       } catch (error) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: error instanceof Error ? error.message : "Could not duplicate that unit.",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Could not duplicate that unit.",
         });
       }
     }),
@@ -497,21 +592,28 @@ export const bidsRouter = router({
   }),
 
   setPricingDefaults: protectedProcedure
-    .input(z.object({
-      overheadEnabled: z.boolean().optional(),
-      overheadMode: overheadModeSchema.optional(),
-      overheadValue: z.number().min(0).optional(),
-      profitMethod: profitMethodSchema.optional(),
-      profitValue: z.number().min(0).max(0.99).optional(),
-      productivityPct: productivitySchema.optional(),
-    }))
+    .input(
+      z.object({
+        overheadEnabled: z.boolean().optional(),
+        overheadMode: overheadModeSchema.optional(),
+        overheadValue: z.number().min(0).optional(),
+        profitMethod: profitMethodSchema.optional(),
+        profitValue: z.number().min(0).max(0.99).optional(),
+        productivityPct: productivitySchema.optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const patch: Record<string, unknown> = {};
-      if (input.overheadEnabled !== undefined) patch.overheadEnabled = input.overheadEnabled;
-      if (input.overheadMode !== undefined) patch.overheadMode = input.overheadMode;
-      if (input.overheadValue !== undefined) patch.overheadValue = toDecimal4(input.overheadValue);
-      if (input.profitMethod !== undefined) patch.profitMethod = input.profitMethod;
-      if (input.profitValue !== undefined) patch.profitValue = toDecimal4(input.profitValue);
+      if (input.overheadEnabled !== undefined)
+        patch.overheadEnabled = input.overheadEnabled;
+      if (input.overheadMode !== undefined)
+        patch.overheadMode = input.overheadMode;
+      if (input.overheadValue !== undefined)
+        patch.overheadValue = toDecimal4(input.overheadValue);
+      if (input.profitMethod !== undefined)
+        patch.profitMethod = input.profitMethod;
+      if (input.profitValue !== undefined)
+        patch.profitValue = toDecimal4(input.profitValue);
       if (input.productivityPct !== undefined) {
         patch.productivityPct = toDecimal4(input.productivityPct);
       }

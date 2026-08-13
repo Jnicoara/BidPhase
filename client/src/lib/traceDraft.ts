@@ -64,14 +64,18 @@ export function saveDraft(draft: Omit<TraceDraft, "savedAt">): void {
  * offering nothing: they would accept it, and the missing vertices would go
  * unnoticed into a measured length.
  */
-export function loadDraft(sheetId: number, now: number = Date.now()): TraceDraft | null {
+export function loadDraft(
+  sheetId: number,
+  now: number = Date.now()
+): TraceDraft | null {
   try {
     const raw = window.localStorage.getItem(keyFor(sheetId));
     if (!raw) return null;
 
     const parsed = JSON.parse(raw) as Partial<TraceDraft>;
     if (
-      typeof parsed !== "object" || parsed === null ||
+      typeof parsed !== "object" ||
+      parsed === null ||
       parsed.sheetId !== sheetId ||
       typeof parsed.bidId !== "number" ||
       typeof parsed.savedAt !== "number" ||
@@ -87,8 +91,10 @@ export function loadDraft(sheetId: number, now: number = Date.now()): TraceDraft
     const points = parsed.points as PagePoint[];
     for (const point of points) {
       if (
-        typeof point?.x !== "number" || typeof point?.y !== "number" ||
-        !Number.isFinite(point.x) || !Number.isFinite(point.y)
+        typeof point?.x !== "number" ||
+        typeof point?.y !== "number" ||
+        !Number.isFinite(point.x) ||
+        !Number.isFinite(point.y)
       ) {
         return null;
       }
@@ -101,7 +107,10 @@ export function loadDraft(sheetId: number, now: number = Date.now()): TraceDraft
       sheetId,
       bidId: parsed.bidId,
       runId: typeof parsed.runId === "number" ? parsed.runId : null,
-      name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name : "Recovered run",
+      name:
+        typeof parsed.name === "string" && parsed.name.trim()
+          ? parsed.name
+          : "Recovered run",
       pathType: parsed.pathType === "cable" ? "cable" : "conduit",
       points,
       savedAt: parsed.savedAt,
@@ -126,7 +135,10 @@ export function clearDraft(sheetId: number): void {
  * A path of fewer than two points is a stray click, not work — warning about
  * it would train people to dismiss the warning that matters.
  */
-export function hasUnsavedWork(points: PagePoint[], savedPointCount: number): boolean {
+export function hasUnsavedWork(
+  points: PagePoint[],
+  savedPointCount: number
+): boolean {
   if (points.length < 2) return false;
   return points.length !== savedPointCount;
 }
@@ -160,7 +172,11 @@ export type StampQueue = {
 
 const stampKeyFor = (sheetId: number) => `${STAMP_KEY_PREFIX}${sheetId}`;
 
-export function saveStampQueue(sheetId: number, bidId: number, stamps: QueuedStamp[]): void {
+export function saveStampQueue(
+  sheetId: number,
+  bidId: number,
+  stamps: QueuedStamp[]
+): void {
   try {
     if (stamps.length === 0) {
       window.localStorage.removeItem(stampKeyFor(sheetId));
@@ -180,7 +196,10 @@ export function saveStampQueue(sheetId: number, bidId: number, stamps: QueuedSta
  * a user accepts whatever is offered, and half a batch of markers restored
  * silently is a quantity that is wrong with nothing to say so.
  */
-export function loadStampQueue(sheetId: number, now: number = Date.now()): StampQueue | null {
+export function loadStampQueue(
+  sheetId: number,
+  now: number = Date.now()
+): StampQueue | null {
   try {
     const raw = window.localStorage.getItem(stampKeyFor(sheetId));
     if (!raw) return null;
@@ -199,9 +218,12 @@ export function loadStampQueue(sheetId: number, now: number = Date.now()): Stamp
 
     for (const stamp of parsed.stamps as QueuedStamp[]) {
       if (
-        typeof stamp?.x !== "number" || typeof stamp?.y !== "number" ||
-        !Number.isFinite(stamp.x) || !Number.isFinite(stamp.y) ||
-        typeof stamp.assemblyName !== "string" || !stamp.assemblyName
+        typeof stamp?.x !== "number" ||
+        typeof stamp?.y !== "number" ||
+        !Number.isFinite(stamp.x) ||
+        !Number.isFinite(stamp.y) ||
+        typeof stamp.assemblyName !== "string" ||
+        !stamp.assemblyName
       ) {
         return null;
       }

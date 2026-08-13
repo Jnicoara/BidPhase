@@ -16,36 +16,63 @@ import {
 
 describe("defaultLaborHoursFor", () => {
   it("never returns zero or a blank, for any input", () => {
-    for (const name of ["", "   ", "wat", "Duplex receptacle", "!!!", "12345"]) {
+    for (const name of [
+      "",
+      "   ",
+      "wat",
+      "Duplex receptacle",
+      "!!!",
+      "12345",
+    ]) {
       expect(defaultLaborHoursFor(name).hours, name).toBeGreaterThan(0);
     }
   });
 
   it("falls back to a visible placeholder when nothing matches", () => {
-    expect(defaultLaborHoursFor("quantum flux capacitor").hours).toBe(FALLBACK_LABOR_HOURS);
+    expect(defaultLaborHoursFor("quantum flux capacitor").hours).toBe(
+      FALLBACK_LABOR_HOURS
+    );
   });
 
   it("matches the examples the product asked for", () => {
-    expect(defaultLaborHoursFor("Duplex receptacle standard").hours).toBeCloseTo(0.75, 10);
-    expect(defaultLaborHoursFor("Single-pole switch").hours).toBeCloseTo(0.6, 10);
-    expect(defaultLaborHoursFor("200A main panel furnish and install").hours).toBeCloseTo(8, 10);
-    expect(defaultLaborHoursFor('1/2" EMT conduit run').hours).toBeCloseTo(0.06, 10);
+    expect(
+      defaultLaborHoursFor("Duplex receptacle standard").hours
+    ).toBeCloseTo(0.75, 10);
+    expect(defaultLaborHoursFor("Single-pole switch").hours).toBeCloseTo(
+      0.6,
+      10
+    );
+    expect(
+      defaultLaborHoursFor("200A main panel furnish and install").hours
+    ).toBeCloseTo(8, 10);
+    expect(defaultLaborHoursFor('1/2" EMT conduit run').hours).toBeCloseTo(
+      0.06,
+      10
+    );
   });
 
   it("lets a specific entry beat a generic one", () => {
     // "duplex receptacle retrofit" must not be answered by the bare
     // "receptacle" rule, which would under-price a cut-in by 25%.
-    expect(defaultLaborHoursFor("Duplex receptacle retrofit").hours)
-      .not.toBeCloseTo(defaultLaborHoursFor("Duplex receptacle standard").hours, 5);
-    expect(defaultLaborHoursFor("Duplex receptacle retrofit").hours).toBeCloseTo(1.0, 10);
+    expect(
+      defaultLaborHoursFor("Duplex receptacle retrofit").hours
+    ).not.toBeCloseTo(
+      defaultLaborHoursFor("Duplex receptacle standard").hours,
+      5
+    );
+    expect(
+      defaultLaborHoursFor("Duplex receptacle retrofit").hours
+    ).toBeCloseTo(1.0, 10);
 
-    expect(defaultLaborHoursFor("3-way switch").hours)
-      .toBeGreaterThan(defaultLaborHoursFor("Single-pole switch").hours);
+    expect(defaultLaborHoursFor("3-way switch").hours).toBeGreaterThan(
+      defaultLaborHoursFor("Single-pole switch").hours
+    );
   });
 
   it("is case-insensitive and tolerant of surrounding words", () => {
-    expect(defaultLaborHoursFor("  INSTALL GFCI RECEPTACLE in kitchen ").hours)
-      .toBeCloseTo(defaultLaborHoursFor("GFCI receptacle").hours, 10);
+    expect(
+      defaultLaborHoursFor("  INSTALL GFCI RECEPTACLE in kitchen ").hours
+    ).toBeCloseTo(defaultLaborHoursFor("GFCI receptacle").hours, 10);
   });
 
   it("marks linear runs as per-foot rather than per-task", () => {
@@ -72,7 +99,9 @@ describe("defaultLaborHoursFor", () => {
 describe("isPlaceholderHours", () => {
   it("is true while the value is still the suggestion", () => {
     expect(isPlaceholderHours("Single-pole switch", 0.6)).toBe(true);
-    expect(isPlaceholderHours("anything unmatched", FALLBACK_LABOR_HOURS)).toBe(true);
+    expect(isPlaceholderHours("anything unmatched", FALLBACK_LABOR_HOURS)).toBe(
+      true
+    );
   });
 
   it("goes false once the user changes the number", () => {

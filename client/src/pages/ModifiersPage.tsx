@@ -24,15 +24,38 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { ScopeFilter } from "@/components/library/LibraryControls";
-import { ArchiveItemDialog, type PendingItem } from "@/components/library/LibraryRemovalDialogs";
-import { filterByScope, scopeCounts, type LibraryScope } from "@/lib/libraryScope";
-import { Archive, ArchiveRestore, Check, Pencil, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from "lucide-react";
+import {
+  ArchiveItemDialog,
+  type PendingItem,
+} from "@/components/library/LibraryRemovalDialogs";
+import {
+  filterByScope,
+  scopeCounts,
+  type LibraryScope,
+} from "@/lib/libraryScope";
+import {
+  Archive,
+  ArchiveRestore,
+  Check,
+  Pencil,
+  Plus,
+  RotateCcw,
+  SlidersHorizontal,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { applyModifiersToHours } from "@shared/pricing";
 
@@ -70,7 +93,11 @@ const formatArchivedAt = (value: Modifier["archivedAt"]) => {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 };
 
 type Draft = { name: string; percent: string };
@@ -79,8 +106,10 @@ const emptyDraft: Draft = { name: "", percent: "" };
 function validateDraft(draft: Draft): string | null {
   if (!draft.name.trim()) return "Give the modifier a name.";
   const percent = Number(draft.percent);
-  if (draft.percent.trim() === "" || Number.isNaN(percent)) return "Enter a percentage.";
-  if (percent < MIN_PCT) return "A modifier cannot remove more than 100% of the labor.";
+  if (draft.percent.trim() === "" || Number.isNaN(percent))
+    return "Enter a percentage.";
+  if (percent < MIN_PCT)
+    return "A modifier cannot remove more than 100% of the labor.";
   if (percent > MAX_PCT) return `Keep the adjustment at or below ${MAX_PCT}%.`;
   return null;
 }
@@ -89,22 +118,36 @@ function validateDraft(draft: Draft): string | null {
 
 function OriginBadge({ modifier }: { modifier: Modifier }) {
   if (modifier.userId === null) {
-    return <Badge variant="outline" className="text-xs text-muted-foreground">Starter</Badge>;
+    return (
+      <Badge variant="outline" className="text-xs text-muted-foreground">
+        Starter
+      </Badge>
+    );
   }
   if (modifier.baselineId != null) {
     return (
-      <Badge variant="outline" className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30">
+      <Badge
+        variant="outline"
+        className="text-xs bg-[#F5C518]/15 text-[#F5C518] border-[#F5C518]/30"
+      >
         Your copy
       </Badge>
     );
   }
-  return <Badge variant="outline" className="text-xs">Yours</Badge>;
+  return (
+    <Badge variant="outline" className="text-xs">
+      Yours
+    </Badge>
+  );
 }
 
 // ─── Active row ───────────────────────────────────────────────────────────────
 
 function ModifierRow({
-  modifier, onSave, onRevert, onArchive,
+  modifier,
+  onSave,
+  onRevert,
+  onArchive,
 }: {
   modifier: Modifier;
   onSave: (id: number, draft: Draft) => void;
@@ -150,7 +193,12 @@ function ModifierRow({
           <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={save}>
             <Check className="w-3 h-3" /> Save
           </Button>
-          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={() => setEditing(false)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setEditing(false)}
+          >
             <X className="w-3 h-3" /> Cancel
           </Button>
         </div>
@@ -170,7 +218,9 @@ function ModifierRow({
       <span
         className={cn(
           "text-sm font-mono w-20 text-right shrink-0",
-          modifier.laborAdjustmentPctValue < 0 ? "text-emerald-400" : "text-foreground"
+          modifier.laborAdjustmentPctValue < 0
+            ? "text-emerald-400"
+            : "text-foreground"
         )}
       >
         {formatPct(modifier.laborAdjustmentPctValue)}
@@ -178,13 +228,19 @@ function ModifierRow({
 
       <div className="flex items-center gap-0.5 w-24 justify-end shrink-0">
         <Button
-          size="sm" variant="ghost"
+          size="sm"
+          variant="ghost"
           className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
           onClick={() => {
-            setDraft({ name: modifier.name, percent: String(toPercent(modifier.laborAdjustmentPctValue)) });
+            setDraft({
+              name: modifier.name,
+              percent: String(toPercent(modifier.laborAdjustmentPctValue)),
+            });
             setEditing(true);
           }}
-          title={modifier.userId === null ? "Edit — creates your own copy" : "Edit"}
+          title={
+            modifier.userId === null ? "Edit — creates your own copy" : "Edit"
+          }
           aria-label={`Edit ${modifier.name}`}
         >
           <Pencil className="w-3.5 h-3.5" />
@@ -192,7 +248,8 @@ function ModifierRow({
 
         {modifier.baselineId != null && (
           <Button
-            size="sm" variant="ghost"
+            size="sm"
+            variant="ghost"
             className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
             onClick={() => onRevert(modifier)}
             title="Undo your changes and restore the starter values"
@@ -203,7 +260,8 @@ function ModifierRow({
         )}
 
         <Button
-          size="sm" variant="ghost"
+          size="sm"
+          variant="ghost"
           className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
           onClick={() => onArchive(modifier)}
           title="Move to Archived — you can restore it later"
@@ -219,7 +277,9 @@ function ModifierRow({
 // ─── Archived row ─────────────────────────────────────────────────────────────
 
 function ArchivedRow({
-  modifier, onRestore, onDeleteForever,
+  modifier,
+  onRestore,
+  onDeleteForever,
 }: {
   modifier: Modifier;
   onRestore: (modifier: Modifier) => void;
@@ -230,9 +290,13 @@ function ArchivedRow({
   return (
     <div className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors group">
       <div className="flex-1 min-w-0">
-        <span className="text-sm font-medium truncate text-muted-foreground">{modifier.name}</span>
+        <span className="text-sm font-medium truncate text-muted-foreground">
+          {modifier.name}
+        </span>
         {archivedOn && (
-          <div className="text-xs text-muted-foreground/70 mt-0.5">Archived {archivedOn}</div>
+          <div className="text-xs text-muted-foreground/70 mt-0.5">
+            Archived {archivedOn}
+          </div>
         )}
       </div>
 
@@ -242,13 +306,16 @@ function ArchivedRow({
 
       <div className="flex items-center gap-1 w-52 justify-end shrink-0">
         <Button
-          size="sm" variant="ghost" className="h-7 gap-1.5 text-xs"
+          size="sm"
+          variant="ghost"
+          className="h-7 gap-1.5 text-xs"
           onClick={() => onRestore(modifier)}
         >
           <ArchiveRestore className="w-3.5 h-3.5" /> Restore
         </Button>
         <Button
-          size="sm" variant="ghost"
+          size="sm"
+          variant="ghost"
           className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-destructive"
           onClick={() => onDeleteForever(modifier)}
         >
@@ -273,7 +340,9 @@ export default function ModifiersPage() {
 
   const activeAll = (activeQuery.data ?? []) as Modifier[];
   const [scope, setScope] = useState<LibraryScope>("all");
-  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(null);
+  const [pendingArchive, setPendingArchive] = useState<PendingItem | null>(
+    null
+  );
   const active = filterByScope(activeAll, scope);
   const archived = (archivedQuery.data ?? []) as Modifier[];
 
@@ -286,8 +355,9 @@ export default function ModifiersPage() {
     async (apply: (rows: Modifier[]) => Modifier[]) => {
       await utils.modifiers.list.cancel({ status: "active" });
       const previous = utils.modifiers.list.getData({ status: "active" });
-      utils.modifiers.list.setData({ status: "active" }, old =>
-        (apply((old ?? []) as Modifier[]) as typeof old)
+      utils.modifiers.list.setData(
+        { status: "active" },
+        old => apply((old ?? []) as Modifier[]) as typeof old
       );
       return { previous };
     },
@@ -295,9 +365,15 @@ export default function ModifiersPage() {
   );
 
   const rollbackActive = useCallback(
-    (context: { previous?: unknown } | undefined, error: { message: string }) => {
+    (
+      context: { previous?: unknown } | undefined,
+      error: { message: string }
+    ) => {
       if (context?.previous !== undefined) {
-        utils.modifiers.list.setData({ status: "active" }, context.previous as never);
+        utils.modifiers.list.setData(
+          { status: "active" },
+          context.previous as never
+        );
       }
       toast.error(error.message);
     },
@@ -305,18 +381,23 @@ export default function ModifiersPage() {
   );
 
   const updateModifier = trpc.modifiers.update.useMutation({
-    onMutate: async vars => optimisticActive(rows => rows.map(row =>
-      row.id === vars.id
-        ? {
-            ...row,
-            name: vars.name ?? row.name,
-            laborAdjustmentPctValue: vars.laborAdjustmentPct ?? row.laborAdjustmentPctValue,
-          }
-        : row
-    )),
+    onMutate: async vars =>
+      optimisticActive(rows =>
+        rows.map(row =>
+          row.id === vars.id
+            ? {
+                ...row,
+                name: vars.name ?? row.name,
+                laborAdjustmentPctValue:
+                  vars.laborAdjustmentPct ?? row.laborAdjustmentPctValue,
+              }
+            : row
+        )
+      ),
     onError: (error, _vars, context) => rollbackActive(context, error),
     onSuccess: result => {
-      if (result?.forked) toast.success("Saved as your own copy — the starter is unchanged.");
+      if (result?.forked)
+        toast.success("Saved as your own copy — the starter is unchanged.");
     },
     onSettled: refreshBoth,
   });
@@ -334,7 +415,8 @@ export default function ModifiersPage() {
 
   const archiveModifier = trpc.modifiers.archive.useMutation({
     // Drop it from the active list straight away; the archived list refetches.
-    onMutate: async vars => optimisticActive(rows => rows.filter(row => row.id !== vars.id)),
+    onMutate: async vars =>
+      optimisticActive(rows => rows.filter(row => row.id !== vars.id)),
     onError: (error, _vars, context) => rollbackActive(context, error),
     onSettled: refreshBoth,
   });
@@ -356,17 +438,23 @@ export default function ModifiersPage() {
   const combined = useMemo(() => {
     return applyModifiersToHours(
       PREVIEW_BASE_HOURS,
-      active.map(m => ({ name: m.name, laborAdjustmentPct: m.laborAdjustmentPctValue }))
+      active.map(m => ({
+        name: m.name,
+        laborAdjustmentPct: m.laborAdjustmentPctValue,
+      }))
     );
   }, [active]);
 
-  const handleSave = useCallback((id: number, draft: Draft) => {
-    updateModifier.mutate({
-      id,
-      name: draft.name.trim(),
-      laborAdjustmentPct: toFraction(Number(draft.percent)),
-    });
-  }, [updateModifier]);
+  const handleSave = useCallback(
+    (id: number, draft: Draft) => {
+      updateModifier.mutate({
+        id,
+        name: draft.name.trim(),
+        laborAdjustmentPct: toFraction(Number(draft.percent)),
+      });
+    },
+    [updateModifier]
+  );
 
   const handleCreate = useCallback(() => {
     const problem = validateDraft(newDraft);
@@ -390,7 +478,8 @@ export default function ModifiersPage() {
     setPendingDelete(null);
   }, [deleteForever, pendingDelete]);
 
-  const isLoading = view === "active" ? activeQuery.isLoading : archivedQuery.isLoading;
+  const isLoading =
+    view === "active" ? activeQuery.isLoading : archivedQuery.isLoading;
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -401,12 +490,16 @@ export default function ModifiersPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold">Modifiers</h1>
             <p className="text-xs text-muted-foreground">
-              Job conditions that change how long the work takes. Starter percentages are placeholders — tune them to
-              your own crews.
+              Job conditions that change how long the work takes. Starter
+              percentages are placeholders — tune them to your own crews.
             </p>
           </div>
           {view === "active" && (
-            <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setAdding(v => !v)}>
+            <Button
+              size="sm"
+              className="h-8 gap-1.5 text-xs shrink-0"
+              onClick={() => setAdding(v => !v)}
+            >
               <Plus className="w-3.5 h-3.5" /> Add modifier
             </Button>
           )}
@@ -442,10 +535,12 @@ export default function ModifiersPage() {
             {active.length > 0 && (
               <div className="rounded-xl border border-border bg-card px-4 py-3 mb-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="text-xs text-muted-foreground">
-                  All {active.length} together on a {PREVIEW_BASE_HOURS}-hour task:
+                  All {active.length} together on a {PREVIEW_BASE_HOURS}-hour
+                  task:
                 </span>
                 <span className="text-sm font-mono text-[#F5C518]">
-                  {PREVIEW_BASE_HOURS} h → {Math.round(combined.hours * 100) / 100} h
+                  {PREVIEW_BASE_HOURS} h →{" "}
+                  {Math.round(combined.hours * 100) / 100} h
                 </span>
                 <span className="text-xs font-mono text-muted-foreground">
                   ({formatPct(combined.modifierPct)})
@@ -461,7 +556,9 @@ export default function ModifiersPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Input
                     value={newDraft.name}
-                    onChange={e => setNewDraft({ ...newDraft, name: e.target.value })}
+                    onChange={e =>
+                      setNewDraft({ ...newDraft, name: e.target.value })
+                    }
                     className="h-8 flex-1 min-w-[12rem] text-sm"
                     placeholder="Condition name — e.g. Confined space"
                     autoFocus
@@ -469,21 +566,34 @@ export default function ModifiersPage() {
                   <div className="flex items-center gap-1.5">
                     <Input
                       value={newDraft.percent}
-                      onChange={e => setNewDraft({ ...newDraft, percent: e.target.value })}
+                      onChange={e =>
+                        setNewDraft({ ...newDraft, percent: e.target.value })
+                      }
                       className="h-8 w-24 text-sm text-right"
                       inputMode="decimal"
                       onFocus={selectOnFocus}
                       placeholder="12"
                       aria-label="Labor adjustment percent"
                     />
-                    <span className="text-xs text-muted-foreground">% labor</span>
+                    <span className="text-xs text-muted-foreground">
+                      % labor
+                    </span>
                   </div>
-                  <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={handleCreate}>
+                  <Button
+                    size="sm"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={handleCreate}
+                  >
                     <Check className="w-3 h-3" /> Add
                   </Button>
                   <Button
-                    size="sm" variant="ghost" className="h-8 gap-1.5 text-xs"
-                    onClick={() => { setAdding(false); setNewDraft(emptyDraft); }}
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={() => {
+                      setAdding(false);
+                      setNewDraft(emptyDraft);
+                    }}
                   >
                     <X className="w-3 h-3" /> Cancel
                   </Button>
@@ -497,15 +607,20 @@ export default function ModifiersPage() {
           <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
             <span className="flex-1">Condition</span>
             <span className="w-20 text-right shrink-0">Labor</span>
-            <span className={cn("shrink-0", view === "active" ? "w-24" : "w-52")} />
+            <span
+              className={cn("shrink-0", view === "active" ? "w-24" : "w-52")}
+            />
           </div>
 
           {isLoading ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading modifiers…</div>
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              Loading modifiers…
+            </div>
           ) : view === "active" ? (
             active.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                No modifiers in the working list. Add one, or restore something from Archived.
+                No modifiers in the working list. Add one, or restore something
+                from Archived.
               </div>
             ) : (
               active.map(modifier => (
@@ -520,7 +635,8 @@ export default function ModifiersPage() {
             )
           ) : archived.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              Nothing archived. Removing a modifier from the working list puts it here.
+              Nothing archived. Removing a modifier from the working list puts
+              it here.
             </div>
           ) : (
             archived.map(modifier => (
@@ -542,16 +658,23 @@ export default function ModifiersPage() {
       </div>
 
       {/* Delete Forever — the only destructive action, and it says so */}
-      <AlertDialog open={pendingDelete !== null} onOpenChange={open => !open && setPendingDelete(null)}>
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={open => !open && setPendingDelete(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{pendingDelete?.name}” forever?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete “{pendingDelete?.name}” forever?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the modifier. It will not appear in the Archived list and{" "}
-              <strong>cannot be undone</strong>. Bids that already used it keep the hours they were priced with.
+              This permanently removes the modifier. It will not appear in the
+              Archived list and <strong>cannot be undone</strong>. Bids that
+              already used it keep the hours they were priced with.
               <br />
               <br />
-              If you only want it out of the way, Restore it and archive it instead.
+              If you only want it out of the way, Restore it and archive it
+              instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

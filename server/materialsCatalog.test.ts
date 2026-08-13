@@ -157,24 +157,34 @@ describe("alias hygiene across the whole catalog", () => {
   });
 
   it("ships exactly two wafer sizes, with no duplicate 6 inch row", () => {
-    const wafers = BASELINE_MATERIALS.filter(m => m.name.includes("wafer")).map(m => m.name);
-    expect(wafers).toEqual(['4" wafer LED downlight', '5"/6" wafer LED downlight']);
+    const wafers = BASELINE_MATERIALS.filter(m => m.name.includes("wafer")).map(
+      m => m.name
+    );
+    expect(wafers).toEqual([
+      '4" wafer LED downlight',
+      '5"/6" wafer LED downlight',
+    ]);
   });
 
   it("stocks a fuse for every fused disconnect amperage", () => {
-    const fused = BASELINE_MATERIALS
-      .filter(m => /^\d+A fused disconnect$/.test(m.name))
-      .map(m => m.name.match(/^(\d+)/)![1]);
-    const fuses = BASELINE_MATERIALS
-      .filter(m => /cartridge fuse$/.test(m.name))
-      .map(m => m.name.match(/^(\d+)/)![1]);
+    const fused = BASELINE_MATERIALS.filter(m =>
+      /^\d+A fused disconnect$/.test(m.name)
+    ).map(m => m.name.match(/^(\d+)/)![1]);
+    const fuses = BASELINE_MATERIALS.filter(m =>
+      /cartridge fuse$/.test(m.name)
+    ).map(m => m.name.match(/^(\d+)/)![1]);
     for (const amps of fused) {
-      expect(fuses, `no ${amps}A fuse for the ${amps}A fused disconnect`).toContain(amps);
+      expect(
+        fuses,
+        `no ${amps}A fuse for the ${amps}A fused disconnect`
+      ).toContain(amps);
     }
   });
 
   it("sizes crimp lugs by conductor range, not per gauge", () => {
-    const lugs = BASELINE_MATERIALS.filter(m => m.name.endsWith("crimp lug")).map(m => m.name);
+    const lugs = BASELINE_MATERIALS.filter(m =>
+      m.name.endsWith("crimp lug")
+    ).map(m => m.name);
     expect(lugs).toEqual([
       "14-10 AWG crimp lug",
       "8-6 AWG crimp lug",
@@ -188,7 +198,9 @@ describe("alias hygiene across the whole catalog", () => {
     // Retiring and shipping the same name would have the seeder insert it and
     // deactivate it on every startup, flickering it in and out of the catalog.
     const current = new Set(BASELINE_MATERIALS.map(m => m.name));
-    const clashes = RETIRED_BASELINE_MATERIALS.filter(name => current.has(name));
+    const clashes = RETIRED_BASELINE_MATERIALS.filter(name =>
+      current.has(name)
+    );
     expect(clashes).toEqual([]);
   });
 
@@ -415,7 +427,10 @@ describe.skipIf(!hasDb)("seeding the catalog into a live database", () => {
     // resolve the part it was priced from. So the row survives, deactivated,
     // and simply stops appearing anywhere.
     const db = await getDb();
-    const rows = await db!.select().from(materials).where(isNull(materials.userId));
+    const rows = await db!
+      .select()
+      .from(materials)
+      .where(isNull(materials.userId));
     const byName = new Map(rows.map(r => [r.name, r]));
 
     for (const name of RETIRED_BASELINE_MATERIALS) {
@@ -426,7 +441,9 @@ describe.skipIf(!hasDb)("seeding the catalog into a live database", () => {
 
     // And none of them can be reached through the library any more.
     const visible = await getLibraryMaterials(USER);
-    const leaked = visible.filter(m => RETIRED_BASELINE_MATERIALS.includes(m.name));
+    const leaked = visible.filter(m =>
+      RETIRED_BASELINE_MATERIALS.includes(m.name)
+    );
     expect(leaked.map(m => m.name)).toEqual([]);
   });
 

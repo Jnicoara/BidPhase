@@ -228,22 +228,27 @@ export function resolveBidPricingSettings(
   company: CompanyPricingDefaults,
   overrides: BidPricingOverrides = {}
 ): ResolvedPricingSettings {
-  const overridesOverhead = overrides.overheadEnabled !== null
-    && overrides.overheadEnabled !== undefined;
-  const overridesProfit = overrides.profitMethod !== null
-    && overrides.profitMethod !== undefined;
+  const overridesOverhead =
+    overrides.overheadEnabled !== null &&
+    overrides.overheadEnabled !== undefined;
+  const overridesProfit =
+    overrides.profitMethod !== null && overrides.profitMethod !== undefined;
 
   const overhead: OverheadSetting = overridesOverhead
-    ? (overrides.overheadEnabled
-        ? {
-            enabled: true,
-            mode: overrides.overheadMode ?? company.overheadMode,
-            value: overrides.overheadValue ?? 0,
-          }
-        : { enabled: false })
-    : (company.overheadEnabled
-        ? { enabled: true, mode: company.overheadMode, value: company.overheadValue }
-        : { enabled: false });
+    ? overrides.overheadEnabled
+      ? {
+          enabled: true,
+          mode: overrides.overheadMode ?? company.overheadMode,
+          value: overrides.overheadValue ?? 0,
+        }
+      : { enabled: false }
+    : company.overheadEnabled
+      ? {
+          enabled: true,
+          mode: company.overheadMode,
+          value: company.overheadValue,
+        }
+      : { enabled: false };
 
   const profit: ProfitSetting = overridesProfit
     ? { method: overrides.profitMethod!, value: overrides.profitValue ?? 0 }
@@ -251,8 +256,9 @@ export function resolveBidPricingSettings(
 
   // Productivity resolves on its own, not as part of a group: unlike overhead
   // and profit there is no second field it could be half-overridden against.
-  const overridesProductivity = overrides.productivityPct !== null
-    && overrides.productivityPct !== undefined;
+  const overridesProductivity =
+    overrides.productivityPct !== null &&
+    overrides.productivityPct !== undefined;
   const productivityPct = overridesProductivity
     ? overrides.productivityPct!
     : company.productivityPct;
@@ -284,16 +290,23 @@ export const DEFAULT_ANNUAL_HOURS = 2080;
  * Rounds to whole cents: an unrounded rate multiplied across hundreds of takeoff
  * hours drifts, and the rate is a figure people read and sanity-check.
  */
-export function effectiveHourlyRate(annualSalary: number, annualHours: number): number {
+export function effectiveHourlyRate(
+  annualSalary: number,
+  annualHours: number
+): number {
   assertFinite(annualSalary, "annualSalary");
   assertFinite(annualHours, "annualHours");
 
   if (annualSalary < 0) {
-    throw new Error(`annualSalary cannot be negative, received: ${annualSalary}`);
+    throw new Error(
+      `annualSalary cannot be negative, received: ${annualSalary}`
+    );
   }
   // Zero hours has no meaningful rate — it is a division by zero, not "free".
   if (annualHours <= 0) {
-    throw new Error(`annualHours must be greater than zero, received: ${annualHours}`);
+    throw new Error(
+      `annualHours must be greater than zero, received: ${annualHours}`
+    );
   }
 
   return fromCents(roundToInt(toCents(annualSalary) / annualHours));
@@ -366,7 +379,9 @@ export function applyModifiersToHours(
 ): { hours: number; modifierPct: number; clamped: boolean } {
   assertFinite(baseLaborHours, "baseLaborHours");
   if (baseLaborHours < 0) {
-    throw new Error(`baseLaborHours cannot be negative, received: ${baseLaborHours}`);
+    throw new Error(
+      `baseLaborHours cannot be negative, received: ${baseLaborHours}`
+    );
   }
 
   const modifierPct = sumModifiers(modifiers);
@@ -396,17 +411,22 @@ export function calculateLineItem(input: LineItemInput): LineItemBreakdown {
   const quantity = input.quantity ?? 1;
   assertFinite(quantity, "quantity");
   assertFinite(input.laborRate, "laborRate");
-  if (quantity < 0) throw new Error(`quantity cannot be negative, received: ${quantity}`);
-  if (input.laborRate < 0) throw new Error(`laborRate cannot be negative, received: ${input.laborRate}`);
+  if (quantity < 0)
+    throw new Error(`quantity cannot be negative, received: ${quantity}`);
+  if (input.laborRate < 0)
+    throw new Error(
+      `laborRate cannot be negative, received: ${input.laborRate}`
+    );
 
   // Per-unit material rounds first, so a single unit's price is what the user
   // sees on the recipe, then scales cleanly by quantity.
   const materialCents = materialCostCents(input.materials) * quantity;
 
-  const { hours: afterModifiers, modifierPct, clamped } = applyModifiersToHours(
-    input.baseLaborHours,
-    input.modifiers
-  );
+  const {
+    hours: afterModifiers,
+    modifierPct,
+    clamped,
+  } = applyModifiersToHours(input.baseLaborHours, input.modifiers);
 
   // Second, separate step — see applyProductivityToHours. Never summed into
   // modifierPct, and both figures are returned so a breakdown can show the two
@@ -435,7 +455,9 @@ export function calculateLineItem(input: LineItemInput): LineItemBreakdown {
 
 /** Roll several line items into one direct cost. Sums in cents — no drift. */
 export function sumDirectCost(lines: LineItemBreakdown[]): number {
-  return fromCents(lines.reduce((cents, line) => cents + toCents(line.directCost), 0));
+  return fromCents(
+    lines.reduce((cents, line) => cents + toCents(line.directCost), 0)
+  );
 }
 
 // ─── Step 2 — Overhead ────────────────────────────────────────────────────────
@@ -445,7 +467,9 @@ function overheadCents(costCents: number, overhead?: OverheadSetting): number {
 
   assertFinite(overhead.value, "Overhead value");
   if (overhead.value < 0) {
-    throw new Error(`Overhead value cannot be negative, received: ${overhead.value}`);
+    throw new Error(
+      `Overhead value cannot be negative, received: ${overhead.value}`
+    );
   }
 
   return overhead.mode === "flat"
@@ -454,7 +478,10 @@ function overheadCents(costCents: number, overhead?: OverheadSetting): number {
 }
 
 /** Overhead amount for a given cost. Returns 0 when disabled. */
-export function calculateOverhead(cost: number, overhead?: OverheadSetting): number {
+export function calculateOverhead(
+  cost: number,
+  overhead?: OverheadSetting
+): number {
   return fromCents(overheadCents(toCents(cost), overhead));
 }
 
@@ -464,7 +491,9 @@ function profitCents(costCents: number, profit: ProfitSetting): number {
   assertFinite(profit.value, "Profit value");
 
   if (profit.value < 0) {
-    throw new Error(`Profit value cannot be negative, received: ${profit.value}`);
+    throw new Error(
+      `Profit value cannot be negative, received: ${profit.value}`
+    );
   }
 
   if (profit.method === "markup") {
@@ -505,7 +534,9 @@ export function calculateProfit(cost: number, profit: ProfitSetting): number {
 export function calculateBidPrice(input: BidPriceInput): BidPriceBreakdown {
   assertFinite(input.directCost, "directCost");
   if (input.directCost < 0) {
-    throw new Error(`directCost cannot be negative, received: ${input.directCost}`);
+    throw new Error(
+      `directCost cannot be negative, received: ${input.directCost}`
+    );
   }
 
   const directCents = toCents(input.directCost);

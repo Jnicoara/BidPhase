@@ -12,7 +12,7 @@ const SALT_ROUNDS = 12;
 
 export const authRouter = router({
   /** Current user — null if not logged in */
-  me: publicProcedure.query((opts) => opts.ctx.user),
+  me: publicProcedure.query(opts => opts.ctx.user),
 
   /** Sign up with email + password */
   signup: publicProcedure
@@ -23,9 +23,18 @@ export const authRouter = router({
           .string()
           .min(8, "Password must be at least 8 characters")
           .max(128)
-          .refine((p) => /[A-Z]/.test(p), "Password must contain at least one uppercase letter")
-          .refine((p) => /[0-9]/.test(p), "Password must contain at least one number")
-          .refine((p) => /[^A-Za-z0-9]/.test(p), "Password must contain at least one special character"),
+          .refine(
+            p => /[A-Z]/.test(p),
+            "Password must contain at least one uppercase letter"
+          )
+          .refine(
+            p => /[0-9]/.test(p),
+            "Password must contain at least one number"
+          )
+          .refine(
+            p => /[^A-Za-z0-9]/.test(p),
+            "Password must contain at least one special character"
+          ),
         name: z.string().min(1).max(128).optional(),
       })
     )
@@ -53,14 +62,23 @@ export const authRouter = router({
       });
 
       const user = await db.getUserByEmail(input.email.toLowerCase());
-      if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create account." });
+      if (!user)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create account.",
+        });
 
       // Issue session cookie
-      const token = await sdk.createSessionToken(user.openId, { name: user.name ?? "" });
+      const token = await sdk.createSessionToken(user.openId, {
+        name: user.name ?? "",
+      });
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.cookie(COOKIE_NAME, token, cookieOptions);
 
-      return { success: true, user: { id: user.id, email: user.email, name: user.name } };
+      return {
+        success: true,
+        user: { id: user.id, email: user.email, name: user.name },
+      };
     }),
 
   /** Log in with email + password */
@@ -95,11 +113,16 @@ export const authRouter = router({
       await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
 
       // Issue session cookie
-      const token = await sdk.createSessionToken(user.openId, { name: user.name ?? "" });
+      const token = await sdk.createSessionToken(user.openId, {
+        name: user.name ?? "",
+      });
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.cookie(COOKIE_NAME, token, cookieOptions);
 
-      return { success: true, user: { id: user.id, email: user.email, name: user.name } };
+      return {
+        success: true,
+        user: { id: user.id, email: user.email, name: user.name },
+      };
     }),
 
   /** Log out — clears the session cookie */
@@ -126,9 +149,15 @@ export const authRouter = router({
         });
       }
 
-      const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
+      const valid = await bcrypt.compare(
+        input.currentPassword,
+        user.passwordHash
+      );
       if (!valid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Current password is incorrect." });
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Current password is incorrect.",
+        });
       }
 
       const newHash = await bcrypt.hash(input.newPassword, SALT_ROUNDS);

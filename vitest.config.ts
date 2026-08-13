@@ -16,7 +16,11 @@ export default defineConfig({
     environment: "node",
     // Server tests, plus the pure client libs (no DOM, no React) that carry
     // real logic worth pinning — smartSearch ranking in particular.
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts", "client/src/lib/**/*.test.ts"],
+    include: [
+      "server/**/*.test.ts",
+      "server/**/*.spec.ts",
+      "client/src/lib/**/*.test.ts",
+    ],
     setupFiles: ["dotenv/config"],
     /**
      * One file at a time, because every DB-backed file shares one MySQL.

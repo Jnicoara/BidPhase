@@ -25,15 +25,23 @@ import { Archive, ArrowLeft, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { RETENTION_DAYS, type RetentionUrgency } from "@shared/retention";
 
 const money = (value: number) =>
   value.toLocaleString("en-US", {
-    style: "currency", currency: "USD",
-    minimumFractionDigits: 0, maximumFractionDigits: 0,
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   });
 
 /** Only a deadline worth acting on gets colour. The rest stays quiet. */
@@ -45,7 +53,9 @@ const URGENCY_STYLE: Record<RetentionUrgency, string> = {
 
 const formatDeleteDate = (value: string | Date) =>
   new Date(value).toLocaleDateString("en-US", {
-    weekday: "short", month: "short", day: "numeric",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
   });
 
 type ArchivedBid = {
@@ -57,7 +67,10 @@ type ArchivedBid = {
   purgeDueAt: string | Date;
 };
 
-export default function BidArchivePage({ onBack, onOpenBid }: {
+export default function BidArchivePage({
+  onBack,
+  onOpenBid,
+}: {
   onBack: () => void;
   onOpenBid: (bidId: number) => void;
 }) {
@@ -81,7 +94,10 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
   });
 
   const deleteForever = trpc.bids.deleteForever.useMutation({
-    onSuccess: () => { toast.success("Bid deleted permanently."); invalidate(); },
+    onSuccess: () => {
+      toast.success("Bid deleted permanently.");
+      invalidate();
+    },
     onError: error => toast.error(error.message),
   });
 
@@ -89,7 +105,12 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
     <div className="flex flex-col h-full bg-background">
       <div className="border-b border-border px-6 py-4 shrink-0">
         <div className="flex items-center gap-3">
-          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={onBack}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 text-xs"
+            onClick={onBack}
+          >
             <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
           </Button>
           <div className="flex-1 min-w-0">
@@ -97,8 +118,8 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
               <Archive className="w-4 h-4 text-muted-foreground" /> Archive
             </h1>
             <p className="text-xs text-muted-foreground">
-              Archived bids stay here for {RETENTION_DAYS} days, then they are deleted for good.
-              Restore one any time before its date.
+              Archived bids stay here for {RETENTION_DAYS} days, then they are
+              deleted for good. Restore one any time before its date.
             </p>
           </div>
         </div>
@@ -108,7 +129,10 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
         {isLoading ? (
           <div className="space-y-2 max-w-3xl">
             {[0, 1, 2].map(i => (
-              <div key={i} className="h-16 rounded-xl border border-border bg-card animate-pulse" />
+              <div
+                key={i}
+                className="h-16 rounded-xl border border-border bg-card animate-pulse"
+              />
             ))}
           </div>
         ) : rows.length === 0 ? (
@@ -116,9 +140,10 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
             <Archive className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
             <p className="text-sm font-medium">Nothing archived</p>
             <p className="text-xs text-muted-foreground mt-1.5 max-w-md mx-auto">
-              Archiving a bid takes it off the dashboard without deleting it — useful for a job
-              that is finished or one you are no longer chasing. Anything you archive shows up
-              here with {RETENTION_DAYS} days to change your mind.
+              Archiving a bid takes it off the dashboard without deleting it —
+              useful for a job that is finished or one you are no longer
+              chasing. Anything you archive shows up here with {RETENTION_DAYS}{" "}
+              days to change your mind.
             </p>
           </div>
         ) : (
@@ -137,7 +162,9 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
                     {bid.name}
                   </button>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-muted-foreground">{bid.status}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {bid.status}
+                    </span>
                     <span className="text-xs text-muted-foreground/50">·</span>
                     <span className="text-xs text-muted-foreground">
                       {bid.lineCount} {bid.lineCount === 1 ? "line" : "lines"}
@@ -155,7 +182,10 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
                 <div className="text-right shrink-0">
                   <Badge
                     variant="outline"
-                    className={cn("text-[0.7rem] font-medium", URGENCY_STYLE[bid.urgency])}
+                    className={cn(
+                      "text-[0.7rem] font-medium",
+                      URGENCY_STYLE[bid.urgency]
+                    )}
                   >
                     {bid.daysRemaining === 0
                       ? "Deleting shortly"
@@ -167,14 +197,17 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
                 </div>
 
                 <Button
-                  size="sm" variant="outline" className="h-8 gap-1.5 text-xs shrink-0"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 text-xs shrink-0"
                   onClick={() => restore.mutate({ id: bid.id })}
                   disabled={restore.isPending}
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Restore
                 </Button>
                 <Button
-                  size="sm" variant="ghost"
+                  size="sm"
+                  variant="ghost"
                   className="h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-destructive"
                   onClick={() => setConfirmDelete(bid as ArchivedBid)}
                   aria-label={`Delete ${bid.name} permanently`}
@@ -188,15 +221,23 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
         )}
       </div>
 
-      <AlertDialog open={confirmDelete !== null} onOpenChange={open => !open && setConfirmDelete(null)}>
+      <AlertDialog
+        open={confirmDelete !== null}
+        onOpenChange={open => !open && setConfirmDelete(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{confirmDelete?.name}” for good?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete “{confirmDelete?.name}” for good?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the bid, every line on it and any plans attached to it, right now —
-              rather than on {confirmDelete ? formatDeleteDate(confirmDelete.purgeDueAt) : "its date"}.
-              It cannot be undone. If you are not sure, leave it here and it will delete itself
-              when the time is up.
+              This removes the bid, every line on it and any plans attached to
+              it, right now — rather than on{" "}
+              {confirmDelete
+                ? formatDeleteDate(confirmDelete.purgeDueAt)
+                : "its date"}
+              . It cannot be undone. If you are not sure, leave it here and it
+              will delete itself when the time is up.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -204,7 +245,8 @@ export default function BidArchivePage({ onBack, onOpenBid }: {
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                if (confirmDelete) deleteForever.mutate({ id: confirmDelete.id });
+                if (confirmDelete)
+                  deleteForever.mutate({ id: confirmDelete.id });
                 setConfirmDelete(null);
               }}
             >

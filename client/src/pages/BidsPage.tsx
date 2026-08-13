@@ -25,13 +25,24 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  Archive, ArrowLeft, CalendarDays, Check, FileText, Plus, Search, X,
+  Archive,
+  ArrowLeft,
+  CalendarDays,
+  Check,
+  FileText,
+  Plus,
+  Search,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { InlineNumberField } from "@/components/InlineNumberField";
 import { asPercent, fromPercent } from "@/lib/inlineEdit";
@@ -48,8 +59,10 @@ const INHERIT = "__inherit__";
 
 const money = (value: number) =>
   value.toLocaleString("en-US", {
-    style: "currency", currency: "USD",
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 
 const round = (value: number, places = 2) => {
@@ -64,7 +77,6 @@ const STATUS_STYLES: Record<Status, string> = {
   Lost: "bg-destructive/15 text-destructive border-destructive/30",
 };
 
-
 // ─── Due date ─────────────────────────────────────────────────────────────────
 
 /**
@@ -77,7 +89,8 @@ const STATUS_STYLES: Record<Status, string> = {
  * it takes focus.
  */
 function DueDateField({
-  value, onSave,
+  value,
+  onSave,
 }: {
   value: string | null;
   onSave: (next: string | null) => void;
@@ -92,14 +105,17 @@ function DueDateField({
     setDraft(value ?? "");
   }, [value]);
 
-  useEffect(() => () => {
-    if (timer.current !== null) window.clearTimeout(timer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    },
+    []
+  );
 
   const commit = () => {
     const saved = value ?? "";
-    if (draft === saved) return;          // nothing moved: no write, no flash
-    onSave(draft === "" ? null : draft);  // clearing the box clears the deadline
+    if (draft === saved) return; // nothing moved: no write, no flash
+    onSave(draft === "" ? null : draft); // clearing the box clears the deadline
     setFlash(true);
     if (timer.current !== null) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setFlash(false), 1100);
@@ -112,10 +128,18 @@ function DueDateField({
         type="date"
         value={draft}
         onChange={e => setDraft(e.target.value)}
-        onFocus={() => { editing.current = true; }}
-        onBlur={() => { editing.current = false; commit(); }}
+        onFocus={() => {
+          editing.current = true;
+        }}
+        onBlur={() => {
+          editing.current = false;
+          commit();
+        }}
         onKeyDown={e => {
-          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
           if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
@@ -167,18 +191,23 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
       await utils.bids.get.cancel({ id: bidId });
       const previous = utils.bids.get.getData({ id: bidId });
       // Only the qty is worth predicting — the rollup follows from the refetch.
-      utils.bids.get.setData({ id: bidId }, old => old && ({
-        ...old,
-        lines: old.lines.map(line =>
-          line.id === vars.id && vars.qty !== undefined
-            ? { ...line, qty: String(vars.qty) }
-            : line
-        ),
-      }));
+      utils.bids.get.setData(
+        { id: bidId },
+        old =>
+          old && {
+            ...old,
+            lines: old.lines.map(line =>
+              line.id === vars.id && vars.qty !== undefined
+                ? { ...line, qty: String(vars.qty) }
+                : line
+            ),
+          }
+      );
       return { previous };
     },
     onError: (error, _vars, context) => {
-      if (context?.previous) utils.bids.get.setData({ id: bidId }, context.previous);
+      if (context?.previous)
+        utils.bids.get.setData({ id: bidId }, context.previous);
       toast.error(error.message);
     },
     onSettled: refresh,
@@ -188,14 +217,19 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     onMutate: async vars => {
       await utils.bids.get.cancel({ id: bidId });
       const previous = utils.bids.get.getData({ id: bidId });
-      utils.bids.get.setData({ id: bidId }, old => old && ({
-        ...old,
-        lines: old.lines.filter(line => line.id !== vars.id),
-      }));
+      utils.bids.get.setData(
+        { id: bidId },
+        old =>
+          old && {
+            ...old,
+            lines: old.lines.filter(line => line.id !== vars.id),
+          }
+      );
       return { previous };
     },
     onError: (error, _vars, context) => {
-      if (context?.previous) utils.bids.get.setData({ id: bidId }, context.previous);
+      if (context?.previous)
+        utils.bids.get.setData({ id: bidId }, context.previous);
       toast.error(error.message);
     },
     onSettled: refresh,
@@ -236,7 +270,12 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     <div className="flex flex-col h-full bg-background">
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-center gap-3">
-          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={onBack}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 text-xs"
+            onClick={onBack}
+          >
             <ArrowLeft className="w-3.5 h-3.5" /> Bids
           </Button>
           <div className="flex-1 min-w-0">
@@ -250,12 +289,18 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               sits on the button so an estimator can see whether this job has
               drawings attached without opening anything. */}
           <Button
-            size="sm" variant="outline" className="h-8 gap-1.5 text-xs shrink-0"
-            onClick={() => { window.location.hash = `/bids/${bid.id}/plans`; }}
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => {
+              window.location.hash = `/bids/${bid.id}/plans`;
+            }}
           >
             <FileText className="w-3.5 h-3.5" />
             Plans
-            {sheetCount > 0 && <span className="text-muted-foreground">{sheetCount}</span>}
+            {sheetCount > 0 && (
+              <span className="text-muted-foreground">{sheetCount}</span>
+            )}
           </Button>
 
           <DueDateField
@@ -265,11 +310,19 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
           <Select
             value={bid.status}
-            onValueChange={status => updateBid.mutate({ id: bid.id, status: status as Status })}
+            onValueChange={status =>
+              updateBid.mutate({ id: bid.id, status: status as Status })
+            }
           >
-            <SelectTrigger className="h-8 w-28 text-sm" aria-label="Bid status"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-28 text-sm" aria-label="Bid status">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
-              {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              {STATUSES.map(s => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -317,9 +370,14 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                       key={assembly.id}
                       onClick={() => {
                         const qty = Number(addQty);
-                        if (!(qty > 0)) { toast.error("Enter a quantity greater than zero."); return; }
+                        if (!(qty > 0)) {
+                          toast.error("Enter a quantity greater than zero.");
+                          return;
+                        }
                         addAssembly.mutate({
-                          bidId, assemblyId: assembly.id, qty,
+                          bidId,
+                          assemblyId: assembly.id,
+                          qty,
                           unitLabel: addUnit.trim() || null,
                         });
                         setAssemblyQuery("");
@@ -328,14 +386,16 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                     >
                       <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       <span className="flex-1 truncate">{assembly.name}</span>
-                      <span className="text-xs text-muted-foreground">{assembly.category}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {assembly.category}
+                      </span>
                     </button>
                   ))}
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Adding freezes that assembly’s costs onto the bid. Later library edits will not
-                change what is already here.
+                Adding freezes that assembly’s costs onto the bid. Later library
+                edits will not change what is already here.
               </p>
             </div>
 
@@ -353,7 +413,8 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
               {lines.length === 0 ? (
                 <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                  No line items yet. Search the assembly library above to add the first one.
+                  No line items yet. Search the assembly library above to add
+                  the first one.
                 </div>
               ) : (
                 groups.map(group => (
@@ -364,7 +425,12 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                           {group.label}
                         </span>
                         <span className="text-xs text-muted-foreground/70 ml-auto font-mono">
-                          {money(group.lines.reduce((sum, l) => sum + l.breakdown.directCost, 0))}
+                          {money(
+                            group.lines.reduce(
+                              (sum, l) => sum + l.breakdown.directCost,
+                              0
+                            )
+                          )}
                         </span>
                       </div>
                     )}
@@ -378,15 +444,21 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                           {line.snapshotModifierNames?.length ? (
                             <div className="text-xs text-muted-foreground truncate">
                               {line.snapshotModifierNames.join(", ")} · frozen{" "}
-                              {new Date(line.snapshotAt).toLocaleDateString("en-US", {
-                                month: "short", day: "numeric",
-                              })}
+                              {new Date(line.snapshotAt).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                }
+                              )}
                             </div>
                           ) : null}
                         </div>
                         <InlineNumberField
                           value={Number(line.qty)}
-                          onSave={qty => updateLine.mutate({ bidId, id: line.id, qty })}
+                          onSave={qty =>
+                            updateLine.mutate({ bidId, id: line.id, qty })
+                          }
                           rules={{ min: 0, max: 999999 }}
                           className="h-7 w-16 text-sm"
                           ariaLabel={`Quantity of ${line.name}`}
@@ -398,9 +470,12 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                           {money(line.breakdown.directCost)}
                         </span>
                         <Button
-                          size="sm" variant="ghost"
+                          size="sm"
+                          variant="ghost"
                           className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                          onClick={() => removeLine.mutate({ bidId, id: line.id })}
+                          onClick={() =>
+                            removeLine.mutate({ bidId, id: line.id })
+                          }
                           aria-label={`Remove ${line.name}`}
                         >
                           <X className="w-3.5 h-3.5" />
@@ -421,13 +496,17 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               </div>
               <div className="flex items-baseline justify-between gap-3 py-1">
                 <span className="text-xs text-muted-foreground">Materials</span>
-                <span className="font-mono text-sm">{money(totals.materialCost)}</span>
+                <span className="font-mono text-sm">
+                  {money(totals.materialCost)}
+                </span>
               </div>
               <div className="flex items-baseline justify-between gap-3 py-1">
                 <span className="text-xs text-muted-foreground">
                   Labor ({round(totals.totalLaborHours, 2)} h)
                 </span>
-                <span className="font-mono text-sm">{money(totals.laborCost)}</span>
+                <span className="font-mono text-sm">
+                  {money(totals.laborCost)}
+                </span>
               </div>
 
               {/*
@@ -444,8 +523,8 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               {settings.productivityPct !== 0 && (
                 <div className="flex items-baseline justify-between gap-3 pl-3 pb-1">
                   <span className="text-[11px] text-muted-foreground/80">
-                    {round(totals.laborHoursBeforeProductivity, 2)} h
-                    {" "}after modifiers, {settings.productivityPct > 0 ? "+" : ""}
+                    {round(totals.laborHoursBeforeProductivity, 2)} h after
+                    modifiers, {settings.productivityPct > 0 ? "+" : ""}
                     {round(settings.productivityPct * 100, 2)}% productivity
                   </span>
                   <span
@@ -456,32 +535,46 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                         : "Your company default"
                     }
                   >
-                    {settings.productivitySource === "bid" ? "this bid" : "company"}
+                    {settings.productivitySource === "bid"
+                      ? "this bid"
+                      : "company"}
                   </span>
                 </div>
               )}
               <div className="border-t border-border my-2" />
               <div className="flex items-baseline justify-between gap-3 py-1">
                 <span className="text-xs font-medium">Direct cost</span>
-                <span className="font-mono text-sm">{money(totals.directCost)}</span>
+                <span className="font-mono text-sm">
+                  {money(totals.directCost)}
+                </span>
               </div>
               {settings.overhead.enabled && (
                 <div className="flex items-baseline justify-between gap-3 py-1">
-                  <span className="text-xs text-muted-foreground">Overhead</span>
-                  <span className="font-mono text-sm">{money(totals.overheadAmount)}</span>
+                  <span className="text-xs text-muted-foreground">
+                    Overhead
+                  </span>
+                  <span className="font-mono text-sm">
+                    {money(totals.overheadAmount)}
+                  </span>
                 </div>
               )}
               <div className="flex items-baseline justify-between gap-3 py-1">
                 <span className="text-xs text-muted-foreground capitalize">
-                  {settings.profit.method === "markup" ? "Markup" : "Target margin"}{" "}
+                  {settings.profit.method === "markup"
+                    ? "Markup"
+                    : "Target margin"}{" "}
                   {round(settings.profit.value * 100, 2)}%
                 </span>
-                <span className="font-mono text-sm">{money(totals.profitAmount)}</span>
+                <span className="font-mono text-sm">
+                  {money(totals.profitAmount)}
+                </span>
               </div>
               <div className="border-t border-border my-2" />
               <div className="flex items-baseline justify-between gap-3 py-1">
                 <span className="text-sm font-medium">Bid price</span>
-                <span className="font-mono text-base text-[#F5C518]">{money(totals.finalPrice)}</span>
+                <span className="font-mono text-base text-[#F5C518]">
+                  {money(totals.finalPrice)}
+                </span>
               </div>
             </div>
 
@@ -493,25 +586,47 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">Overhead</span>
+                  <span className="text-xs text-muted-foreground">
+                    Overhead
+                  </span>
                   <Badge variant="outline" className="text-xs">
-                    {settings.overheadSource === "bid" ? "This bid" : "Company default"}
+                    {settings.overheadSource === "bid"
+                      ? "This bid"
+                      : "Company default"}
                   </Badge>
                 </div>
                 <Select
-                  value={bid.overheadEnabled === null ? INHERIT : bid.overheadEnabled ? "on" : "off"}
-                  onValueChange={value => updateBid.mutate({
-                    id: bid.id,
-                    overheadEnabled: value === INHERIT ? null : value === "on",
-                    ...(value === "on" && bid.overheadValue === null
-                      ? { overheadMode: company.overheadMode, overheadValue: company.overheadValue }
-                      : {}),
-                  })}
+                  value={
+                    bid.overheadEnabled === null
+                      ? INHERIT
+                      : bid.overheadEnabled
+                        ? "on"
+                        : "off"
+                  }
+                  onValueChange={value =>
+                    updateBid.mutate({
+                      id: bid.id,
+                      overheadEnabled:
+                        value === INHERIT ? null : value === "on",
+                      ...(value === "on" && bid.overheadValue === null
+                        ? {
+                            overheadMode: company.overheadMode,
+                            overheadValue: company.overheadValue,
+                          }
+                        : {}),
+                    })
+                  }
                 >
-                  <SelectTrigger className="h-8 text-sm" aria-label="Overhead setting"><SelectValue /></SelectTrigger>
+                  <SelectTrigger
+                    className="h-8 text-sm"
+                    aria-label="Overhead setting"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={INHERIT}>
-                      Use company default ({company.overheadEnabled ? "on" : "off"})
+                      Use company default (
+                      {company.overheadEnabled ? "on" : "off"})
                     </SelectItem>
                     <SelectItem value="on">On for this bid</SelectItem>
                     <SelectItem value="off">Off for this bid</SelectItem>
@@ -521,11 +636,16 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   <div className="flex items-center gap-2">
                     <Select
                       value={bid.overheadMode ?? "percentage"}
-                      onValueChange={mode => updateBid.mutate({
-                        id: bid.id, overheadMode: mode as "percentage" | "flat",
-                      })}
+                      onValueChange={mode =>
+                        updateBid.mutate({
+                          id: bid.id,
+                          overheadMode: mode as "percentage" | "flat",
+                        })
+                      }
                     >
-                      <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 w-24 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="percentage">%</SelectItem>
                         <SelectItem value="flat">Flat $</SelectItem>
@@ -537,10 +657,15 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                           ? Number(bid.overheadValue ?? 0)
                           : asPercent(Number(bid.overheadValue ?? 0))
                       }
-                      onSave={raw => updateBid.mutate({
-                        id: bid.id,
-                        overheadValue: bid.overheadMode === "flat" ? raw : fromPercent(raw),
-                      })}
+                      onSave={raw =>
+                        updateBid.mutate({
+                          id: bid.id,
+                          overheadValue:
+                            bid.overheadMode === "flat"
+                              ? raw
+                              : fromPercent(raw),
+                        })
+                      }
                       rules={{ min: 0 }}
                       className="h-7 w-20 text-xs"
                       ariaLabel="Overhead value"
@@ -554,30 +679,52 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">Profit</span>
                   <Badge variant="outline" className="text-xs">
-                    {settings.profitSource === "bid" ? "This bid" : "Company default"}
+                    {settings.profitSource === "bid"
+                      ? "This bid"
+                      : "Company default"}
                   </Badge>
                 </div>
                 <Select
                   value={bid.profitMethod ?? INHERIT}
-                  onValueChange={value => updateBid.mutate({
-                    id: bid.id,
-                    profitMethod: value === INHERIT ? null : (value as "markup" | "margin"),
-                    profitValue: value === INHERIT ? null : company.profitValue,
-                  })}
+                  onValueChange={value =>
+                    updateBid.mutate({
+                      id: bid.id,
+                      profitMethod:
+                        value === INHERIT
+                          ? null
+                          : (value as "markup" | "margin"),
+                      profitValue:
+                        value === INHERIT ? null : company.profitValue,
+                    })
+                  }
                 >
-                  <SelectTrigger className="h-8 text-sm" aria-label="Profit method"><SelectValue /></SelectTrigger>
+                  <SelectTrigger
+                    className="h-8 text-sm"
+                    aria-label="Profit method"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={INHERIT}>
                       Use company default ({company.profitMethod})
                     </SelectItem>
-                    <SelectItem value="markup">Markup % for this bid</SelectItem>
-                    <SelectItem value="margin">Target margin % for this bid</SelectItem>
+                    <SelectItem value="markup">
+                      Markup % for this bid
+                    </SelectItem>
+                    <SelectItem value="margin">
+                      Target margin % for this bid
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 {bid.profitMethod && (
                   <InlineNumberField
                     value={asPercent(Number(bid.profitValue ?? 0))}
-                    onSave={raw => updateBid.mutate({ id: bid.id, profitValue: fromPercent(raw) })}
+                    onSave={raw =>
+                      updateBid.mutate({
+                        id: bid.id,
+                        profitValue: fromPercent(raw),
+                      })
+                    }
                     // Below 99%: at 100% the target-margin formula divides by zero.
                     rules={{ min: 0, max: 98.99 }}
                     className="h-7 w-20 text-xs"
@@ -586,8 +733,8 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   />
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Markup and target margin are different numbers on the same cost — the method is
-                  always an explicit choice.
+                  Markup and target margin are different numbers on the same
+                  cost — the method is always an explicit choice.
                 </p>
               </div>
 
@@ -603,22 +750,31 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium">Productivity</span>
                   <Badge variant="outline" className="text-[10px]">
-                    {settings.productivitySource === "bid" ? "This bid" : "Company"}
+                    {settings.productivitySource === "bid"
+                      ? "This bid"
+                      : "Company"}
                   </Badge>
                 </div>
                 <Select
                   value={bid.productivityPct === null ? INHERIT : "custom"}
-                  onValueChange={value => updateBid.mutate({
-                    id: bid.id,
-                    productivityPct: value === INHERIT ? null : company.productivityPct,
-                  })}
+                  onValueChange={value =>
+                    updateBid.mutate({
+                      id: bid.id,
+                      productivityPct:
+                        value === INHERIT ? null : company.productivityPct,
+                    })
+                  }
                 >
-                  <SelectTrigger className="h-8 text-sm" aria-label="Productivity setting">
+                  <SelectTrigger
+                    className="h-8 text-sm"
+                    aria-label="Productivity setting"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={INHERIT}>
-                      Use company default ({asPercent(company.productivityPct)}%)
+                      Use company default ({asPercent(company.productivityPct)}
+                      %)
                     </SelectItem>
                     <SelectItem value="custom">Set for this bid</SelectItem>
                   </SelectContent>
@@ -626,7 +782,12 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                 {bid.productivityPct !== null && (
                   <InlineNumberField
                     value={asPercent(Number(bid.productivityPct ?? 0))}
-                    onSave={raw => updateBid.mutate({ id: bid.id, productivityPct: fromPercent(raw) })}
+                    onSave={raw =>
+                      updateBid.mutate({
+                        id: bid.id,
+                        productivityPct: fromPercent(raw),
+                      })
+                    }
                     // Signed: a crew that beats book hours is as real as one
                     // that does not. Floored above −100%, where every job would
                     // price at no labor at all.
@@ -637,8 +798,8 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   />
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Adjusts every labor hour on this bid, applied after job-condition
-                  modifiers rather than added to them.
+                  Adjusts every labor hour on this bid, applied after
+                  job-condition modifiers rather than added to them.
                 </p>
               </div>
             </div>
@@ -651,14 +812,18 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export default function BidsPage({ initialBidId }: { initialBidId?: number } = {}) {
+export default function BidsPage({
+  initialBidId,
+}: { initialBidId?: number } = {}) {
   // Seeded from /bids/:id so the Dashboard can link straight into one bid.
   // State, not derived: once open, closing must be able to return to the list
   // without the route dragging it back in.
   const [openId, setOpenId] = useState<number | null>(initialBidId ?? null);
   const [newName, setNewName] = useState("");
   const [adding, setAdding] = useState(false);
-  const [confirmArchive, setConfirmArchive] = useState<PendingArchive | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState<PendingArchive | null>(
+    null
+  );
 
   const utils = trpc.useUtils();
   const { data: bids = [], isLoading } = trpc.bids.list.useQuery();
@@ -666,8 +831,12 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
 
   const createBid = trpc.bids.create.useMutation({
     onError: error => toast.error(error.message),
-    onSuccess: bid => { if (bid) setOpenId(bid.id); },
-    onSettled: () => { void utils.bids.list.invalidate(); },
+    onSuccess: bid => {
+      if (bid) setOpenId(bid.id);
+    },
+    onSettled: () => {
+      void utils.bids.list.invalidate();
+    },
   });
 
   const restoreBid = trpc.bids.restore.useMutation({
@@ -687,19 +856,29 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
       // Captured before the optimistic removal — afterwards the row is gone
       // from the cache and every bid would be named "Bid" in the toast.
       const name = previous?.find(b => b.id === vars.id)?.name;
-      utils.bids.list.setData(undefined, old => (old ?? []).filter(b => b.id !== vars.id) as typeof old);
+      utils.bids.list.setData(
+        undefined,
+        old => (old ?? []).filter(b => b.id !== vars.id) as typeof old
+      );
       return { previous, name };
     },
     onError: (error, _vars, context) => {
-      if (context?.previous !== undefined) utils.bids.list.setData(undefined, context.previous as never);
+      if (context?.previous !== undefined)
+        utils.bids.list.setData(undefined, context.previous as never);
       toast.error(error.message);
     },
     onSuccess: (_result, vars, context) => {
       // Undo in the toast as well as the dialog before it: the dialog stops the
       // accident, this fixes the one that got through anyway.
-      toast.success(`${context?.name ?? "Bid"} archived — ${RETENTION_DAYS} days to change your mind.`, {
-        action: { label: "Undo", onClick: () => restoreBid.mutate({ id: vars.id }) },
-      });
+      toast.success(
+        `${context?.name ?? "Bid"} archived — ${RETENTION_DAYS} days to change your mind.`,
+        {
+          action: {
+            label: "Undo",
+            onClick: () => restoreBid.mutate({ id: vars.id }),
+          },
+        }
+      );
     },
     onSettled: () => {
       void utils.bids.list.invalidate();
@@ -720,22 +899,30 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold">Bids</h1>
             <p className="text-xs text-muted-foreground">
-              Assemblies priced into a job. Costs freeze when an assembly is added, so a submitted
-              bid never moves on its own.
+              Assemblies priced into a job. Costs freeze when an assembly is
+              added, so a submitted bid never moves on its own.
             </p>
           </div>
           {/* The way back to anything archived from here. Appears once there
               is something in it — the Dashboard carries the same entry. */}
           {archived.length > 0 && (
             <Button
-              size="sm" variant="ghost" className="h-8 gap-1.5 text-xs shrink-0"
-              onClick={() => { window.location.hash = "/archive"; }}
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 text-xs shrink-0"
+              onClick={() => {
+                window.location.hash = "/archive";
+              }}
             >
               <Archive className="w-3.5 h-3.5" /> Archive
               <span className="text-muted-foreground">{archived.length}</span>
             </Button>
           )}
-          <Button size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => setAdding(v => !v)}>
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setAdding(v => !v)}
+          >
             <Plus className="w-3.5 h-3.5" /> New bid
           </Button>
         </div>
@@ -753,22 +940,33 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
               onKeyDown={e => {
                 if (e.key !== "Enter" || !newName.trim()) return;
                 createBid.mutate({ name: newName.trim() });
-                setNewName(""); setAdding(false);
+                setNewName("");
+                setAdding(false);
               }}
             />
             <Button
-              size="sm" className="h-8 gap-1.5 text-xs"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
               onClick={() => {
-                if (!newName.trim()) { toast.error("Give the bid a name."); return; }
+                if (!newName.trim()) {
+                  toast.error("Give the bid a name.");
+                  return;
+                }
                 createBid.mutate({ name: newName.trim() });
-                setNewName(""); setAdding(false);
+                setNewName("");
+                setAdding(false);
               }}
             >
               <Check className="w-3 h-3" /> Create
             </Button>
             <Button
-              size="sm" variant="ghost" className="h-8 gap-1.5 text-xs"
-              onClick={() => { setAdding(false); setNewName(""); }}
+              size="sm"
+              variant="ghost"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => {
+                setAdding(false);
+                setNewName("");
+              }}
             >
               <X className="w-3 h-3" /> Cancel
             </Button>
@@ -784,7 +982,9 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
           </div>
 
           {isLoading ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">Loading bids…</div>
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              Loading bids…
+            </div>
           ) : bids.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
               No bids yet. Create one to start pricing a job.
@@ -795,20 +995,35 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
                 key={bid.id}
                 className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors group"
               >
-                <button onClick={() => setOpenId(bid.id)} className="flex-1 min-w-0 text-left">
-                  <span className="text-sm font-medium truncate">{bid.name}</span>
+                <button
+                  onClick={() => setOpenId(bid.id)}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <span className="text-sm font-medium truncate">
+                    {bid.name}
+                  </span>
                   {bid.trades?.length ? (
-                    <div className="text-xs text-muted-foreground truncate">{bid.trades.join(", ")}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {bid.trades.join(", ")}
+                    </div>
                   ) : null}
                 </button>
                 <span className="w-24 shrink-0">
-                  <Badge variant="outline" className={cn("text-xs", STATUS_STYLES[bid.status as Status])}>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs",
+                      STATUS_STYLES[bid.status as Status]
+                    )}
+                  >
                     {bid.status}
                   </Badge>
                 </span>
                 <span className="w-28 text-right shrink-0 text-xs text-muted-foreground">
                   {new Date(bid.createdAt).toLocaleDateString("en-US", {
-                    month: "short", day: "numeric", year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
                   })}
                 </span>
                 {/* An Archive icon, not a trash can: this does not delete, and
@@ -816,9 +1031,12 @@ export default function BidsPage({ initialBidId }: { initialBidId?: number } = {
                     people to fear it. Confirmation comes from the shared
                     dialog — this used to archive on a single click. */}
                 <Button
-                  size="sm" variant="ghost"
+                  size="sm"
+                  variant="ghost"
                   className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                  onClick={() => setConfirmArchive({ id: bid.id, name: bid.name })}
+                  onClick={() =>
+                    setConfirmArchive({ id: bid.id, name: bid.name })
+                  }
                   title="Archive — off this list, restorable for 30 days"
                   aria-label={`Archive ${bid.name}`}
                 >

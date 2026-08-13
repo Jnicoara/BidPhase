@@ -51,7 +51,10 @@ async function priceAssemblyAt(
 
   const applied = cache.modifiers
     .filter(m => detail.modifierIds.includes(m.id))
-    .map(m => ({ name: m.name, laborAdjustmentPct: Number(m.laborAdjustmentPct) }));
+    .map(m => ({
+      name: m.name,
+      laborAdjustmentPct: Number(m.laborAdjustmentPct),
+    }));
 
   const laborRate = hourlyCostFor(cache.rates, detail.laborRateId);
 
@@ -70,9 +73,16 @@ async function priceAssemblyAt(
 export const kitsRouter = router({
   /** The working list, or the archive. Never returns `deleted` tombstones. */
   list: protectedProcedure
-    .input(z.object({
-      status: z.enum(LIBRARY_STATUSES).exclude(["deleted"]).default("active"),
-    }).optional())
+    .input(
+      z
+        .object({
+          status: z
+            .enum(LIBRARY_STATUSES)
+            .exclude(["deleted"])
+            .default("active"),
+        })
+        .optional()
+    )
     .query(async ({ input, ctx }) => {
       return db.getLibraryKits(ctx.user.id, input?.status ?? "active");
     }),
@@ -81,16 +91,23 @@ export const kitsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const detail = await db.getKitDetail(input.id, ctx.user.id);
-      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
+      if (!detail)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
       return detail;
     }),
 
   /** A kit's contents priced at today's library values, item by item. */
   price: protectedProcedure
-    .input(z.object({ id: z.number().int().positive(), quantity: qtySchema.default(1) }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        quantity: qtySchema.default(1),
+      })
+    )
     .query(async ({ input, ctx }) => {
       const detail = await db.getKitDetail(input.id, ctx.user.id);
-      if (!detail) throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
+      if (!detail)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
 
       const [modifiers, rates] = await Promise.all([
         db.getLibraryModifiers(ctx.user.id, "active"),
@@ -100,7 +117,9 @@ export const kitsRouter = router({
       const priced = [];
       for (const item of detail.items) {
         const breakdown = await priceAssemblyAt(
-          ctx.user.id, item.assemblyId, Number(item.qty) * input.quantity,
+          ctx.user.id,
+          item.assemblyId,
+          Number(item.qty) * input.quantity,
           { modifiers, rates }
         );
         if (breakdown) priced.push({ item, breakdown });
@@ -111,22 +130,32 @@ export const kitsRouter = router({
         items: priced,
         totals: {
           directCost: sumDirectCost(priced.map(p => p.breakdown)),
-          materialCost: priced.reduce((s, p) => s + p.breakdown.materialCost, 0),
+          materialCost: priced.reduce(
+            (s, p) => s + p.breakdown.materialCost,
+            0
+          ),
           laborCost: priced.reduce((s, p) => s + p.breakdown.laborCost, 0),
-          totalLaborHours: priced.reduce((s, p) => s + p.breakdown.totalLaborHours, 0),
+          totalLaborHours: priced.reduce(
+            (s, p) => s + p.breakdown.totalLaborHours,
+            0
+          ),
         },
       };
     }),
 
   create: protectedProcedure
-    .input(z.object({
-      name: nameSchema,
-      description: descriptionSchema.default(null),
-      items: itemsSchema.default([]),
-    }))
+    .input(
+      z.object({
+        name: nameSchema,
+        description: descriptionSchema.default(null),
+        items: itemsSchema.default([]),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const existing = await db.getLibraryKits(ctx.user.id);
-      const clash = existing.find(k => k.name.toLowerCase() === input.name.toLowerCase());
+      const clash = existing.find(
+        k => k.name.toLowerCase() === input.name.toLowerCase()
+      );
       if (clash) {
         throw new TRPCError({
           code: "CONFLICT",
@@ -141,40 +170,56 @@ export const kitsRouter = router({
       });
       await db.setKitItems(
         id,
-        input.items.map(i => ({ assemblyId: i.assemblyId, qty: toDecimal(i.qty) }))
+        input.items.map(i => ({
+          assemblyId: i.assemblyId,
+          qty: toDecimal(i.qty),
+        }))
       );
       return db.getKitDetail(id, ctx.user.id);
     }),
 
   /** Edit a kit, forking a starter first if that is what was targeted. */
   update: protectedProcedure
-    .input(z.object({
-      id: z.number().int().positive(),
-      name: nameSchema.optional(),
-      description: descriptionSchema.optional(),
-      items: itemsSchema.optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        name: nameSchema.optional(),
+        description: descriptionSchema.optional(),
+        items: itemsSchema.optional(),
+      })
+    )
     .mutation(async ({ input, ctx }) => {
       const target = await db.getKitById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
+      if (!target)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
 
       const isBaseline = target.userId === null;
-      const editableId = isBaseline ? await db.forkKit(input.id, ctx.user.id) : input.id;
+      const editableId = isBaseline
+        ? await db.forkKit(input.id, ctx.user.id)
+        : input.id;
 
       const patch: Record<string, unknown> = {};
       if (input.name !== undefined) patch.name = input.name;
-      if (input.description !== undefined) patch.description = input.description;
-      if (Object.keys(patch).length > 0) await db.updateKit(editableId, ctx.user.id, patch);
+      if (input.description !== undefined)
+        patch.description = input.description;
+      if (Object.keys(patch).length > 0)
+        await db.updateKit(editableId, ctx.user.id, patch);
 
       // Omitting `items` leaves the contents alone; sending [] empties the kit.
       if (input.items !== undefined) {
         await db.setKitItems(
           editableId,
-          input.items.map(i => ({ assemblyId: i.assemblyId, qty: toDecimal(i.qty) }))
+          input.items.map(i => ({
+            assemblyId: i.assemblyId,
+            qty: toDecimal(i.qty),
+          }))
         );
       }
 
-      return { kit: await db.getKitDetail(editableId, ctx.user.id), forked: isBaseline };
+      return {
+        kit: await db.getKitDetail(editableId, ctx.user.id),
+        forked: isBaseline,
+      };
     }),
 
   /**
@@ -187,7 +232,9 @@ export const kitsRouter = router({
     .input(z.object({ id: z.number().int().positive(), name: nameSchema }))
     .mutation(async ({ input, ctx }) => {
       const existing = await db.getLibraryKits(ctx.user.id);
-      const clash = existing.find(k => k.name.toLowerCase() === input.name.toLowerCase());
+      const clash = existing.find(
+        k => k.name.toLowerCase() === input.name.toLowerCase()
+      );
       if (clash) {
         throw new TRPCError({
           code: "CONFLICT",
@@ -208,7 +255,8 @@ export const kitsRouter = router({
       if (target.baselineId == null) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "This kit was built from scratch, so there is no original to restore.",
+          message:
+            "This kit was built from scratch, so there is no original to restore.",
         });
       }
       await db.revertKitToBaseline(input.id, ctx.user.id);
@@ -223,11 +271,16 @@ export const kitsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getKitById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
+      if (!target)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
       if (target.userId === null) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Starter kits cannot be removed." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Starter kits cannot be removed.",
+        });
       }
-      if (target.status === "archived") return { id: input.id, alreadyArchived: true };
+      if (target.status === "archived")
+        return { id: input.id, alreadyArchived: true };
 
       const archivedId = await db.archiveKit(input.id, ctx.user.id);
       return { id: archivedId, alreadyArchived: false };
@@ -238,9 +291,13 @@ export const kitsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getKitById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
+      if (!target)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
       if (target.status !== "archived") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "That kit is not archived." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "That kit is not archived.",
+        });
       }
       await db.restoreKit(input.id, ctx.user.id);
       return { success: true };
@@ -254,11 +311,13 @@ export const kitsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
       const target = await db.getKitById(input.id, ctx.user.id);
-      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
+      if (!target)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
       if (target.status !== "archived") {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Only archived kits can be deleted permanently. Archive it first.",
+          message:
+            "Only archived kits can be deleted permanently. Archive it first.",
         });
       }
       await db.deleteKitForever(input.id, ctx.user.id);

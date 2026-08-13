@@ -38,36 +38,73 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  ArrowLeft, Cable, ChevronLeft, ChevronRight, FileText, Loader2, Plus,
-  MapPin, Trash2, Upload, X, Zap,
+  ArrowLeft,
+  Cable,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Loader2,
+  Plus,
+  MapPin,
+  Trash2,
+  Upload,
+  X,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  ResizableHandle, ResizablePanel, ResizablePanelGroup,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { SheetIndex } from "@/components/takeoff/SheetIndex";
 import { ScaleControl } from "@/components/takeoff/ScaleControl";
 import { UploadProgress } from "@/components/takeoff/UploadProgress";
-import { MAX_PDF_BYTES, checkPdfUpload, formatBytes, looksLikePdf } from "@shared/uploadLimits";
+import {
+  MAX_PDF_BYTES,
+  checkPdfUpload,
+  formatBytes,
+  looksLikePdf,
+} from "@shared/uploadLimits";
 import { TraceLayer } from "@/components/takeoff/TraceLayer";
 import { RunsPanel } from "@/components/takeoff/RunsPanel";
 import {
-  clearDraft, clearStampQueue, hasUnsavedWork, loadDraft, loadStampQueue, saveDraft,
-  saveStampQueue, type QueuedStamp,
+  clearDraft,
+  clearStampQueue,
+  hasUnsavedWork,
+  loadDraft,
+  loadStampQueue,
+  saveDraft,
+  saveStampQueue,
+  type QueuedStamp,
 } from "@/lib/traceDraft";
 import { LegendPanel } from "@/components/takeoff/LegendPanel";
 import { groupStamps } from "@shared/takeoffCounts";
 import { LayersPanel } from "@/components/takeoff/LayersPanel";
 import {
-  SymbolCaptureForm, SymbolCaptureLayer, cropToThumbnail, type CaptureRegion,
+  SymbolCaptureForm,
+  SymbolCaptureLayer,
+  cropToThumbnail,
+  type CaptureRegion,
 } from "@/components/takeoff/SymbolCapture";
 import {
-  allLayersOn, filterByLayers, layersPresent, locationKeyOf, systemKeyForRun,
-  systemKeyForStamp, type LayerState,
+  allLayersOn,
+  filterByLayers,
+  layersPresent,
+  locationKeyOf,
+  systemKeyForRun,
+  systemKeyForStamp,
+  type LayerState,
 } from "@shared/takeoffLayers";
 import type { PagePoint } from "@shared/takeoffGeometry";
 import type { RunPathType } from "@shared/takeoffQuantities";
@@ -104,7 +141,9 @@ type Pending = { resolve: (value: any) => void; reject: (e: Error) => void };
 function usePdfWorker() {
   const workerRef = useRef<Worker | null>(null);
   const pending = useRef(new Map<string, Pending>());
-  const loadWaiters = useRef<{ resolve: (pages: number) => void; reject: (e: Error) => void }[]>([]);
+  const loadWaiters = useRef<
+    { resolve: (pages: number) => void; reject: (e: Error) => void }[]
+  >([]);
 
   useEffect(() => {
     const worker = new Worker(
@@ -145,7 +184,9 @@ function usePdfWorker() {
         }
         // An error with no request to attach it to can only be the load, which
         // would otherwise hang on a spinner forever.
-        loadWaiters.current.splice(0).forEach(w => w.reject(new Error(msg.message)));
+        loadWaiters.current
+          .splice(0)
+          .forEach(w => w.reject(new Error(msg.message)));
       }
     };
     workerRef.current = worker;
@@ -157,15 +198,18 @@ function usePdfWorker() {
     };
   }, []);
 
-  const ask = useCallback(<T,>(message: Record<string, unknown>): Promise<T> => {
-    return new Promise<T>((resolve, reject) => {
-      const worker = workerRef.current;
-      if (!worker) return reject(new Error("Viewer not ready"));
-      const reqId = `${Date.now()}:${Math.random()}`;
-      pending.current.set(reqId, { resolve, reject });
-      worker.postMessage({ ...message, reqId });
-    });
-  }, []);
+  const ask = useCallback(
+    <T,>(message: Record<string, unknown>): Promise<T> => {
+      return new Promise<T>((resolve, reject) => {
+        const worker = workerRef.current;
+        if (!worker) return reject(new Error("Viewer not ready"));
+        const reqId = `${Date.now()}:${Math.random()}`;
+        pending.current.set(reqId, { resolve, reject });
+        worker.postMessage({ ...message, reqId });
+      });
+    },
+    []
+  );
 
   const load = useCallback((pdfData: ArrayBuffer, hash: string) => {
     return new Promise<number>((resolve, reject) => {
@@ -180,28 +224,42 @@ function usePdfWorker() {
   // function identity per render restarts the document load on every render —
   // which cancels the one in flight, so the viewer spins forever and never
   // finishes opening anything.
-  return useMemo(() => ({
-    load,
-    render: (pageNum: number, scale: number, hash: string) =>
-      ask<ImageBitmap>({ type: "render", pageNum, scale, hash }),
-    outline: (hash: string) =>
-      ask<{ pageNumber: number; title: string }[]>({ type: "outline", hash }),
-    pageText: (pageNum: number, hash: string) =>
-      ask<string>({ type: "text", pageNum, hash }),
-  }), [load, ask]);
+  return useMemo(
+    () => ({
+      load,
+      render: (pageNum: number, scale: number, hash: string) =>
+        ask<ImageBitmap>({ type: "render", pageNum, scale, hash }),
+      outline: (hash: string) =>
+        ask<{ pageNumber: number; title: string }[]>({ type: "outline", hash }),
+      pageText: (pageNum: number, hash: string) =>
+        ask<string>({ type: "text", pageNum, hash }),
+    }),
+    [load, ask]
+  );
 }
 
 // ── The drawing pane ─────────────────────────────────────────────────────────
 
 const RENDER_SCALE = 1.5;
 
-function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisible, overlay }: {
+function PlanPane({
+  doc,
+  page,
+  onPageCount,
+  onPage,
+  onDocumentReady,
+  onSheetVisible,
+  overlay,
+}: {
   doc: Document;
   page: number;
   onPageCount: (pageCount: number) => void;
   onPage: (page: number) => void;
   /** Fires once per document, with the page count and outline. */
-  onDocumentReady: (info: { pageCount: number; outline: { pageNumber: number; title: string }[] }) => void;
+  onDocumentReady: (info: {
+    pageCount: number;
+    outline: { pageNumber: number; title: string }[];
+  }) => void;
   /** Fires when a page is shown, with its extracted text, for scale detection. */
   onSheetVisible: (pageNumber: number, text: string) => void;
   /**
@@ -210,7 +268,9 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
    * a mismatch here would put every measurement out by a constant factor.
    */
   overlay?: (size: {
-    width: number; height: number; renderScale: number;
+    width: number;
+    height: number;
+    renderScale: number;
     canvas: HTMLCanvasElement | null;
   }) => React.ReactNode;
 }) {
@@ -235,7 +295,8 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
     (async () => {
       try {
         const resp = await fetch(doc.url);
-        if (!resp.ok) throw new Error(`Could not fetch the plan (${resp.status})`);
+        if (!resp.ok)
+          throw new Error(`Could not fetch the plan (${resp.status})`);
         const buffer = await resp.arrayBuffer();
         if (cancelled) return;
 
@@ -251,12 +312,16 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
         onDocumentReady({ pageCount: pages, outline: entries });
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "That plan could not be opened.");
+        setError(
+          err instanceof Error ? err.message : "That plan could not be opened."
+        );
         setLoading(false);
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [doc.id, doc.url, hash, load, outline]);
 
   // Paint the current page.
@@ -279,11 +344,15 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
       })
       .catch(err => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "That page could not be drawn.");
+        setError(
+          err instanceof Error ? err.message : "That page could not be drawn."
+        );
         setRendering(false);
       });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [page, pageCount, loading, error, render, hash]);
 
   // Pull the page's text once, for scale detection.
@@ -294,30 +363,53 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
     let cancelled = false;
 
     pageText(page, hash)
-      .then(text => { if (!cancelled) onSheetVisible(page, text); })
+      .then(text => {
+        if (!cancelled) onSheetVisible(page, text);
+      })
       // Detection is a convenience. A page whose text will not extract simply
       // stays unscaled until someone sets it.
       .catch(() => {});
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [page, pageCount, loading, error, pageText, hash, onSheetVisible]);
 
-  const go = useCallback((to: number) => {
-    onPage(Math.min(Math.max(to, 1), pageCount || 1));
-  }, [pageCount, onPage]);
+  const go = useCallback(
+    (to: number) => {
+      onPage(Math.min(Math.max(to, 1), pageCount || 1));
+    },
+    [pageCount, onPage]
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
-      if (e.key === "ArrowRight" || e.key === "ArrowDown" || e.key === "PageDown") {
-        e.preventDefault(); go(page + 1);
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "PageUp") {
-        e.preventDefault(); go(page - 1);
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+      )
+        return;
+      if (
+        e.key === "ArrowRight" ||
+        e.key === "ArrowDown" ||
+        e.key === "PageDown"
+      ) {
+        e.preventDefault();
+        go(page + 1);
+      } else if (
+        e.key === "ArrowLeft" ||
+        e.key === "ArrowUp" ||
+        e.key === "PageUp"
+      ) {
+        e.preventDefault();
+        go(page - 1);
       } else if (e.key === "Home") {
-        e.preventDefault(); go(1);
+        e.preventDefault();
+        go(1);
       } else if (e.key === "End") {
-        e.preventDefault(); go(pageCount);
+        e.preventDefault();
+        go(pageCount);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -329,7 +421,9 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="text-center max-w-sm">
           <FileText className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
-          <p className="text-sm font-medium">{doc.filename} could not be opened</p>
+          <p className="text-sm font-medium">
+            {doc.filename} could not be opened
+          </p>
           <p className="text-xs text-muted-foreground mt-1">{error}</p>
         </div>
       </div>
@@ -340,7 +434,9 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-card shrink-0">
         <Button
-          size="sm" variant="ghost" className="h-7 w-7 p-0"
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0"
           onClick={() => go(page - 1)}
           disabled={loading || page <= 1}
           aria-label="Previous page"
@@ -351,7 +447,9 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
           {loading ? "—" : `${page} / ${pageCount}`}
         </span>
         <Button
-          size="sm" variant="ghost" className="h-7 w-7 p-0"
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0"
           onClick={() => go(page + 1)}
           disabled={loading || page >= pageCount}
           aria-label="Next page"
@@ -379,9 +477,12 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
               ref={canvasRef}
               className="max-w-full h-auto rounded-lg shadow-lg bg-white block"
             />
-            {canvasSize.width > 0 && overlay?.({
-              ...canvasSize, renderScale: RENDER_SCALE, canvas: canvasRef.current,
-            })}
+            {canvasSize.width > 0 &&
+              overlay?.({
+                ...canvasSize,
+                renderScale: RENDER_SCALE,
+                canvas: canvasRef.current,
+              })}
           </div>
         )}
       </div>
@@ -391,7 +492,10 @@ function PlanPane({ doc, page, onPageCount, onPage, onDocumentReady, onSheetVisi
 
 // ── The page ─────────────────────────────────────────────────────────────────
 
-export default function TakeoffPage({ bidId, onBack }: {
+export default function TakeoffPage({
+  bidId,
+  onBack,
+}: {
   bidId: number;
   onBack: () => void;
 }) {
@@ -405,7 +509,12 @@ export default function TakeoffPage({ bidId, onBack }: {
   const [uploads, setUploads] = useState<UploadJob[]>([]);
   /** The transfer in flight, so it can be cancelled. */
   const xhrRef = useRef<XMLHttpRequest | null>(null);
-  const uploading = uploads.some(u => u.state === "uploading" || u.state === "finishing" || u.state === "waiting");
+  const uploading = uploads.some(
+    u =>
+      u.state === "uploading" ||
+      u.state === "finishing" ||
+      u.state === "waiting"
+  );
   const [confirmRemove, setConfirmRemove] = useState<Document | null>(null);
   /**
    * Which sheets state NOT TO SCALE, by sheet id.
@@ -414,7 +523,9 @@ export default function TakeoffPage({ bidId, onBack }: {
    * detection's answer onto whatever sheet is opened next, so a diagram marked
    * N.T.S. makes the plan after it claim the same thing.
    */
-  const [notToScaleBySheet, setNotToScaleBySheet] = useState<Record<number, boolean>>({});
+  const [notToScaleBySheet, setNotToScaleBySheet] = useState<
+    Record<number, boolean>
+  >({});
 
   // ── Tracing (phase 2b) ────────────────────────────────────────────────────
   const [tracing, setTracing] = useState(false);
@@ -425,17 +536,25 @@ export default function TakeoffPage({ bidId, onBack }: {
   const draftRunId = useRef<number | null>(null);
   /** How many points the server has. Drives the unsaved-work warning. */
   const savedPointCount = useRef(0);
-  const [recoverable, setRecoverable] = useState<ReturnType<typeof loadDraft>>(null);
+  const [recoverable, setRecoverable] =
+    useState<ReturnType<typeof loadDraft>>(null);
 
   // ── Stamping (phase 2c) ───────────────────────────────────────────────────
   /** The assembly the stamp tool holds. Chosen once, then click, click, click. */
-  const [stampAssembly, setStampAssembly] = useState<{ id: number | null; name: string } | null>(null);
+  const [stampAssembly, setStampAssembly] = useState<{
+    id: number | null;
+    name: string;
+  } | null>(null);
   const [selectedStampId, setSelectedStampId] = useState<number | null>(null);
   /** Where a click in the counted-items list sent the viewer. */
-  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
+  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(
+    null
+  );
   const [capturingSymbol, setCapturingSymbol] = useState(false);
   /** The crop taken from the page, awaiting a name. */
-  const [pendingCapture, setPendingCapture] = useState<{ thumbnail: string | null } | null>(null);
+  const [pendingCapture, setPendingCapture] = useState<{
+    thumbnail: string | null;
+  } | null>(null);
   /** Clicks not yet confirmed by the server. Mirrored locally; see traceDraft. */
   const pendingStamps = useRef<QueuedStamp[]>([]);
   /** Which layers are showing. Null until a sheet's contents are known. */
@@ -446,10 +565,11 @@ export default function TakeoffPage({ bidId, onBack }: {
 
   const doc = docs.find(d => d.id === selectedDocId) ?? docs[0] ?? null;
 
-  const { data: sheets = [], isLoading: sheetsLoading } = trpc.bidPdfs.sheets.useQuery(
-    { bidPdfId: doc?.id ?? 0 },
-    { enabled: Boolean(doc) }
-  );
+  const { data: sheets = [], isLoading: sheetsLoading } =
+    trpc.bidPdfs.sheets.useQuery(
+      { bidPdfId: doc?.id ?? 0 },
+      { enabled: Boolean(doc) }
+    );
   const activeSheet = sheets.find(s => s.pageNumber === page) ?? null;
 
   const refreshSheets = () => {
@@ -473,11 +593,16 @@ export default function TakeoffPage({ bidId, onBack }: {
     onError: error => toast.error(error.message),
   });
 
-  const ensureSheets = trpc.bidPdfs.ensureSheets.useMutation({ onSuccess: refreshSheets });
+  const ensureSheets = trpc.bidPdfs.ensureSheets.useMutation({
+    onSuccess: refreshSheets,
+  });
 
   const detectScale = trpc.bidPdfs.detectSheetScale.useMutation({
     onSuccess: (result, { id }) => {
-      setNotToScaleBySheet(prev => ({ ...prev, [id]: Boolean(result.notToScale) }));
+      setNotToScaleBySheet(prev => ({
+        ...prev,
+        [id]: Boolean(result.notToScale),
+      }));
       refreshSheets();
     },
   });
@@ -489,7 +614,9 @@ export default function TakeoffPage({ bidId, onBack }: {
       await utils.bidPdfs.sheets.cancel({ bidPdfId: doc.id });
       const snapshot = utils.bidPdfs.sheets.getData({ bidPdfId: doc.id });
       utils.bidPdfs.sheets.setData({ bidPdfId: doc.id }, old =>
-        old?.map(s => (s.id === id ? { ...s, name, nameSource: "user" as const } : s))
+        old?.map(s =>
+          s.id === id ? { ...s, name, nameSource: "user" as const } : s
+        )
       );
       return { snapshot };
     },
@@ -503,7 +630,10 @@ export default function TakeoffPage({ bidId, onBack }: {
   });
 
   const setSheetScale = trpc.bidPdfs.setSheetScale.useMutation({
-    onSuccess: sheet => { toast.success(`Scale set to ${sheet.scaleText}.`); refreshSheets(); },
+    onSuccess: sheet => {
+      toast.success(`Scale set to ${sheet.scaleText}.`);
+      refreshSheets();
+    },
     onError: error => toast.error(error.message),
   });
 
@@ -513,7 +643,10 @@ export default function TakeoffPage({ bidId, onBack }: {
   });
 
   const handleDocumentReady = useCallback(
-    (info: { pageCount: number; outline: { pageNumber: number; title: string }[] }) => {
+    (info: {
+      pageCount: number;
+      outline: { pageNumber: number; title: string }[];
+    }) => {
       if (!doc) return;
       ensureSheets.mutate({
         bidPdfId: doc.id,
@@ -537,7 +670,10 @@ export default function TakeoffPage({ bidId, onBack }: {
   const { data: totals } = trpc.takeoffRuns.totals.useQuery({ bidId });
 
   const refreshRuns = useCallback(() => {
-    if (activeSheet) void utils.takeoffRuns.listForSheet.invalidate({ sheetId: activeSheet.id });
+    if (activeSheet)
+      void utils.takeoffRuns.listForSheet.invalidate({
+        sheetId: activeSheet.id,
+      });
     void utils.takeoffRuns.totals.invalidate({ bidId });
   }, [utils, activeSheet?.id, bidId]);
 
@@ -550,8 +686,12 @@ export default function TakeoffPage({ bidId, onBack }: {
 
   const refreshStamps = useCallback(() => {
     if (activeSheet) {
-      void utils.takeoffStamps.listForSheet.invalidate({ sheetId: activeSheet.id });
-      void utils.takeoffStamps.countedItems.invalidate({ sheetId: activeSheet.id });
+      void utils.takeoffStamps.listForSheet.invalidate({
+        sheetId: activeSheet.id,
+      });
+      void utils.takeoffStamps.countedItems.invalidate({
+        sheetId: activeSheet.id,
+      });
     }
   }, [utils, activeSheet?.id]);
 
@@ -560,7 +700,8 @@ export default function TakeoffPage({ bidId, onBack }: {
     onSettled: refreshStamps,
   });
   const removeStamp = trpc.takeoffStamps.remove.useMutation({
-    onError: e => toast.error(e.message), onSettled: refreshStamps,
+    onError: e => toast.error(e.message),
+    onSettled: refreshStamps,
   });
   const captureSymbol = trpc.takeoffStamps.captureSymbol.useMutation({
     onError: e => toast.error(e.message),
@@ -568,7 +709,8 @@ export default function TakeoffPage({ bidId, onBack }: {
   });
   const linkSymbol = trpc.takeoffStamps.linkSymbol.useMutation({
     onError: e => toast.error(e.message),
-    onSuccess: r => toast.success(`Linked to ${r.assemblyName} — one click from now on.`),
+    onSuccess: r =>
+      toast.success(`Linked to ${r.assemblyName} — one click from now on.`),
     onSettled: () => void utils.takeoffStamps.symbols.invalidate(),
   });
   const unlinkSymbol = trpc.takeoffStamps.unlinkSymbol.useMutation({
@@ -589,60 +731,80 @@ export default function TakeoffPage({ bidId, onBack }: {
    * here.
    */
   const flushTimer = useRef<number | null>(null);
-  const queueStamp = useCallback((at: { x: number; y: number }) => {
-    if (!activeSheet || !stampAssembly) return;
-    pendingStamps.current = [...pendingStamps.current, {
-      assemblyId: stampAssembly.id, assemblyName: stampAssembly.name, x: at.x, y: at.y,
-    }];
-    saveStampQueue(activeSheet.id, bidId, pendingStamps.current);
-
-    if (flushTimer.current !== null) window.clearTimeout(flushTimer.current);
-    flushTimer.current = window.setTimeout(() => {
-      const batch = pendingStamps.current;
-      if (batch.length === 0 || !activeSheet) return;
-      pendingStamps.current = [];
-      dropStamps.mutate({
-        bidId,
-        sheetId: activeSheet.id,
-        assemblyId: batch[0].assemblyId,
-        assemblyName: batch[0].assemblyName,
-        at: batch.map(b => ({ x: b.x, y: b.y })),
-      }, {
-        onSuccess: () => clearStampQueue(activeSheet.id),
-        // Put the batch back so it is retried and stays mirrored, rather than
-        // vanishing because one request failed.
-        onError: () => {
-          pendingStamps.current = [...batch, ...pendingStamps.current];
-          saveStampQueue(activeSheet.id, bidId, pendingStamps.current);
+  const queueStamp = useCallback(
+    (at: { x: number; y: number }) => {
+      if (!activeSheet || !stampAssembly) return;
+      pendingStamps.current = [
+        ...pendingStamps.current,
+        {
+          assemblyId: stampAssembly.id,
+          assemblyName: stampAssembly.name,
+          x: at.x,
+          y: at.y,
         },
-      });
-    }, 700);
-  }, [activeSheet?.id, stampAssembly, bidId, dropStamps]);
+      ];
+      saveStampQueue(activeSheet.id, bidId, pendingStamps.current);
+
+      if (flushTimer.current !== null) window.clearTimeout(flushTimer.current);
+      flushTimer.current = window.setTimeout(() => {
+        const batch = pendingStamps.current;
+        if (batch.length === 0 || !activeSheet) return;
+        pendingStamps.current = [];
+        dropStamps.mutate(
+          {
+            bidId,
+            sheetId: activeSheet.id,
+            assemblyId: batch[0].assemblyId,
+            assemblyName: batch[0].assemblyName,
+            at: batch.map(b => ({ x: b.x, y: b.y })),
+          },
+          {
+            onSuccess: () => clearStampQueue(activeSheet.id),
+            // Put the batch back so it is retried and stays mirrored, rather than
+            // vanishing because one request failed.
+            onError: () => {
+              pendingStamps.current = [...batch, ...pendingStamps.current];
+              saveStampQueue(activeSheet.id, bidId, pendingStamps.current);
+            },
+          }
+        );
+      }, 700);
+    },
+    [activeSheet?.id, stampAssembly, bidId, dropStamps]
+  );
 
   /** Recover stamps clicked but never sent, after a crash or reload. */
   useEffect(() => {
     if (!activeSheet) return;
     const queued = loadStampQueue(activeSheet.id);
     if (!queued || queued.stamps.length === 0) return;
-    dropStamps.mutate({
-      bidId: queued.bidId,
-      sheetId: activeSheet.id,
-      assemblyId: queued.stamps[0].assemblyId,
-      assemblyName: queued.stamps[0].assemblyName,
-      at: queued.stamps.map(st => ({ x: st.x, y: st.y })),
-    }, {
-      onSuccess: () => {
-        clearStampQueue(activeSheet.id);
-        toast.success(`Recovered ${queued.stamps.length} stamp${queued.stamps.length === 1 ? "" : "s"} from your last session.`);
+    dropStamps.mutate(
+      {
+        bidId: queued.bidId,
+        sheetId: activeSheet.id,
+        assemblyId: queued.stamps[0].assemblyId,
+        assemblyName: queued.stamps[0].assemblyName,
+        at: queued.stamps.map(st => ({ x: st.x, y: st.y })),
       },
-    });
+      {
+        onSuccess: () => {
+          clearStampQueue(activeSheet.id);
+          toast.success(
+            `Recovered ${queued.stamps.length} stamp${queued.stamps.length === 1 ? "" : "s"} from your last session.`
+          );
+        },
+      }
+    );
   }, [activeSheet?.id]);
 
   /** Escape puts the stamp tool down. */
   useEffect(() => {
     if (!stampAssembly) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); setStampAssembly(null); }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setStampAssembly(null);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -656,19 +818,21 @@ export default function TakeoffPage({ bidId, onBack }: {
    * the sheet — see shared/takeoffLayers.ts.
    */
   const layeredStamps = useMemo(
-    () => stamps.map(st => ({
-      ...st,
-      systemKey: systemKeyForStamp(st.assemblyCategory),
-      location: st.location ?? null,
-    })),
+    () =>
+      stamps.map(st => ({
+        ...st,
+        systemKey: systemKeyForStamp(st.assemblyCategory),
+        location: st.location ?? null,
+      })),
     [stamps]
   );
   const layeredRuns = useMemo(
-    () => runs.map(run => ({
-      ...run,
-      systemKey: systemKeyForRun(run.pathType as "conduit" | "cable"),
-      location: run.location ?? null,
-    })),
+    () =>
+      runs.map(run => ({
+        ...run,
+        systemKey: systemKeyForRun(run.pathType as "conduit" | "cable"),
+        location: run.location ?? null,
+      })),
     [runs]
   );
 
@@ -686,7 +850,12 @@ export default function TakeoffPage({ bidId, onBack }: {
    * hidden.
    */
   const presentKey = useMemo(
-    () => [...present.systems.map(s => s.key), "|", ...present.locations.map(l => l.key)].join(","),
+    () =>
+      [
+        ...present.systems.map(s => s.key),
+        "|",
+        ...present.locations.map(l => l.key),
+      ].join(","),
     [present]
   );
   useEffect(() => {
@@ -718,7 +887,8 @@ export default function TakeoffPage({ bidId, onBack }: {
     });
   }, [presentKey]);
 
-  const effectiveLayers = layerState ?? allLayersOn([...layeredStamps, ...layeredRuns]);
+  const effectiveLayers =
+    layerState ?? allLayersOn([...layeredStamps, ...layeredRuns]);
 
   const visibleStamps = useMemo(
     () => filterByLayers(layeredStamps, effectiveLayers),
@@ -729,24 +899,37 @@ export default function TakeoffPage({ bidId, onBack }: {
     [layeredRuns, effectiveLayers]
   );
   const hiddenCount =
-    (layeredStamps.length - visibleStamps.length) + (layeredRuns.length - visibleRuns.length);
+    layeredStamps.length -
+    visibleStamps.length +
+    (layeredRuns.length - visibleRuns.length);
 
   const stampGroups = useMemo(
-    () => groupStamps(visibleStamps.map(st => ({
-      id: st.id, sheetId: st.sheetId, assemblyId: st.assemblyId,
-      assemblyName: st.assemblyName, x: st.x, y: st.y,
-    }))),
+    () =>
+      groupStamps(
+        visibleStamps.map(st => ({
+          id: st.id,
+          sheetId: st.sheetId,
+          assemblyId: st.assemblyId,
+          assemblyName: st.assemblyName,
+          x: st.x,
+          y: st.y,
+        }))
+      ),
     [visibleStamps]
   );
 
-  const saveRun = trpc.takeoffRuns.save.useMutation({ onError: e => toast.error(e.message) });
+  const saveRun = trpc.takeoffRuns.save.useMutation({
+    onError: e => toast.error(e.message),
+  });
   const commitRun = trpc.takeoffRuns.commit.useMutation({
     onError: e => toast.error(e.message),
-    onSuccess: result => toast.success(`Run finished — ${result.lengthFeet} ft.`),
+    onSuccess: result =>
+      toast.success(`Run finished — ${result.lengthFeet} ft.`),
     onSettled: refreshRuns,
   });
   const removeRun = trpc.takeoffRuns.remove.useMutation({
-    onError: e => toast.error(e.message), onSettled: refreshRuns,
+    onError: e => toast.error(e.message),
+    onSettled: refreshRuns,
   });
   const acceptSuggestion = trpc.takeoffRuns.acceptSuggestion.useMutation({
     onError: e => toast.error(e.message),
@@ -754,13 +937,16 @@ export default function TakeoffPage({ bidId, onBack }: {
     onSettled: refreshRuns,
   });
   const addCircuit = trpc.takeoffRuns.addCircuit.useMutation({
-    onError: e => toast.error(e.message), onSettled: refreshRuns,
+    onError: e => toast.error(e.message),
+    onSettled: refreshRuns,
   });
   const updateCircuit = trpc.takeoffRuns.updateCircuit.useMutation({
-    onError: e => toast.error(e.message), onSettled: refreshRuns,
+    onError: e => toast.error(e.message),
+    onSettled: refreshRuns,
   });
   const removeCircuit = trpc.takeoffRuns.removeCircuit.useMutation({
-    onError: e => toast.error(e.message), onSettled: refreshRuns,
+    onError: e => toast.error(e.message),
+    onSettled: refreshRuns,
   });
 
   /**
@@ -775,21 +961,26 @@ export default function TakeoffPage({ bidId, onBack }: {
     if (!tracing || !activeSheet || tracePoints.length < 2) return;
     const timer = window.setInterval(() => {
       if (tracePoints.length === savedPointCount.current) return;
-      saveRun.mutate({
-        bidId,
-        sheetId: activeSheet.id,
-        id: draftRunId.current ?? undefined,
-        name: draftRunId.current ? `Run ${draftRunId.current}` : `Run on ${activeSheet.name}`,
-        pathType: tracePathType,
-        points: tracePoints,
-        status: "draft",
-      }, {
-        onSuccess: result => {
-          draftRunId.current = result.id;
-          savedPointCount.current = tracePoints.length;
-          refreshRuns();
+      saveRun.mutate(
+        {
+          bidId,
+          sheetId: activeSheet.id,
+          id: draftRunId.current ?? undefined,
+          name: draftRunId.current
+            ? `Run ${draftRunId.current}`
+            : `Run on ${activeSheet.name}`,
+          pathType: tracePathType,
+          points: tracePoints,
+          status: "draft",
         },
-      });
+        {
+          onSuccess: result => {
+            draftRunId.current = result.id;
+            savedPointCount.current = tracePoints.length;
+            refreshRuns();
+          },
+        }
+      );
     }, 4000);
     return () => window.clearInterval(timer);
   }, [tracing, activeSheet?.id, tracePoints, tracePathType, bidId]);
@@ -841,25 +1032,28 @@ export default function TakeoffPage({ bidId, onBack }: {
 
   const finishTrace = useCallback(() => {
     if (!activeSheet || tracePoints.length < 2) return;
-    saveRun.mutate({
-      bidId,
-      sheetId: activeSheet.id,
-      id: draftRunId.current ?? undefined,
-      name: `Run on ${activeSheet.name}`,
-      pathType: tracePathType,
-      points: tracePoints,
-      status: "draft",
-    }, {
-      onSuccess: result => {
-        commitRun.mutate({ id: result.id });
-        clearDraft(activeSheet.id);
-        setTracing(false);
-        setTracePoints([]);
-        draftRunId.current = null;
-        savedPointCount.current = 0;
-        setRecoverable(null);
+    saveRun.mutate(
+      {
+        bidId,
+        sheetId: activeSheet.id,
+        id: draftRunId.current ?? undefined,
+        name: `Run on ${activeSheet.name}`,
+        pathType: tracePathType,
+        points: tracePoints,
+        status: "draft",
       },
-    });
+      {
+        onSuccess: result => {
+          commitRun.mutate({ id: result.id });
+          clearDraft(activeSheet.id);
+          setTracing(false);
+          setTracePoints([]);
+          draftRunId.current = null;
+          savedPointCount.current = 0;
+          setRecoverable(null);
+        },
+      }
+    );
   }, [activeSheet, tracePoints, tracePathType, bidId, saveRun, commitRun]);
 
   const cancelTrace = useCallback(() => {
@@ -870,14 +1064,17 @@ export default function TakeoffPage({ bidId, onBack }: {
     savedPointCount.current = 0;
   }, [activeSheet?.id]);
 
-  const handleSheetVisible = useCallback((pageNumber: number, text: string) => {
-    const sheet = sheets.find(s => s.pageNumber === pageNumber);
-    // Nothing to attach a reading to yet; ensureSheets is still in flight and
-    // this page's text will be re-read the next time it is shown.
-    if (!sheet) return;
-    if (sheet.scaleSource !== "none") return;
-    detectScale.mutate({ id: sheet.id, sheetText: text });
-  }, [sheets]);
+  const handleSheetVisible = useCallback(
+    (pageNumber: number, text: string) => {
+      const sheet = sheets.find(s => s.pageNumber === pageNumber);
+      // Nothing to attach a reading to yet; ensureSheets is still in flight and
+      // this page's text will be re-read the next time it is shown.
+      if (!sheet) return;
+      if (sheet.scaleSource !== "none") return;
+      detectScale.mutate({ id: sheet.id, sheetText: text });
+    },
+    [sheets]
+  );
 
   /**
    * Attach files: check, ticket, upload straight to storage, confirm.
@@ -886,86 +1083,110 @@ export default function TakeoffPage({ bidId, onBack }: {
    * others gives three progress bars all crawling and a saturated connection;
    * sequential means the first sheet is usable while the rest arrive.
    */
-  const acceptFiles = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const queue = Array.from(files);
-    setUploads(queue.map(f => ({ filename: f.name, byteSize: f.size, sent: 0, state: "waiting" })));
+  const acceptFiles = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      const queue = Array.from(files);
+      setUploads(
+        queue.map(f => ({
+          filename: f.name,
+          byteSize: f.size,
+          sent: 0,
+          state: "waiting",
+        }))
+      );
 
-    for (let i = 0; i < queue.length; i++) {
-      const file = queue[i];
-      const setState = (patch: Partial<UploadJob>) =>
-        setUploads(prev => prev.map((u, n) => (n === i ? { ...u, ...patch } : u)));
+      for (let i = 0; i < queue.length; i++) {
+        const file = queue[i];
+        const setState = (patch: Partial<UploadJob>) =>
+          setUploads(prev =>
+            prev.map((u, n) => (n === i ? { ...u, ...patch } : u))
+          );
 
-      // Cheap checks first, so an obviously wrong file fails instantly rather
-      // than after a long upload.
-      const check = checkPdfUpload({ filename: file.name, byteSize: file.size });
-      if (!check.ok) {
-        setState({ state: "failed", error: check.message });
-        toast.error(check.message);
-        continue;
-      }
-
-      // The magic bytes, read from the first few bytes of the file rather than
-      // the whole thing. Catches a document renamed to .pdf, which otherwise
-      // uploads perfectly and then fails to open with nothing explaining why.
-      const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
-      if (!looksLikePdf(head)) {
-        const message = `${file.name} is not a PDF inside, whatever it is named. Export a real PDF and try again.`;
-        setState({ state: "failed", error: message });
-        toast.error(message);
-        continue;
-      }
-
-      try {
-        setState({ state: "uploading" });
-        const ticket = await createTicket.mutateAsync({
-          bidId, filename: file.name, byteSize: file.size,
-        });
-
-        // XHR rather than fetch: fetch cannot report upload progress, and a
-        // 150MB transfer with no feedback is indistinguishable from a hang.
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhrRef.current = xhr;
-          xhr.open("PUT", ticket.uploadUrl, true);
-          xhr.setRequestHeader("Content-Type", "application/pdf");
-          xhr.upload.onprogress = e => {
-            if (e.lengthComputable) setState({ sent: e.loaded });
-          };
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) resolve();
-            else reject(new Error(`Storage refused the upload (${xhr.status}).`));
-          };
-          xhr.onerror = () => reject(new Error("The connection dropped during upload."));
-          xhr.onabort = () => reject(new Error("Upload cancelled."));
-          xhr.send(file);
-        });
-        xhrRef.current = null;
-
-        setState({ state: "finishing", sent: file.size });
-        const attached = await confirmAttach.mutateAsync({
-          bidId,
+        // Cheap checks first, so an obviously wrong file fails instantly rather
+        // than after a long upload.
+        const check = checkPdfUpload({
           filename: file.name,
-          storageKey: ticket.storageKey,
           byteSize: file.size,
         });
+        if (!check.ok) {
+          setState({ state: "failed", error: check.message });
+          toast.error(check.message);
+          continue;
+        }
 
-        setState({ state: "done" });
-        setSelectedDocId(attached.id);
-        setPage(1);
-        void utils.bidPdfs.list.invalidate({ bidId });
-        toast.success(`${attached.filename} attached.`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "That file could not be attached.";
-        setState({ state: "failed", error: message });
-        toast.error(message);
+        // The magic bytes, read from the first few bytes of the file rather than
+        // the whole thing. Catches a document renamed to .pdf, which otherwise
+        // uploads perfectly and then fails to open with nothing explaining why.
+        const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+        if (!looksLikePdf(head)) {
+          const message = `${file.name} is not a PDF inside, whatever it is named. Export a real PDF and try again.`;
+          setState({ state: "failed", error: message });
+          toast.error(message);
+          continue;
+        }
+
+        try {
+          setState({ state: "uploading" });
+          const ticket = await createTicket.mutateAsync({
+            bidId,
+            filename: file.name,
+            byteSize: file.size,
+          });
+
+          // XHR rather than fetch: fetch cannot report upload progress, and a
+          // 150MB transfer with no feedback is indistinguishable from a hang.
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhrRef.current = xhr;
+            xhr.open("PUT", ticket.uploadUrl, true);
+            xhr.setRequestHeader("Content-Type", "application/pdf");
+            xhr.upload.onprogress = e => {
+              if (e.lengthComputable) setState({ sent: e.loaded });
+            };
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) resolve();
+              else
+                reject(
+                  new Error(`Storage refused the upload (${xhr.status}).`)
+                );
+            };
+            xhr.onerror = () =>
+              reject(new Error("The connection dropped during upload."));
+            xhr.onabort = () => reject(new Error("Upload cancelled."));
+            xhr.send(file);
+          });
+          xhrRef.current = null;
+
+          setState({ state: "finishing", sent: file.size });
+          const attached = await confirmAttach.mutateAsync({
+            bidId,
+            filename: file.name,
+            storageKey: ticket.storageKey,
+            byteSize: file.size,
+          });
+
+          setState({ state: "done" });
+          setSelectedDocId(attached.id);
+          setPage(1);
+          void utils.bidPdfs.list.invalidate({ bidId });
+          toast.success(`${attached.filename} attached.`);
+        } catch (err) {
+          const message =
+            err instanceof Error
+              ? err.message
+              : "That file could not be attached.";
+          setState({ state: "failed", error: message });
+          toast.error(message);
+        }
       }
-    }
 
-    // Clear only what succeeded; a failure stays on screen with its reason.
-    setUploads(prev => prev.filter(u => u.state === "failed"));
-    if (fileInput.current) fileInput.current.value = "";
-  }, [bidId, createTicket, confirmAttach, utils]);
+      // Clear only what succeeded; a failure stays on screen with its reason.
+      setUploads(prev => prev.filter(u => u.state === "failed"));
+      if (fileInput.current) fileInput.current.value = "";
+    },
+    [bidId, createTicket, confirmAttach, utils]
+  );
 
   const cancelUpload = useCallback(() => {
     xhrRef.current?.abort();
@@ -975,8 +1196,13 @@ export default function TakeoffPage({ bidId, onBack }: {
   return (
     <div
       className="flex flex-col h-full bg-background"
-      onDragOver={e => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={e => { if (e.currentTarget === e.target) setDragging(false); }}
+      onDragOver={e => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={e => {
+        if (e.currentTarget === e.target) setDragging(false);
+      }}
       onDrop={e => {
         e.preventDefault();
         setDragging(false);
@@ -994,7 +1220,12 @@ export default function TakeoffPage({ bidId, onBack }: {
 
       <div className="border-b border-border px-6 py-3 shrink-0">
         <div className="flex items-center gap-3">
-          <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" onClick={onBack}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 gap-1.5 text-xs"
+            onClick={onBack}
+          >
             <ArrowLeft className="w-3.5 h-3.5" /> Bid
           </Button>
           <div className="flex-1 min-w-0">
@@ -1007,13 +1238,20 @@ export default function TakeoffPage({ bidId, onBack }: {
           </div>
           {docs.length > 0 && (
             <Button
-              size="sm" className="h-8 gap-1.5 text-xs"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
               onClick={() => fileInput.current?.click()}
               disabled={uploading}
             >
-              {uploading
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…</>
-                : <><Plus className="w-3.5 h-3.5" /> Add PDF</>}
+              {uploading ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5" /> Add PDF
+                </>
+              )}
             </Button>
           )}
         </div>
@@ -1024,7 +1262,9 @@ export default function TakeoffPage({ bidId, onBack }: {
       <UploadProgress
         jobs={uploads}
         onCancel={cancelUpload}
-        onDismiss={index => setUploads(prev => prev.filter((_, n) => n !== index))}
+        onDismiss={index =>
+          setUploads(prev => prev.filter((_, n) => n !== index))
+        }
       />
 
       {isLoading ? (
@@ -1041,7 +1281,9 @@ export default function TakeoffPage({ bidId, onBack }: {
               "w-full max-w-lg rounded-2xl border-2 border-dashed p-10 text-center transition-colors",
               "hover:border-[#F5C518] hover:bg-[#F5C518]/5 focus-visible:outline-none",
               "focus-visible:border-[#F5C518] focus-visible:bg-[#F5C518]/5",
-              dragging ? "border-[#F5C518] bg-[#F5C518]/10" : "border-border bg-card"
+              dragging
+                ? "border-[#F5C518] bg-[#F5C518]/10"
+                : "border-border bg-card"
             )}
           >
             {uploading ? (
@@ -1056,7 +1298,8 @@ export default function TakeoffPage({ bidId, onBack }: {
               or click to choose files from this computer
             </p>
             <p className="text-xs text-muted-foreground/70 mt-4">
-              PDFs only, up to {formatBytes(MAX_PDF_BYTES)} each. Attach as many sheets as the job has.
+              PDFs only, up to {formatBytes(MAX_PDF_BYTES)} each. Attach as many
+              sheets as the job has.
             </p>
           </button>
         </div>
@@ -1075,10 +1318,15 @@ export default function TakeoffPage({ bidId, onBack }: {
                   key={d.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => { setSelectedDocId(d.id); setPage(1); }}
+                  onClick={() => {
+                    setSelectedDocId(d.id);
+                    setPage(1);
+                  }}
                   onKeyDown={e => {
                     if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault(); setSelectedDocId(d.id); setPage(1);
+                      e.preventDefault();
+                      setSelectedDocId(d.id);
+                      setPage(1);
                     }
                   }}
                   className={cn(
@@ -1088,20 +1336,31 @@ export default function TakeoffPage({ bidId, onBack }: {
                       : "border-l-transparent hover:bg-muted/50"
                   )}
                 >
-                  <FileText className={cn(
-                    "w-3.5 h-3.5 mt-0.5 shrink-0",
-                    doc?.id === d.id ? "text-[#F5C518]" : "text-muted-foreground"
-                  )} />
+                  <FileText
+                    className={cn(
+                      "w-3.5 h-3.5 mt-0.5 shrink-0",
+                      doc?.id === d.id
+                        ? "text-[#F5C518]"
+                        : "text-muted-foreground"
+                    )}
+                  />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs truncate" title={d.filename}>{d.filename}</p>
+                    <p className="text-xs truncate" title={d.filename}>
+                      {d.filename}
+                    </p>
                     <p className="text-[0.7rem] text-muted-foreground">
-                      {d.pageCount ? `${d.pageCount} pages · ` : ""}{formatBytes(d.byteSize)}
+                      {d.pageCount ? `${d.pageCount} pages · ` : ""}
+                      {formatBytes(d.byteSize)}
                     </p>
                   </div>
                   <Button
-                    size="sm" variant="ghost"
+                    size="sm"
+                    variant="ghost"
                     className="h-5 w-5 p-0 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-destructive"
-                    onClick={e => { e.stopPropagation(); setConfirmRemove(d); }}
+                    onClick={e => {
+                      e.stopPropagation();
+                      setConfirmRemove(d);
+                    }}
                     aria-label={`Remove ${d.filename}`}
                   >
                     <Trash2 className="w-3 h-3" />
@@ -1116,7 +1375,9 @@ export default function TakeoffPage({ bidId, onBack }: {
                 activePage={page}
                 loading={sheetsLoading}
                 onOpenPage={setPage}
-                onRename={(sheetId, name) => renameSheet.mutate({ id: sheetId, name })}
+                onRename={(sheetId, name) =>
+                  renameSheet.mutate({ id: sheetId, name })
+                }
               />
             </div>
           </aside>
@@ -1124,8 +1385,15 @@ export default function TakeoffPage({ bidId, onBack }: {
           {/* The split: drawing on the left, work pane on the right. Built now
               so the counted-items list and legend land in a structure that
               exists, rather than as a drawer bolted on later. */}
-          <ResizablePanelGroup direction="horizontal" className="flex-1 min-w-0">
-            <ResizablePanel defaultSize={68} minSize={35} className="flex flex-col min-w-0">
+          <ResizablePanelGroup
+            direction="horizontal"
+            className="flex-1 min-w-0"
+          >
+            <ResizablePanel
+              defaultSize={68}
+              minSize={35}
+              className="flex flex-col min-w-0"
+            >
               {doc && (
                 <>
                   <PlanPane
@@ -1133,70 +1401,87 @@ export default function TakeoffPage({ bidId, onBack }: {
                     doc={doc}
                     page={page}
                     onPage={setPage}
-                    onPageCount={pageCount => setPageCount.mutate({ id: doc.id, pageCount })}
+                    onPageCount={pageCount =>
+                      setPageCount.mutate({ id: doc.id, pageCount })
+                    }
                     onDocumentReady={handleDocumentReady}
                     onSheetVisible={handleSheetVisible}
-                    overlay={size => measurability ? (
-                      <>
-                      {capturingSymbol && (
-                        <SymbolCaptureLayer
-                          width={size.width}
-                          height={size.height}
-                          renderScale={size.renderScale}
-                          onCancel={() => setCapturingSymbol(false)}
-                          onRegion={(region: CaptureRegion) => {
-                            const thumbnail = size.canvas
-                              ? cropToThumbnail(size.canvas, region, size.renderScale)
-                              : null;
-                            setCapturingSymbol(false);
-                            setPendingCapture({ thumbnail });
-                          }}
-                        />
-                      )}
-                      {pendingCapture && (
-                        <SymbolCaptureForm
-                          thumbnail={pendingCapture.thumbnail}
-                          onCancel={() => setPendingCapture(null)}
-                          onSave={label => {
-                            captureSymbol.mutate({
-                              label,
-                              thumbnail: pendingCapture.thumbnail,
-                              capturedFromSheetId: activeSheet?.id,
-                            }, {
-                              onSuccess: r => toast.success(r.alreadyKnown
-                                ? "Already in your legend."
-                                : "Captured — click it to choose an assembly."),
-                            });
-                            setPendingCapture(null);
-                          }}
-                        />
-                      )}
-                      <TraceLayer
-                        width={size.width}
-                        height={size.height}
-                        renderScale={size.renderScale}
-                        measurability={measurability}
-                        tracing={tracing}
-                        pathType={tracePathType}
-                        points={tracePoints}
-                        onPointsChange={setTracePoints}
-                        existingRuns={visibleRuns}
-                        onFinish={finishTrace}
-                        onCancel={cancelTrace}
-                        selectedRunId={selectedRunId}
-                        onSelectRun={setSelectedRunId}
-                        stamping={Boolean(stampAssembly) && !tracing}
-                        stampAssemblyName={stampAssembly?.name ?? null}
-                        stamps={visibleStamps.map(st => ({
-                          id: st.id, assemblyName: st.assemblyName, x: st.x, y: st.y,
-                        }))}
-                        onDropStamp={queueStamp}
-                        selectedStampId={selectedStampId}
-                        onSelectStamp={setSelectedStampId}
-                        focusPoint={focusPoint}
-                      />
-                      </>
-                    ) : null}
+                    overlay={size =>
+                      measurability ? (
+                        <>
+                          {capturingSymbol && (
+                            <SymbolCaptureLayer
+                              width={size.width}
+                              height={size.height}
+                              renderScale={size.renderScale}
+                              onCancel={() => setCapturingSymbol(false)}
+                              onRegion={(region: CaptureRegion) => {
+                                const thumbnail = size.canvas
+                                  ? cropToThumbnail(
+                                      size.canvas,
+                                      region,
+                                      size.renderScale
+                                    )
+                                  : null;
+                                setCapturingSymbol(false);
+                                setPendingCapture({ thumbnail });
+                              }}
+                            />
+                          )}
+                          {pendingCapture && (
+                            <SymbolCaptureForm
+                              thumbnail={pendingCapture.thumbnail}
+                              onCancel={() => setPendingCapture(null)}
+                              onSave={label => {
+                                captureSymbol.mutate(
+                                  {
+                                    label,
+                                    thumbnail: pendingCapture.thumbnail,
+                                    capturedFromSheetId: activeSheet?.id,
+                                  },
+                                  {
+                                    onSuccess: r =>
+                                      toast.success(
+                                        r.alreadyKnown
+                                          ? "Already in your legend."
+                                          : "Captured — click it to choose an assembly."
+                                      ),
+                                  }
+                                );
+                                setPendingCapture(null);
+                              }}
+                            />
+                          )}
+                          <TraceLayer
+                            width={size.width}
+                            height={size.height}
+                            renderScale={size.renderScale}
+                            measurability={measurability}
+                            tracing={tracing}
+                            pathType={tracePathType}
+                            points={tracePoints}
+                            onPointsChange={setTracePoints}
+                            existingRuns={visibleRuns}
+                            onFinish={finishTrace}
+                            onCancel={cancelTrace}
+                            selectedRunId={selectedRunId}
+                            onSelectRun={setSelectedRunId}
+                            stamping={Boolean(stampAssembly) && !tracing}
+                            stampAssemblyName={stampAssembly?.name ?? null}
+                            stamps={visibleStamps.map(st => ({
+                              id: st.id,
+                              assemblyName: st.assemblyName,
+                              x: st.x,
+                              y: st.y,
+                            }))}
+                            onDropStamp={queueStamp}
+                            selectedStampId={selectedStampId}
+                            onSelectStamp={setSelectedStampId}
+                            focusPoint={focusPoint}
+                          />
+                        </>
+                      ) : null
+                    }
                   />
                   {/* Rendered under the pager rather than inside PlanPane so
                       the sheet row (and its mutations) stay owned here. */}
@@ -1212,20 +1497,27 @@ export default function TakeoffPage({ bidId, onBack }: {
                       {measurability?.ok && !tracing && (
                         <>
                           <Button
-                            size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1.5 text-xs"
                             onClick={() => startTracing("conduit")}
                           >
-                            <Zap className="w-3.5 h-3.5 text-[#F5C518]" /> Trace conduit
+                            <Zap className="w-3.5 h-3.5 text-[#F5C518]" /> Trace
+                            conduit
                           </Button>
                           <Button
-                            size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1.5 text-xs"
                             onClick={() => startTracing("cable")}
                           >
-                            <Cable className="w-3.5 h-3.5 text-emerald-400" /> Trace cable
+                            <Cable className="w-3.5 h-3.5 text-emerald-400" />{" "}
+                            Trace cable
                           </Button>
                           {stampAssembly ? (
                             <Button
-                              size="sm" className="h-7 gap-1.5 text-xs"
+                              size="sm"
+                              className="h-7 gap-1.5 text-xs"
                               onClick={() => setStampAssembly(null)}
                             >
                               <MapPin className="w-3.5 h-3.5" />
@@ -1240,8 +1532,15 @@ export default function TakeoffPage({ bidId, onBack }: {
                       <ScaleControl
                         sheet={activeSheet}
                         notToScale={notToScaleBySheet[activeSheet.id] ?? false}
-                        onSet={scaleText => setSheetScale.mutate({ id: activeSheet.id, scaleText })}
-                        onClear={() => clearSheetScale.mutate({ id: activeSheet.id })}
+                        onSet={scaleText =>
+                          setSheetScale.mutate({
+                            id: activeSheet.id,
+                            scaleText,
+                          })
+                        }
+                        onClear={() =>
+                          clearSheetScale.mutate({ id: activeSheet.id })
+                        }
                       />
                     </div>
                   )}
@@ -1253,7 +1552,10 @@ export default function TakeoffPage({ bidId, onBack }: {
 
             <ResizablePanel defaultSize={32} minSize={18} className="min-w-0">
               <RunsPanel
-                runs={visibleRuns.map(r => ({ ...r, firstPoint: r.points[0] ?? null }))}
+                runs={visibleRuns.map(r => ({
+                  ...r,
+                  firstPoint: r.points[0] ?? null,
+                }))}
                 stampGroups={stampGroups}
                 onJumpTo={at => {
                   setFocusPoint(at);
@@ -1264,34 +1566,50 @@ export default function TakeoffPage({ bidId, onBack }: {
                 onRemoveStamp={id => removeStamp.mutate({ id })}
                 legend={
                   <>
-                  <LayersPanel
-                    present={present}
-                    state={effectiveLayers}
-                    onChange={update => setLayerState(previous =>
-                      update(previous ?? allLayersOn([...layeredStamps, ...layeredRuns]))
-                    )}
-                    filtered={hiddenCount > 0}
-                    hiddenCount={hiddenCount}
-                  />
-                  <LegendPanel
-                    symbols={symbols}
-                    assemblies={allAssemblies.map(a => ({
-                      id: a.id, name: a.name, category: a.category,
-                    }))}
-                    activeAssemblyId={stampAssembly?.id ?? null}
-                    capturing={capturingSymbol}
-                    onStartCapture={() => setCapturingSymbol(true)}
-                    onCancelCapture={() => setCapturingSymbol(false)}
-                    onLink={(symbolId, assemblyId) => linkSymbol.mutate({ id: symbolId, assemblyId })}
-                    onUnlink={id => unlinkSymbol.mutate({ id })}
-                    onRemove={id => removeSymbol.mutate({ id })}
-                    onUseSymbol={symbol => {
-                      const assembly = allAssemblies.find(a => a.id === symbol.assemblyId);
-                      if (!assembly) return;
-                      setStampAssembly({ id: assembly.id, name: assembly.name });
-                      toast.success(`Stamping ${assembly.name} — click to place.`);
-                    }}
-                  />
+                    <LayersPanel
+                      present={present}
+                      state={effectiveLayers}
+                      onChange={update =>
+                        setLayerState(previous =>
+                          update(
+                            previous ??
+                              allLayersOn([...layeredStamps, ...layeredRuns])
+                          )
+                        )
+                      }
+                      filtered={hiddenCount > 0}
+                      hiddenCount={hiddenCount}
+                    />
+                    <LegendPanel
+                      symbols={symbols}
+                      assemblies={allAssemblies.map(a => ({
+                        id: a.id,
+                        name: a.name,
+                        category: a.category,
+                      }))}
+                      activeAssemblyId={stampAssembly?.id ?? null}
+                      capturing={capturingSymbol}
+                      onStartCapture={() => setCapturingSymbol(true)}
+                      onCancelCapture={() => setCapturingSymbol(false)}
+                      onLink={(symbolId, assemblyId) =>
+                        linkSymbol.mutate({ id: symbolId, assemblyId })
+                      }
+                      onUnlink={id => unlinkSymbol.mutate({ id })}
+                      onRemove={id => removeSymbol.mutate({ id })}
+                      onUseSymbol={symbol => {
+                        const assembly = allAssemblies.find(
+                          a => a.id === symbol.assemblyId
+                        );
+                        if (!assembly) return;
+                        setStampAssembly({
+                          id: assembly.id,
+                          name: assembly.name,
+                        });
+                        toast.success(
+                          `Stamping ${assembly.name} — click to place.`
+                        );
+                      }}
+                    />
                   </>
                 }
                 totals={totals}
@@ -1301,9 +1619,11 @@ export default function TakeoffPage({ bidId, onBack }: {
                 onCommitRun={id => commitRun.mutate({ id })}
                 onAcceptSuggestion={id => acceptSuggestion.mutate({ id })}
                 onAddCircuit={(runId, name, conductorCount) =>
-                  addCircuit.mutate({ runId, name, conductorCount })}
+                  addCircuit.mutate({ runId, name, conductorCount })
+                }
                 onUpdateCircuit={(id, conductorCount) =>
-                  updateCircuit.mutate({ id, conductorCount })}
+                  updateCircuit.mutate({ id, conductorCount })
+                }
                 onRemoveCircuit={id => removeCircuit.mutate({ id })}
               />
             </ResizablePanel>
@@ -1320,14 +1640,18 @@ export default function TakeoffPage({ bidId, onBack }: {
         </div>
       )}
 
-      <AlertDialog open={confirmRemove !== null} onOpenChange={open => !open && setConfirmRemove(null)}>
+      <AlertDialog
+        open={confirmRemove !== null}
+        onOpenChange={open => !open && setConfirmRemove(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this plan?</AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmRemove?.filename} will be detached from this bid straight away, along with
-              its sheet names and scales. The bid itself, and everything priced on it, is
-              untouched. You can attach the file again.
+              {confirmRemove?.filename} will be detached from this bid straight
+              away, along with its sheet names and scales. The bid itself, and
+              everything priced on it, is untouched. You can attach the file
+              again.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

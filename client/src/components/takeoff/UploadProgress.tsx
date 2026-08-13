@@ -36,7 +36,11 @@ export type UploadJobView = {
   error?: string;
 };
 
-export function UploadProgress({ jobs, onCancel, onDismiss }: {
+export function UploadProgress({
+  jobs,
+  onCancel,
+  onDismiss,
+}: {
   jobs: UploadJobView[];
   /** Abort the transfer in flight. */
   onCancel: () => void;
@@ -51,9 +55,10 @@ export function UploadProgress({ jobs, onCancel, onDismiss }: {
         const failed = job.state === "failed";
         // Guard the divide: a zero-byte file is refused before it gets here,
         // but a NaN width would break the bar rather than show an empty one.
-        const pct = job.byteSize > 0
-          ? Math.min(100, Math.round((job.sent / job.byteSize) * 100))
-          : 0;
+        const pct =
+          job.byteSize > 0
+            ? Math.min(100, Math.round((job.sent / job.byteSize) * 100))
+            : 0;
 
         return (
           <div key={`${job.filename}-${index}`}>
@@ -64,13 +69,17 @@ export function UploadProgress({ jobs, onCancel, onDismiss }: {
                 <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin text-[#F5C518]" />
               )}
 
-              <span className="text-xs truncate flex-1 min-w-0" title={job.filename}>
+              <span
+                className="text-xs truncate flex-1 min-w-0"
+                title={job.filename}
+              >
                 {job.filename}
               </span>
 
               {failed ? (
                 <Button
-                  size="sm" variant="ghost"
+                  size="sm"
+                  variant="ghost"
                   className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
                   onClick={() => onDismiss(index)}
                   aria-label={`Dismiss ${job.filename}`}
@@ -88,7 +97,8 @@ export function UploadProgress({ jobs, onCancel, onDismiss }: {
                   </span>
                   {job.state === "uploading" && (
                     <Button
-                      size="sm" variant="ghost"
+                      size="sm"
+                      variant="ghost"
                       className="h-6 px-1.5 shrink-0 text-[0.7rem] text-muted-foreground hover:text-destructive"
                       onClick={onCancel}
                     >
@@ -100,7 +110,9 @@ export function UploadProgress({ jobs, onCancel, onDismiss }: {
             </div>
 
             {failed ? (
-              <p className="text-[0.7rem] text-destructive mt-0.5 ml-5.5 pl-0.5">{job.error}</p>
+              <p className="text-[0.7rem] text-destructive mt-0.5 ml-5.5 pl-0.5">
+                {job.error}
+              </p>
             ) : (
               <div
                 className="h-1 mt-1.5 rounded-full bg-muted overflow-hidden"

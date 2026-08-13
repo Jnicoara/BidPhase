@@ -38,15 +38,31 @@ export type LaborHourDefault = {
 
 export const LABOR_HOUR_DEFAULTS: LaborHourDefault[] = [
   // ── Devices ──
-  { match: "duplex receptacle retrofit", hours: 1.0, basis: "old-work box, cut-in and fish" },
+  {
+    match: "duplex receptacle retrofit",
+    hours: 1.0,
+    basis: "old-work box, cut-in and fish",
+  },
   { match: "duplex receptacle", hours: 0.75, basis: "rough-in and trim" },
-  { match: "dedicated 20a receptacle", hours: 1.25, basis: "rough-in, trim and home run" },
+  {
+    match: "dedicated 20a receptacle",
+    hours: 1.25,
+    basis: "rough-in, trim and home run",
+  },
   { match: "gfci receptacle", hours: 0.9, basis: "rough-in and trim" },
   { match: "range receptacle", hours: 1.75, basis: "50A device, heavy cable" },
   { match: "dryer receptacle", hours: 1.5, basis: "30A device, heavy cable" },
-  { match: "ev charger circuit", hours: 3.5, basis: "home run, breaker, EVSE connection" },
+  {
+    match: "ev charger circuit",
+    hours: 3.5,
+    basis: "home run, breaker, EVSE connection",
+  },
   { match: "3-way switch", hours: 1.5, basis: "the pair, plus traveler run" },
-  { match: "three-way switch", hours: 1.5, basis: "the pair, plus traveler run" },
+  {
+    match: "three-way switch",
+    hours: 1.5,
+    basis: "the pair, plus traveler run",
+  },
   { match: "4-way switch", hours: 2.0, basis: "three-location switching" },
   { match: "single-pole switch", hours: 0.6, basis: "rough-in and trim" },
   { match: "dimmer switch", hours: 0.7, basis: "rough-in and trim" },
@@ -55,9 +71,21 @@ export const LABOR_HOUR_DEFAULTS: LaborHourDefault[] = [
   { match: "receptacle", hours: 0.75, basis: "rough-in and trim" },
 
   // ── Lighting ──
-  { match: "recessed can retrofit", hours: 0.85, basis: "cut-in to existing ceiling" },
-  { match: "recessed can", hours: 0.65, basis: "new construction, open ceiling" },
-  { match: "surface-mount ceiling fixture", hours: 0.6, basis: "box, whip and hang" },
+  {
+    match: "recessed can retrofit",
+    hours: 0.85,
+    basis: "cut-in to existing ceiling",
+  },
+  {
+    match: "recessed can",
+    hours: 0.65,
+    basis: "new construction, open ceiling",
+  },
+  {
+    match: "surface-mount ceiling fixture",
+    hours: 0.6,
+    basis: "box, whip and hang",
+  },
   { match: "ceiling fan", hours: 1.5, basis: "fan-rated box and balance" },
   { match: "exit sign", hours: 0.75, basis: "mount and connect" },
   { match: "emergency light", hours: 0.85, basis: "mount and connect" },
@@ -79,7 +107,11 @@ export const LABOR_HOUR_DEFAULTS: LaborHourDefault[] = [
   { match: "ev charger", hours: 3.5, basis: "home run, breaker, connection" },
   { match: "water heater", hours: 2.5, basis: "circuit and connection" },
   { match: "hvac", hours: 3.0, basis: "disconnect, whip and connection" },
-  { match: "motor connection", hours: 2.5, basis: "disconnect and termination" },
+  {
+    match: "motor connection",
+    hours: 2.5,
+    basis: "disconnect and termination",
+  },
   { match: "appliance", hours: 1.5, basis: "circuit and connection" },
 
   // ── Low voltage ──
@@ -91,15 +123,50 @@ export const LABOR_HOUR_DEFAULTS: LaborHourDefault[] = [
   // ── Linear runs — hours PER FOOT ──
   // Conduit and wire are conventionally quoted per 100 ft; expressed per foot
   // here so the number multiplies straight through a footage takeoff.
-  { match: '1/2" emt', hours: 0.06, perUnit: "ft", basis: "per foot, run and strap" },
-  { match: '3/4" emt', hours: 0.07, perUnit: "ft", basis: "per foot, run and strap" },
-  { match: '1" emt', hours: 0.09, perUnit: "ft", basis: "per foot, run and strap" },
-  { match: "emt", hours: 0.06, perUnit: "ft", basis: "per foot, run and strap" },
-  { match: "pvc", hours: 0.05, perUnit: "ft", basis: "per foot, run and strap" },
-  { match: "conduit", hours: 0.06, perUnit: "ft", basis: "per foot, run and strap" },
+  {
+    match: '1/2" emt',
+    hours: 0.06,
+    perUnit: "ft",
+    basis: "per foot, run and strap",
+  },
+  {
+    match: '3/4" emt',
+    hours: 0.07,
+    perUnit: "ft",
+    basis: "per foot, run and strap",
+  },
+  {
+    match: '1" emt',
+    hours: 0.09,
+    perUnit: "ft",
+    basis: "per foot, run and strap",
+  },
+  {
+    match: "emt",
+    hours: 0.06,
+    perUnit: "ft",
+    basis: "per foot, run and strap",
+  },
+  {
+    match: "pvc",
+    hours: 0.05,
+    perUnit: "ft",
+    basis: "per foot, run and strap",
+  },
+  {
+    match: "conduit",
+    hours: 0.06,
+    perUnit: "ft",
+    basis: "per foot, run and strap",
+  },
   { match: "nm-b", hours: 0.02, perUnit: "ft", basis: "per foot, pull" },
   { match: "romex", hours: 0.02, perUnit: "ft", basis: "per foot, pull" },
-  { match: "thhn", hours: 0.015, perUnit: "ft", basis: "per foot, per conductor pulled" },
+  {
+    match: "thhn",
+    hours: 0.015,
+    perUnit: "ft",
+    basis: "per foot, per conductor pulled",
+  },
 ];
 
 /**
@@ -112,7 +179,11 @@ export const LABOR_HOUR_DEFAULTS: LaborHourDefault[] = [
 export function defaultLaborHoursFor(name: string): LaborHourDefault {
   const needle = name.trim().toLowerCase();
   if (!needle) {
-    return { match: "", hours: FALLBACK_LABOR_HOURS, basis: "generic placeholder" };
+    return {
+      match: "",
+      hours: FALLBACK_LABOR_HOURS,
+      basis: "generic placeholder",
+    };
   }
 
   let best: LaborHourDefault | null = null;
@@ -121,7 +192,13 @@ export function defaultLaborHoursFor(name: string): LaborHourDefault {
     if (!best || candidate.match.length > best.match.length) best = candidate;
   }
 
-  return best ?? { match: "", hours: FALLBACK_LABOR_HOURS, basis: "generic placeholder" };
+  return (
+    best ?? {
+      match: "",
+      hours: FALLBACK_LABOR_HOURS,
+      basis: "generic placeholder",
+    }
+  );
 }
 
 /**
