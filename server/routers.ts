@@ -14,6 +14,7 @@ import { laborRatesRouter } from "./routers/laborRatesRouter";
 import { modifiersRouter } from "./routers/modifiersRouter";
 import { assembliesRouter } from "./routers/assembliesRouter";
 import { bidsRouter } from "./routers/bidsRouter";
+import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
 import { takeoffStampsRouter } from "./routers/takeoffStampsRouter";
@@ -37,6 +38,7 @@ export const appRouter = router({
   modifiers: modifiersRouter,
   assemblies: assembliesRouter,
   bids: bidsRouter,
+  proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,
   takeoffStamps: takeoffStampsRouter,

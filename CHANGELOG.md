@@ -4,6 +4,15 @@ Plain-English record of what changed and when. Newest first.
 
 This is the human-readable companion to the git history — read this to see what happened, read the commits for the technical detail.
 
+## [2026-08-13]
+
+- **A finished bid can now be turned into a proposal you would actually hand a client.** Open any bid and click Proposal: your letterhead at the top, who it is for, what is included, what it costs, and signature lines at the bottom, on a real US-Letter page you can print or save as PDF straight from the browser.
+- **The proposal shows a client a price, not your costs.** Materials, labor, overhead, profit and the productivity factor all go into the number, and none of them appear on the page as separate lines — a client sees "Total investment", the work included with quantities, and nothing that invites a line-by-line argument about your margin. On a bid with repeating units it can also show a per-room price, scaled so the rooms add up to the total rather than to the bare cost.
+- **It quotes what was actually priced.** The document is built from the frozen snapshot each line was added with, so re-pricing a material next month does not silently reissue a quote you already sent.
+- **Settings has a Branding section: logo, company name, license number, address, phone, email and website.** It is yours — nothing is filled in for you, and nothing is shared with another account. Anything you have not filled in is flagged in Settings AND printed on the document as a visible prompt like "[Add your license number]", never as blank space, so a half-finished letterhead cannot be posted by accident. The same prompt appears beside the preview, with a link straight to the settings.
+- **Three finished layouts to choose between — Classic, Modern and Minimal — plus an accent colour and switches for which sections appear.** Layout and colour are picked from thumbnails beside the live preview, so you can see what each does. There is no template upload and no free-form editor, deliberately: every choice is a document already laid out to be presentable. Your company header and the price cannot be switched off; everything else can, and a section with nothing to show (no terms written, no repeating units) leaves itself out rather than printing an empty heading.
+- **Standard terms and a "price good for N days" line are set once and reused on every proposal**, and each bid carries its own client name, job address and opening note.
+
 ## [2026-08-12]
 
 - **Every screen now lists materials in the same order: category, then type, then size.** The order used to be a hand-copied list inside the Materials screen, with a note asking whoever came next to keep it in step with the database by hand — and Supplier Pricing did not sort by size at all. One catalog listed two ways means the answer to "where is the 20 amp breaker" depends on which screen you opened. There is one rule now, in one place, and a test that fails if the two ever drift apart again.

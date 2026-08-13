@@ -10,7 +10,11 @@
  */
 import type { FocusEvent } from "react";
 
-export function selectOnFocus(event: FocusEvent<HTMLInputElement>): void {
+export function selectOnFocus(
+  // Textareas take the same treatment — a multi-line address field is still a
+  // field somebody tabs into meaning to replace what is there.
+  event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>
+): void {
   // `select()` on an already-focused element is a no-op, so this is safe to
   // attach unconditionally.
   event.target.select();

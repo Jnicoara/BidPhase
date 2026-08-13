@@ -943,6 +943,111 @@ export const pricingDefaults = mysqlTable("pricing_defaults", {
 export type PricingDefaults = typeof pricingDefaults.$inferSelect;
 export type InsertPricingDefaults = typeof pricingDefaults.$inferInsert;
 
+// ─── Company branding ─────────────────────────────────────────────────────────
+/**
+ * Who the contractor is, as it appears on a document a client receives.
+ *
+ * ── One row per user, never a shared default ─────────────────────────────────
+ * Every field here is the USER's company, not this app's and not some seeded
+ * example. A proposal that ships with somebody else's name on it is worse than
+ * one that ships blank, because blank is obviously unfinished and wrong-but-
+ * plausible is not. Nothing in here is ever populated with sample content.
+ *
+ * ── Blank is the flag ────────────────────────────────────────────────────────
+ * Text fields default to "" and the logo columns to NULL, and "still empty"
+ * IS the signal that the user has not filled this in — exactly the reasoning
+ * behind `needsPricing` reading the $0 itself instead of carrying a separate
+ * "has it been priced" flag (shared/materialPricing.ts). A second column saying
+ * whether branding was set up is a fact that can drift out of step with the
+ * fields it describes; the fields cannot disagree with themselves.
+ * `needsBranding` in shared/proposal.ts is what reads them.
+ */
+export const companyBranding = mysqlTable("company_branding", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  /** Trading name, as the client should see it. */
+  companyName: varchar("companyName", { length: 255 }).default("").notNull(),
+  /** Contractor licence number — on many jobs a legal requirement to state. */
+  licenseNumber: varchar("licenseNumber", { length: 128 })
+    .default("")
+    .notNull(),
+  /** Free-form, multi-line. Rendered line by line, never parsed. */
+  address: varchar("address", { length: 512 }).default("").notNull(),
+  phone: varchar("phone", { length: 64 }).default("").notNull(),
+  email: varchar("email", { length: 320 }).default("").notNull(),
+  website: varchar("website", { length: 255 }).default("").notNull(),
+
+  /**
+   * The logo in S3. Two columns for the same reason `bid_pdfs` splits them: the
+   * key is what this app owns and can re-sign, the URL is what a browser loads.
+   * NULL means no logo, which the document renders as a placeholder rather than
+   * as blank space.
+   */
+  logoKey: varchar("logoKey", { length: 1024 }),
+  logoUrl: varchar("logoUrl", { length: 1024 }),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CompanyBranding = typeof companyBranding.$inferSelect;
+export type InsertCompanyBranding = typeof companyBranding.$inferInsert;
+
+// ─── Proposal presentation ────────────────────────────────────────────────────
+/**
+ * How the client-facing proposal LOOKS: which of the pre-built layouts, what
+ * accent colour, and which optional sections are on.
+ *
+ * ── Presentation only, never pricing ─────────────────────────────────────────
+ * Nothing here can change a number. The document is built from the bid's own
+ * snapshot and its resolved pricing settings; this table decides what is shown
+ * and in what style. Keeping the two apart is what makes it safe to let a user
+ * click through three layouts on a finished bid.
+ *
+ * ── Hidden, not visible ──────────────────────────────────────────────────────
+ * `hiddenSections` stores the ones switched OFF, so a section added to the app
+ * later is on by default for everybody rather than silently missing from every
+ * existing user's proposals — a "visible list" would grandfather people out of
+ * new content they never chose to hide.
+ */
+export const PROPOSAL_LAYOUTS = ["classic", "modern", "minimal"] as const;
+export type ProposalLayout = (typeof PROPOSAL_LAYOUTS)[number];
+
+export const proposalSettings = mysqlTable("proposal_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  layout: mysqlEnum("layout", PROPOSAL_LAYOUTS).default("classic").notNull(),
+  /** Hex, `#RRGGBB`. Validated at the router, so the document can trust it. */
+  accentColor: varchar("accentColor", { length: 9 })
+    .default("#F5C518")
+    .notNull(),
+  /** Section ids the user switched off. See shared/proposal.ts. */
+  hiddenSections: json("hiddenSections").$type<string[]>(),
+
+  /**
+   * Boilerplate the contractor reuses on every proposal — payment terms, what
+   * is excluded, how long the price stands. Stored at company level because
+   * retyping it per bid is how it ends up inconsistent or missing.
+   */
+  termsText: text("termsText"),
+  /** How many days the quoted price is good for. 0 = do not state a validity. */
+  validDays: int("validDays").default(30).notNull(),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProposalSettings = typeof proposalSettings.$inferSelect;
+export type InsertProposalSettings = typeof proposalSettings.$inferInsert;
+
 // ─── Bids ─────────────────────────────────────────────────────────────────────
 // The Foundation bid layer. Deliberately NOT the legacy `projects` table, which
 // belongs to the master_* system and carries PDF/takeoff state — see the divider
@@ -997,6 +1102,22 @@ export const bids = mysqlTable(
      * there is no second field it could be half-overridden against.
      */
     productivityPct: decimal("productivityPct", { precision: 6, scale: 4 }),
+
+    /**
+     * Who the proposal is addressed to, and where the work is.
+     *
+     * Per-bid because they ARE the bid — unlike the branding and layout, which
+     * are the same on every document this contractor sends. NULL rather than ""
+     * so the proposal can tell "not filled in yet" from "deliberately empty"
+     * and prompt for it instead of printing a blank line where a client's name
+     * belongs.
+     *
+     * `proposalNote` is the one or two sentences of scope summary that opens
+     * the document — the part a contractor writes per job.
+     */
+    clientName: varchar("clientName", { length: 255 }),
+    siteAddress: varchar("siteAddress", { length: 512 }),
+    proposalNote: text("proposalNote"),
 
     /**
      * When the bid was archived, or NULL if it is live. This single column is

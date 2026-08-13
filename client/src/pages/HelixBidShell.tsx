@@ -37,6 +37,7 @@ import AssembliesLibraryPage from "@/pages/AssembliesLibraryPage";
 import BidsPage from "@/pages/BidsPage";
 import QuickBidPage from "@/pages/QuickBidPage";
 import TakeoffPage from "@/pages/TakeoffPage";
+import ProposalPage from "@/pages/ProposalPage";
 import BidArchivePage from "@/pages/BidArchivePage";
 import KitsPage from "@/pages/KitsPage";
 import FirstRunPage from "@/pages/FirstRunPage";
@@ -74,6 +75,7 @@ type Route =
   | "bids"
   | "quickbid"
   | "takeoff"
+  | "proposal"
   | "bid-archive"
   | "welcome"
   | "admin";
@@ -110,6 +112,8 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
     if (isNaN(id)) return { route: "bids" };
     // /bids/:id/plans is the takeoff surface for that bid.
     if (parts[2] === "plans") return { route: "takeoff", projectId: id };
+    // /bids/:id/proposal is the client-facing document for that bid.
+    if (parts[2] === "proposal") return { route: "proposal", projectId: id };
     return { route: "bids", projectId: id };
   }
   if (p === "quickbid") return { route: "quickbid" };
@@ -165,6 +169,8 @@ export default function HelixBidShell() {
       window.location.hash = `/bids/${id}`;
     } else if (r === "takeoff" && id) {
       window.location.hash = `/bids/${id}/plans`;
+    } else if (r === "proposal" && id) {
+      window.location.hash = `/bids/${id}/proposal`;
     } else if (r === "bid-archive") {
       window.location.hash = "/archive";
     } else if (r === "project-detail" && id) {
@@ -224,6 +230,7 @@ export default function HelixBidShell() {
   const isInLibraryKits = route === "library-kits";
   const isInBids = route === "bids";
   const isInTakeoff = route === "takeoff";
+  const isInProposal = route === "proposal";
   const isInBidArchive = route === "bid-archive";
   const isInQuickBid = route === "quickbid";
   const isOnWelcome = route === "welcome";
@@ -284,6 +291,16 @@ export default function HelixBidShell() {
       return (
         <TakeoffPage
           key={`takeoff-${activeProjectId}`}
+          bidId={activeProjectId}
+          onBack={() => navigate("bids", activeProjectId)}
+        />
+      );
+    }
+    // Keyed like the takeoff surface: a different bid is a different document.
+    if (isInProposal && activeProjectId) {
+      return (
+        <ProposalPage
+          key={`proposal-${activeProjectId}`}
           bidId={activeProjectId}
           onBack={() => navigate("bids", activeProjectId)}
         />

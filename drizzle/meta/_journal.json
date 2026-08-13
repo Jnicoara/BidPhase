@@ -204,6 +204,13 @@
       "when": 1786599099338,
       "tag": "0028_brainy_black_cat",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1786632314821,
+      "tag": "0029_lucky_the_fury",
+      "breakpoints": true
     }
   ]
 }

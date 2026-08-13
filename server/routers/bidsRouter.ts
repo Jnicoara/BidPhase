@@ -5,24 +5,20 @@
  * was added, plus the pricing settings that turn their sum into a price.
  *
  * ── All math is delegated ────────────────────────────────────────────────────
- * The rollup calls calculateLineItem / sumDirectCost / calculateBidPrice from
- * shared/pricing.ts, and the company-vs-bid settings question is answered by
- * resolveBidPricingSettings in the same module. Nothing here re-implements a
- * percentage. That matters most for the snapshot: a line prices from its frozen
- * inputs through the same engine as everything else, so "what this bid says"
- * and "what the engine computes" can never diverge.
+ * The rollup lives in ../bidPricing, which calls calculateLineItem /
+ * sumDirectCost / calculateBidPrice from shared/pricing.ts, and answers the
+ * company-vs-bid settings question with resolveBidPricingSettings in the same
+ * module. Nothing here re-implements a percentage. That matters most for the
+ * snapshot: a line prices from its frozen inputs through the same engine as
+ * everything else, so "what this bid says" and "what the engine computes" can
+ * never diverge — and the client proposal, which prices through that same
+ * module, cannot quote a different number from the bid it was built from.
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { BID_STATUSES, type BidLineItem } from "../../drizzle/schema";
-import {
-  calculateBidPrice,
-  calculateLineItem,
-  resolveBidPricingSettings,
-  sumDirectCost,
-  type CompanyPricingDefaults,
-} from "../../shared/pricing";
+import { BID_STATUSES } from "../../drizzle/schema";
+import { bidRollup, companyDefaultsFor, rollUpBid } from "../bidPricing";
 import {
   daysRemaining,
   purgeDueAt,
@@ -55,84 +51,6 @@ async function requireBid(id: number, userId: number) {
   if (!bid)
     throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
   return bid;
-}
-
-/**
- * Resolve a user's company defaults into the shape the pricing engine wants.
- * Shared by `get` and `dashboard` so one bid cannot price two ways.
- */
-async function companyDefaultsFor(
-  userId: number
-): Promise<CompanyPricingDefaults> {
-  const defaults = await db.getPricingDefaults(userId);
-  return {
-    overheadEnabled: defaults?.overheadEnabled ?? false,
-    overheadMode: defaults?.overheadMode ?? "percentage",
-    overheadValue: Number(defaults?.overheadValue ?? 0),
-    profitMethod: defaults?.profitMethod ?? "markup",
-    profitValue: Number(defaults?.profitValue ?? 0),
-    productivityPct: Number(defaults?.productivityPct ?? 0),
-  };
-}
-
-/** Roll one bid's lines up to a price, at whatever settings apply to it. */
-function rollUpBid(
-  bid: Awaited<ReturnType<typeof db.getBidById>> & object,
-  lines: BidLineItem[],
-  company: CompanyPricingDefaults
-) {
-  const settings = resolveBidPricingSettings(company, {
-    overheadEnabled: bid.overheadEnabled,
-    overheadMode: bid.overheadMode,
-    overheadValue:
-      bid.overheadValue === null ? null : Number(bid.overheadValue),
-    profitMethod: bid.profitMethod,
-    profitValue: bid.profitValue === null ? null : Number(bid.profitValue),
-    productivityPct:
-      bid.productivityPct === null ? null : Number(bid.productivityPct),
-  });
-
-  const breakdowns = lines.map(line =>
-    priceLine(line, settings.productivityPct)
-  );
-  const directCost = sumDirectCost(breakdowns);
-  const bidPrice = calculateBidPrice({
-    directCost,
-    overhead: settings.overhead,
-    profit: settings.profit,
-  });
-
-  return { settings, breakdowns, directCost, bidPrice };
-}
-
-/**
- * Price one snapshot line at its quantity, through the shared engine.
- *
- * ── What is frozen and what is not ───────────────────────────────────────────
- * Everything that describes the WORK is read off the snapshot: material cost,
- * labor hours, the labor rate and the summed modifier percentage, all captured
- * when the line was added. Re-pricing a material or editing an assembly later
- * cannot move an existing bid, which is the whole point of the snapshot.
- *
- * The productivity factor is not one of those. It is a company-level dial
- * passed in at calculation time, so a bid that inherits it does follow a later
- * change — exactly as it follows a later change to overhead or profit, and for
- * the same reason: those three are settings the bid is priced UNDER, not facts
- * about the work it contains. A bid that should stop following gets its own
- * override, and then nothing at company level reaches it.
- */
-function priceLine(line: BidLineItem, productivityPct: number) {
-  return calculateLineItem({
-    // The snapshot is already a single rolled-up material figure for one
-    // assembly, so it enters as one material line at qty 1 and the bid
-    // quantity scales the whole thing.
-    materials: [{ costPerUnit: Number(line.snapshotMaterialCost), qty: 1 }],
-    baseLaborHours: Number(line.snapshotLaborHours),
-    modifiers: [{ laborAdjustmentPct: Number(line.snapshotModifierPct) }],
-    laborRate: Number(line.snapshotLaborRate),
-    quantity: Number(line.qty),
-    productivityPct,
-  });
 }
 
 export const bidsRouter = router({
@@ -217,6 +135,14 @@ export const bidsRouter = router({
         profitMethod: profitMethodSchema.nullable().optional(),
         profitValue: z.number().min(0).max(0.99).nullable().optional(),
         productivityPct: productivitySchema.nullable().optional(),
+        /**
+         * Proposal content. Null clears the field back to "not filled in", so
+         * the document goes back to prompting for it rather than printing a
+         * blank line where a client's name belongs.
+         */
+        clientName: z.string().trim().max(255).nullable().optional(),
+        siteAddress: z.string().trim().max(512).nullable().optional(),
+        proposalNote: z.string().trim().max(4000).nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -248,6 +174,14 @@ export const bidsRouter = router({
             ? null
             : toDecimal4(rest.productivityPct);
       }
+      // Emptied by hand is the same as never filled in: both mean the proposal
+      // should prompt, not print an empty line.
+      if (rest.clientName !== undefined)
+        patch.clientName = rest.clientName || null;
+      if (rest.siteAddress !== undefined)
+        patch.siteAddress = rest.siteAddress || null;
+      if (rest.proposalNote !== undefined)
+        patch.proposalNote = rest.proposalNote || null;
 
       if (Object.keys(patch).length > 0)
         await db.updateBid(id, ctx.user.id, patch);
@@ -367,67 +301,17 @@ export const bidsRouter = router({
         companyDefaultsFor(ctx.user.id),
       ]);
 
-      const { settings, breakdowns, directCost, bidPrice } = rollUpBid(
+      const { settings, priced, units, totals } = bidRollup(
         bid,
         lines,
         company
       );
-      const priced = lines.map((line, index) => ({
-        line,
-        breakdown: breakdowns[index],
-      }));
-
-      // Unit subtotals, so a hotel bid can answer "what does one room cost?"
-      const unitTotals = new Map<
-        string,
-        { directCost: number; lines: number }
-      >();
-      for (const { line, breakdown } of priced) {
-        if (!line.unitLabel) continue;
-        const current = unitTotals.get(line.unitLabel) ?? {
-          directCost: 0,
-          lines: 0,
-        };
-        current.directCost += breakdown.directCost;
-        current.lines += 1;
-        unitTotals.set(line.unitLabel, current);
-      }
 
       return {
         bid,
         lines: priced.map(({ line, breakdown }) => ({ ...line, breakdown })),
-        units: Array.from(unitTotals, ([label, totals]) => ({
-          label,
-          ...totals,
-        })),
-        totals: {
-          // bidPrice carries its own directCost (identical, rounded through the
-          // engine) — spread it first so the authoritative one wins.
-          ...bidPrice,
-          totalLaborHours: priced.reduce(
-            (sum, p) => sum + p.breakdown.totalLaborHours,
-            0
-          ),
-          /**
-           * The same hours BEFORE the productivity factor, at quantity.
-           *
-           * Sent so the breakdown can show the adjustment as its own step
-           * rather than as a total that silently differs from the hours on the
-           * assemblies. hoursAfterModifiers is per-unit, so it scales by qty
-           * here exactly as totalLaborHours does — comparing one to the other
-           * is the whole point, and they have to be on the same footing.
-           */
-          laborHoursBeforeProductivity: priced.reduce(
-            (sum, p) =>
-              sum + p.breakdown.hoursAfterModifiers * Number(p.line.qty),
-            0
-          ),
-          materialCost: priced.reduce(
-            (sum, p) => sum + p.breakdown.materialCost,
-            0
-          ),
-          laborCost: priced.reduce((sum, p) => sum + p.breakdown.laborCost, 0),
-        },
+        units,
+        totals,
         settings,
         company,
       };

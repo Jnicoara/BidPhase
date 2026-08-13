@@ -45,6 +45,12 @@ import {
   InsertPricingDefaults,
   PricingDefaults,
   pricingDefaults,
+  InsertCompanyBranding,
+  CompanyBranding,
+  companyBranding,
+  InsertProposalSettings,
+  ProposalSettings,
+  proposalSettings,
   InsertBid,
   Bid,
   bids,
@@ -2673,6 +2679,92 @@ export async function updatePricingDefaults(
     .update(pricingDefaults)
     .set({ ...safe, updatedAt: new Date() })
     .where(eq(pricingDefaults.userId, userId));
+}
+
+// ─── Company branding & proposal presentation ─────────────────────────────────
+//
+// Both follow the same create-on-first-read shape as the pricing defaults
+// above: a user has a row from the first time anything asks for one, so no
+// caller has to handle "no settings yet" separately from "settings that are
+// still empty". The row is created BLANK on purpose — see the schema comment on
+// `company_branding`. Nothing here ever invents a company name.
+
+/** A user's branding, creating the (blank) row on first read. */
+export async function getCompanyBranding(
+  userId: number
+): Promise<CompanyBranding | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [existing] = await db
+    .select()
+    .from(companyBranding)
+    .where(eq(companyBranding.userId, userId))
+    .limit(1);
+  if (existing) return existing;
+
+  await db.insert(companyBranding).values({ userId });
+  const [created] = await db
+    .select()
+    .from(companyBranding)
+    .where(eq(companyBranding.userId, userId))
+    .limit(1);
+  return created;
+}
+
+export async function updateCompanyBranding(
+  userId: number,
+  data: Partial<InsertCompanyBranding>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await getCompanyBranding(userId); // ensure the row exists
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(companyBranding)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(eq(companyBranding.userId, userId));
+}
+
+/** A user's proposal presentation settings, creating the row on first read. */
+export async function getProposalSettings(
+  userId: number
+): Promise<ProposalSettings | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [existing] = await db
+    .select()
+    .from(proposalSettings)
+    .where(eq(proposalSettings.userId, userId))
+    .limit(1);
+  if (existing) return existing;
+
+  await db.insert(proposalSettings).values({ userId });
+  const [created] = await db
+    .select()
+    .from(proposalSettings)
+    .where(eq(proposalSettings.userId, userId))
+    .limit(1);
+  return created;
+}
+
+export async function updateProposalSettings(
+  userId: number,
+  data: Partial<InsertProposalSettings>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await getProposalSettings(userId); // ensure the row exists
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(proposalSettings)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(eq(proposalSettings.userId, userId));
 }
 
 // ─── Bids ─────────────────────────────────────────────────────────────────────

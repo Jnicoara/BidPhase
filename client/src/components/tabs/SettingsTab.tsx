@@ -18,6 +18,8 @@ import {
   User,
 } from "lucide-react";
 import { BidPricingDefaultsSection } from "@/components/BidPricingDefaultsSection";
+import { BrandingSection } from "@/components/BrandingSection";
+import { ProposalDesignControls } from "@/components/proposal/ProposalDesignControls";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 
@@ -298,6 +300,18 @@ export default function SettingsTab({ onBack }: { onBack?: () => void }) {
           First of the real settings: these are the ones that reach every bid,
           and the sidebar entry that lands here is called "Company Defaults". */}
       <BidPricingDefaultsSection />
+
+      {/* ── Branding ─────────────────────────────────────────────────
+          Company-wide like the pricing defaults above, and in the same place
+          for the same reason: it is set up once and reaches everything the
+          contractor sends out. */}
+      <BrandingSection />
+
+      {/* ── Proposal document ────────────────────────────────────────
+          The same controls that sit beside the live preview on the proposal
+          screen. Here for discoverability; there for actually choosing, since
+          that is where the effect is visible. */}
+      <ProposalDesignControls />
 
       {/* Two CSV importers used to live here, one writing to localStorage and
           one to a separate per-user table. Both are gone: importing a supplier
