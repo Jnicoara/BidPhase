@@ -139,12 +139,57 @@ describe.skipIf(!hasDb)("removing a material archives it", () => {
     expect(archived.find(m => m.id === material.id)).toBeDefined();
   });
 
-  it("refuses to archive a starter", async () => {
-    const starters = await caller().materials.list();
-    const starter = starters.find(m => m.userId === null)!;
-    await expect(
-      caller().materials.archive({ id: starter.id })
-    ).rejects.toThrow(/starter library/i);
+  it("archives an untouched starter by forking it first", async () => {
+    const starter = (await caller().materials.list()).find(
+      m => m.userId === null
+    )!;
+
+    const { id: archivedId } = await caller().materials.archive({
+      id: starter.id,
+    });
+    // The shared row cannot itself be archived, so the id changes under us.
+    expect(archivedId).not.toBe(starter.id);
+
+    expect(
+      (await caller().materials.list()).some(m => m.name === starter.name)
+    ).toBe(false);
+    expect(
+      (await caller().materials.list({ status: "archived" })).some(
+        m => m.name === starter.name
+      )
+    ).toBe(true);
+  });
+
+  it("restores an archived starter to the working list", async () => {
+    const starter = (await caller().materials.list()).find(
+      m => m.userId === null
+    )!;
+    const { id } = await caller().materials.archive({ id: starter.id });
+    await caller().materials.restore({ id });
+
+    expect(
+      (await caller().materials.list()).some(m => m.name === starter.name)
+    ).toBe(true);
+    expect(
+      (await caller().materials.list({ status: "archived" })).some(
+        m => m.name === starter.name
+      )
+    ).toBe(false);
+  });
+
+  it("leaves the shared starter alone for everyone else", async () => {
+    // The whole reason archiving forks first. If this fails, one user tidying
+    // their list has removed a material from every other contractor's.
+    const starter = (await caller().materials.list()).find(
+      m => m.userId === null
+    )!;
+    await caller().materials.archive({ id: starter.id });
+
+    expect(
+      (await callerFor(OTHER_USER).materials.list()).some(
+        m => m.name === starter.name
+      )
+    ).toBe(true);
   });
 
   it("refuses another user's material", async () => {
@@ -280,13 +325,49 @@ describe.skipIf(!hasDb)("removing an assembly archives it", () => {
     );
   });
 
-  it("refuses to archive a starter", async () => {
+  it("archives an untouched starter by forking it first", async () => {
     const starter = (await caller().assemblies.list()).find(
       a => a.userId === null
     )!;
-    await expect(
-      caller().assemblies.archive({ id: starter.id })
-    ).rejects.toThrow(/starter/i);
+
+    const { id: archivedId } = await caller().assemblies.archive({
+      id: starter.id,
+    });
+    expect(archivedId).not.toBe(starter.id);
+
+    expect(
+      (await caller().assemblies.list()).some(a => a.name === starter.name)
+    ).toBe(false);
+    expect(
+      (await caller().assemblies.list({ status: "archived" })).some(
+        a => a.name === starter.name
+      )
+    ).toBe(true);
+  });
+
+  it("restores an archived starter assembly", async () => {
+    const starter = (await caller().assemblies.list()).find(
+      a => a.userId === null
+    )!;
+    const { id } = await caller().assemblies.archive({ id: starter.id });
+    await caller().assemblies.restore({ id });
+
+    expect(
+      (await caller().assemblies.list()).some(a => a.name === starter.name)
+    ).toBe(true);
+  });
+
+  it("leaves the shared starter assembly alone for everyone else", async () => {
+    const starter = (await caller().assemblies.list()).find(
+      a => a.userId === null
+    )!;
+    await caller().assemblies.archive({ id: starter.id });
+
+    expect(
+      (await callerFor(OTHER_USER).assemblies.list()).some(
+        a => a.name === starter.name
+      )
+    ).toBe(true);
   });
 });
 
@@ -335,11 +416,41 @@ describe.skipIf(!hasDb)("removing a kit archives it", () => {
     );
   });
 
-  it("refuses to archive a starter", async () => {
+  it("archives an untouched starter by forking it first", async () => {
     const starter = (await caller().kits.list()).find(k => k.userId === null)!;
-    await expect(caller().kits.archive({ id: starter.id })).rejects.toThrow(
-      /starter/i
-    );
+
+    const { id: archivedId } = await caller().kits.archive({ id: starter.id });
+    expect(archivedId).not.toBe(starter.id);
+
+    expect(
+      (await caller().kits.list()).some(k => k.name === starter.name)
+    ).toBe(false);
+    expect(
+      (await caller().kits.list({ status: "archived" })).some(
+        k => k.name === starter.name
+      )
+    ).toBe(true);
+  });
+
+  it("restores an archived starter kit", async () => {
+    const starter = (await caller().kits.list()).find(k => k.userId === null)!;
+    const { id } = await caller().kits.archive({ id: starter.id });
+    await caller().kits.restore({ id });
+
+    expect(
+      (await caller().kits.list()).some(k => k.name === starter.name)
+    ).toBe(true);
+  });
+
+  it("leaves the shared starter kit alone for everyone else", async () => {
+    const starter = (await caller().kits.list()).find(k => k.userId === null)!;
+    await caller().kits.archive({ id: starter.id });
+
+    expect(
+      (await callerFor(OTHER_USER).kits.list()).some(
+        k => k.name === starter.name
+      )
+    ).toBe(true);
   });
 });
 
@@ -379,6 +490,61 @@ describe.skipIf(!hasDb)("every library table behaves the same way", () => {
     ]) {
       expect(list.every(row => row.status === "active")).toBe(true);
     }
+  });
+
+  it("archives an already-customized row in place, without re-forking", async () => {
+    // The starter path forks and the id changes. A row the user already owns
+    // must NOT take that path: a second fork would leave two copies of one
+    // item, one of them archived and one not.
+    const material = (await caller().materials.create({
+      name: `Owned material ${unique()}`,
+      costPerUnit: 1,
+    }))!;
+    const assembly = (await caller().assemblies.create({
+      name: `Owned assembly ${unique()}`,
+      category: "Devices",
+      baseLaborHours: 1,
+    }))!;
+    const kit = (await caller().kits.create({
+      name: `Owned kit ${unique()}`,
+    }))!;
+
+    expect((await caller().materials.archive({ id: material.id })).id).toBe(
+      material.id
+    );
+    expect((await caller().assemblies.archive({ id: assembly.id })).id).toBe(
+      assembly.id
+    );
+    expect((await caller().kits.archive({ id: kit.id })).id).toBe(kit.id);
+
+    // Exactly one archived row each — no stray duplicate left behind.
+    expect(await caller().materials.list({ status: "archived" })).toHaveLength(
+      1
+    );
+    expect(await caller().assemblies.list({ status: "archived" })).toHaveLength(
+      1
+    );
+    expect(await caller().kits.list({ status: "archived" })).toHaveLength(1);
+  });
+
+  it("archives a FORK of a starter in place, not as a second fork", async () => {
+    // Editing a starter forks it; archiving that fork afterwards is the
+    // ordinary owned-row path, so the id must hold steady.
+    const starter = (await caller().materials.list()).find(
+      m => m.userId === null
+    )!;
+    const { material, forked } = await caller().materials.update({
+      id: starter.id,
+      costPerUnit: 9.99,
+    });
+    expect(forked).toBe(true);
+    const forkId = material!.id;
+    expect(forkId).not.toBe(starter.id);
+
+    expect((await caller().materials.archive({ id: forkId })).id).toBe(forkId);
+    expect(await caller().materials.list({ status: "archived" })).toHaveLength(
+      1
+    );
   });
 
   it("refuses permanent deletion from the working list on all three", async () => {

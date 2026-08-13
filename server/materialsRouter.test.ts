@@ -332,10 +332,14 @@ describe.skipIf(!hasDb)("materials.archive", () => {
     expect(rows.some(r => r.id === mine!.id)).toBe(false);
   });
 
-  it("refuses to remove a baseline material", async () => {
+  it("removes a baseline material by forking it first", async () => {
     const id = await baselineId();
-    await expect(caller().materials.archive({ id })).rejects.toThrow(
-      /cannot be removed/i
+    const { id: archivedId } = await caller().materials.archive({ id });
+    // The baseline row is shared with every user, so the fork is what gets
+    // archived — and the fork is then what hides the baseline from the list.
+    expect(archivedId).not.toBe(id);
+    expect((await caller().materials.list()).some(r => r.id === id)).toBe(
+      false
     );
   });
 

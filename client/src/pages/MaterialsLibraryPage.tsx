@@ -529,19 +529,20 @@ function MaterialRow({
             </Button>
           </>
         ) : (
-          material.userId !== null && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-              onClick={() => onRemove(material)}
-              disabled={isBusy}
-              title="Archive — out of the working list, restorable any time"
-              aria-label={`Archive ${material.name}`}
-            >
-              <ArchiveIcon className="w-3.5 h-3.5" />
-            </Button>
-          )
+          /* Offered on starters too. Archiving one forks it first, so the
+             shared row is untouched and the id changes under us — which is why
+             this screen refetches rather than patching the row it sent. */
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+            onClick={() => onRemove(material)}
+            disabled={isBusy}
+            title="Archive — out of the working list, restorable any time"
+            aria-label={`Archive ${material.name}`}
+          >
+            <ArchiveIcon className="w-3.5 h-3.5" />
+          </Button>
         )}
       </div>
     </div>
