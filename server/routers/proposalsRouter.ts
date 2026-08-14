@@ -35,6 +35,7 @@ import {
   type BrandingFields,
 } from "../../shared/proposal";
 import { bidRollup, companyDefaultsFor } from "../bidPricing";
+import { resolveBidClient } from "../../shared/bidClient";
 import { storagePresignPut } from "../storage";
 import * as db from "../db";
 
@@ -260,20 +261,30 @@ export const proposalsRouter = router({
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const bid = await requireBid(input.bidId, ctx.user.id);
-      const [lines, company, brandingRow, settingsRow] = await Promise.all([
-        db.getBidLineItems(bid.id),
-        companyDefaultsFor(ctx.user.id),
-        db.getCompanyBranding(ctx.user.id),
-        db.getProposalSettings(ctx.user.id),
-      ]);
+      const [lines, company, brandingRow, settingsRow, client] =
+        await Promise.all([
+          db.getBidLineItems(bid.id),
+          companyDefaultsFor(ctx.user.id),
+          db.getCompanyBranding(ctx.user.id),
+          db.getProposalSettings(ctx.user.id),
+          bid.clientId
+            ? db.getClientById(bid.clientId, ctx.user.id)
+            : Promise.resolve(undefined),
+        ]);
 
       const { priced, units, totals } = bidRollup(bid, lines, company);
+
+      // The bid's own text still wins; a linked client only fills in what was
+      // left blank. With no client this returns bid.clientName/siteAddress
+      // unchanged, which is why attaching the link altered no existing
+      // proposal. See shared/bidClient.ts.
+      const resolved = resolveBidClient(bid, client);
 
       const document = buildProposal({
         bid: {
           name: bid.name,
-          clientName: bid.clientName,
-          siteAddress: bid.siteAddress,
+          clientName: resolved.clientName,
+          siteAddress: resolved.siteAddress,
           proposalNote: bid.proposalNote,
         },
         totals,

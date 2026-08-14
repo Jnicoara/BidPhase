@@ -25,6 +25,8 @@
  * If a future trade has nothing worth saying there, leave it out.
  */
 
+import type { TradeId } from "@shared/trades";
+
 /**
  * A product screenshot.
  *
@@ -78,8 +80,17 @@ export type TradeStep = {
 };
 
 export type TradeContent = {
-  /** Stable id. Matches the `trade` value on assemblies in drizzle/schema.ts. */
-  id: string;
+  /**
+   * Stable id, and the SAME string the data model stores.
+   *
+   * `shared/trades.ts` is the registry both sides read: this id is what lands
+   * in `assemblies.trade`, `materials.trade` and `early_access_signups.tradeId`
+   * for the trade this page sells. It used to be only a comment saying so,
+   * which is not a connection — client/src/lib/tradeContent.test.ts now checks
+   * that every shipped trade here is one the registry names, so a landing page
+   * cannot advertise a trade no row can be tagged with.
+   */
+  id: TradeId;
   /** What this trade is called, capitalised — "Electrical". */
   label: string;
 

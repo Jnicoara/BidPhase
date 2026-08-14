@@ -14,6 +14,7 @@ import { laborRatesRouter } from "./routers/laborRatesRouter";
 import { modifiersRouter } from "./routers/modifiersRouter";
 import { assembliesRouter } from "./routers/assembliesRouter";
 import { bidsRouter } from "./routers/bidsRouter";
+import { clientsRouter } from "./routers/clientsRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
@@ -41,6 +42,9 @@ export const appRouter = router({
   modifiers: modifiersRouter,
   assemblies: assembliesRouter,
   bids: bidsRouter,
+  // Who the work is for. A bid points at one optionally — see shared/bidClient.ts
+  // for how a linked record and a bid's own typed-in name are reconciled.
+  clients: clientsRouter,
   proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,

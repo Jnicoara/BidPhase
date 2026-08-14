@@ -17,6 +17,7 @@ import {
   DEFAULT_ANNUAL_HOURS,
   effectiveHourlyRate,
 } from "../../shared/pricing";
+import { TRADE_ALL } from "../../shared/trades";
 import * as db from "../db";
 
 /** decimal(10,4) on hourlyCost — must stay under 10 total digits. */
@@ -97,11 +98,21 @@ function normalizeForRateType(input: {
   };
 }
 
+/**
+ * Which trade a role belongs to, or `all` for one that serves every trade.
+ *
+ * Defaults to `all` rather than `electrical`, matching the column — see the
+ * schema comment on `labor_rates.trade`. A shop's foreman does not stop being
+ * the foreman when a second trade unlocks.
+ */
+const tradeSchema = z.string().trim().toLowerCase().min(1).max(64);
+
 const rateBodySchema = z.object({
   rateType: z.enum(LABOR_RATE_TYPES),
   hourlyCost: hourlySchema.optional(),
   annualSalary: salarySchema.optional(),
   annualHours: annualHoursSchema.optional(),
+  trade: tradeSchema.optional(),
 });
 
 export const laborRatesRouter = router({
@@ -140,6 +151,8 @@ export const laborRatesRouter = router({
       const id = await db.createLaborRate({
         userId: ctx.user.id,
         name: input.name,
+        // Omitted means `all` — the column default. Nothing sends this today.
+        trade: input.trade ?? TRADE_ALL,
         ...normalizeForRateType(input),
       });
       const created = await db.getLaborRateById(id, ctx.user.id);
@@ -179,6 +192,7 @@ export const laborRatesRouter = router({
       const nextType = rest.rateType ?? target.rateType;
       const patch: Record<string, unknown> = {};
       if (rest.name !== undefined) patch.name = rest.name;
+      if (rest.trade !== undefined) patch.trade = rest.trade;
 
       const touchesRate =
         rest.rateType !== undefined ||

@@ -24,6 +24,7 @@ import {
   purgeDueAt,
   retentionUrgency,
 } from "../../shared/retention";
+import { resolveBidClient } from "../../shared/bidClient";
 import * as db from "../db";
 
 const nameSchema = z.string().trim().min(1).max(255);
@@ -136,6 +137,13 @@ export const bidsRouter = router({
         profitValue: z.number().min(0).max(0.99).nullable().optional(),
         productivityPct: productivitySchema.nullable().optional(),
         /**
+         * Who this bid is for. Null unassigns, leaving the bid's own
+         * `clientName` text as the only source — which is the state every bid
+         * written before clients existed is already in, and it prints exactly
+         * as it did before.
+         */
+        clientId: z.number().int().positive().nullable().optional(),
+        /**
          * Proposal content. Null clears the field back to "not filled in", so
          * the document goes back to prompting for it rather than printing a
          * blank line where a client's name belongs.
@@ -173,6 +181,20 @@ export const bidsRouter = router({
           rest.productivityPct === null
             ? null
             : toDecimal4(rest.productivityPct);
+      }
+      // Checked rather than trusted: a client id is a small integer, so
+      // assigning one must prove it belongs to this user or a bid could be
+      // pointed at a stranger's contact record.
+      if (rest.clientId !== undefined) {
+        if (rest.clientId !== null) {
+          const client = await db.getClientById(rest.clientId, ctx.user.id);
+          if (!client)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Client not found.",
+            });
+        }
+        patch.clientId = rest.clientId;
       }
       // Emptied by hand is the same as never filled in: both mean the proposal
       // should prompt, not print an empty line.
@@ -296,9 +318,13 @@ export const bidsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const bid = await requireBid(input.id, ctx.user.id);
-      const [lines, company] = await Promise.all([
+      const [lines, company, client] = await Promise.all([
         db.getBidLineItems(bid.id),
         companyDefaultsFor(ctx.user.id),
+        // Null for the great majority of bids, which have no client assigned.
+        bid.clientId
+          ? db.getClientById(bid.clientId, ctx.user.id)
+          : Promise.resolve(undefined),
       ]);
 
       const { settings, priced, units, totals } = bidRollup(
@@ -314,6 +340,14 @@ export const bidsRouter = router({
         totals,
         settings,
         company,
+        /** The linked client record, or null. */
+        client: client ?? null,
+        /**
+         * Name and site address after the bid's own text and the linked record
+         * have been reconciled — the same resolution the proposal prints, so
+         * the screen and the document cannot show different names.
+         */
+        resolvedClient: resolveBidClient(bid, client),
       };
     }),
 

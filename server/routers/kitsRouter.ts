@@ -16,6 +16,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { LIBRARY_STATUSES } from "../../drizzle/schema";
 import { calculateLineItem, sumDirectCost } from "../../shared/pricing";
 import { hourlyCostFor } from "../../shared/laborRateLookup";
+import { DEFAULT_TRADE } from "../../shared/trades";
 import * as db from "../db";
 
 const nameSchema = z.string().trim().min(1).max(255);
@@ -29,6 +30,14 @@ const itemSchema = z.object({
 
 const itemsSchema = z.array(itemSchema).max(100);
 const toDecimal = (value: number) => value.toFixed(4);
+
+/**
+ * Which trade's library this kit is filed under.
+ *
+ * Defaults to `electrical` like the assemblies it bundles, not to `all` like a
+ * labor rate — see the schema comment on `kits.trade` for the distinction.
+ */
+const tradeSchema = z.string().trim().toLowerCase().min(1).max(64);
 
 /**
  * Price one assembly at a quantity, from its CURRENT library values.
@@ -152,6 +161,7 @@ export const kitsRouter = router({
       z.object({
         name: nameSchema,
         description: descriptionSchema.default(null),
+        trade: tradeSchema.default(DEFAULT_TRADE),
         items: itemsSchema.default([]),
       })
     )
@@ -171,6 +181,7 @@ export const kitsRouter = router({
         userId: ctx.user.id,
         name: input.name,
         description: input.description,
+        trade: input.trade,
       });
       await db.setKitItems(
         id,
@@ -189,6 +200,7 @@ export const kitsRouter = router({
         id: z.number().int().positive(),
         name: nameSchema.optional(),
         description: descriptionSchema.optional(),
+        trade: tradeSchema.optional(),
         items: itemsSchema.optional(),
       })
     )
@@ -206,6 +218,7 @@ export const kitsRouter = router({
       if (input.name !== undefined) patch.name = input.name;
       if (input.description !== undefined)
         patch.description = input.description;
+      if (input.trade !== undefined) patch.trade = input.trade;
       if (Object.keys(patch).length > 0)
         await db.updateKit(editableId, ctx.user.id, patch);
 

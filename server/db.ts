@@ -54,6 +54,9 @@ import {
   InsertBid,
   Bid,
   bids,
+  InsertClient,
+  Client,
+  clients,
   InsertBidLineItem,
   InsertBidUnitLink,
   BidUnitLink,
@@ -117,6 +120,7 @@ import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
 import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
 import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
 import { BASELINE_KITS } from "./seed/baselineKits";
+import { TRADE_ALL, normalizeTradeId, resolveForTrade } from "../shared/trades";
 import { hourlyCostFor } from "../shared/laborRateLookup";
 import { addAssemblyOverheadHours } from "../shared/pricing";
 
@@ -2652,45 +2656,91 @@ const FALLBACK_PRICING_DEFAULTS = {
   profitValue: "0",
 };
 
-/** A user's company-level pricing defaults, creating the row on first read. */
+/**
+ * A user's company-level pricing defaults, creating the row on first read.
+ *
+ * ── The `trade` parameter, and why it defaults ───────────────────────────────
+ * These are now one row per user PER TRADE, with `all` meaning the company-wide
+ * record (see the schema comment). Reads resolve through resolveForTrade: the
+ * trade's own row if it has one, otherwise the `all` row. Every caller today
+ * passes nothing and gets the `all` row, which is the single row each user
+ * already had — which is why adding the column changed nothing on screen.
+ *
+ * A `limit(1)` on userId alone would have been the bug here: correct while
+ * exactly one row exists, and quietly returning an arbitrary trade's settings
+ * the moment a second one does.
+ */
 export async function getPricingDefaults(
-  userId: number
+  userId: number,
+  trade: string = TRADE_ALL
 ): Promise<PricingDefaults | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const [existing] = await db
+  const rows = await db
     .select()
     .from(pricingDefaults)
-    .where(eq(pricingDefaults.userId, userId))
-    .limit(1);
+    .where(eq(pricingDefaults.userId, userId));
+  const existing = resolveForTrade(rows, trade);
   if (existing) return existing;
 
+  // Nothing at all for this user yet. The first row is created for whatever
+  // trade was asked for, which for every caller today is `all`.
+  const wanted = normalizeTradeId(trade);
   await db
     .insert(pricingDefaults)
-    .values({ userId, ...FALLBACK_PRICING_DEFAULTS });
-  const [created] = await db
+    .values({ userId, trade: wanted, ...FALLBACK_PRICING_DEFAULTS });
+  const created = await db
     .select()
     .from(pricingDefaults)
-    .where(eq(pricingDefaults.userId, userId))
-    .limit(1);
-  return created;
+    .where(eq(pricingDefaults.userId, userId));
+  return resolveForTrade(created, trade);
 }
 
+/**
+ * Write the row for exactly this trade, creating it if it does not exist.
+ *
+ * Note the asymmetry with the read above, which is deliberate: a READ of
+ * plumbing settings may fall back to the company-wide row, but a WRITE must
+ * never land on it — editing plumbing's overhead would otherwise silently move
+ * electrical's too. So this targets `trade` exactly.
+ *
+ * A per-trade row created this way starts from the shipped fallback rather than
+ * inheriting the `all` row's current values. That choice is only reachable once
+ * a second trade ships and there is a screen to make it from; it is called out
+ * here so whoever builds that screen makes it deliberately rather than
+ * discovering it.
+ */
 export async function updatePricingDefaults(
   userId: number,
-  data: Partial<InsertPricingDefaults>
+  data: Partial<InsertPricingDefaults>,
+  trade: string = TRADE_ALL
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await getPricingDefaults(userId); // ensure the row exists
+  const wanted = normalizeTradeId(trade);
+
+  const rows = await db
+    .select()
+    .from(pricingDefaults)
+    .where(eq(pricingDefaults.userId, userId));
+  const exact = rows.find(row => normalizeTradeId(row.trade) === wanted);
+  if (!exact) {
+    await db
+      .insert(pricingDefaults)
+      .values({ userId, trade: wanted, ...FALLBACK_PRICING_DEFAULTS });
+  }
+
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
+  delete safe.trade;
   await db
     .update(pricingDefaults)
     .set({ ...safe, updatedAt: new Date() })
-    .where(eq(pricingDefaults.userId, userId));
+    .where(
+      and(eq(pricingDefaults.userId, userId), eq(pricingDefaults.trade, wanted))
+    );
 }
 
 // ─── Company branding & proposal presentation ─────────────────────────────────
@@ -2701,82 +2751,283 @@ export async function updatePricingDefaults(
 // still empty". The row is created BLANK on purpose — see the schema comment on
 // `company_branding`. Nothing here ever invents a company name.
 
-/** A user's branding, creating the (blank) row on first read. */
+/**
+ * A user's branding, creating the (blank) row on first read.
+ *
+ * Trade-resolved exactly like getPricingDefaults above — see that function for
+ * why the read falls back to the `all` row and the write does not. The licence
+ * number is the field that makes this per trade: two trades mean two numbers
+ * from two boards, and printing the wrong one is a compliance problem.
+ */
 export async function getCompanyBranding(
-  userId: number
+  userId: number,
+  trade: string = TRADE_ALL
 ): Promise<CompanyBranding | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const [existing] = await db
+  const rows = await db
     .select()
     .from(companyBranding)
-    .where(eq(companyBranding.userId, userId))
-    .limit(1);
+    .where(eq(companyBranding.userId, userId));
+  const existing = resolveForTrade(rows, trade);
   if (existing) return existing;
 
-  await db.insert(companyBranding).values({ userId });
-  const [created] = await db
+  const wanted = normalizeTradeId(trade);
+  await db.insert(companyBranding).values({ userId, trade: wanted });
+  const created = await db
     .select()
     .from(companyBranding)
-    .where(eq(companyBranding.userId, userId))
-    .limit(1);
-  return created;
+    .where(eq(companyBranding.userId, userId));
+  return resolveForTrade(created, trade);
 }
 
 export async function updateCompanyBranding(
   userId: number,
-  data: Partial<InsertCompanyBranding>
+  data: Partial<InsertCompanyBranding>,
+  trade: string = TRADE_ALL
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await getCompanyBranding(userId); // ensure the row exists
+  const wanted = normalizeTradeId(trade);
+
+  const rows = await db
+    .select()
+    .from(companyBranding)
+    .where(eq(companyBranding.userId, userId));
+  if (!rows.some(row => normalizeTradeId(row.trade) === wanted)) {
+    await db.insert(companyBranding).values({ userId, trade: wanted });
+  }
+
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
+  delete safe.trade;
   await db
     .update(companyBranding)
     .set({ ...safe, updatedAt: new Date() })
-    .where(eq(companyBranding.userId, userId));
+    .where(
+      and(eq(companyBranding.userId, userId), eq(companyBranding.trade, wanted))
+    );
 }
 
-/** A user's proposal presentation settings, creating the row on first read. */
+/**
+ * A user's proposal presentation settings, creating the row on first read.
+ *
+ * Trade-resolved like the two above. `termsText` is what makes it worth
+ * splitting: an electrical quote's exclusions are not a plumbing quote's.
+ */
 export async function getProposalSettings(
-  userId: number
+  userId: number,
+  trade: string = TRADE_ALL
 ): Promise<ProposalSettings | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const [existing] = await db
+  const rows = await db
     .select()
     .from(proposalSettings)
-    .where(eq(proposalSettings.userId, userId))
-    .limit(1);
+    .where(eq(proposalSettings.userId, userId));
+  const existing = resolveForTrade(rows, trade);
   if (existing) return existing;
 
-  await db.insert(proposalSettings).values({ userId });
-  const [created] = await db
+  const wanted = normalizeTradeId(trade);
+  await db.insert(proposalSettings).values({ userId, trade: wanted });
+  const created = await db
     .select()
     .from(proposalSettings)
-    .where(eq(proposalSettings.userId, userId))
-    .limit(1);
-  return created;
+    .where(eq(proposalSettings.userId, userId));
+  return resolveForTrade(created, trade);
 }
 
 export async function updateProposalSettings(
   userId: number,
-  data: Partial<InsertProposalSettings>
+  data: Partial<InsertProposalSettings>,
+  trade: string = TRADE_ALL
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await getProposalSettings(userId); // ensure the row exists
+  const wanted = normalizeTradeId(trade);
+
+  const rows = await db
+    .select()
+    .from(proposalSettings)
+    .where(eq(proposalSettings.userId, userId));
+  if (!rows.some(row => normalizeTradeId(row.trade) === wanted)) {
+    await db.insert(proposalSettings).values({ userId, trade: wanted });
+  }
+
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  delete safe.trade;
+  await db
+    .update(proposalSettings)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(
+      and(
+        eq(proposalSettings.userId, userId),
+        eq(proposalSettings.trade, wanted)
+      )
+    );
+}
+
+// ─── Clients ──────────────────────────────────────────────────────────────────
+//
+// Scoped by userId like everything else. Every read filters on it, and the
+// write paths take it as a parameter rather than trusting an id the caller
+// happened to have — a client id is a small integer and guessable, so "you knew
+// the number" must never be the only thing standing in the way.
+
+/** The user's live clients, A–Z. Archived ones are excluded. */
+export async function getClientsByUser(userId: number): Promise<Client[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.userId, userId), isNull(clients.archivedAt)))
+    .orderBy(asc(clients.name));
+}
+
+/** Archived clients, most recently archived first. */
+export async function getArchivedClients(userId: number): Promise<Client[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.userId, userId), isNotNull(clients.archivedAt)))
+    .orderBy(desc(clients.archivedAt));
+}
+
+/**
+ * One client, live or archived.
+ *
+ * Archived rows resolve on purpose: a bid linked to a client the user has since
+ * archived must still print that client's name. Hiding it from this lookup
+ * would turn tidying the contact list into silently blanking old proposals.
+ */
+export async function getClientById(
+  id: number,
+  userId: number
+): Promise<Client | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, id), eq(clients.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+export async function createClient(data: InsertClient): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(clients).values(data);
+  return result.insertId;
+}
+
+export async function updateClient(
+  id: number,
+  userId: number,
+  data: Partial<InsertClient>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
   await db
-    .update(proposalSettings)
+    .update(clients)
     .set({ ...safe, updatedAt: new Date() })
-    .where(eq(proposalSettings.userId, userId));
+    .where(and(eq(clients.id, id), eq(clients.userId, userId)));
+}
+
+/**
+ * Take a client off the working list, keeping the row.
+ *
+ * There is no hard delete here and no countdown either. A client is a name and
+ * a phone number that bid history points at, so keeping one costs nothing —
+ * and destroying it would null the `clientId` on every bid that referenced it
+ * (the FK is `set null`), quietly unpicking the link the record existed for.
+ * Guarded on `archivedAt IS NULL` so a double-click cannot move the date.
+ */
+export async function archiveClient(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(clients)
+    .set({ archivedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(clients.id, id),
+        eq(clients.userId, userId),
+        isNull(clients.archivedAt)
+      )
+    );
+}
+
+export async function restoreClient(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(clients)
+    .set({ archivedAt: null, updatedAt: now })
+    .where(
+      and(
+        eq(clients.id, id),
+        eq(clients.userId, userId),
+        isNotNull(clients.archivedAt)
+      )
+    );
+}
+
+/**
+ * Every bid belonging to a client — what historical bid search will be built
+ * on, and what the client detail view lists today.
+ *
+ * Includes archived bids: "what have I quoted this customer" is a question
+ * about history, and history does not stop at the dashboard's edge.
+ */
+export async function getBidsForClient(
+  clientId: number,
+  userId: number
+): Promise<Bid[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bids)
+    .where(and(eq(bids.clientId, clientId), eq(bids.userId, userId)))
+    .orderBy(desc(bids.updatedAt));
+}
+
+/** How many bids point at each of a user's clients, for the list view. */
+export async function countBidsPerClient(
+  userId: number
+): Promise<Map<number, number>> {
+  const db = await getDb();
+  if (!db) return new Map();
+  const rows = await db
+    .select({ clientId: bids.clientId, n: sql<number>`count(*)` })
+    .from(bids)
+    .where(and(eq(bids.userId, userId), isNotNull(bids.clientId)))
+    .groupBy(bids.clientId);
+  const counts = new Map<number, number>();
+  for (const row of rows) {
+    if (row.clientId != null) counts.set(row.clientId, Number(row.n));
+  }
+  return counts;
 }
 
 // ─── Bids ─────────────────────────────────────────────────────────────────────

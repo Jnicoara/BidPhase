@@ -499,6 +499,29 @@ export const PROJECT_TYPES = ["residential", "commercial", "both"] as const;
 export type ProjectType = (typeof PROJECT_TYPES)[number];
 
 /**
+ * The two trade defaults, restated as column literals.
+ *
+ * The registry itself is shared/trades.ts — that is the file to read for what
+ * the trade axis means and why the sentinel exists. These constants are copies
+ * because this schema is parsed by drizzle-kit as well as by the app and stays
+ * free of app imports (the same reason CONFIDENCE_TIER_VALUES is restated
+ * further down rather than imported from shared/copilotConfidence.ts).
+ *
+ * server/trades.test.ts asserts the copies still equal the originals, so the
+ * two cannot drift apart in silence.
+ *
+ * ── Which tables get which ───────────────────────────────────────────────────
+ * TRADE_DEFAULT_TRADE_GATED — materials, assemblies, kits. Rows that ARE a
+ *   trade's content, and that a future unlock filters on.
+ * TRADE_DEFAULT_SHARED — labor rates, pricing defaults, branding, proposal
+ *   settings. Rows ASSEMBLIES_PLAN.md § MULTI-TRADE STRUCTURE says are shared
+ *   across every trade regardless of unlock. `all` keeps that promise true
+ *   after a second trade lands instead of needing a backfill to restore it.
+ */
+export const TRADE_DEFAULT_TRADE_GATED = "electrical";
+export const TRADE_DEFAULT_SHARED = "all";
+
+/**
  * How the material catalog is shelved. Curated, NOT user-extendable.
  *
  * Declaration order is the display order on the Materials screen — keep them in
@@ -590,7 +613,9 @@ export const materials = mysqlTable(
      * material list even when the same contractor pulls both — an electrical
      * estimator scrolling for a receptacle should not wade through Cat6 jacks.
      */
-    trade: varchar("trade", { length: 64 }).default("electrical").notNull(),
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_TRADE_GATED)
+      .notNull(),
     /**
      * A short clarifier, shown under the name. Deliberately sparse: it exists
      * only where two catalog entries could genuinely be mistaken for each other
@@ -707,6 +732,26 @@ export const laborRates = mysqlTable(
       .default("hourly")
       .notNull(),
 
+    /**
+     * Which trade this role belongs to, or `all` for one that serves every one.
+     *
+     * ── Defaults to `all`, unlike a material or an assembly ──────────────────
+     * ASSEMBLIES_PLAN.md § MULTI-TRADE STRUCTURE lists the labor rate structure
+     * as shared across all trades regardless of unlock, and that is also just
+     * true of a real shop: the foreman who runs the electrical crew is the same
+     * person on the day the company starts taking plumbing work. Tagging every
+     * existing rate `electrical` would hide the contractor's whole org chart
+     * the moment a second trade unlocked.
+     *
+     * So the column is opt-in. A rate is company-wide until somebody says
+     * otherwise, and naming a trade is how you say a role is specific to one —
+     * a plumbing journeyman priced differently from an electrical one. See
+     * TRADE_DEFAULT_SHARED and resolveForTrade in shared/trades.ts.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_SHARED)
+      .notNull(),
+
     /** The rate for an hourly role. Ignored when rateType is "salary". */
     hourlyCost: decimal("hourlyCost", { precision: 10, scale: 4 })
       .default("0")
@@ -731,6 +776,7 @@ export const laborRates = mysqlTable(
   t => [
     index("labor_rates_userId_idx").on(t.userId),
     index("labor_rates_baselineId_idx").on(t.baselineId),
+    index("labor_rates_trade_idx").on(t.trade),
   ]
 );
 
@@ -800,7 +846,9 @@ export const assemblies = mysqlTable(
     /** Curated list — users pick, never add. Also drives takeoff layer grouping. */
     category: mysqlEnum("category", ASSEMBLY_CATEGORIES).notNull(),
     /** Unlock-gated at the app layer, not the schema, so new trades need no migration. */
-    trade: varchar("trade", { length: 64 }).default("electrical").notNull(),
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_TRADE_GATED)
+      .notNull(),
     /** Optional library filter. See PROJECT_TYPES. */
     projectType: mysqlEnum("projectType", PROJECT_TYPES),
     baseLaborHours: decimal("baseLaborHours", { precision: 10, scale: 4 })
@@ -923,55 +971,81 @@ export type InsertAssemblyModifier = typeof assemblyModifiers.$inferInsert;
 // Company-level defaults that auto-fill new estimates. The per-project override
 // layer is deliberately NOT here — that belongs to Bid/Project structure (build
 // step 3), so this table stays the single company-wide source.
-export const pricingDefaults = mysqlTable("pricing_defaults", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: "cascade" }),
+export const pricingDefaults = mysqlTable(
+  "pricing_defaults",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
-  // Overhead — optional, applied BEFORE profit.
-  overheadEnabled: boolean("overheadEnabled").default(false).notNull(),
-  overheadMode: mysqlEnum("overheadMode", ["percentage", "flat"])
-    .default("percentage")
-    .notNull(),
-  /** Fraction when percentage (0.10 = 10%); currency amount when flat. */
-  overheadValue: decimal("overheadValue", { precision: 12, scale: 4 })
-    .default("0")
-    .notNull(),
+    /**
+     * Which trade these defaults govern. `all` is the company-wide row.
+     *
+     * One row per user became one row per user PER TRADE so that a second
+     * trade can carry its own overhead and profit without disturbing the
+     * first — a plumbing division that runs on different margins is an
+     * ordinary fact about a multi-trade contractor, not an exception.
+     *
+     * Every existing row is `all` and every read still resolves to it, so this
+     * changed nothing on screen. See resolveForTrade in shared/trades.ts for
+     * the fallback, and TRADE_DEFAULT_SHARED for why the sentinel is a string
+     * rather than NULL — a nullable column would let the unique index below
+     * store two company-wide rows and never complain.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_SHARED)
+      .notNull(),
 
-  // Profit — the method is always an explicit choice, never assumed.
-  profitMethod: mysqlEnum("profitMethod", ["markup", "margin"])
-    .default("markup")
-    .notNull(),
-  /** Fraction: 0.20 = 20% markup, or 20% target margin, per profitMethod. */
-  profitValue: decimal("profitValue", { precision: 6, scale: 4 })
-    .default("0")
-    .notNull(),
+    // Overhead — optional, applied BEFORE profit.
+    overheadEnabled: boolean("overheadEnabled").default(false).notNull(),
+    overheadMode: mysqlEnum("overheadMode", ["percentage", "flat"])
+      .default("percentage")
+      .notNull(),
+    /** Fraction when percentage (0.10 = 10%); currency amount when flat. */
+    overheadValue: decimal("overheadValue", { precision: 12, scale: 4 })
+      .default("0")
+      .notNull(),
 
-  /**
-   * Company-wide productivity adjustment, as a fraction (0.10 = +10% hours).
-   *
-   * Applied at calculation time as a final multiplier AFTER job-condition
-   * modifiers have been summed — a separate step, never added into them. See
-   * applyProductivityToHours in shared/pricing.ts for why that separation
-   * matters. Ships at 0: no adjustment until the contractor has a reason.
-   *
-   * Signed, so scale(4) with a negative range — a crew that beats book hours
-   * is as real as one that does not.
-   */
-  productivityPct: decimal("productivityPct", { precision: 6, scale: 4 })
-    .default("0")
-    .notNull(),
+    // Profit — the method is always an explicit choice, never assumed.
+    profitMethod: mysqlEnum("profitMethod", ["markup", "margin"])
+      .default("markup")
+      .notNull(),
+    /** Fraction: 0.20 = 20% markup, or 20% target margin, per profitMethod. */
+    profitValue: decimal("profitValue", { precision: 6, scale: 4 })
+      .default("0")
+      .notNull(),
 
-  defaultLaborRateId: int("defaultLaborRateId").references(
-    () => laborRates.id,
-    { onDelete: "set null" }
-  ),
+    /**
+     * Company-wide productivity adjustment, as a fraction (0.10 = +10% hours).
+     *
+     * Applied at calculation time as a final multiplier AFTER job-condition
+     * modifiers have been summed — a separate step, never added into them. See
+     * applyProductivityToHours in shared/pricing.ts for why that separation
+     * matters. Ships at 0: no adjustment until the contractor has a reason.
+     *
+     * Signed, so scale(4) with a negative range — a crew that beats book hours
+     * is as real as one that does not.
+     */
+    productivityPct: decimal("productivityPct", { precision: 6, scale: 4 })
+      .default("0")
+      .notNull(),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+    defaultLaborRateId: int("defaultLaborRateId").references(
+      () => laborRates.id,
+      { onDelete: "set null" }
+    ),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    // Was unique(userId). One row per user per trade now, which is what makes
+    // a second trade additive — and it still permits exactly one company-wide
+    // (`all`) row, because the sentinel is a real value the index can see.
+    unique("pricing_defaults_user_trade_uq").on(t.userId, t.trade),
+  ]
+);
 
 export type PricingDefaults = typeof pricingDefaults.$inferSelect;
 export type InsertPricingDefaults = typeof pricingDefaults.$inferInsert;
@@ -995,37 +1069,58 @@ export type InsertPricingDefaults = typeof pricingDefaults.$inferInsert;
  * fields it describes; the fields cannot disagree with themselves.
  * `needsBranding` in shared/proposal.ts is what reads them.
  */
-export const companyBranding = mysqlTable("company_branding", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: "cascade" }),
+export const companyBranding = mysqlTable(
+  "company_branding",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
-  /** Trading name, as the client should see it. */
-  companyName: varchar("companyName", { length: 255 }).default("").notNull(),
-  /** Contractor licence number — on many jobs a legal requirement to state. */
-  licenseNumber: varchar("licenseNumber", { length: 128 })
-    .default("")
-    .notNull(),
-  /** Free-form, multi-line. Rendered line by line, never parsed. */
-  address: varchar("address", { length: 512 }).default("").notNull(),
-  phone: varchar("phone", { length: 64 }).default("").notNull(),
-  email: varchar("email", { length: 320 }).default("").notNull(),
-  website: varchar("website", { length: 255 }).default("").notNull(),
+    /**
+     * Which trade this identity is for. `all` is the company-wide row.
+     *
+     * ── The licence number is why this is per trade ──────────────────────────
+     * Everything else here would happily be one row forever — a company has one
+     * name and one phone number. `licenseNumber` does not work that way: a
+     * contractor licensed for electrical and plumbing holds two separate
+     * numbers from two separate boards, and printing the electrical one on a
+     * plumbing proposal is a compliance problem, not a cosmetic one. That alone
+     * makes branding a per-trade record.
+     *
+     * Existing rows are `all` and every read falls back to it, so a
+     * single-trade contractor still has exactly one row and sees no change.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_SHARED)
+      .notNull(),
 
-  /**
-   * The logo in S3. Two columns for the same reason `bid_pdfs` splits them: the
-   * key is what this app owns and can re-sign, the URL is what a browser loads.
-   * NULL means no logo, which the document renders as a placeholder rather than
-   * as blank space.
-   */
-  logoKey: varchar("logoKey", { length: 1024 }),
-  logoUrl: varchar("logoUrl", { length: 1024 }),
+    /** Trading name, as the client should see it. */
+    companyName: varchar("companyName", { length: 255 }).default("").notNull(),
+    /** Contractor licence number — on many jobs a legal requirement to state. */
+    licenseNumber: varchar("licenseNumber", { length: 128 })
+      .default("")
+      .notNull(),
+    /** Free-form, multi-line. Rendered line by line, never parsed. */
+    address: varchar("address", { length: 512 }).default("").notNull(),
+    phone: varchar("phone", { length: 64 }).default("").notNull(),
+    email: varchar("email", { length: 320 }).default("").notNull(),
+    website: varchar("website", { length: 255 }).default("").notNull(),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+    /**
+     * The logo in S3. Two columns for the same reason `bid_pdfs` splits them:
+     * the key is what this app owns and can re-sign, the URL is what a browser
+     * loads. NULL means no logo, which the document renders as a placeholder
+     * rather than as blank space.
+     */
+    logoKey: varchar("logoKey", { length: 1024 }),
+    logoUrl: varchar("logoUrl", { length: 1024 }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [unique("company_branding_user_trade_uq").on(t.userId, t.trade)]
+);
 
 export type CompanyBranding = typeof companyBranding.$inferSelect;
 export type InsertCompanyBranding = typeof companyBranding.$inferInsert;
@@ -1050,36 +1145,151 @@ export type InsertCompanyBranding = typeof companyBranding.$inferInsert;
 export const PROPOSAL_LAYOUTS = ["classic", "modern", "minimal"] as const;
 export type ProposalLayout = (typeof PROPOSAL_LAYOUTS)[number];
 
-export const proposalSettings = mysqlTable("proposal_settings", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: "cascade" }),
+export const proposalSettings = mysqlTable(
+  "proposal_settings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
-  layout: mysqlEnum("layout", PROPOSAL_LAYOUTS).default("classic").notNull(),
-  /** Hex, `#RRGGBB`. Validated at the router, so the document can trust it. */
-  accentColor: varchar("accentColor", { length: 9 })
-    .default("#F5C518")
-    .notNull(),
-  /** Section ids the user switched off. See shared/proposal.ts. */
-  hiddenSections: json("hiddenSections").$type<string[]>(),
+    /**
+     * Which trade this presentation is for. `all` is the company-wide row.
+     *
+     * Layout and accent colour are the same on every document a contractor
+     * sends and would never need splitting. `termsText` is the field that does:
+     * what a proposal excludes and how long the price stands are trade-specific
+     * in practice — an electrical quote's exclusions are not a plumbing quote's
+     * — and boilerplate that has to be edited per job is boilerplate that ends
+     * up wrong. Splitting the whole row rather than that one field keeps the
+     * resolution rule identical across all three settings tables.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_SHARED)
+      .notNull(),
 
-  /**
-   * Boilerplate the contractor reuses on every proposal — payment terms, what
-   * is excluded, how long the price stands. Stored at company level because
-   * retyping it per bid is how it ends up inconsistent or missing.
-   */
-  termsText: text("termsText"),
-  /** How many days the quoted price is good for. 0 = do not state a validity. */
-  validDays: int("validDays").default(30).notNull(),
+    layout: mysqlEnum("layout", PROPOSAL_LAYOUTS).default("classic").notNull(),
+    /** Hex, `#RRGGBB`. Validated at the router, so the document can trust it. */
+    accentColor: varchar("accentColor", { length: 9 })
+      .default("#F5C518")
+      .notNull(),
+    /** Section ids the user switched off. See shared/proposal.ts. */
+    hiddenSections: json("hiddenSections").$type<string[]>(),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+    /**
+     * Boilerplate the contractor reuses on every proposal — payment terms, what
+     * is excluded, how long the price stands. Stored at company level because
+     * retyping it per bid is how it ends up inconsistent or missing.
+     */
+    termsText: text("termsText"),
+    /** How many days the quoted price is good for. 0 = do not state a validity. */
+    validDays: int("validDays").default(30).notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [unique("proposal_settings_user_trade_uq").on(t.userId, t.trade)]
+);
 
 export type ProposalSettings = typeof proposalSettings.$inferSelect;
 export type InsertProposalSettings = typeof proposalSettings.$inferInsert;
+
+// ─── Clients ──────────────────────────────────────────────────────────────────
+/**
+ * Who the work is for — a company or a person, with the details that identify
+ * them and the address the job is at.
+ *
+ * ── Why a table, when the bid already has clientName and siteAddress ─────────
+ * Those two columns are free text typed per bid, which is fine for printing one
+ * proposal and useless for everything after it. A general contractor a user
+ * bids for twenty times a year is twenty independent spellings of one name, so
+ * "show me everything I have quoted for Harbour Construction" cannot be
+ * answered, and neither can "what did I charge them last time". A record with
+ * an id makes both a lookup instead of a text search.
+ *
+ * Three named features are waiting on this, and none of them is built here:
+ *   • historical bid search, which queries this;
+ *   • sales tax, which needs the JOB address — jurisdiction follows where the
+ *     work happens, not where the invoice is posted, which is why `address` and
+ *     the bid's own `siteAddress` are separate things and both survive;
+ *   • government bids, which will hang contract and agency fields off a client.
+ * This pass is the structure they depend on and stops there.
+ *
+ * ── Optional, and permanently so ─────────────────────────────────────────────
+ * `bids.clientId` is nullable and nothing requires it. A contractor quoting a
+ * job at 7pm to get a number out the door must not be stopped by a form asking
+ * who they are billing, and every bid that already exists predates this table.
+ * A bid with no client behaves exactly as it did before — the proposal still
+ * reads the bid's own clientName, and the fallback is tested.
+ */
+export const CLIENT_KINDS = ["company", "individual"] as const;
+export type ClientKind = (typeof CLIENT_KINDS)[number];
+
+export const clients = mysqlTable(
+  "clients",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /**
+     * Company or individual. One field, not two tables, because everything
+     * about them is identical apart from what `name` means — a builder's
+     * trading name against a homeowner's own name — and the distinction is
+     * worth keeping only so a document can address them correctly.
+     */
+    kind: mysqlEnum("kind", CLIENT_KINDS).default("company").notNull(),
+
+    /** The company's trading name, or the person's name. The only required field. */
+    name: varchar("name", { length: 255 }).notNull(),
+    /**
+     * The person you actually deal with at a company. Nullable, and meaningless
+     * for an individual, whose name is already in `name`.
+     */
+    contactName: varchar("contactName", { length: 255 }),
+
+    /**
+     * Where the client is. Free-form and multi-line, matching
+     * `company_branding.address` — rendered line by line, never parsed.
+     *
+     * NOT the job address. `bids.siteAddress` stays per bid because one client
+     * has many jobs in many places, and it is the JOB's location that decides
+     * the tax jurisdiction. Collapsing the two would put the wrong rate on
+     * every bid a repeat customer places outside their own town.
+     */
+    address: varchar("address", { length: 512 }),
+    phone: varchar("phone", { length: 64 }),
+    email: varchar("email", { length: 320 }),
+
+    /** Anything the contractor wants to remember. Never printed on a document. */
+    notes: text("notes"),
+
+    /**
+     * When this client was archived, or NULL if live. Same single-column shape
+     * as `bids.archivedAt`, and the same reasoning: a flag and a date can
+     * disagree, one column cannot.
+     *
+     * Unlike a bid there is no countdown and nothing purges it. A client is a
+     * name and a phone number attached to bid history, so keeping one costs
+     * nothing — and deleting it would strand the bids that point at it.
+     */
+    archivedAt: timestamp("archivedAt"),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("clients_userId_idx").on(t.userId),
+    // Historical search lands here: "every bid for this client" starts by
+    // finding the client by name within one account.
+    index("clients_userId_name_idx").on(t.userId, t.name),
+    index("clients_archivedAt_idx").on(t.archivedAt),
+  ]
+);
+
+export type Client = typeof clients.$inferSelect;
+export type InsertClient = typeof clients.$inferInsert;
 
 // ─── Bids ─────────────────────────────────────────────────────────────────────
 // The Foundation bid layer. Deliberately NOT the legacy `projects` table, which
@@ -1137,6 +1347,26 @@ export const bids = mysqlTable(
     productivityPct: decimal("productivityPct", { precision: 6, scale: 4 }),
 
     /**
+     * The client this bid is for, if one has been assigned.
+     *
+     * ── Nullable, and it stays that way ──────────────────────────────────────
+     * Every bid written before this column existed has none, and a bid put
+     * together in a hurry never has to have one. Nothing reads it without
+     * handling absence — see resolveBidClient in shared/bidClient.ts, which is
+     * the single place the fallback to the free-text fields below lives.
+     *
+     * ── `set null`, never cascade ────────────────────────────────────────────
+     * Deleting a client must not delete their bids. That is the difference
+     * between tidying a contact list and destroying a year of quoting history,
+     * and the bid keeps its own `clientName` text, so an unlinked bid still
+     * prints the name it always printed. Same instinct as `assemblyId` on a bid
+     * line: a provenance link is severed, never followed into a deletion.
+     */
+    clientId: int("clientId").references(() => clients.id, {
+      onDelete: "set null",
+    }),
+
+    /**
      * Who the proposal is addressed to, and where the work is.
      *
      * Per-bid because they ARE the bid — unlike the branding and layout, which
@@ -1144,6 +1374,18 @@ export const bids = mysqlTable(
      * so the proposal can tell "not filled in yet" from "deliberately empty"
      * and prompt for it instead of printing a blank line where a client's name
      * belongs.
+     *
+     * ── Kept after `clientId` landed, deliberately ───────────────────────────
+     * These are not made redundant by the link, they are the override layer
+     * over it: `clientName` set on the bid wins, and the client record fills in
+     * when it is blank. A bid addressed to one division of a customer, or a
+     * name corrected for one document, must not edit the shared client record
+     * and change every other bid pointing at it — the same
+     * snapshot-beats-library rule the whole bid layer runs on.
+     *
+     * `siteAddress` is more than an override: a client has one address and many
+     * jobs, so where THIS work happens is genuinely per bid. It is what sales
+     * tax will read.
      *
      * `proposalNote` is the one or two sentences of scope summary that opens
      * the document — the part a contractor writes per job.
@@ -1178,6 +1420,8 @@ export const bids = mysqlTable(
   t => [
     index("bids_userId_idx").on(t.userId),
     index("bids_status_idx").on(t.status),
+    // "Every bid for this client" — the query historical search is built on.
+    index("bids_clientId_idx").on(t.clientId),
     // The purge sweep scans this across every user, so it cannot be a table
     // scan that grows with the whole bid history.
     index("bids_archivedAt_idx").on(t.archivedAt),
@@ -2025,6 +2269,22 @@ export const kits = mysqlTable(
     name: varchar("name", { length: 255 }).notNull(),
     description: varchar("description", { length: 512 }),
 
+    /**
+     * Which trade's library this kit belongs to. Same varchar-not-enum
+     * treatment as `assemblies.trade`, for the same reason.
+     *
+     * Trade-gated rather than shared, and it follows from what a kit IS: a
+     * bundle of assemblies, and every assembly in it already carries a trade.
+     * A "Bedroom package" of receptacles and a switch is electrical work in the
+     * same sense its contents are, so it belongs behind the same unlock. A kit
+     * mixing trades is possible — the column names the shelf it is filed on,
+     * not a constraint on its contents — which is the same latitude a bid gets
+     * from `bids.trades`.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_TRADE_GATED)
+      .notNull(),
+
     /** active / archived / deleted. See materials.status — same lifecycle. */
     status: mysqlEnum("status", LIBRARY_STATUSES).default("active").notNull(),
     archivedAt: timestamp("archivedAt"),
@@ -2037,7 +2297,7 @@ export const kits = mysqlTable(
     index("kits_userId_idx").on(t.userId),
     index("kits_baselineId_idx").on(t.baselineId),
     index("kits_status_idx").on(t.status),
-    index("kits_status_idx").on(t.status),
+    index("kits_trade_idx").on(t.trade),
   ]
 );
 
