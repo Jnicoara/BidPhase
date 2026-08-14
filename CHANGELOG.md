@@ -6,6 +6,9 @@ This is the human-readable companion to the git history — read this to see wha
 
 ## [2026-08-14]
 
+- **A failed plan upload now has a Retry button.** It reuses the file you already picked, so there is no hunting through folders for it again and no reloading the page. Retrying is the same code path as the first attempt, so it behaves identically rather than being a slightly different second version. Failures that the file itself causes — too large, or not really a PDF — offer only Dismiss, because sending the same bytes again could never work and a button that cannot succeed is worse than no button.
+- **Picking another file no longer wipes a failed one off the list.** New files are added to the list instead of replacing it, so the row explaining what went wrong stays until you dismiss it. Also fixed: dismissing one upload while another was still going could send the second one's progress to the wrong row.
+
 - **Found why plan upload was failing completely: it is a storage setting, not a file size.** The browser uploads plans straight to storage, and storage was refusing the request before any of the file left the browser — so every upload failed, at every size, no matter how small. Nothing about the file was ever the problem. The fix is one configuration change on the storage bucket, written up in `references/deploying.md` § 9; it cannot be made from the codebase.
 - **Uploads work again in the meantime, up to 25MB.** Plans now go by way of the HelixBid server when the direct route is blocked, which storage cannot refuse. That detour has a smaller size limit than the direct one, so larger sets still cannot be attached until the storage setting is corrected — and the app says exactly that, rather than pretending the file is too big and telling you to split it. As soon as the setting is fixed the app goes back to the direct route by itself.
 

@@ -82,6 +82,17 @@ import {
   putDirectToStorage,
   type UploadError,
 } from "@/lib/planUploadTransport";
+import {
+  appendJobs,
+  clearFinished,
+  dismissJob,
+  failJob,
+  isBusy,
+  makeJob,
+  patchJob,
+  resetForRetry,
+  type UploadJob,
+} from "@/lib/uploadQueue";
 import { TraceLayer } from "@/components/takeoff/TraceLayer";
 import { RunsPanel } from "@/components/takeoff/RunsPanel";
 import {
@@ -117,24 +128,8 @@ import {
 import type { PagePoint } from "@shared/takeoffGeometry";
 import type { RunPathType } from "@shared/takeoffQuantities";
 
-/** One in-flight (or failed) upload, as the progress list shows it. */
-type UploadJob = {
-  filename: string;
-  byteSize: number;
-  /** Bytes the browser has confirmed sent. */
-  sent: number;
-  state: "waiting" | "uploading" | "finishing" | "done" | "failed";
-  error?: string;
-  /**
-   * The technical line behind `error`, when there is one worth keeping.
-   *
-   * Separate so the message stays one readable sentence while the thing an
-   * engineer needs — bytes transferred, HTTP status, why zero bytes points at
-   * configuration — survives on screen instead of only in a toast that has
-   * already gone.
-   */
-  errorDetail?: string | null;
-};
+// The upload queue's shape and its operations live in lib/uploadQueue.ts, so
+// that retrying and dismissing can be tested without rendering this page.
 
 type Document = {
   id: number;
@@ -533,14 +528,18 @@ export default function TakeoffPage({
   const [page, setPage] = useState(1);
   const [dragging, setDragging] = useState(false);
   const [uploads, setUploads] = useState<UploadJob[]>([]);
+  /**
+   * The queue as it is right now, for reading outside render.
+   *
+   * Retry needs the failed job's File, and a state updater is the wrong place
+   * to look one up — updaters must be pure and React invokes them twice in
+   * development to enforce it.
+   */
+  const uploadsRef = useRef<UploadJob[]>([]);
+  uploadsRef.current = uploads;
   /** The transfer in flight, so it can be cancelled. */
   const xhrRef = useRef<XMLHttpRequest | null>(null);
-  const uploading = uploads.some(
-    u =>
-      u.state === "uploading" ||
-      u.state === "finishing" ||
-      u.state === "waiting"
-  );
+  const uploading = isBusy(uploads);
   const [confirmRemove, setConfirmRemove] = useState<Document | null>(null);
   /**
    * Which sheets state NOT TO SCALE, by sheet id.
@@ -1283,139 +1282,193 @@ export default function TakeoffPage({
   );
 
   /**
-   * Attach files: check, ticket, upload straight to storage, confirm.
+   * Send ONE queued file: check it, transfer it, record the sheet.
    *
-   * One at a time rather than in parallel. A 150MB set uploading alongside two
+   * Separate from `acceptFiles` so that retrying is the same code path as the
+   * first attempt rather than a second, subtly different one — a retry that
+   * skipped a validation step or a fallback would be a retry that behaves
+   * unlike the thing it is retrying.
+   *
+   * Everything is addressed by `job.id`, never by position: the dismiss button
+   * removes rows while a transfer is in flight, and index-addressed updates
+   * used to land on whichever row had shifted into place.
+   */
+  const runJob = useCallback(
+    async (job: UploadJob) => {
+      const file = job.file;
+      const setState = (patch: Partial<Omit<UploadJob, "id" | "file">>) =>
+        setUploads(prev => patchJob(prev, job.id, patch));
+
+      /**
+       * `retryable: false` is for failures the same bytes will always produce —
+       * too large, not a PDF. Offering Retry there is offering a button that
+       * cannot work; the way forward is a different file.
+       */
+      const fail = (
+        message: string,
+        {
+          detail = null,
+          retryable = true,
+        }: { detail?: string | null; retryable?: boolean } = {}
+      ) => {
+        setUploads(prev =>
+          failJob(prev, job.id, { error: message, detail, retryable })
+        );
+        toast.error(message);
+      };
+
+      // Cheap checks first, so an obviously wrong file fails instantly rather
+      // than after a long upload.
+      const check = checkPdfUpload({
+        filename: file.name,
+        byteSize: file.size,
+      });
+      if (!check.ok) {
+        fail(check.message, { retryable: false });
+        return;
+      }
+
+      // The magic bytes, read from the first few bytes of the file rather than
+      // the whole thing. Catches a document renamed to .pdf, which otherwise
+      // uploads perfectly and then fails to open with nothing explaining why.
+      const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+      if (!looksLikePdf(head)) {
+        fail(
+          `${file.name} is not a PDF inside, whatever it is named. Export a real PDF and try again.`,
+          { retryable: false }
+        );
+        return;
+      }
+
+      // Accepted, but say so before the viewer struggles with it. The app
+      // takes files up to MAX_PDF_BYTES; it opens them comfortably up to
+      // rather less, because the whole document is read into memory (see
+      // VIEWER_COMFORTABLE_BYTES). Warning beats a limit that implies
+      // everything under it will open.
+      if (file.size > VIEWER_COMFORTABLE_BYTES) {
+        toast.warning(
+          `${file.name} is ${formatBytes(file.size)}. It will attach, but a set this large can be slow to open and may not render on a low-memory device.`
+        );
+      }
+
+      try {
+        setState({ state: "uploading", sent: 0 });
+
+        const handle = {
+          onProgress: (sent: number) => setState({ sent }),
+          onStart: (xhr: XMLHttpRequest) => {
+            xhrRef.current = xhr;
+          },
+        };
+
+        // The direct path first: browser straight to storage, no size ceiling
+        // and nothing buffered on our server. See lib/planUploadTransport.ts.
+        let storageKey: string;
+        try {
+          const ticket = await createTicket.mutateAsync({
+            bidId,
+            filename: file.name,
+            byteSize: file.size,
+          });
+          await putDirectToStorage(ticket.uploadUrl, file, handle);
+          storageKey = ticket.storageKey;
+        } catch (directError) {
+          // Only a `blocked` failure is worth another attempt. It means zero
+          // bytes left the browser — the request was refused before its body
+          // was read, which is what a storage bucket with no CORS rule for
+          // this origin does to every upload at every size. Our own origin
+          // cannot be refused that way, so the same file goes through the
+          // server instead.
+          //
+          // Anything else — dropped, stalled, an HTTP rejection — would fail
+          // the same way through a smaller pipe, so it is reported as-is
+          // rather than turned into two errors.
+          if ((directError as UploadError).kind !== "blocked")
+            throw directError;
+
+          setState({ sent: 0 });
+          storageKey = await postViaServer(bidId, file, handle);
+        }
+        xhrRef.current = null;
+
+        setState({ state: "finishing", sent: file.size });
+        // One place records a sheet, whichever path carried the bytes.
+        const attached = await confirmAttach.mutateAsync({
+          bidId,
+          filename: file.name,
+          storageKey,
+          byteSize: file.size,
+        });
+
+        setState({ state: "done" });
+        setSelectedDocId(attached.id);
+        setPage(1);
+        void utils.bidPdfs.list.invalidate({ bidId });
+        toast.success(`${attached.filename} attached.`);
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "That file could not be attached.";
+        const detail =
+          err instanceof Error
+            ? ((err as Error & { detail?: string | null }).detail ?? null)
+            : null;
+        fail(message, { detail });
+      }
+    },
+    [bidId, createTicket, confirmAttach, utils]
+  );
+
+  /**
+   * Attach picked files.
+   *
+   * One at a time rather than in parallel. A 500MB set uploading alongside two
    * others gives three progress bars all crawling and a saturated connection;
    * sequential means the first sheet is usable while the rest arrive.
+   *
+   * New files are APPENDED. They used to replace the list, which wiped a failed
+   * row — and its message — the moment the user picked anything else.
    */
   const acceptFiles = useCallback(
     async (files: FileList | null) => {
       if (!files || files.length === 0) return;
-      const queue = Array.from(files);
-      setUploads(
-        queue.map(f => ({
-          filename: f.name,
-          byteSize: f.size,
-          sent: 0,
-          state: "waiting",
-        }))
-      );
+      const queued = Array.from(files).map(makeJob);
+      setUploads(prev => appendJobs(prev, queued));
 
-      for (let i = 0; i < queue.length; i++) {
-        const file = queue[i];
-        const setState = (patch: Partial<UploadJob>) =>
-          setUploads(prev =>
-            prev.map((u, n) => (n === i ? { ...u, ...patch } : u))
-          );
-
-        // Cheap checks first, so an obviously wrong file fails instantly rather
-        // than after a long upload.
-        const check = checkPdfUpload({
-          filename: file.name,
-          byteSize: file.size,
-        });
-        if (!check.ok) {
-          setState({ state: "failed", error: check.message });
-          toast.error(check.message);
-          continue;
-        }
-
-        // The magic bytes, read from the first few bytes of the file rather than
-        // the whole thing. Catches a document renamed to .pdf, which otherwise
-        // uploads perfectly and then fails to open with nothing explaining why.
-        const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
-        if (!looksLikePdf(head)) {
-          const message = `${file.name} is not a PDF inside, whatever it is named. Export a real PDF and try again.`;
-          setState({ state: "failed", error: message });
-          toast.error(message);
-          continue;
-        }
-
-        // Accepted, but say so before the viewer struggles with it. The app
-        // takes files up to MAX_PDF_BYTES; it opens them comfortably up to
-        // rather less, because the whole document is read into memory (see
-        // VIEWER_COMFORTABLE_BYTES). Warning beats a limit that implies
-        // everything under it will open.
-        if (file.size > VIEWER_COMFORTABLE_BYTES) {
-          toast.warning(
-            `${file.name} is ${formatBytes(file.size)}. It will attach, but a set this large can be slow to open and may not render on a low-memory device.`
-          );
-        }
-
-        try {
-          setState({ state: "uploading" });
-
-          const handle = {
-            onProgress: (sent: number) => setState({ sent }),
-            onStart: (xhr: XMLHttpRequest) => {
-              xhrRef.current = xhr;
-            },
-          };
-
-          // The direct path first: browser straight to storage, no size ceiling
-          // and nothing buffered on our server. See lib/planUploadTransport.ts.
-          let storageKey: string;
-          try {
-            const ticket = await createTicket.mutateAsync({
-              bidId,
-              filename: file.name,
-              byteSize: file.size,
-            });
-            await putDirectToStorage(ticket.uploadUrl, file, handle);
-            storageKey = ticket.storageKey;
-          } catch (directError) {
-            // Only a `blocked` failure is worth another attempt. It means zero
-            // bytes left the browser — the request was refused before its body
-            // was read, which is what a storage bucket with no CORS rule for
-            // this origin does to every upload at every size. Our own origin
-            // cannot be refused that way, so the same file goes through the
-            // server instead.
-            //
-            // Anything else — dropped, stalled, an HTTP rejection — would fail
-            // the same way through a smaller pipe, so it is reported as-is
-            // rather than turned into two errors.
-            if ((directError as UploadError).kind !== "blocked")
-              throw directError;
-
-            setState({ sent: 0 });
-            storageKey = await postViaServer(bidId, file, handle);
-          }
-          xhrRef.current = null;
-
-          setState({ state: "finishing", sent: file.size });
-          // One place records a sheet, whichever path carried the bytes.
-          const attached = await confirmAttach.mutateAsync({
-            bidId,
-            filename: file.name,
-            storageKey,
-            byteSize: file.size,
-          });
-
-          setState({ state: "done" });
-          setSelectedDocId(attached.id);
-          setPage(1);
-          void utils.bidPdfs.list.invalidate({ bidId });
-          toast.success(`${attached.filename} attached.`);
-        } catch (err) {
-          const message =
-            err instanceof Error
-              ? err.message
-              : "That file could not be attached.";
-          const detail =
-            err instanceof Error
-              ? ((err as Error & { detail?: string | null }).detail ?? null)
-              : null;
-          setState({ state: "failed", error: message, errorDetail: detail });
-          toast.error(message);
-        }
-      }
-
-      // Clear only what succeeded; a failure stays on screen with its reason.
-      setUploads(prev => prev.filter(u => u.state === "failed"));
+      // The input is cleared immediately so that picking the SAME file again
+      // still fires a change event — otherwise a failed upload could not be
+      // re-attempted from the picker at all.
       if (fileInput.current) fileInput.current.value = "";
+
+      for (const job of queued) await runJob(job);
+
+      // Successes disappear — the sheet they produced is the confirmation.
+      // Failures stay, with their reason and a Retry button.
+      setUploads(prev => clearFinished(prev));
     },
-    [bidId, createTicket, confirmAttach, utils]
+    [runJob]
+  );
+
+  /**
+   * Send a failed upload again, without the user finding the file twice.
+   *
+   * The job is read from `uploadsRef` rather than from inside a state updater:
+   * an updater must be pure, React calls it twice in development to prove it,
+   * and reaching into one for a value would start the upload twice.
+   */
+  const retryUpload = useCallback(
+    async (id: string) => {
+      const job = uploadsRef.current.find(
+        candidate => candidate.id === id && candidate.state === "failed"
+      );
+      if (!job) return;
+
+      setUploads(prev => resetForRetry(prev, id));
+      await runJob(job);
+      setUploads(prev => clearFinished(prev));
+    },
+    [runJob]
   );
 
   const cancelUpload = useCallback(() => {
@@ -1492,9 +1545,8 @@ export default function TakeoffPage({
       <UploadProgress
         jobs={uploads}
         onCancel={cancelUpload}
-        onDismiss={index =>
-          setUploads(prev => prev.filter((_, n) => n !== index))
-        }
+        onDismiss={id => setUploads(prev => dismissJob(prev, id))}
+        onRetry={id => void retryUpload(id)}
       />
 
       {isLoading ? (
