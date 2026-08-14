@@ -337,6 +337,13 @@ export type BuildProposalInput = {
     overheadAmount: number;
     profitAmount: number;
     finalPrice: number;
+    /**
+     * The marked-up materials and labor alone.
+     *
+     * Falls back to finalPrice, which is what it equals on any bid with no
+     * marked-up charge — so a caller that predates them is unaffected.
+     */
+    workPrice?: number;
     totalLaborHours: number;
   };
   /**
@@ -535,7 +542,7 @@ function buildInvestment(
   taxExemptReason: string | null | undefined,
   expenseLines: readonly { name: string; amount: number }[] = []
 ): ProposalDocument["investment"] {
-  const workTotal = totals.finalPrice;
+  const workTotal = totals.workPrice ?? totals.finalPrice;
   const expensesTotal = sumExpenses(expenseLines);
   const expenses =
     expenseLines.length > 0

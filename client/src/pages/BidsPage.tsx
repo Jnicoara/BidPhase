@@ -644,7 +644,10 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               <div className="flex items-baseline justify-between gap-3 py-1">
                 <span className="text-sm font-medium">Bid price</span>
                 <span className="font-mono text-base text-[#F5C518]">
-                  {money(totals.finalPrice)}
+                  {/* The work alone. A marked-up charge is inside finalPrice
+                      but is billed on its own line below, so showing
+                      finalPrice here would count it twice. */}
+                  {money(totals.workPrice)}
                 </span>
               </div>
 

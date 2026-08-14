@@ -36,7 +36,11 @@ import {
   type TaxRateComponent,
   type TaxRules,
 } from "../shared/salesTax";
-import { sumExpenses } from "../shared/bidExtras";
+import {
+  priceExpenses,
+  sumMarkedUpExpenses,
+  type ExpenseLine,
+} from "../shared/bidExtras";
 import * as db from "./db";
 
 /**
@@ -206,7 +210,9 @@ export function priceLine(line: BidLineItem, productivityPct: number) {
 export function rollUpBid(
   bid: Bid,
   lines: BidLineItem[],
-  company: CompanyPricingDefaults
+  company: CompanyPricingDefaults,
+  /** Charges on the bid. Only the marked-up ones affect the direct cost. */
+  expenses: readonly ExpenseLine[] = []
 ) {
   const settings = resolveBidPricingSettings(company, {
     overheadEnabled: bid.overheadEnabled,
@@ -222,14 +228,26 @@ export function rollUpBid(
   const breakdowns = lines.map(line =>
     priceLine(line, settings.productivityPct)
   );
-  const directCost = sumDirectCost(breakdowns);
+  /**
+   * Materials and labor, plus any charge the user marked up.
+   *
+   * A marked-up charge enters the direct cost so it runs through the SAME
+   * overhead and profit as everything else — that is what "the same
+   * calculation already used for materials and labor" has to mean if the two
+   * are never to disagree. Applying a markup to it separately here would be a
+   * second implementation of the thing shared/pricing.ts exists to own.
+   *
+   * Flat charges are absent by design; they are added after profit.
+   */
+  const workCost = sumDirectCost(breakdowns);
+  const directCost = roundMoney(workCost + sumMarkedUpExpenses(expenses));
   const bidPrice = calculateBidPrice({
     directCost,
     overhead: settings.overhead,
     profit: settings.profit,
   });
 
-  return { settings, breakdowns, directCost, bidPrice };
+  return { settings, breakdowns, workCost, directCost, bidPrice };
 }
 
 /**
@@ -255,9 +273,14 @@ export function bidRollup(
    * Flat charges on the bid — permits, inspections, dispatch. Optional for the
    * same reason: a bid with none prices exactly as it did before they existed.
    */
-  expenses: readonly { name: string; amount: number }[] = []
+  expenses: readonly ExpenseLine[] = []
 ) {
-  const { settings, breakdowns, bidPrice } = rollUpBid(bid, lines, company);
+  const { settings, breakdowns, directCost, bidPrice } = rollUpBid(
+    bid,
+    lines,
+    company,
+    expenses
+  );
   const priced = lines.map((line, index) => ({
     line,
     breakdown: breakdowns[index],
@@ -302,27 +325,39 @@ export function bidRollup(
       } as ResolvedTaxRate);
 
   /**
-   * Flat charges, added after profit and NOT marked up.
+   * Charges, each priced according to its own two switches.
    *
-   * Deliberately outside the sales-tax base as well: `calculateSalesTax` is
-   * still handed the bid price without expenses in it, so every tax figure the
-   * previous release established is unchanged. See shared/bidExtras.ts for why
-   * both of those are decisions rather than facts.
+   * A marked-up charge was already folded into `directCost` above, so it is
+   * inside `bidPrice.finalPrice` — scaled by the same overhead and profit the
+   * work got. Its billed value is recovered here so it can still appear as its
+   * own line: itemisation is the whole reason a permit is a separate charge,
+   * and losing it into the bid price would defeat that.
+   *
+   * `workPrice` is therefore the bid price with those charges taken back out —
+   * the marked-up materials and labor alone.
    */
-  const expensesTotal = sumExpenses(expenses);
+  const uplift = directCost > 0 ? bidPrice.finalPrice / directCost : 1;
+  const pricedExpenses = priceExpenses(expenses, uplift);
+  const workPrice = roundMoney(
+    bidPrice.finalPrice - pricedExpenses.markedUpCharged
+  );
 
   const salesTax = calculateSalesTax({
     materialCost,
     laborCost,
-    finalPrice: bidPrice.finalPrice,
+    // The work only. Charges carry their own taxability and are passed
+    // separately rather than blended into a figure taxed wholesale.
+    finalPrice: workPrice,
+    expenses: pricedExpenses.lines,
     rules: tax?.rules ?? DEFAULT_TAX_RULES,
     ratePct: rate.ratePct,
     components: rate.components,
     exempt: bid.taxExempt,
   });
 
-  /** Price + expenses, before tax. What the tax line sits under. */
-  const subtotal = roundMoney(bidPrice.finalPrice + expensesTotal);
+  /** Everything billed, before tax. What the tax line sits under. */
+  const expensesTotal = pricedExpenses.total;
+  const subtotal = roundMoney(workPrice + expensesTotal);
   /** Everything the customer owes. */
   const totalDue = roundMoney(subtotal + salesTax.amount);
 
@@ -371,8 +406,19 @@ export function bidRollup(
        */
       salesTaxAmount: salesTax.amount,
       totalWithTax: salesTax.totalWithTax,
-      /** Flat charges, summed. Zero when the bid has none. */
+      /** Charges as billed, summed. Zero when the bid has none. */
       expensesTotal,
+      /**
+       * The marked-up materials and labor alone.
+       *
+       * Differs from `finalPrice` only when a charge is marked up: that charge
+       * is inside finalPrice (it ran through overhead and profit with
+       * everything else) but is billed on its own line, so the screen shows
+       * this to avoid counting it twice.
+       */
+      workPrice,
+      /** Every charge with what it is billed at, for itemising. */
+      expenseLines: pricedExpenses.lines,
       /** finalPrice + expenses, before tax. */
       subtotal,
       /** finalPrice + expenses + tax. The bottom line. */

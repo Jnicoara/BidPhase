@@ -113,8 +113,30 @@ export type SalesTaxInput = {
   materialCost: number;
   /** Cost of labor across the bid, before overhead and profit. */
   laborCost: number;
-  /** What the customer is charged before tax — overhead and profit included. */
+  /**
+   * What the customer is charged for the WORK — materials and labor with
+   * overhead and profit on top, and nothing else.
+   *
+   * Deliberately excludes additional charges even when those are marked up:
+   * each charge decides its own taxability, so they are supplied separately
+   * below rather than blended into a figure the rate is applied to wholesale.
+   * On a bid with no charges this is simply the bid price, which is why every
+   * caller that predates them is unaffected.
+   */
   finalPrice: number;
+  /**
+   * Flat charges — permits, inspections, fees — each with its own taxability.
+   *
+   * `amount` is the cost and `charged` is what the customer pays for it, which
+   * differ only when the charge is marked up. Which one enters the base
+   * follows `applyTo`, exactly as it does for materials and labor: "cost"
+   * taxes what was paid, "price" taxes what is billed.
+   */
+  expenses?: readonly {
+    amount: number;
+    charged: number;
+    taxable?: boolean;
+  }[];
   rules: TaxRules;
   /**
    * The rate to apply, as a percent. Null when nothing supplied one — which is
@@ -164,6 +186,8 @@ export type SalesTaxBreakdown = {
    */
   taxableMaterial: number;
   taxableLabor: number;
+  /** The part of the base contributed by taxable charges. */
+  taxableExpenses: number;
 };
 
 /**
@@ -198,13 +222,25 @@ export function calculateSalesTax(input: SalesTaxInput): SalesTaxBreakdown {
     totalWithTax: fromCents(finalPriceCents),
     taxableMaterial: 0,
     taxableLabor: 0,
+    taxableExpenses: 0,
   });
+
+  const expenses = input.expenses ?? [];
+  const taxableExpenses = expenses.filter(line => line.taxable);
 
   if (!input.rules.enabled) return none("disabled");
   // Exemption outranks the rate: an exempt bid is $0 whether or not a
   // jurisdiction matched, and saying "no rate" there would be misleading.
   if (input.exempt) return none("exempt");
-  if (!input.rules.taxMaterials && !input.rules.taxLabor) {
+  // A charge marked taxable is taxable whatever the company rules say about
+  // materials and labor — that is what "per expense, not global" means. So
+  // "nothing taxable" has to account for it, or a bid whose only taxable thing
+  // is a fee would report as untaxable and quietly charge nothing.
+  if (
+    !input.rules.taxMaterials &&
+    !input.rules.taxLabor &&
+    taxableExpenses.length === 0
+  ) {
     return none("nothing-taxable");
   }
   if (input.ratePct === null || !Number.isFinite(input.ratePct)) {
@@ -241,7 +277,16 @@ export function calculateSalesTax(input: SalesTaxInput): SalesTaxBreakdown {
     }
   }
 
-  const baseCents = baseMaterialCents + baseLaborCents;
+  // Each taxable charge enters on the same footing as materials and labor:
+  // what it cost under "cost", what it is billed at under "price".
+  const baseExpenseCents = taxableExpenses.reduce(
+    (cents, line) =>
+      cents +
+      toCents(input.rules.applyTo === "cost" ? line.amount : line.charged),
+    0
+  );
+
+  const baseCents = baseMaterialCents + baseLaborCents + baseExpenseCents;
   const taxCents = Math.round((baseCents * input.ratePct) / 100);
 
   return {
@@ -253,6 +298,7 @@ export function calculateSalesTax(input: SalesTaxInput): SalesTaxBreakdown {
     totalWithTax: fromCents(finalPriceCents + taxCents),
     taxableMaterial: fromCents(baseMaterialCents),
     taxableLabor: fromCents(baseLaborCents),
+    taxableExpenses: fromCents(baseExpenseCents),
   };
 }
 

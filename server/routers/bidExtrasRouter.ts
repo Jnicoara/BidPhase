@@ -60,6 +60,12 @@ const expenses = router({
         name: nameSchema,
         amount: amountSchema,
         notes: z.string().trim().max(512).nullable().optional(),
+        /**
+         * Independent switches, both defaulting off so a charge created
+         * without saying anything behaves as every charge did before them.
+         */
+        taxable: z.boolean().default(false),
+        markedUp: z.boolean().default(false),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -68,6 +74,8 @@ const expenses = router({
         name: input.name,
         amount: toDecimal4(input.amount),
         notes: input.notes || null,
+        taxable: input.taxable,
+        markedUp: input.markedUp,
       });
       const row = await db.getExpenseItemById(id, ctx.user.id);
       return row ? { ...row, amount: Number(row.amount) } : null;
@@ -80,6 +88,8 @@ const expenses = router({
         name: nameSchema.optional(),
         amount: amountSchema.optional(),
         notes: z.string().trim().max(512).nullable().optional(),
+        taxable: z.boolean().optional(),
+        markedUp: z.boolean().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -92,6 +102,8 @@ const expenses = router({
       if (rest.name !== undefined) patch.name = rest.name;
       if (rest.amount !== undefined) patch.amount = toDecimal4(rest.amount);
       if (rest.notes !== undefined) patch.notes = rest.notes || null;
+      if (rest.taxable !== undefined) patch.taxable = rest.taxable;
+      if (rest.markedUp !== undefined) patch.markedUp = rest.markedUp;
 
       if (Object.keys(patch).length > 0)
         await db.updateExpenseItem(id, ctx.user.id, patch);
@@ -142,6 +154,14 @@ const expenses = router({
         itemId: z.number().int().positive().nullable().default(null),
         name: nameSchema.optional(),
         amount: amountSchema.optional(),
+        /**
+         * Omitted, these are inherited from the saved entry when adding from
+         * the list, and default off for a one-off. Passing them explicitly
+         * overrides the saved entry FOR THIS BID ONLY — the snapshot rule
+         * applies to the switches exactly as it does to the amount.
+         */
+        taxable: z.boolean().optional(),
+        markedUp: z.boolean().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -149,6 +169,8 @@ const expenses = router({
 
       let name = input.name;
       let amount = input.amount;
+      let taxable = input.taxable;
+      let markedUp = input.markedUp;
 
       if (input.itemId !== null) {
         // Checked, not trusted: an item id is a small integer and must belong
@@ -161,6 +183,8 @@ const expenses = router({
           });
         name = name ?? item.name;
         amount = amount ?? Number(item.amount);
+        taxable = taxable ?? item.taxable;
+        markedUp = markedUp ?? item.markedUp;
       }
 
       if (!name || amount === undefined) {
@@ -175,6 +199,8 @@ const expenses = router({
         expenseItemId: input.itemId,
         name,
         amount: toDecimal4(amount),
+        taxable: taxable ?? false,
+        markedUp: markedUp ?? false,
         sortOrder: await db.nextBidExpenseSortOrder(input.bidId),
       });
       const rows = await db.getBidExpenses(input.bidId);
@@ -190,6 +216,8 @@ const expenses = router({
         id: z.number().int().positive(),
         name: nameSchema.optional(),
         amount: amountSchema.optional(),
+        taxable: z.boolean().optional(),
+        markedUp: z.boolean().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -197,6 +225,8 @@ const expenses = router({
       const patch: Record<string, unknown> = {};
       if (input.name !== undefined) patch.name = input.name;
       if (input.amount !== undefined) patch.amount = toDecimal4(input.amount);
+      if (input.taxable !== undefined) patch.taxable = input.taxable;
+      if (input.markedUp !== undefined) patch.markedUp = input.markedUp;
       if (Object.keys(patch).length > 0)
         await db.updateBidExpense(input.id, input.bidId, patch);
       return { success: true };
@@ -244,6 +274,10 @@ const expenses = router({
         userId: ctx.user.id,
         name: onBid.name,
         amount: onBid.amount,
+        // The switches travel with it — a charge saved for reuse should behave
+        // next time exactly as it did on the bid it was promoted from.
+        taxable: onBid.taxable,
+        markedUp: onBid.markedUp,
       });
       await db.updateBidExpense(input.id, input.bidId, {
         expenseItemId: itemId,

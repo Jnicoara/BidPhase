@@ -382,6 +382,8 @@ export const bidsRouter = router({
       const expenses = expenseRows.map(row => ({
         name: row.name,
         amount: Number(row.amount),
+        taxable: row.taxable,
+        markedUp: row.markedUp,
       }));
 
       const { settings, priced, units, totals, salesTax, taxRate } = bidRollup(

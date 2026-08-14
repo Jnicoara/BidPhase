@@ -6,6 +6,10 @@ This is the human-readable companion to the git history — read this to see wha
 
 ## [2026-08-14]
 
+- **Each additional expense now has two tickboxes: Taxable and Marked up.** They are independent — a charge can be taxed but not marked up, marked up but not taxed, both, or neither — because which one is right depends on the state and on the kind of charge. A permit is often passed through at cost and untaxed; a minimum service call is usually treated like any other revenue.
+- **Both start off, so nothing about existing bids changes.** Taxable puts the amount into the sales tax base alongside materials and labor. Marked up runs it through exactly the same overhead and profit as the rest of the bid, rather than a separate markup that could drift from it. A marked-up charge still shows as its own line at what the customer is actually charged, so it is never counted twice.
+- **The tickboxes work the same on a saved expense and a one-off**, and can be changed on a charge already sitting on a bid. A saved expense carries its settings onto a bid when you add it, and changing them on that bid does not reach back and edit the saved one.
+
 - **Bids can carry flat charges — permits, inspections, dispatch, a minimum service fee.** Keep the ones you use often on a saved list for quick re-adding, or type a one-off for a single job. A one-off stays on that job and is never added to your list — a $340 permit for one awkward site should not turn up as a suggestion on every bid afterwards. If it turns out to be worth keeping, there is a button to save it afterwards.
 - **Charges are added to the price as they are.** Not marked up, and not taxed. They appear as their own named line on the bid and on the proposal, so a customer can see what a permit cost rather than finding it folded into a total.
 - **Includes and excludes.** A section listing what the price covers and what it explicitly does not — standard bidding practice, and the thing that settles the argument three months later about who was supposed to pull the permit. Same pattern: save the ones you use on every job, or type a one-off. They print on the proposal, with the excludes given the emphasis.

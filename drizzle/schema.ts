@@ -1368,6 +1368,26 @@ export const expenseItems = mysqlTable(
     /** Optional note for the user — never printed on a proposal. */
     notes: varchar("notes", { length: 512 }),
 
+    /**
+     * Whether this charge is part of the sales-tax base.
+     *
+     * Off by default, which is the behaviour every existing expense already
+     * has. Independent of `markedUp` on purpose: a permit may be marked up but
+     * untaxed, taxed but passed through at cost, both, or neither, and which
+     * combination is right varies by state AND by the kind of charge. Two
+     * booleans on the row beat a rules engine nobody can predict.
+     */
+    taxable: boolean("taxable").default(false).notNull(),
+    /**
+     * Whether the company's overhead and profit are applied to this charge.
+     *
+     * Off by default — a flat pass-through, as before. When on, the amount
+     * joins the direct cost and runs through exactly the same overhead and
+     * profit calculation as materials and labor, rather than through a second
+     * markup path that could drift from it.
+     */
+    markedUp: boolean("markedUp").default(false).notNull(),
+
     archivedAt: timestamp("archivedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -1412,6 +1432,26 @@ export const bidExpenses = mysqlTable(
     amount: decimal("amount", { precision: 12, scale: 4 })
       .default("0")
       .notNull(),
+
+    /**
+     * Whether this charge is part of the sales-tax base.
+     *
+     * Off by default, which is the behaviour every existing expense already
+     * has. Independent of `markedUp` on purpose: a permit may be marked up but
+     * untaxed, taxed but passed through at cost, both, or neither, and which
+     * combination is right varies by state AND by the kind of charge. Two
+     * booleans on the row beat a rules engine nobody can predict.
+     */
+    taxable: boolean("taxable").default(false).notNull(),
+    /**
+     * Whether the company's overhead and profit are applied to this charge.
+     *
+     * Off by default — a flat pass-through, as before. When on, the amount
+     * joins the direct cost and runs through exactly the same overhead and
+     * profit calculation as materials and labor, rather than through a second
+     * markup path that could drift from it.
+     */
+    markedUp: boolean("markedUp").default(false).notNull(),
 
     sortOrder: int("sortOrder").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),

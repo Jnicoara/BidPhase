@@ -12,11 +12,25 @@ import { fromCents, toCents } from "./pricing";
 
 export type ExpenseLine = {
   name: string;
+  /** What the charge costs. Never includes overhead or profit. */
   amount: number;
+  /** In the sales-tax base. Default false — a pass-through owes no tax. */
+  taxable?: boolean;
+  /** Gets the company's overhead and profit. Default false — flat. */
+  markedUp?: boolean;
+};
+
+/** A charge with what the customer is actually billed for it worked out. */
+export type PricedExpense = ExpenseLine & {
+  /**
+   * What appears on the document: `amount` when flat, `amount` plus its share
+   * of overhead and profit when marked up.
+   */
+  charged: number;
 };
 
 /**
- * Sum the flat charges on a bid.
+ * Sum the amounts (costs) of some charges.
  *
  * Integer cents like everything else in the engine, so a list of expenses adds
  * up to exactly the figure shown beside it rather than to something a hundredth
@@ -28,35 +42,86 @@ export function sumExpenses(lines: readonly ExpenseLine[]): number {
   );
 }
 
+/** The cost of the charges that join the direct cost and get marked up. */
+export function sumMarkedUpExpenses(lines: readonly ExpenseLine[]): number {
+  return sumExpenses(lines.filter(line => line.markedUp));
+}
+
+/** Do any of these charges belong in the tax base? */
+export function hasTaxableExpense(lines: readonly ExpenseLine[]): boolean {
+  return lines.some(line => line.taxable);
+}
+
 /**
- * ── Where expenses sit in the price, and why ─────────────────────────────────
+ * Work out what each charge is billed at.
  *
- * A permit fee is a PASS-THROUGH. It is added after overhead and profit, and it
- * is not marked up:
+ * ── The uplift is the bid's own, not a second markup path ────────────────────
+ * `uplift` is finalPrice ÷ directCost for THIS bid — the factor the pricing
+ * engine already applied to materials and labor. A marked-up charge is scaled
+ * by exactly that, which is what "the same calculation already used for
+ * materials and labor" has to mean if the two are never to disagree. Computing
+ * overhead and profit a second time here would be a second implementation of
+ * the thing shared/pricing.ts exists to own.
  *
- *     materials + labor          →  direct cost
- *     + overhead                 →  cost with overhead
- *     + profit                   →  bid price
- *     + expenses                 →  subtotal          ← here
- *     + sales tax                →  total due
- *
- * Two consequences worth being explicit about, because both are decisions
- * rather than facts:
- *
- *  • Expenses are NOT marked up. A $180 permit appears as $180. Marking up a
- *    government fee is a choice some contractors make and many customers
- *    query, so the app does the unsurprising thing and leaves the other
- *    available by simply typing a larger number.
- *
- *  • Expenses are NOT in the sales-tax base. The taxable amount is still the
- *    material and/or labor share of the bid price, exactly as before — permits
- *    and inspection fees are generally not taxable receipts, and folding them
- *    in would change every tax figure the previous release established.
- *
- * If a jurisdiction or a business needs either of those the other way round,
- * that is a real change here and not a setting somebody can guess at.
+ * A flat charge is billed at cost, whatever the uplift is.
  */
-export const EXPENSES_ARE_MARKED_UP = false;
+export function priceExpenses(
+  lines: readonly ExpenseLine[],
+  uplift: number
+): {
+  lines: PricedExpense[];
+  /** Billed total of the marked-up charges — the part inside the bid price. */
+  markedUpCharged: number;
+  /** Cost total of the flat charges — the part added after it. */
+  flatTotal: number;
+  /** Billed total of everything. */
+  total: number;
+} {
+  const priced: PricedExpense[] = lines.map(line => ({
+    ...line,
+    charged: line.markedUp
+      ? fromCents(Math.round(toCents(line.amount || 0) * uplift))
+      : fromCents(toCents(line.amount || 0)),
+  }));
+
+  const sumCharged = (rows: PricedExpense[]) =>
+    fromCents(rows.reduce((cents, row) => cents + toCents(row.charged), 0));
+
+  return {
+    lines: priced,
+    markedUpCharged: sumCharged(priced.filter(row => row.markedUp)),
+    flatTotal: sumCharged(priced.filter(row => !row.markedUp)),
+    total: sumCharged(priced),
+  };
+}
+
+/**
+ * ── Where expenses sit in the price ──────────────────────────────────────────
+ *
+ * Each charge carries two independent switches, and both ship OFF, so a charge
+ * with neither behaves exactly as every charge did before they existed: a flat
+ * pass-through, untaxed.
+ *
+ *     materials + labor
+ *     + marked-up charges        →  direct cost      ← `markedUp` puts it here
+ *     + overhead
+ *     + profit                   →  bid price
+ *     + flat charges             →  subtotal         ← `markedUp` off stays here
+ *     + sales tax                →  total due        ← `taxable` feeds the base
+ *
+ * ── Why two booleans and not a rules system ──────────────────────────────────
+ * Because the answer varies by state AND by the kind of charge, and no rule
+ * anybody could write would predict it. A permit is often passed through at
+ * cost and untaxed; a minimum service fee is usually taxed and marked up like
+ * any other revenue; an inspection might be one and not the other. Four
+ * combinations, chosen per charge by the person who knows, beats a clever
+ * scheme that is wrong in a way nobody can see.
+ *
+ * They are genuinely independent — `taxable` decides whether the amount enters
+ * the tax base, `markedUp` decides whether overhead and profit apply, and
+ * neither reads the other.
+ */
+export const EXPENSE_FLAGS_DEFAULT_OFF = true;
 
 // ─── Includes / excludes ──────────────────────────────────────────────────────
 

@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 
 const money = (value: number) =>
@@ -47,6 +48,8 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
 
   const [expenseName, setExpenseName] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
+  const [expenseTaxable, setExpenseTaxable] = useState(false);
+  const [expenseMarkedUp, setExpenseMarkedUp] = useState(false);
   const [noteKind, setNoteKind] = useState<"include" | "exclude">("exclude");
   const [noteText, setNoteText] = useState("");
 
@@ -63,6 +66,10 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
   const onError = (e: { message: string }) => toast.error(e.message);
 
   const addExpense = trpc.bidExtras.expenses.addToBid.useMutation({
+    onError,
+    onSettled: refresh,
+  });
+  const updateExpense = trpc.bidExtras.expenses.updateOnBid.useMutation({
     onError,
     onSettled: refresh,
   });
@@ -102,9 +109,17 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
   const submitExpense = () => {
     const amount = Number(expenseAmount);
     if (!expenseName.trim() || !Number.isFinite(amount) || amount < 0) return;
-    addExpense.mutate({ bidId, name: expenseName.trim(), amount });
+    addExpense.mutate({
+      bidId,
+      name: expenseName.trim(),
+      amount,
+      taxable: expenseTaxable,
+      markedUp: expenseMarkedUp,
+    });
     setExpenseName("");
     setExpenseAmount("");
+    setExpenseTaxable(false);
+    setExpenseMarkedUp(false);
   };
 
   const submitNote = () => {
@@ -133,8 +148,46 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
                 key={row.id}
                 className="flex items-center gap-2 group text-sm"
               >
-                <span className="flex-1 min-w-0 truncate">{row.name}</span>
-                <span className="font-mono text-sm shrink-0">
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate">{row.name}</span>
+                  {/* The two switches, per charge, editable in place. Shown as
+                      words rather than icons because "taxed" and "marked up"
+                      are the kind of thing an estimator wants to read back at
+                      a glance before sending. */}
+                  <span className="flex items-center gap-3 mt-0.5">
+                    <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer">
+                      <Checkbox
+                        checked={row.taxable}
+                        onCheckedChange={next =>
+                          updateExpense.mutate({
+                            bidId,
+                            id: row.id,
+                            taxable: next === true,
+                          })
+                        }
+                        aria-label={`${row.name} is taxable`}
+                        className="h-3 w-3"
+                      />
+                      Taxable
+                    </label>
+                    <label className="flex items-center gap-1 text-xs text-muted-foreground cursor-pointer">
+                      <Checkbox
+                        checked={row.markedUp}
+                        onCheckedChange={next =>
+                          updateExpense.mutate({
+                            bidId,
+                            id: row.id,
+                            markedUp: next === true,
+                          })
+                        }
+                        aria-label={`${row.name} is marked up`}
+                        className="h-3 w-3"
+                      />
+                      Marked up
+                    </label>
+                  </span>
+                </span>
+                <span className="font-mono text-sm shrink-0 self-start">
                   {money(row.amount)}
                 </span>
                 {/* Only a one-off can be saved — an entry that came FROM the
@@ -215,9 +268,33 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
             <Plus className="w-3.5 h-3.5" />
           </Button>
         </div>
+
+        {/* Both off by default — a charge nobody thinks about stays a flat,
+            untaxed pass-through, which is what it was before these existed. */}
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+            <Checkbox
+              checked={expenseTaxable}
+              onCheckedChange={next => setExpenseTaxable(next === true)}
+              aria-label="New charge is taxable"
+            />
+            Taxable
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+            <Checkbox
+              checked={expenseMarkedUp}
+              onCheckedChange={next => setExpenseMarkedUp(next === true)}
+              aria-label="New charge is marked up"
+            />
+            Marked up
+          </label>
+        </div>
+
         <p className="text-xs text-muted-foreground">
-          Added to the price as-is — not marked up, and not taxed. Typing one
-          here does not save it to your list.
+          <strong>Taxable</strong> puts the amount in the sales tax base.{" "}
+          <strong>Marked up</strong> applies your overhead and profit to it.
+          They are independent, and both start off. Typing a charge here does
+          not save it to your list.
         </p>
       </div>
 

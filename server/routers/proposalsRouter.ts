@@ -310,6 +310,8 @@ export const proposalsRouter = router({
       const expenses = expenseRows.map(row => ({
         name: row.name,
         amount: Number(row.amount),
+        taxable: row.taxable,
+        markedUp: row.markedUp,
       }));
 
       const { priced, units, totals, salesTax } = bidRollup(
@@ -339,7 +341,10 @@ export const proposalsRouter = router({
         totals,
         salesTax,
         taxExemptReason: bid.taxExemptReason,
-        expenses,
+        expenses: totals.expenseLines.map(line => ({
+          name: line.name,
+          amount: line.charged,
+        })),
         scopeNotes: scopeNoteRows.map(row => ({
           kind: row.kind,
           text: row.text,
