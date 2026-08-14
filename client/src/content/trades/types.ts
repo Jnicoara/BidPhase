@@ -1,89 +1,51 @@
 /**
  * The contract between the marketing page and a trade.
  *
- * ── The whole point of this file ─────────────────────────────────────────────
+ * ── The seam ────────────────────────────────────────────────────────────────
  * HelixBid is electrical-first by sequencing, not electrical-only by design
- * (CLAUDE.md § Project). The data model has carried a `trade` on every assembly
- * from the start, and a plumbing or HVAC launch is meant to be content plus an
- * unlock, not a refactor. The landing page has to be able to make the same
- * promise, and a page that hardcodes "electrician" into its headline cannot.
+ * (CLAUDE.md § Project): a plumbing or HVAC launch is meant to be content plus
+ * an unlock, not a refactor. The landing page has to be able to make the same
+ * promise, and a page with "electrician" typed into its headline cannot.
  *
- * So the split is: **this type is the seam.** Everything a plumber would need
- * said differently — the headline, the pain, the words for the work, the
- * screenshot — is in here. Everything structural — section order, layout,
- * spacing, the brand, the signup mechanics — is in the components and is
- * IDENTICAL across trades. Adding a trade means adding one file next to
- * electrical.ts and one line in index.ts. It never means opening a component.
+ * So everything a plumber would say differently lives here, and everything
+ * structural — section order, layout, the brand, the signup mechanics — lives
+ * in the components and is identical across trades. Adding a trade is a file
+ * next to electrical.ts and a line in index.ts. It is never a component edit,
+ * and client/src/lib/tradeContent.test.ts fails if that stops being true.
  *
- * client/src/lib/tradeContent.test.ts holds the architecture to that promise by
- * rendering the real page with a synthetic trade and asserting that not one
- * word of electrical content survives.
+ * ── Deliberately small ──────────────────────────────────────────────────────
+ * This type used to carry a problem section, a differentiator grid and a
+ * credibility block. They are gone. The page is a headline, three steps and a
+ * signup, because that is what the rest of HelixBid looks like — dense screens
+ * with restrained chrome — and a marketing page with six sections of cards did
+ * not look like the product it was selling.
  *
- * ── Why icons are keys and not imports ───────────────────────────────────────
- * A config entry names an icon from a fixed set (see ICON_KEYS) rather than
- * importing a component. A content file should not be able to break the render
- * — and a closed set is the same instinct the navigation helper and the
- * co-pilot's action list already use in this codebase: choose between options,
- * never construct one.
+ * The one survivor of what was cut is `closingLine`: a single sentence at the
+ * end of the steps carrying the thing the differentiator grid existed to say.
+ * If a future trade has nothing worth saying there, leave it out.
  */
-
-/**
- * Icons a trade config may name.
- *
- * Deliberately small and generic. If a trade needs a symbol this list cannot
- * express, add it here once — that is a shared-chrome decision, not a content
- * one, and it is the one thing about a new trade that should touch code.
- */
-export const ICON_KEYS = [
-  "ruler",
-  "calculator",
-  "sliders",
-  "fileText",
-  "hardHat",
-  "shieldCheck",
-  "gauge",
-  "trendingUp",
-  "clock",
-  "receipt",
-  "layers",
-  "zap",
-] as const;
-
-export type IconKey = (typeof ICON_KEYS)[number];
-
-/** A step in the "how it works" flow. */
-export type TradeStep = {
-  /** Short imperative title — "Trace it on the real plans". */
-  title: string;
-  /** One or two sentences of plain trade language. */
-  body: string;
-  icon: IconKey;
-};
-
-/** One honest differentiator. */
-export type TradeCard = {
-  title: string;
-  body: string;
-  icon: IconKey;
-};
 
 /**
  * A product screenshot.
  *
  * `src` points at a real capture of the running app. There is no stock-photo
- * fallback and there should not be: a screenshot is the only image on this page
- * that tells a contractor whether the tool is worth their time, and a
- * hard-hat-and-clipboard photo tells them the opposite.
+ * fallback and there should not be: it is the only image on the page, and a
+ * hard-hat-and-clipboard photo tells a contractor the opposite of what the
+ * screenshot does.
  */
 export type TradeShot = {
   src: string;
   /** Alt text describing what the screen actually shows. */
   alt: string;
-  /** A short caption naming the screen, shown under the frame. */
-  caption: string;
-  /** Intrinsic size, so the browser reserves the space and nothing jumps. */
+  /** Intrinsic size, so the browser reserves space and nothing jumps. */
   width: number;
   height: number;
+};
+
+/** One step of the three. Title plus a single sentence — no icon, no card. */
+export type TradeStep = {
+  title: string;
+  body: string;
 };
 
 export type TradeContent = {
@@ -94,9 +56,9 @@ export type TradeContent = {
 
   /** Search and link-preview text. */
   meta: {
-    /** The <title>. Leads with what the product does; the name alone does not explain itself. */
+    /** The <title>. Leads with what the product does; the name does not explain itself. */
     title: string;
-    /** ~155 characters, written for a person scanning results, not for a crawler. */
+    /** ~155 characters, written for a person scanning results. */
     description: string;
     /** Absolute-from-root path to the sharing preview image. */
     ogImage: string;
@@ -104,69 +66,41 @@ export type TradeContent = {
   };
 
   hero: {
-    /** Small line above the headline. Sets the category in three or four words. */
-    eyebrow: string;
     /**
-     * The headline. Says what the product DOES.
+     * One line saying what the app does.
      *
-     * "HelixBid" is not self-explanatory and must never carry this on its own —
-     * a visitor who bounces off the hero never finds out what was being sold.
+     * Not the product name on its own — "HelixBid" tells a first-time visitor
+     * nothing, and someone who bounces off this line never learns what was on
+     * offer.
      */
     headline: string;
-    /** The mechanics, in plain language: what goes in, what comes out, how fast. */
+    /** ONE sentence on the mechanics. Not a paragraph. */
     subhead: string;
-    /** The primary button. */
+    /** The single button. There is no second call to action on this page. */
     ctaLabel: string;
-    /** Reassurance directly under the button — cost, commitment, spam. */
-    ctaNote: string;
-    /** Three short proof chips beside the hero. */
-    highlights: string[];
     shot: TradeShot;
-  };
-
-  problem: {
-    heading: string;
-    /** One or two sentences setting up the pains. Trade language, not SaaS-speak. */
-    intro: string;
-    /** The specific, recognisable pains. Each one should make someone wince. */
-    pains: { title: string; body: string }[];
-    /** The turn: one line saying what should happen instead. */
-    turn: string;
   };
 
   howItWorks: {
     heading: string;
-    subheading: string;
-    steps: TradeStep[];
-  };
-
-  different: {
-    heading: string;
-    subheading: string;
-    cards: TradeCard[];
-  };
-
-  credibility: {
-    heading: string;
+    /** Exactly three. The test enforces it — four steps is the old page creeping back. */
+    steps: [TradeStep, TradeStep, TradeStep];
     /**
-     * The honest framing.
+     * One closing sentence, or omitted.
      *
-     * There is no customer base yet, so there are no testimonials — and inventing
-     * them would be the single fastest way to lose the audience this is aimed at.
-     * This section says who built it and how it is being tested, and stops there.
+     * All that is kept of the differentiator and credibility sections. It earns
+     * its place only if it says something the three steps do not.
      */
-    body: string;
-    points: { title: string; body: string; icon: IconKey }[];
-    /** Attribution line — who is behind it. */
-    signature: string;
+    closingLine?: string;
   };
 
   cta: {
     heading: string;
+    /** One short line. */
     body: string;
     buttonLabel: string;
     placeholder: string;
-    /** One short line near the form saying what the address will and will not be used for. */
+    /** What the address will and will not be used for. Sits with the field. */
     privacy: string;
     /** Shown after a successful signup. */
     success: string;
@@ -175,18 +109,13 @@ export type TradeContent = {
   };
 
   /**
-   * The words this trade uses for its own work.
+   * The words this trade uses for its own people.
    *
-   * Kept apart from the prose above so shared chrome can use them too — the
-   * page footer and the form's aria labels say "electricians" without any
-   * component knowing that word.
+   * Kept apart from the prose so the shared footer can say "electricians"
+   * without any component knowing that word.
    */
   vocabulary: {
-    /** "electricians" — the people. Plural, lower case. */
+    /** "electricians" — plural, lower case. */
     tradespeople: string;
-    /** "an electrician" — with an article, for mid-sentence use. */
-    tradespersonWithArticle: string;
-    /** "devices" — the countable thing on a plan. */
-    countedThing: string;
   };
 };

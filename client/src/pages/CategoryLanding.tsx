@@ -10,7 +10,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BrandMark } from "@/components/brand/BrandMark";
 import { useApp } from "@/contexts/AppContext";
 import type { CivilProject } from "@/contexts/AppContext";
 
@@ -252,7 +251,12 @@ export default function CategoryLanding({
             /* Empty state */
             <div className="flex flex-col items-center justify-center py-24 gap-5 text-center">
               <div className="w-16 h-16 rounded-2xl bg-[#F5C518]/10 flex items-center justify-center">
-                <BrandMark size={34} />
+                <span
+                  className="font-bold text-[#F5C518] text-2xl"
+                  style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                >
+                  HB
+                </span>
               </div>
               <div>
                 <p className="text-base font-semibold text-foreground">

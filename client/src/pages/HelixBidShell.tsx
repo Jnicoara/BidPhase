@@ -59,7 +59,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@shared/version";
-import { BrandLockup, BrandMark } from "@/components/brand/BrandMark";
 
 type Route =
   | "home"
@@ -422,14 +421,18 @@ export default function HelixBidShell() {
           className="flex items-center justify-center gap-2 px-3 py-4 h-16 border-b border-sidebar-border shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
           title="HelixBid Home"
         >
-          {/* The emblem alone while the rail is collapsed, the full lockup once
-              it expands. Both come from BrandMark, so the mark the marketing
-              page shows and the mark in here cannot drift apart. */}
-          <span className="shrink-0 group-hover:hidden">
-            <BrandMark size={22} title="HelixBid" />
+          <span
+            className="font-bold text-[#F5C518] text-sm shrink-0 group-hover:hidden"
+            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+          >
+            HB
           </span>
-          <span className="hidden group-hover:block transition-opacity duration-150">
-            <BrandLockup size={26} />
+          <span
+            className="font-bold text-base whitespace-nowrap hidden group-hover:block transition-opacity duration-150"
+            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+          >
+            <span className="text-foreground">Helix</span>
+            <span className="text-[#F5C518]">Bid</span>
           </span>
         </div>
 
