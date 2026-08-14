@@ -23,6 +23,7 @@ import { onboardingRouter } from "./routers/onboardingRouter";
 import { navigationRouter } from "./routers/navigationRouter";
 import { planCopilotRouter } from "./routers/planCopilotRouter";
 import { earlyAccessRouter } from "./routers/earlyAccessRouter";
+import { backupRouter } from "./routers/backupRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -53,6 +54,9 @@ export const appRouter = router({
   // The marketing landing page's waitlist. Carries the app's only public
   // write — see the router header for what guards it instead of auth.
   earlyAccess: earlyAccessRouter,
+  // Admin-only. Exports everything to Cloudflare R2, independent of Manus —
+  // scripts/backup.mts is the same job without needing the app to be up.
+  backup: backupRouter,
 });
 
 export type AppRouter = typeof appRouter;
