@@ -55,9 +55,20 @@ const OTHER_USER = 9402;
 const hasDb = Boolean(process.env.DATABASE_URL);
 const describeDb = hasDb ? describe : describe.skip;
 
+/**
+ * Internal tier, because the QuickBooks export is gated to internal accounts
+ * while its column format is confirmed against a real QuickBooks company.
+ * See shared/permissions.ts § FEATURES — flipping it to everyone is one word
+ * there, and this line then becomes unnecessary rather than wrong.
+ */
 const callerFor = (userId: number) =>
   appRouter.createCaller({
-    user: { id: userId, openId: `test-accounting-${userId}`, role: "user" },
+    user: {
+      id: userId,
+      openId: `test-accounting-${userId}`,
+      role: "user",
+      accessTier: "internal",
+    },
   } as unknown as TrpcContext);
 
 const caller = () => callerFor(USER);
@@ -555,6 +566,7 @@ describeDb("against a bid built through the app", () => {
           id,
           openId: `test-accounting-${id}`,
           name: `Accounting user ${id}`,
+          accessTier: "internal",
         });
       }
     }

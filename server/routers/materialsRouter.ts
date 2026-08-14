@@ -12,7 +12,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import {
   LIBRARY_STATUSES,
   MATERIAL_CATEGORIES,
@@ -25,6 +25,13 @@ import {
   parseAliasResponse,
 } from "../../shared/aliasSuggestions";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `library.view`, a mutation needs `library.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("library.view", "library.edit");
 
 /** decimal(10,4) — four decimal places, and it must stay under 10 total digits. */
 const MAX_COST = 999999.9999;
@@ -49,7 +56,7 @@ const toDecimal = (value: number) => value.toFixed(4);
 
 export const materialsRouter = router({
   /** The working list, or the archive. Never returns `deleted` tombstones. */
-  list: protectedProcedure
+  list: procedure
     .input(
       z
         .object({
@@ -61,7 +68,10 @@ export const materialsRouter = router({
         .optional()
     )
     .query(async ({ input, ctx }) => {
-      return db.getLibraryMaterials(ctx.user.id, input?.status ?? "active");
+      return db.getLibraryMaterials(
+        ctx.scope.dataUserId,
+        input?.status ?? "active"
+      );
     }),
 
   /**
@@ -84,7 +94,7 @@ export const materialsRouter = router({
    * timeout, unparseable output all mean "no suggestions", and the user types
    * their own. Search must never depend on this being available.
    */
-  suggestAliases: protectedProcedure
+  suggestAliases: procedure
     .input(
       z.object({
         name: nameSchema,
@@ -96,7 +106,7 @@ export const materialsRouter = router({
     .mutation(async ({ input, ctx }) => {
       // Every other material this user can see — the list a suggestion must
       // not collide with.
-      const catalog = await db.getLibraryMaterials(ctx.user.id);
+      const catalog = await db.getLibraryMaterials(ctx.scope.dataUserId);
       const otherMaterialNames = catalog
         .filter(m => m.name.toLowerCase() !== input.name.toLowerCase())
         .map(m => m.name);
@@ -144,18 +154,21 @@ export const materialsRouter = router({
    * parts go into most recipes, and making them a click away beats making them
    * a search away.
    */
-  recent: protectedProcedure
+  recent: procedure
     .input(
       z.object({ limit: z.number().int().min(1).max(24).default(8) }).optional()
     )
     .query(async ({ input, ctx }) => {
-      return db.getRecentMaterialsForUser(ctx.user.id, input?.limit ?? 8);
+      return db.getRecentMaterialsForUser(
+        ctx.scope.dataUserId,
+        input?.limit ?? 8
+      );
     }),
 
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const material = await db.getMaterialById(input.id, ctx.user.id);
+      const material = await db.getMaterialById(input.id, ctx.scope.dataUserId);
       if (!material)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -164,7 +177,7 @@ export const materialsRouter = router({
       return material;
     }),
 
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         name: nameSchema,
@@ -178,7 +191,7 @@ export const materialsRouter = router({
     .mutation(async ({ input, ctx }) => {
       // Block exact-name duplicates against everything the user can already see.
       // Customising the existing row is nearly always what was meant.
-      const existing = await db.getLibraryMaterials(ctx.user.id);
+      const existing = await db.getLibraryMaterials(ctx.scope.dataUserId);
       const clash = existing.find(
         m => m.name.toLowerCase() === input.name.toLowerCase()
       );
@@ -190,7 +203,7 @@ export const materialsRouter = router({
       }
 
       const id = await db.createMaterial({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         unitOfSale: input.unitOfSale,
         costPerUnit: toDecimal(input.costPerUnit),
@@ -198,7 +211,7 @@ export const materialsRouter = router({
         searchAliases: input.searchAliases,
         brandNote: input.brandNote,
       });
-      return db.getMaterialById(id, ctx.user.id);
+      return db.getMaterialById(id, ctx.scope.dataUserId);
     }),
 
   /**
@@ -214,7 +227,7 @@ export const materialsRouter = router({
    * way. A price set through a path that forgot to stamp would show as fresh
    * forever, which is the exact failure the colouring exists to catch.
    */
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -230,7 +243,7 @@ export const materialsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const { id, costPerUnit, ...rest } = input;
 
-      const target = await db.getMaterialById(id, ctx.user.id);
+      const target = await db.getMaterialById(id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -239,17 +252,20 @@ export const materialsRouter = router({
 
       const isBaseline = target.userId === null;
       const editableId = isBaseline
-        ? await db.forkMaterial(id, ctx.user.id)
+        ? await db.forkMaterial(id, ctx.scope.dataUserId)
         : id;
 
-      await db.updateMaterial(editableId, ctx.user.id, {
+      await db.updateMaterial(editableId, ctx.scope.dataUserId, {
         ...rest,
         ...(costPerUnit !== undefined
           ? { costPerUnit: toDecimal(costPerUnit), priceUpdatedAt: new Date() }
           : {}),
       });
 
-      const material = await db.getMaterialById(editableId, ctx.user.id);
+      const material = await db.getMaterialById(
+        editableId,
+        ctx.scope.dataUserId
+      );
       return { material, forked: isBaseline };
     }),
 
@@ -257,10 +273,10 @@ export const materialsRouter = router({
    * Take a private copy of a baseline material without changing anything yet —
    * the "customise" action, as opposed to editing a field directly.
    */
-  fork: protectedProcedure
+  fork: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getMaterialById(input.id, ctx.user.id);
+      const target = await db.getMaterialById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -268,16 +284,16 @@ export const materialsRouter = router({
         });
       if (target.userId !== null) return target; // already the user's own
 
-      const forkId = await db.forkMaterial(input.id, ctx.user.id);
-      return db.getMaterialById(forkId, ctx.user.id);
+      const forkId = await db.forkMaterial(input.id, ctx.scope.dataUserId);
+      return db.getMaterialById(forkId, ctx.scope.dataUserId);
     }),
 
   /** Discard edits to a forked material and restore the shipped version. */
-  revert: protectedProcedure
+  revert: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getMaterialById(input.id, ctx.user.id);
-      if (!target || target.userId !== ctx.user.id) {
+      const target = await db.getMaterialById(input.id, ctx.scope.dataUserId);
+      if (!target || target.userId !== ctx.scope.dataUserId) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Material not found.",
@@ -291,8 +307,8 @@ export const materialsRouter = router({
         });
       }
 
-      await db.revertMaterialToBaseline(input.id, ctx.user.id);
-      return db.getMaterialById(input.id, ctx.user.id);
+      await db.revertMaterialToBaseline(input.id, ctx.scope.dataUserId);
+      return db.getMaterialById(input.id, ctx.scope.dataUserId);
     }),
 
   /**
@@ -309,10 +325,10 @@ export const materialsRouter = router({
    * never asked for is theirs to put away; expecting them to scroll past 600
    * shipped materials forever was the odd position, not this.
    */
-  archive: protectedProcedure
+  archive: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getMaterialById(input.id, ctx.user.id);
+      const target = await db.getMaterialById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -321,15 +337,18 @@ export const materialsRouter = router({
       if (target.status === "archived")
         return { id: input.id, alreadyArchived: true };
 
-      const archivedId = await db.archiveMaterial(input.id, ctx.user.id);
+      const archivedId = await db.archiveMaterial(
+        input.id,
+        ctx.scope.dataUserId
+      );
       return { id: archivedId, alreadyArchived: false };
     }),
 
   /** Put an archived material back on the working list. */
-  restore: protectedProcedure
+  restore: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getMaterialById(input.id, ctx.user.id);
+      const target = await db.getMaterialById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -341,7 +360,7 @@ export const materialsRouter = router({
           message: "That material is not archived.",
         });
       }
-      await db.restoreMaterial(input.id, ctx.user.id);
+      await db.restoreMaterial(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
@@ -350,10 +369,10 @@ export const materialsRouter = router({
    * path from the working list straight to destruction — the user archives
    * first, then confirms again in the Archived view.
    */
-  deleteForever: protectedProcedure
+  deleteForever: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getMaterialById(input.id, ctx.user.id);
+      const target = await db.getMaterialById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -366,7 +385,7 @@ export const materialsRouter = router({
             "Only archived materials can be deleted permanently. Archive it first.",
         });
       }
-      await db.deleteMaterialForever(input.id, ctx.user.id);
+      await db.deleteMaterialForever(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
@@ -388,7 +407,7 @@ export const materialsRouter = router({
    * Baselines fork on write, exactly as a hand edit does — a shared row cannot
    * carry one user's supplier price.
    */
-  importPrices: protectedProcedure
+  importPrices: procedure
     .input(
       z.object({
         supplierName: z.string().trim().min(1).max(128),
@@ -404,7 +423,10 @@ export const materialsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const existing = await db.getLibraryMaterials(ctx.user.id, "active");
+      const existing = await db.getLibraryMaterials(
+        ctx.scope.dataUserId,
+        "active"
+      );
       // Name match is case- and space-insensitive: a supply house writes
       // "12-2 NM-B" where the catalog says "12-2 NM-B " often enough that an
       // exact match would report half a real price list as unmatched.
@@ -424,10 +446,10 @@ export const materialsRouter = router({
         }
         const editableId =
           target.userId === null
-            ? await db.forkMaterial(target.id, ctx.user.id)
+            ? await db.forkMaterial(target.id, ctx.scope.dataUserId)
             : target.id;
 
-        await db.updateMaterial(editableId, ctx.user.id, {
+        await db.updateMaterial(editableId, ctx.scope.dataUserId, {
           costPerUnit: toDecimal(row.costPerUnit),
           supplierName: input.supplierName,
           priceUpdatedAt: stamped,

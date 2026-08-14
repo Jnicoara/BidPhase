@@ -274,6 +274,20 @@
       "when": 1786738369162,
       "tag": "0038_typical_titanium_man",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1786746339028,
+      "tag": "0039_oval_richard_fisk",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1786747136053,
+      "tag": "0040_eminent_miek",
+      "breakpoints": true
     }
   ]
 }

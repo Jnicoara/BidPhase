@@ -55,6 +55,7 @@ import { UnitLinkBadge } from "@/components/UnitLinkBadge";
 import { UnitTemplateActions } from "@/components/UnitTemplateActions";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
 import { MaterialsListDialog } from "@/components/MaterialsListDialog";
+import { useCompany } from "@/hooks/useCompany";
 import { AccountingExportDialog } from "@/components/AccountingExportDialog";
 import { ClientLinkField } from "@/components/ClientLinkField";
 import { BidTaxControls } from "@/components/BidTaxControls";
@@ -179,6 +180,7 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
   const [addUnit, setAddUnit] = useState("");
   const [materialsListOpen, setMaterialsListOpen] = useState(false);
   const [accountingOpen, setAccountingOpen] = useState(false);
+  const access = useCompany();
 
   const utils = trpc.useUtils();
   const detailQuery = trpc.bids.get.useQuery({ id: bidId });
@@ -369,16 +371,22 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               beside the other two because all three are ways this bid leaves
               the app, and they differ only in who receives them and therefore
               in what they are allowed to carry. */}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs shrink-0"
-            onClick={() => setAccountingOpen(true)}
-            title="Accounting export — the numbers, as a QuickBooks CSV"
-          >
-            <Receipt className="w-3.5 h-3.5" />
-            Accounting
-          </Button>
+          {/* Hidden rather than disabled when the feature is not available to
+              this account: the server returns NOT_FOUND, so a visible button
+              would announce an unreleased feature and then fail on click.
+              Hiding is the UI agreeing with the server, not protecting it. */}
+          {access.hasFeature("accounting.quickbooks") && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs shrink-0"
+              onClick={() => setAccountingOpen(true)}
+              title="Accounting export — the numbers, as a QuickBooks CSV"
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              Accounting
+            </Button>
+          )}
 
           {/* The way out of the app: this bid as a document a client receives.
               Its own screen rather than a dialog, because it is a full page

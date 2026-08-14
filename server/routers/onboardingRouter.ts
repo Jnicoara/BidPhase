@@ -8,7 +8,7 @@
  * rates are set" means without either of them owning the answer.
  */
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { companyProcedure, requireCapability, router } from "../_core/trpc";
 import { buildChecklist, type OnboardingFacts } from "../../shared/onboarding";
 import { hasAnyRealRate } from "../../shared/laborRatePricing";
 import { needsPricing } from "../../shared/materialPricing";
@@ -48,8 +48,8 @@ export const onboardingRouter = router({
    * One query rather than three so the Dashboard and the router are never
    * briefly disagreeing about whether this account is new.
    */
-  state: protectedProcedure.query(async ({ ctx }) => {
-    const facts = await gatherFacts(ctx.user.id);
+  state: companyProcedure.query(async ({ ctx }) => {
+    const facts = await gatherFacts(ctx.scope.dataUserId);
     const user = await db.getUserById(ctx.user.id);
 
     return {
@@ -68,13 +68,13 @@ export const onboardingRouter = router({
    * skipping is a user who gets to skip: a welcome screen that will not let go
    * is worse than a bid built on a rate they were warned about.
    */
-  completeFirstRun: protectedProcedure.mutation(async ({ ctx }) => {
+  completeFirstRun: companyProcedure.mutation(async ({ ctx }) => {
     await db.markOnboardingComplete(ctx.user.id);
     return { success: true };
   }),
 
   /** Hide the checklist. Reversible — see restoreChecklist. */
-  dismissChecklist: protectedProcedure.mutation(async ({ ctx }) => {
+  dismissChecklist: companyProcedure.mutation(async ({ ctx }) => {
     await db.setChecklistDismissed(ctx.user.id, new Date());
     return { success: true };
   }),
@@ -86,13 +86,22 @@ export const onboardingRouter = router({
    * promises, and only one of them is safe to make to someone still learning
    * the app.
    */
-  restoreChecklist: protectedProcedure.mutation(async ({ ctx }) => {
+  restoreChecklist: companyProcedure.mutation(async ({ ctx }) => {
     await db.setChecklistDismissed(ctx.user.id, null);
     return { success: true };
   }),
 
-  /** Used by the first-run screen to price the starter roles in place. */
-  setStarterRate: protectedProcedure
+  /**
+   * Used by the first-run screen to price the starter roles in place.
+   *
+   * `pricing.edit`, not plain membership — and this is the exception worth
+   * noticing in an otherwise per-person router. Everything else here reads or
+   * writes the acting user's own flags; this one writes an hourly cost that
+   * multiplies every line of every future bid in the company. A first-run
+   * screen is a perfectly ordinary place for a viewer to land, and without this
+   * gate that viewer could set the company's labor rate on their way through.
+   */
+  setStarterRate: requireCapability("pricing.edit")
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -102,6 +111,10 @@ export const onboardingRouter = router({
     .mutation(async ({ input, ctx }) => {
       // Goes through the same fork-on-edit path as the Labor Rates screen, so
       // a starter role edited here behaves exactly as it would there.
-      return db.setLaborRateHourlyCost(input.id, ctx.user.id, input.hourlyCost);
+      return db.setLaborRateHourlyCost(
+        input.id,
+        ctx.scope.dataUserId,
+        input.hourlyCost
+      );
     }),
 });

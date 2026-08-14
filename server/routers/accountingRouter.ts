@@ -14,7 +14,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { internalProcedure, router } from "../_core/trpc";
 import {
   bidRollup,
   companyDefaultsFor,
@@ -28,6 +28,18 @@ import {
 } from "../../shared/accountingExport";
 import * as db from "../db";
 
+/**
+ * Internal-only for now, and `bids.view` on top because the export is a read
+ * of a bid.
+ *
+ * The QuickBooks column format was verified from Intuit's documentation and two
+ * independent write-ups, but never by importing into a live QuickBooks company
+ * — and a mis-mapped column lands in somebody's books, where a mistake is
+ * expensive and slow to find. Testers first. Flipping it to everyone is one
+ * word in `shared/permissions.ts`; nothing here changes.
+ */
+const procedure = internalProcedure("accounting.quickbooks", "bids.view");
+
 export const accountingRouter = router({
   /**
    * The QuickBooks export for one bid.
@@ -37,22 +49,22 @@ export const accountingRouter = router({
    * and 1,000 rows — and building it before anyone has asked would be guessing
    * at how they want the bids chosen.
    */
-  quickbooks: protectedProcedure
+  quickbooks: procedure
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }): Promise<AccountingExport> => {
-      const bid = await db.getBidById(input.bidId, ctx.user.id);
+      const bid = await db.getBidById(input.bidId, ctx.scope.dataUserId);
       if (!bid)
         throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
 
       const [lines, company, client, taxRules, jurisdictionRows, expenseRows] =
         await Promise.all([
           db.getBidLineItems(bid.id),
-          companyDefaultsFor(ctx.user.id),
+          companyDefaultsFor(ctx.scope.dataUserId),
           bid.clientId
-            ? db.getClientById(bid.clientId, ctx.user.id)
+            ? db.getClientById(bid.clientId, ctx.scope.dataUserId)
             : Promise.resolve(undefined),
-          taxRulesFor(ctx.user.id),
-          db.getTaxJurisdictions(ctx.user.id),
+          taxRulesFor(ctx.scope.dataUserId),
+          db.getTaxJurisdictions(ctx.scope.dataUserId),
           db.getBidExpenses(bid.id),
         ]);
 

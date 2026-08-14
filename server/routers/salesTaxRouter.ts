@@ -13,10 +13,17 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { TAX_APPLY_TO } from "../../drizzle/schema";
 import { combinedRatePct } from "../../shared/salesTax";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `pricing.view`, a mutation needs `pricing.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("pricing.view", "pricing.edit");
 
 const nameSchema = z.string().trim().min(1).max(255);
 const keySchema = (max: number) =>
@@ -59,8 +66,8 @@ async function requireJurisdiction(id: number, userId: number) {
 
 export const salesTaxRouter = router({
   /** Live tax areas, each with its combined rate worked out. */
-  list: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await db.getTaxJurisdictions(ctx.user.id);
+  list: procedure.query(async ({ ctx }) => {
+    const rows = await db.getTaxJurisdictions(ctx.scope.dataUserId);
     return rows.map(row => ({
       ...row,
       components: row.components ?? [],
@@ -68,8 +75,8 @@ export const salesTaxRouter = router({
     }));
   }),
 
-  archived: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await db.getArchivedTaxJurisdictions(ctx.user.id);
+  archived: procedure.query(async ({ ctx }) => {
+    const rows = await db.getArchivedTaxJurisdictions(ctx.scope.dataUserId);
     return rows.map(row => ({
       ...row,
       components: row.components ?? [],
@@ -77,7 +84,7 @@ export const salesTaxRouter = router({
     }));
   }),
 
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         name: nameSchema,
@@ -102,7 +109,7 @@ export const salesTaxRouter = router({
       }
 
       const id = await db.createTaxJurisdiction({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         state: input.state || null,
         county: input.county || null,
@@ -110,10 +117,10 @@ export const salesTaxRouter = router({
         components: input.components,
         sourceNote: input.sourceNote || null,
       });
-      return db.getTaxJurisdictionById(id, ctx.user.id);
+      return db.getTaxJurisdictionById(id, ctx.scope.dataUserId);
     }),
 
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -127,7 +134,7 @@ export const salesTaxRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { id, ...rest } = input;
-      const existing = await requireJurisdiction(id, ctx.user.id);
+      const existing = await requireJurisdiction(id, ctx.scope.dataUserId);
 
       const patch: Record<string, unknown> = {};
       if (rest.name !== undefined) patch.name = rest.name;
@@ -158,19 +165,19 @@ export const salesTaxRouter = router({
       if (rest.components !== undefined) patch.verifiedAt = null;
 
       if (Object.keys(patch).length > 0)
-        await db.updateTaxJurisdiction(id, ctx.user.id, patch);
-      return db.getTaxJurisdictionById(id, ctx.user.id);
+        await db.updateTaxJurisdiction(id, ctx.scope.dataUserId, patch);
+      return db.getTaxJurisdictionById(id, ctx.scope.dataUserId);
     }),
 
   /** "I have checked this rate is still current, today." */
-  markVerified: protectedProcedure
+  markVerified: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await requireJurisdiction(input.id, ctx.user.id);
-      await db.updateTaxJurisdiction(input.id, ctx.user.id, {
+      await requireJurisdiction(input.id, ctx.scope.dataUserId);
+      await db.updateTaxJurisdiction(input.id, ctx.scope.dataUserId, {
         verifiedAt: new Date(),
       });
-      return db.getTaxJurisdictionById(input.id, ctx.user.id);
+      return db.getTaxJurisdictionById(input.id, ctx.scope.dataUserId);
     }),
 
   /**
@@ -179,30 +186,30 @@ export const salesTaxRouter = router({
    * pinned to it, which changes what those bids charge. Archiving leaves the
    * pin intact and the rate resolvable.
    */
-  archive: protectedProcedure
+  archive: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const row = await requireJurisdiction(input.id, ctx.user.id);
+      const row = await requireJurisdiction(input.id, ctx.scope.dataUserId);
       if (row.archivedAt)
         return { success: true, alreadyArchived: true as const };
-      await db.archiveTaxJurisdiction(input.id, ctx.user.id);
+      await db.archiveTaxJurisdiction(input.id, ctx.scope.dataUserId);
       return { success: true, alreadyArchived: false as const };
     }),
 
-  restore: protectedProcedure
+  restore: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const row = await requireJurisdiction(input.id, ctx.user.id);
+      const row = await requireJurisdiction(input.id, ctx.scope.dataUserId);
       if (!row.archivedAt) return { success: true, alreadyLive: true as const };
-      await db.restoreTaxJurisdiction(input.id, ctx.user.id);
+      await db.restoreTaxJurisdiction(input.id, ctx.scope.dataUserId);
       return { success: true, alreadyLive: false as const };
     }),
 
   // ── Company rules ──────────────────────────────────────────────────────────
 
   /** What is taxable, company-wide. Lives on pricing_defaults. */
-  rules: protectedProcedure.query(async ({ ctx }) => {
-    const defaults = await db.getPricingDefaults(ctx.user.id);
+  rules: procedure.query(async ({ ctx }) => {
+    const defaults = await db.getPricingDefaults(ctx.scope.dataUserId);
     return {
       enabled: defaults?.salesTaxEnabled ?? false,
       taxMaterials: defaults?.taxMaterials ?? false,
@@ -211,7 +218,7 @@ export const salesTaxRouter = router({
     };
   }),
 
-  setRules: protectedProcedure
+  setRules: procedure
     .input(
       z.object({
         enabled: z.boolean().optional(),
@@ -229,9 +236,9 @@ export const salesTaxRouter = router({
       if (input.applyTo !== undefined) patch.taxApplyTo = input.applyTo;
 
       if (Object.keys(patch).length > 0) {
-        await db.updatePricingDefaults(ctx.user.id, patch);
+        await db.updatePricingDefaults(ctx.scope.dataUserId, patch);
       }
-      const defaults = await db.getPricingDefaults(ctx.user.id);
+      const defaults = await db.getPricingDefaults(ctx.scope.dataUserId);
       return {
         enabled: defaults?.salesTaxEnabled ?? false,
         taxMaterials: defaults?.taxMaterials ?? false,

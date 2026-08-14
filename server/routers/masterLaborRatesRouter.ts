@@ -1,15 +1,22 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `library.view`, a mutation needs `library.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("library.view", "library.edit");
 
 const RATE_TYPES = ["journeyman", "apprentice", "foreman"] as const;
 
 export const masterLaborRatesRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return db.getMasterLaborRates(ctx.user.id);
+  list: procedure.query(async ({ ctx }) => {
+    return db.getMasterLaborRates(ctx.scope.dataUserId);
   }),
 
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         name: z.string().min(1).max(128),
@@ -20,18 +27,18 @@ export const masterLaborRatesRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       await db.createMasterLaborRate({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         ratePerHour: String(input.ratePerHour),
         type: input.type,
         isDefault: input.isDefault,
       });
-      const rates = await db.getMasterLaborRates(ctx.user.id);
+      const rates = await db.getMasterLaborRates(ctx.scope.dataUserId);
       const created = rates.find(r => r.name === input.name);
       return created ?? { success: true };
     }),
 
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -47,16 +54,16 @@ export const masterLaborRatesRouter = router({
       if (ratePerHour !== undefined) data.ratePerHour = String(ratePerHour);
       await db.updateMasterLaborRate(
         id,
-        ctx.user.id,
+        ctx.scope.dataUserId,
         data as Parameters<typeof db.updateMasterLaborRate>[2]
       );
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.deleteMasterLaborRate(input.id, ctx.user.id);
+      await db.deleteMasterLaborRate(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 });

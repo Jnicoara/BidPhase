@@ -35,6 +35,7 @@ import ProposalPage from "@/pages/ProposalPage";
 import BidArchivePage from "@/pages/BidArchivePage";
 import KitsPage from "@/pages/KitsPage";
 import ClientsPage from "@/pages/ClientsPage";
+import TeamPage from "@/pages/TeamPage";
 import FirstRunPage from "@/pages/FirstRunPage";
 import { trpc } from "@/lib/trpc";
 import {
@@ -52,6 +53,7 @@ import {
   LayoutDashboard,
   Archive as ArchiveIcon,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@shared/version";
@@ -67,6 +69,7 @@ type Route =
   | "library-kits"
   | "bids"
   | "clients"
+  | "team"
   | "quickbid"
   | "takeoff"
   | "proposal"
@@ -108,6 +111,7 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
     return { route: "bids", projectId: id };
   }
   if (p === "clients") return { route: "clients" };
+  if (p === "team") return { route: "team" };
   if (p === "quickbid") return { route: "quickbid" };
   if (p === "welcome") return { route: "welcome" };
   // Library § …. Bare /library lands on Materials; Assemblies is still to come.
@@ -216,6 +220,7 @@ export default function HelixBidShell() {
   const isInLibraryKits = route === "library-kits";
   const isInBids = route === "bids";
   const isInClients = route === "clients";
+  const isInTeam = route === "team";
   const isInTakeoff = route === "takeoff";
   const isInProposal = route === "proposal";
   const isInBidArchive = route === "bid-archive";
@@ -293,6 +298,7 @@ export default function HelixBidShell() {
         />
       );
     if (isInClients) return <ClientsPage />;
+    if (isInTeam) return <TeamPage />;
     if (isInQuickBid) return <QuickBidPage />;
     if (isOnWelcome) return <FirstRunPage />;
     if (isInAdmin) return <AdminSettingsPage />;
@@ -479,6 +485,18 @@ export default function HelixBidShell() {
               icon={Users}
               label="Clients"
               title="Clients — who the work is for"
+            />
+            {/* Beside Clients because both answer "who", and deliberately NOT
+                buried in Settings: adding someone to the company is a thing a
+                contractor does while working, not a thing they configure once.
+                Shown to every member, whatever their role — a viewer needs to
+                be able to find out that they are a viewer. */}
+            <NavBtn
+              onClick={() => navigate("team")}
+              isActive={isInTeam}
+              icon={UsersRound}
+              label="Crew"
+              title="Crew — who can get into this company"
             />
           </NavSection>
 

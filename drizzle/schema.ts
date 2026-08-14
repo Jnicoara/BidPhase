@@ -27,6 +27,41 @@ export const users = mysqlTable("users", {
   role: mysqlEnum("role", ["user", "admin", "contractor"])
     .default("user")
     .notNull(),
+
+  /**
+   * Which build of the product this person sees. See shared/permissions.ts.
+   *
+   * Deliberately NOT the same column as `role` above, and not part of the
+   * company membership either. `role` is platform staff vs customer and
+   * predates this; company role is what you may do inside one company; this is
+   * whether unreleased work is visible to you at all. A tester helping a
+   * customer debug something is internal AND a viewer in that company, and one
+   * enum cannot say both.
+   *
+   * Defaults to `standard`, so a new account never sees unfinished work.
+   */
+  accessTier: mysqlEnum("accessTier", ["standard", "internal"])
+    .default("standard")
+    .notNull(),
+
+  /**
+   * Which company this person is currently working in.
+   *
+   * Only meaningful for someone who belongs to more than one — a subcontractor
+   * who joined a GC's company keeps their own. NULL means "whichever they have
+   * had longest", which is every single-company account.
+   *
+   * It lives on the USER rather than being sent with each request, and that is
+   * the security-relevant part: a company id the client could supply would let
+   * a member name someone else's company and be authorised against their own
+   * role in their own. The resolver only ever honours this column, and only
+   * when the user still has an active membership in it.
+   *
+   * No foreign key, deliberately. A stale id resolves to no matching membership
+   * and falls back to their oldest one; an FK with ON DELETE SET NULL would add
+   * a write to every company deletion to achieve the same end state.
+   */
+  activeCompanyId: int("activeCompanyId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -2784,3 +2819,157 @@ export const featureFlags = mysqlTable("feature_flags", {
 
 export type FeatureFlag = typeof featureFlags.$inferSelect;
 export type InsertFeatureFlag = typeof featureFlags.$inferInsert;
+
+// ─── Companies, members and invitations ───────────────────────────────────────
+/**
+ * Multi-user access. Read this whole block before changing anything in it.
+ *
+ * ── The data-scoping decision, and why it is not a companyId column ──────────
+ * Every table in this app is filed under `userId`. The obvious way to add
+ * companies is to put a `companyId` on all forty of them and rewrite every
+ * query — and that is exactly the change that produces a half-migrated schema
+ * where some tables are company-scoped and some are still user-scoped, which is
+ * a data leak wearing a refactor's clothes.
+ *
+ * So a company does not re-file the data. It names an OWNER, and every member
+ * reads and writes under that owner's user id. `scope.dataUserId` is that id,
+ * resolved once per request. A brand-new user owns a company of one, where
+ * their own id is the owner id, so every existing row and every existing query
+ * is already correct and the migration touches no data.
+ *
+ * The failure mode if a query is ever missed is that a member sees NOTHING —
+ * their own id owns no rows — rather than seeing someone else's. That direction
+ * is deliberate, and `server/scopeDiscipline.test.ts` enforces it mechanically
+ * rather than by review.
+ *
+ * ── Roles live on the membership, tiers live on the user ─────────────────────
+ * `company_members.role` says what you may do here. `users.accessTier` says
+ * which build of the product you see anywhere. See shared/permissions.ts.
+ */
+export const COMPANY_ROLE_VALUES = [
+  "owner",
+  "admin",
+  "estimator",
+  "viewer",
+] as const;
+export const MEMBER_STATUS_VALUES = ["active", "suspended"] as const;
+export const ACCESS_TIER_VALUES = ["standard", "internal"] as const;
+
+export const companies = mysqlTable(
+  "companies",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    /**
+     * The user whose id every row of this company's data is filed under.
+     *
+     * Not a convenience field — it IS the scoping key, and the reason there is
+     * no `companyId` on forty other tables. Changing it moves the whole
+     * company's data, so ownership transfer updates this and the two
+     * memberships together or not at all.
+     */
+    ownerUserId: int("ownerUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [index("companies_ownerUserId_idx").on(t.ownerUserId)]
+);
+
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = typeof companies.$inferInsert;
+
+/**
+ * One person's place in one company.
+ *
+ * `unique(companyId, userId)` is what stops a second membership row quietly
+ * granting a second, higher role — the resolver takes one row, and two rows
+ * would make which one it takes an accident of insertion order.
+ *
+ * A user may belong to several companies; `companyId` is chosen per request
+ * (see companyScope.ts), never inferred from the data being touched.
+ */
+export const companyMembers = mysqlTable(
+  "company_members",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    companyId: int("companyId")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: mysqlEnum("role", COMPANY_ROLE_VALUES).default("estimator").notNull(),
+    /**
+     * `suspended` keeps the row and removes the access. Deleting a membership
+     * instead would lose who was in the company when a bid was priced, which is
+     * the question asked after something goes wrong.
+     */
+    status: mysqlEnum("status", MEMBER_STATUS_VALUES)
+      .default("active")
+      .notNull(),
+    invitedByUserId: int("invitedByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    joinedAt: timestamp("joinedAt").defaultNow().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    unique("company_members_company_user_unique").on(t.companyId, t.userId),
+    // The hot path: one indexed lookup per request resolves a user's scope.
+    // Without this, sign-in cost grows with the number of memberships in the
+    // system rather than with the number this user has.
+    index("company_members_userId_idx").on(t.userId),
+    index("company_members_companyId_idx").on(t.companyId),
+  ]
+);
+
+export type CompanyMember = typeof companyMembers.$inferSelect;
+export type InsertCompanyMember = typeof companyMembers.$inferInsert;
+
+/**
+ * An outstanding invitation to join a company.
+ *
+ * ── The code is stored hashed ────────────────────────────────────────────────
+ * `codeHash` is a SHA-256 of the code the inviter shares, never the code
+ * itself. There is no mail sender in this app, so the code travels by whatever
+ * channel the contractor uses — and a readable invite column would mean anyone
+ * with database access, or a leaked backup, could walk into any company. The
+ * plaintext exists exactly once, in the response that creates it.
+ *
+ * Looked up BY hash, which is why the hash is the unique index: a lookup by
+ * company followed by a comparison would need the plaintext to compare against.
+ */
+export const companyInvites = mysqlTable(
+  "company_invites",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    companyId: int("companyId")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    /** Who it was meant for. Advisory — the code is what admits, not this. */
+    email: varchar("email", { length: 320 }),
+    role: mysqlEnum("role", COMPANY_ROLE_VALUES).default("estimator").notNull(),
+    codeHash: varchar("codeHash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    acceptedAt: timestamp("acceptedAt"),
+    acceptedByUserId: int("acceptedByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    revokedAt: timestamp("revokedAt"),
+    createdByUserId: int("createdByUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    unique("company_invites_codeHash_unique").on(t.codeHash),
+    index("company_invites_companyId_idx").on(t.companyId),
+  ]
+);
+
+export type CompanyInvite = typeof companyInvites.$inferSelect;
+export type InsertCompanyInvite = typeof companyInvites.$inferInsert;

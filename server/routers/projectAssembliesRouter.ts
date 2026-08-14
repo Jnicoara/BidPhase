@@ -1,18 +1,28 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
 
 export const projectAssembliesRouter = router({
   /** List all assemblies (with items) for a project */
-  list: protectedProcedure
+  list: procedure
     .input(z.object({ projectId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      return db.getProjectAssembliesWithItems(input.projectId, ctx.user.id);
+      return db.getProjectAssembliesWithItems(
+        input.projectId,
+        ctx.scope.dataUserId
+      );
     }),
 
   /** Add a master assembly as a project assembly (snapshot all items) */
-  addFromMaster: protectedProcedure
+  addFromMaster: procedure
     .input(
       z.object({
         projectId: z.number().int().positive(),
@@ -22,7 +32,10 @@ export const projectAssembliesRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       // Verify the project belongs to the user
-      const project = await db.getProjectById(input.projectId, ctx.user.id);
+      const project = await db.getProjectById(
+        input.projectId,
+        ctx.scope.dataUserId
+      );
       if (!project)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -32,7 +45,7 @@ export const projectAssembliesRouter = router({
       // Verify master assembly belongs to user
       const masterAssembly = await db.getMasterAssemblyWithItems(
         input.masterAssemblyId,
-        ctx.user.id
+        ctx.scope.dataUserId
       );
       if (!masterAssembly)
         throw new TRPCError({
@@ -52,7 +65,7 @@ export const projectAssembliesRouter = router({
       // Get the newly created assembly
       const assemblies = await db.getProjectAssemblies(
         input.projectId,
-        ctx.user.id
+        ctx.scope.dataUserId
       );
       const newAssembly = assemblies[assemblies.length - 1];
       if (!newAssembly) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
@@ -79,7 +92,7 @@ export const projectAssembliesRouter = router({
     }),
 
   /** Create a blank project assembly (manual, no master) */
-  createBlank: protectedProcedure
+  createBlank: procedure
     .input(
       z.object({
         projectId: z.number().int().positive(),
@@ -88,7 +101,10 @@ export const projectAssembliesRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const project = await db.getProjectById(input.projectId, ctx.user.id);
+      const project = await db.getProjectById(
+        input.projectId,
+        ctx.scope.dataUserId
+      );
       if (!project)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -104,7 +120,7 @@ export const projectAssembliesRouter = router({
       return { success: true };
     }),
 
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -115,19 +131,19 @@ export const projectAssembliesRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
-      await db.updateProjectAssembly(id, ctx.user.id, data);
+      await db.updateProjectAssembly(id, ctx.scope.dataUserId, data);
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.deleteProjectAssembly(input.id, ctx.user.id);
+      await db.deleteProjectAssembly(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
   /** Add a single item to an existing project assembly */
-  addItem: protectedProcedure
+  addItem: procedure
     .input(
       z.object({
         projectAssemblyId: z.number().int().positive(),
@@ -146,7 +162,7 @@ export const projectAssembliesRouter = router({
       const ownerId = await db.getProjectAssemblyOwnerId(
         input.projectAssemblyId
       );
-      if (ownerId !== ctx.user.id)
+      if (ownerId !== ctx.scope.dataUserId)
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Project assembly not found.",
@@ -174,7 +190,7 @@ export const projectAssembliesRouter = router({
     }),
 
   /** Update qty or override values for an item in a project assembly */
-  updateItem: protectedProcedure
+  updateItem: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -193,24 +209,24 @@ export const projectAssembliesRouter = router({
         data.overrideLaborHours = String(overrideLaborHours);
       await db.updateProjectAssemblyItem(
         id,
-        ctx.user.id,
+        ctx.scope.dataUserId,
         data as Parameters<typeof db.updateProjectAssemblyItem>[2]
       );
       return { success: true };
     }),
 
   /** Reset a single item's overrides back to master values */
-  resetItem: protectedProcedure
+  resetItem: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.resetProjectAssemblyItemToMaster(input.id, ctx.user.id);
+      await db.resetProjectAssemblyItemToMaster(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
-  deleteItem: protectedProcedure
+  deleteItem: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.deleteProjectAssemblyItem(input.id, ctx.user.id);
+      await db.deleteProjectAssemblyItem(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 });

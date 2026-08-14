@@ -15,12 +15,19 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { buildCountedItems, symbolLookupKey } from "../../shared/takeoffCounts";
 import { measurabilityOf } from "../../shared/takeoffQuantities";
 import { TAKEOFF_LOCATIONS } from "../../drizzle/schema";
 import { pathRealInches, toBillableFeet } from "../../shared/takeoffGeometry";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
 
 const nameSchema = z.string().trim().min(1).max(255);
 
@@ -70,7 +77,7 @@ export const takeoffStampsRouter = router({
    * measurement, and blocking counting on a missing scale would stop work that
    * does not depend on one.
    */
-  drop: protectedProcedure
+  drop: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -87,8 +94,8 @@ export const takeoffStampsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
-      await requireSheet(input.sheetId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
+      await requireSheet(input.sheetId, ctx.scope.dataUserId);
 
       // The assembly's Category is snapshotted at drop time so the System
       // layer keeps working after the library assembly is archived or renamed.
@@ -96,7 +103,7 @@ export const takeoffStampsRouter = router({
       if (input.assemblyId !== null) {
         const assembly = await db.getAssemblyById(
           input.assemblyId,
-          ctx.user.id
+          ctx.scope.dataUserId
         );
         assemblyCategory = assembly?.category ?? null;
       }
@@ -105,7 +112,7 @@ export const takeoffStampsRouter = router({
         input.at.map(point => ({
           bidId: input.bidId,
           sheetId: input.sheetId,
-          userId: ctx.user.id,
+          userId: ctx.scope.dataUserId,
           assemblyId: input.assemblyId,
           assemblyName: input.assemblyName,
           assemblyCategory,
@@ -119,19 +126,22 @@ export const takeoffStampsRouter = router({
     }),
 
   /** Remove one stamp — the misclick path. */
-  remove: protectedProcedure
+  remove: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.deleteStamp(input.id, ctx.user.id);
+      await db.deleteStamp(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
   /** Every stamp on a sheet, for drawing the marks. */
-  listForSheet: protectedProcedure
+  listForSheet: procedure
     .input(z.object({ sheetId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      await requireSheet(input.sheetId, ctx.user.id);
-      const rows = await db.getStampsForSheet(input.sheetId, ctx.user.id);
+      await requireSheet(input.sheetId, ctx.scope.dataUserId);
+      const rows = await db.getStampsForSheet(
+        input.sheetId,
+        ctx.scope.dataUserId
+      );
       return rows.map(row => ({
         id: row.id,
         sheetId: row.sheetId,
@@ -145,7 +155,7 @@ export const takeoffStampsRouter = router({
     }),
 
   /** Tag one stamp's Location. */
-  setLocation: protectedProcedure
+  setLocation: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -153,7 +163,7 @@ export const takeoffStampsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await db.setStampLocation(input.id, ctx.user.id, input.location);
+      await db.setStampLocation(input.id, ctx.scope.dataUserId, input.location);
       return { success: true };
     }),
 
@@ -163,7 +173,7 @@ export const takeoffStampsRouter = router({
    * The realistic path: you stamp twenty ceiling lights and then say they are
    * all in the ceiling, rather than tagging each of twenty marks.
    */
-  setLocationForAssembly: protectedProcedure
+  setLocationForAssembly: procedure
     .input(
       z.object({
         sheetId: z.number().int().positive(),
@@ -172,10 +182,10 @@ export const takeoffStampsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireSheet(input.sheetId, ctx.user.id);
+      await requireSheet(input.sheetId, ctx.scope.dataUserId);
       await db.setStampLocationForAssembly(
         input.sheetId,
-        ctx.user.id,
+        ctx.scope.dataUserId,
         input.assemblyName,
         input.location
       );
@@ -189,10 +199,10 @@ export const takeoffStampsRouter = router({
    * One call rather than two so the list cannot render half-updated — a
    * quantity climbing while a run's footage lags behind reads as a bug.
    */
-  countedItems: protectedProcedure
+  countedItems: procedure
     .input(z.object({ sheetId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const sheet = await requireSheet(input.sheetId, ctx.user.id);
+      const sheet = await requireSheet(input.sheetId, ctx.scope.dataUserId);
       const measurability = measurabilityOf({
         scaleRatio: sheet.scaleRatio === null ? null : Number(sheet.scaleRatio),
         scaleSource: sheet.scaleSource,
@@ -201,8 +211,8 @@ export const takeoffStampsRouter = router({
       const ratio = measurability.ok ? measurability.ratio : null;
 
       const [stamps, runs] = await Promise.all([
-        db.getStampsForSheet(input.sheetId, ctx.user.id),
-        db.getRunsForSheet(input.sheetId, ctx.user.id),
+        db.getStampsForSheet(input.sheetId, ctx.scope.dataUserId),
+        db.getRunsForSheet(input.sheetId, ctx.scope.dataUserId),
       ]);
 
       return buildCountedItems(
@@ -237,8 +247,8 @@ export const takeoffStampsRouter = router({
   // ── Legend: symbol → assembly links ────────────────────────────────────────
 
   /** Every symbol this user has captured, across all their jobs. */
-  symbols: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await db.getSymbolLinks(ctx.user.id);
+  symbols: procedure.query(async ({ ctx }) => {
+    const rows = await db.getSymbolLinks(ctx.scope.dataUserId);
     return rows.map(row => ({
       id: row.id,
       label: row.label,
@@ -257,7 +267,7 @@ export const takeoffStampsRouter = router({
    * sheet immediately carries the assembly the first one was linked to. That
    * reuse across sheets and jobs is the feature.
    */
-  captureSymbol: protectedProcedure
+  captureSymbol: procedure
     .input(
       z.object({
         label: nameSchema,
@@ -269,7 +279,10 @@ export const takeoffStampsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const lookupKey = symbolLookupKey(input.label);
-      const existing = await db.getSymbolLinkByKey(ctx.user.id, lookupKey);
+      const existing = await db.getSymbolLinkByKey(
+        ctx.scope.dataUserId,
+        lookupKey
+      );
 
       if (existing) {
         // Fill in a thumbnail or a link if this capture supplies one the
@@ -281,9 +294,12 @@ export const takeoffStampsRouter = router({
           patch.assemblyId = input.assemblyId;
         }
         if (Object.keys(patch).length > 0) {
-          await db.updateSymbolLink(existing.id, ctx.user.id, patch);
+          await db.updateSymbolLink(existing.id, ctx.scope.dataUserId, patch);
         }
-        const updated = await db.getSymbolLinkById(existing.id, ctx.user.id);
+        const updated = await db.getSymbolLinkById(
+          existing.id,
+          ctx.scope.dataUserId
+        );
         return {
           id: existing.id,
           alreadyKnown: true,
@@ -293,7 +309,7 @@ export const takeoffStampsRouter = router({
       }
 
       const id = await db.createSymbolLink({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         label: input.label,
         lookupKey,
         assemblyId: input.assemblyId,
@@ -309,7 +325,7 @@ export const takeoffStampsRouter = router({
     }),
 
   /** Answer the one-time "which assembly does this match?" prompt. */
-  linkSymbol: protectedProcedure
+  linkSymbol: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -317,21 +333,24 @@ export const takeoffStampsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const link = await db.getSymbolLinkById(input.id, ctx.user.id);
+      const link = await db.getSymbolLinkById(input.id, ctx.scope.dataUserId);
       if (!link)
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Symbol not found.",
         });
 
-      const assembly = await db.getAssemblyById(input.assemblyId, ctx.user.id);
+      const assembly = await db.getAssemblyById(
+        input.assemblyId,
+        ctx.scope.dataUserId
+      );
       if (!assembly)
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Assembly not found.",
         });
 
-      await db.updateSymbolLink(input.id, ctx.user.id, {
+      await db.updateSymbolLink(input.id, ctx.scope.dataUserId, {
         assemblyId: input.assemblyId,
       });
       return {
@@ -342,23 +361,25 @@ export const takeoffStampsRouter = router({
     }),
 
   /** Break a link, leaving the captured symbol in place to be re-linked. */
-  unlinkSymbol: protectedProcedure
+  unlinkSymbol: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const link = await db.getSymbolLinkById(input.id, ctx.user.id);
+      const link = await db.getSymbolLinkById(input.id, ctx.scope.dataUserId);
       if (!link)
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Symbol not found.",
         });
-      await db.updateSymbolLink(input.id, ctx.user.id, { assemblyId: null });
+      await db.updateSymbolLink(input.id, ctx.scope.dataUserId, {
+        assemblyId: null,
+      });
       return { success: true };
     }),
 
-  removeSymbol: protectedProcedure
+  removeSymbol: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.deleteSymbolLink(input.id, ctx.user.id);
+      await db.deleteSymbolLink(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 });

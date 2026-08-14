@@ -15,9 +15,16 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { CLIENT_KINDS } from "../../drizzle/schema";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `clients.view`, a mutation needs `clients.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("clients.view", "clients.edit");
 
 const nameSchema = z.string().trim().min(1).max(255);
 
@@ -41,10 +48,10 @@ async function requireClient(id: number, userId: number) {
 
 export const clientsRouter = router({
   /** Live clients, A–Z, each with how many bids point at it. */
-  list: protectedProcedure.query(async ({ ctx }) => {
+  list: procedure.query(async ({ ctx }) => {
     const [rows, counts] = await Promise.all([
-      db.getClientsByUser(ctx.user.id),
-      db.countBidsPerClient(ctx.user.id),
+      db.getClientsByUser(ctx.scope.dataUserId),
+      db.countBidsPerClient(ctx.scope.dataUserId),
     ]);
     return rows.map(client => ({
       ...client,
@@ -53,14 +60,14 @@ export const clientsRouter = router({
   }),
 
   /** Archived clients. Kept indefinitely — nothing purges a client. */
-  archived: protectedProcedure.query(async ({ ctx }) => {
-    return db.getArchivedClients(ctx.user.id);
+  archived: procedure.query(async ({ ctx }) => {
+    return db.getArchivedClients(ctx.scope.dataUserId);
   }),
 
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      return requireClient(input.id, ctx.user.id);
+      return requireClient(input.id, ctx.scope.dataUserId);
     }),
 
   /**
@@ -70,14 +77,14 @@ export const clientsRouter = router({
    * question about history, and a bid being off the dashboard does not make it
    * stop having happened.
    */
-  bids: protectedProcedure
+  bids: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      await requireClient(input.id, ctx.user.id);
-      return db.getBidsForClient(input.id, ctx.user.id);
+      await requireClient(input.id, ctx.scope.dataUserId);
+      return db.getBidsForClient(input.id, ctx.scope.dataUserId);
     }),
 
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         name: nameSchema,
@@ -91,7 +98,7 @@ export const clientsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const id = await db.createClient({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         kind: input.kind,
         contactName: input.contactName || null,
@@ -100,10 +107,10 @@ export const clientsRouter = router({
         email: input.email || null,
         notes: input.notes || null,
       });
-      return db.getClientById(id, ctx.user.id);
+      return db.getClientById(id, ctx.scope.dataUserId);
     }),
 
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -118,7 +125,7 @@ export const clientsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { id, ...rest } = input;
-      await requireClient(id, ctx.user.id);
+      await requireClient(id, ctx.scope.dataUserId);
 
       const patch: Record<string, unknown> = {};
       if (rest.name !== undefined) patch.name = rest.name;
@@ -135,8 +142,8 @@ export const clientsRouter = router({
       }
 
       if (Object.keys(patch).length > 0)
-        await db.updateClient(id, ctx.user.id, patch);
-      return db.getClientById(id, ctx.user.id);
+        await db.updateClient(id, ctx.scope.dataUserId, patch);
+      return db.getClientById(id, ctx.scope.dataUserId);
     }),
 
   /**
@@ -147,10 +154,10 @@ export const clientsRouter = router({
    * that pointed at it, which unpicks exactly the history this record exists to
    * hold. Archiving keeps the link intact and the name printable.
    */
-  archive: protectedProcedure
+  archive: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const client = await requireClient(input.id, ctx.user.id);
+      const client = await requireClient(input.id, ctx.scope.dataUserId);
       if (client.archivedAt)
         return {
           success: true,
@@ -158,16 +165,16 @@ export const clientsRouter = router({
           alreadyArchived: true,
         };
       const now = new Date();
-      await db.archiveClient(input.id, ctx.user.id, now);
+      await db.archiveClient(input.id, ctx.scope.dataUserId, now);
       return { success: true, archivedAt: now, alreadyArchived: false };
     }),
 
-  restore: protectedProcedure
+  restore: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const client = await requireClient(input.id, ctx.user.id);
+      const client = await requireClient(input.id, ctx.scope.dataUserId);
       if (!client.archivedAt) return { success: true, alreadyLive: true };
-      await db.restoreClient(input.id, ctx.user.id);
+      await db.restoreClient(input.id, ctx.scope.dataUserId);
       return { success: true, alreadyLive: false };
     }),
 });

@@ -1,30 +1,38 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import * as db from "../db";
 import { storagePut } from "../storage";
+
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
 
 const PROJECT_STATUS = ["Bidding", "Won", "In Progress", "Lost"] as const;
 
 export const projectsRouter = router({
   /** List all non-archived projects for the current user */
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return db.getProjectsByUser(ctx.user.id);
+  list: procedure.query(async ({ ctx }) => {
+    return db.getProjectsByUser(ctx.scope.dataUserId);
   }),
 
   /** Search projects by name, customer, or address */
-  search: protectedProcedure
+  search: procedure
     .input(z.object({ query: z.string() }))
     .query(async ({ input, ctx }) => {
-      if (!input.query.trim()) return db.getProjectsByUser(ctx.user.id);
-      return db.searchProjectsByUser(ctx.user.id, input.query.trim());
+      if (!input.query.trim())
+        return db.getProjectsByUser(ctx.scope.dataUserId);
+      return db.searchProjectsByUser(ctx.scope.dataUserId, input.query.trim());
     }),
 
   /** Get a single project by id (must belong to current user) */
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const project = await db.getProjectById(input.id, ctx.user.id);
+      const project = await db.getProjectById(input.id, ctx.scope.dataUserId);
       if (!project)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -34,7 +42,7 @@ export const projectsRouter = router({
     }),
 
   /** Create a new project */
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         name: z.string().min(1).max(255),
@@ -48,7 +56,7 @@ export const projectsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       await db.createProject({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         category: "electrical",
         description: input.description ?? null,
@@ -58,12 +66,12 @@ export const projectsRouter = router({
         notes: input.notes ?? null,
         status: input.status ?? "Bidding",
       });
-      const projects = await db.getProjectsByUser(ctx.user.id);
+      const projects = await db.getProjectsByUser(ctx.scope.dataUserId);
       return projects[0]; // most recently updated = just created
     }),
 
   /** Update project fields including expanded v5.45 fields */
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -84,30 +92,30 @@ export const projectsRouter = router({
       }
       await db.updateProject(
         id,
-        ctx.user.id,
+        ctx.scope.dataUserId,
         data as Parameters<typeof db.updateProject>[2]
       );
       return { success: true };
     }),
 
   /** Archive a project (soft delete) */
-  archive: protectedProcedure
+  archive: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.archiveProject(input.id, ctx.user.id);
+      await db.archiveProject(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
   /** Permanently delete a project and all its data */
-  delete: protectedProcedure
+  delete: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.deleteProject(input.id, ctx.user.id);
+      await db.deleteProject(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
   /** Upload a PDF for a project — stores to S3, saves url+key to project row */
-  uploadPdf: protectedProcedure
+  uploadPdf: procedure
     .input(
       z.object({
         projectId: z.number().int().positive(),
@@ -116,7 +124,10 @@ export const projectsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const project = await db.getProjectById(input.projectId, ctx.user.id);
+      const project = await db.getProjectById(
+        input.projectId,
+        ctx.scope.dataUserId
+      );
       if (!project)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -130,13 +141,13 @@ export const projectsRouter = router({
         });
       const buffer = Buffer.from(base64, "base64");
       const filename = input.filename ?? "plan.pdf";
-      const storageKey = `pdfs/${ctx.user.id}/${input.projectId}/${filename}`;
+      const storageKey = `pdfs/${ctx.scope.dataUserId}/${input.projectId}/${filename}`;
       const { key, url } = await storagePut(
         storageKey,
         buffer,
         "application/pdf"
       );
-      await db.updateProject(input.projectId, ctx.user.id, {
+      await db.updateProject(input.projectId, ctx.scope.dataUserId, {
         pdfUrl: url,
         pdfKey: key,
         pdfFilename: filename,
@@ -145,10 +156,13 @@ export const projectsRouter = router({
     }),
 
   /** Get the stored PDF URL for a project */
-  getPdfUrl: protectedProcedure
+  getPdfUrl: procedure
     .input(z.object({ projectId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const project = await db.getProjectById(input.projectId, ctx.user.id);
+      const project = await db.getProjectById(
+        input.projectId,
+        ctx.scope.dataUserId
+      );
       if (!project)
         throw new TRPCError({
           code: "NOT_FOUND",

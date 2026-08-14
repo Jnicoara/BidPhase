@@ -19,6 +19,7 @@ import { salesTaxRouter } from "./routers/salesTaxRouter";
 import { bidExtrasRouter } from "./routers/bidExtrasRouter";
 import { materialsListRouter } from "./routers/materialsListRouter";
 import { accountingRouter } from "./routers/accountingRouter";
+import { companyRouter } from "./routers/companyRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
@@ -58,6 +59,9 @@ export const appRouter = router({
   bidExtras: bidExtrasRouter,
   materialsList: materialsListRouter,
   accounting: accountingRouter,
+  // Access control: who is in the company and what they may do. Every route
+  // acts on ctx.scope.companyId — none of them take a company id.
+  company: companyRouter,
   proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,

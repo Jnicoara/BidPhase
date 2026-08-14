@@ -39,7 +39,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { invokeLLM, type Tool } from "../_core/llm";
 import {
   COPILOT_ACTIONS,
@@ -60,6 +60,13 @@ import { extractPlanIssuer, planSourceKey } from "../../shared/planSource";
 import { symbolLookupKey } from "../../shared/takeoffCounts";
 import type { CopilotRunStatus } from "../../drizzle/schema";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
 
 /**
  * The heavier tier, because this one is actually reading something.
@@ -356,7 +363,7 @@ export const planCopilotRouter = router({
    * button for something the guardrail will refuse — and a new action appears
    * in the UI's "what this can do" without a second edit.
    */
-  allowedActions: protectedProcedure.query(() =>
+  allowedActions: procedure.query(() =>
     COPILOT_ACTIONS.map(a => ({
       id: a.id,
       label: a.label,
@@ -373,12 +380,15 @@ export const planCopilotRouter = router({
    * control that costs nothing: opening a sheet that was read yesterday shows
    * yesterday's findings rather than buying them again.
    */
-  state: protectedProcedure
+  state: procedure
     .input(z.object({ sheetId: z.number().int().positive() }))
     .query(async ({ input, ctx }): Promise<CopilotSheetState> => {
-      await requireSheet(input.sheetId, ctx.user.id);
-      const run = await db.getLatestCopilotRun(input.sheetId, ctx.user.id);
-      return stateForRun(run, ctx.user.id);
+      await requireSheet(input.sheetId, ctx.scope.dataUserId);
+      const run = await db.getLatestCopilotRun(
+        input.sheetId,
+        ctx.scope.dataUserId
+      );
+      return stateForRun(run, ctx.scope.dataUserId);
     }),
 
   /**
@@ -387,7 +397,7 @@ export const planCopilotRouter = router({
    * Writes findings, and nothing else — no stamp, no bid line, no quantity. A
    * finding is a proposal sitting in its own table until someone confirms it.
    */
-  read: protectedProcedure
+  read: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -404,27 +414,27 @@ export const planCopilotRouter = router({
       })
     )
     .mutation(async ({ input, ctx }): Promise<CopilotSheetState> => {
-      await requireBid(input.bidId, ctx.user.id);
-      const sheet = await requireSheet(input.sheetId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
+      const sheet = await requireSheet(input.sheetId, ctx.scope.dataUserId);
 
       // Cost control: a sheet already read is not read again unless asked.
       if (!input.force) {
         const existing = await db.getLatestCopilotRun(
           input.sheetId,
-          ctx.user.id
+          ctx.scope.dataUserId
         );
-        if (existing) return stateForRun(existing, ctx.user.id);
+        if (existing) return stateForRun(existing, ctx.scope.dataUserId);
       }
 
-      const pdf = await db.getBidPdf(sheet.bidPdfId, ctx.user.id);
+      const pdf = await db.getBidPdf(sheet.bidPdfId, ctx.scope.dataUserId);
       const sourceKey = planSourceKey({
         issuer: extractPlanIssuer(input.pageText),
         filename: pdf?.filename ?? null,
       });
 
       const [symbols, corrections] = await Promise.all([
-        legendFor(ctx.user.id),
-        db.getCopilotCorrections(ctx.user.id, sourceKey),
+        legendFor(ctx.scope.dataUserId),
+        db.getCopilotCorrections(ctx.scope.dataUserId, sourceKey),
       ]);
 
       const record = async (
@@ -436,7 +446,7 @@ export const planCopilotRouter = router({
         const runId = await db.createCopilotRun({
           bidId: input.bidId,
           sheetId: input.sheetId,
-          userId: ctx.user.id,
+          userId: ctx.scope.dataUserId,
           status,
           summary,
           message,
@@ -446,7 +456,7 @@ export const planCopilotRouter = router({
         await db.createCopilotFindings(
           findings.map(f => ({
             runId,
-            userId: ctx.user.id,
+            userId: ctx.scope.dataUserId,
             rawLabel: f.rawLabel.slice(0, 255),
             symbolLinkId: f.symbolLinkId,
             assemblyId: f.assemblyId,
@@ -466,8 +476,8 @@ export const planCopilotRouter = router({
                 : ("proposed" as const),
           }))
         );
-        const run = await db.getCopilotRunById(runId, ctx.user.id);
-        return stateForRun(run, ctx.user.id);
+        const run = await db.getCopilotRunById(runId, ctx.scope.dataUserId);
+        return stateForRun(run, ctx.scope.dataUserId);
       };
 
       let result;
@@ -650,7 +660,7 @@ export const planCopilotRouter = router({
    * NOT given the report tool: a question is a question, and a model that can
    * answer by proposing forty stamps is one that will.
    */
-  ask: protectedProcedure
+  ask: procedure
     .input(
       z.object({
         sheetId: z.number().int().positive(),
@@ -660,7 +670,7 @@ export const planCopilotRouter = router({
       })
     )
     .mutation(async ({ input, ctx }): Promise<{ answer: string }> => {
-      const sheet = await requireSheet(input.sheetId, ctx.user.id);
+      const sheet = await requireSheet(input.sheetId, ctx.scope.dataUserId);
 
       try {
         const result = await invokeLLM({
@@ -720,7 +730,7 @@ export const planCopilotRouter = router({
    * here even though the panel would not have offered it. The client deciding
    * what is acceptable is a convenience; this is the rule.
    */
-  confirm: protectedProcedure
+  confirm: procedure
     .input(
       z.object({
         runId: z.number().int().positive(),
@@ -737,17 +747,17 @@ export const planCopilotRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const run = await db.getCopilotRunById(input.runId, ctx.user.id);
+      const run = await db.getCopilotRunById(input.runId, ctx.scope.dataUserId);
       if (!run)
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "That reading no longer exists.",
         });
 
-      const sheet = await requireSheet(run.sheetId, ctx.user.id);
+      const sheet = await requireSheet(run.sheetId, ctx.scope.dataUserId);
       const rows = await db.getCopilotFindingsByIds(
         input.findingIds,
-        ctx.user.id
+        ctx.scope.dataUserId
       );
 
       const placeable: typeof rows = [];
@@ -791,7 +801,10 @@ export const planCopilotRouter = router({
       const categories = new Map<number, string | null>();
       for (const row of placeable) {
         if (row.assemblyId === null || categories.has(row.assemblyId)) continue;
-        const assembly = await db.getAssemblyById(row.assemblyId, ctx.user.id);
+        const assembly = await db.getAssemblyById(
+          row.assemblyId,
+          ctx.scope.dataUserId
+        );
         categories.set(row.assemblyId, assembly?.category ?? null);
       }
 
@@ -799,7 +812,7 @@ export const planCopilotRouter = router({
         placeable.map(row => ({
           bidId: run.bidId,
           sheetId: sheet.id,
-          userId: ctx.user.id,
+          userId: ctx.scope.dataUserId,
           assemblyId: row.assemblyId,
           assemblyName: row.assemblyName ?? row.rawLabel,
           assemblyCategory:
@@ -816,7 +829,7 @@ export const planCopilotRouter = router({
         placeable.map((row, index) =>
           db.setCopilotFindingStatus(
             row.id,
-            ctx.user.id,
+            ctx.scope.dataUserId,
             "confirmed",
             stampIds[index] ?? null
           )
@@ -827,7 +840,7 @@ export const planCopilotRouter = router({
     }),
 
   /** Put a proposal aside. Touches the co-pilot's own row and nothing else. */
-  dismiss: protectedProcedure
+  dismiss: procedure
     .input(
       z.object({
         findingIds: z.array(z.number().int().positive()).min(1).max(500),
@@ -836,13 +849,18 @@ export const planCopilotRouter = router({
     .mutation(async ({ input, ctx }) => {
       const rows = await db.getCopilotFindingsByIds(
         input.findingIds,
-        ctx.user.id
+        ctx.scope.dataUserId
       );
       await Promise.all(
         rows
           .filter(row => row.status !== "confirmed")
           .map(row =>
-            db.setCopilotFindingStatus(row.id, ctx.user.id, "dismissed", null)
+            db.setCopilotFindingStatus(
+              row.id,
+              ctx.scope.dataUserId,
+              "dismissed",
+              null
+            )
           )
       );
       return { dismissed: rows.length };
@@ -860,7 +878,7 @@ export const planCopilotRouter = router({
    * are. Two estimators can read the same ambiguous mark differently and both
    * be right about their own job.
    */
-  correct: protectedProcedure
+  correct: procedure
     .input(
       z.object({
         findingId: z.number().int().positive(),
@@ -871,7 +889,7 @@ export const planCopilotRouter = router({
     .mutation(async ({ input, ctx }) => {
       const [finding] = await db.getCopilotFindingsByIds(
         [input.findingId],
-        ctx.user.id
+        ctx.scope.dataUserId
       );
       if (!finding)
         throw new TRPCError({
@@ -886,28 +904,34 @@ export const planCopilotRouter = router({
       if (!verdict.allowed)
         throw new TRPCError({ code: "FORBIDDEN", message: verdict.reason });
 
-      const link = await db.getSymbolLinkById(input.symbolLinkId, ctx.user.id);
+      const link = await db.getSymbolLinkById(
+        input.symbolLinkId,
+        ctx.scope.dataUserId
+      );
       if (!link)
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "That legend symbol was not found.",
         });
 
-      const run = await db.getCopilotRunById(finding.runId, ctx.user.id);
+      const run = await db.getCopilotRunById(
+        finding.runId,
+        ctx.scope.dataUserId
+      );
       const assembly =
         link.assemblyId === null
           ? null
-          : await db.getAssemblyById(link.assemblyId, ctx.user.id);
+          : await db.getAssemblyById(link.assemblyId, ctx.scope.dataUserId);
 
       await db.upsertCopilotCorrection({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         sourceKey: run?.sourceKey ?? "unknown",
         rawLabel: finding.rawLabel,
         rawLabelKey: symbolLookupKey(finding.rawLabel),
         symbolLinkId: link.id,
       });
 
-      await db.updateCopilotFinding(finding.id, ctx.user.id, {
+      await db.updateCopilotFinding(finding.id, ctx.scope.dataUserId, {
         symbolLinkId: link.id,
         assemblyId: link.assemblyId,
         assemblyName: assembly?.name ?? null,

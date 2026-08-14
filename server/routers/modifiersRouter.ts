@@ -14,9 +14,16 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { MODIFIER_STATUSES, type Modifier } from "../../drizzle/schema";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `library.view`, a mutation needs `library.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("library.view", "library.edit");
 
 /**
  * decimal(6,4) holds ±99.9999, i.e. ±9999.99%. The practical bound is much
@@ -40,7 +47,7 @@ const toView = (row: Modifier): ModifierView => ({
 
 export const modifiersRouter = router({
   /** The working list, or the archive. Never returns `deleted` tombstones. */
-  list: protectedProcedure
+  list: procedure
     .input(
       z
         .object({
@@ -53,18 +60,21 @@ export const modifiersRouter = router({
     )
     .query(async ({ input, ctx }) => {
       const rows = await db.getLibraryModifiers(
-        ctx.user.id,
+        ctx.scope.dataUserId,
         input?.status ?? "active"
       );
       return rows.map(toView);
     }),
 
-  create: protectedProcedure
+  create: procedure
     .input(z.object({ name: nameSchema, laborAdjustmentPct: pctSchema }))
     .mutation(async ({ input, ctx }) => {
       // Check against the working list only. A name sitting in the archive
       // should not block reusing it — the user removed that one deliberately.
-      const existing = await db.getLibraryModifiers(ctx.user.id, "active");
+      const existing = await db.getLibraryModifiers(
+        ctx.scope.dataUserId,
+        "active"
+      );
       const clash = existing.find(
         m => m.name.toLowerCase() === input.name.toLowerCase()
       );
@@ -76,16 +86,16 @@ export const modifiersRouter = router({
       }
 
       const id = await db.createModifier({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         laborAdjustmentPct: toDecimal(input.laborAdjustmentPct),
       });
-      const created = await db.getModifierById(id, ctx.user.id);
+      const created = await db.getModifierById(id, ctx.scope.dataUserId);
       return created ? toView(created) : null;
     }),
 
   /** Edit a modifier, forking a starter first if that is what was targeted. */
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -96,7 +106,7 @@ export const modifiersRouter = router({
     .mutation(async ({ input, ctx }) => {
       const { id, name, laborAdjustmentPct } = input;
 
-      const target = await db.getModifierById(id, ctx.user.id);
+      const target = await db.getModifierById(id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -105,26 +115,26 @@ export const modifiersRouter = router({
 
       const isBaseline = target.userId === null;
       const editableId = isBaseline
-        ? await db.forkModifier(id, ctx.user.id)
+        ? await db.forkModifier(id, ctx.scope.dataUserId)
         : id;
 
-      await db.updateModifier(editableId, ctx.user.id, {
+      await db.updateModifier(editableId, ctx.scope.dataUserId, {
         ...(name !== undefined ? { name } : {}),
         ...(laborAdjustmentPct !== undefined
           ? { laborAdjustmentPct: toDecimal(laborAdjustmentPct) }
           : {}),
       });
 
-      const saved = await db.getModifierById(editableId, ctx.user.id);
+      const saved = await db.getModifierById(editableId, ctx.scope.dataUserId);
       return { modifier: saved ? toView(saved) : null, forked: isBaseline };
     }),
 
   /** Discard edits to a forked modifier and restore the shipped values. */
-  revert: protectedProcedure
+  revert: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getModifierById(input.id, ctx.user.id);
-      if (!target || target.userId !== ctx.user.id) {
+      const target = await db.getModifierById(input.id, ctx.scope.dataUserId);
+      if (!target || target.userId !== ctx.scope.dataUserId) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Modifier not found.",
@@ -138,8 +148,8 @@ export const modifiersRouter = router({
         });
       }
 
-      await db.revertModifierToBaseline(input.id, ctx.user.id);
-      const reverted = await db.getModifierById(input.id, ctx.user.id);
+      await db.revertModifierToBaseline(input.id, ctx.scope.dataUserId);
+      const reverted = await db.getModifierById(input.id, ctx.scope.dataUserId);
       return reverted ? toView(reverted) : null;
     }),
 
@@ -148,10 +158,10 @@ export const modifiersRouter = router({
    * Works on starters too: archiving one forks it first, so the shared row is
    * never touched. The returned id may therefore differ from the input id.
    */
-  archive: protectedProcedure
+  archive: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getModifierById(input.id, ctx.user.id);
+      const target = await db.getModifierById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -160,15 +170,18 @@ export const modifiersRouter = router({
       if (target.status === "archived")
         return { id: input.id, alreadyArchived: true };
 
-      const archivedId = await db.archiveModifier(input.id, ctx.user.id);
+      const archivedId = await db.archiveModifier(
+        input.id,
+        ctx.scope.dataUserId
+      );
       return { id: archivedId, alreadyArchived: false };
     }),
 
-  restore: protectedProcedure
+  restore: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getModifierById(input.id, ctx.user.id);
-      if (!target || target.userId !== ctx.user.id) {
+      const target = await db.getModifierById(input.id, ctx.scope.dataUserId);
+      if (!target || target.userId !== ctx.scope.dataUserId) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Modifier not found.",
@@ -181,8 +194,8 @@ export const modifiersRouter = router({
         });
       }
 
-      await db.restoreModifier(input.id, ctx.user.id);
-      const restored = await db.getModifierById(input.id, ctx.user.id);
+      await db.restoreModifier(input.id, ctx.scope.dataUserId);
+      const restored = await db.getModifierById(input.id, ctx.scope.dataUserId);
       return restored ? toView(restored) : null;
     }),
 
@@ -191,11 +204,11 @@ export const modifiersRouter = router({
    * path from the working list straight to destruction — the user must archive
    * first, then confirm again in the Archived view.
    */
-  deleteForever: protectedProcedure
+  deleteForever: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getModifierById(input.id, ctx.user.id);
-      if (!target || target.userId !== ctx.user.id) {
+      const target = await db.getModifierById(input.id, ctx.scope.dataUserId);
+      if (!target || target.userId !== ctx.scope.dataUserId) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Modifier not found.",
@@ -209,7 +222,7 @@ export const modifiersRouter = router({
         });
       }
 
-      await db.deleteModifierForever(input.id, ctx.user.id);
+      await db.deleteModifierForever(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 });

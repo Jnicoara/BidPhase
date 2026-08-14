@@ -12,12 +12,19 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { LIBRARY_STATUSES } from "../../drizzle/schema";
 import { calculateLineItem, sumDirectCost } from "../../shared/pricing";
 import { hourlyCostFor } from "../../shared/laborRateLookup";
 import { DEFAULT_TRADE } from "../../shared/trades";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `library.view`, a mutation needs `library.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("library.view", "library.edit");
 
 const nameSchema = z.string().trim().min(1).max(255);
 const descriptionSchema = z.string().trim().max(512).nullable();
@@ -85,7 +92,7 @@ async function priceAssemblyAt(
 
 export const kitsRouter = router({
   /** The working list, or the archive. Never returns `deleted` tombstones. */
-  list: protectedProcedure
+  list: procedure
     .input(
       z
         .object({
@@ -97,20 +104,20 @@ export const kitsRouter = router({
         .optional()
     )
     .query(async ({ input, ctx }) => {
-      return db.getLibraryKits(ctx.user.id, input?.status ?? "active");
+      return db.getLibraryKits(ctx.scope.dataUserId, input?.status ?? "active");
     }),
 
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const detail = await db.getKitDetail(input.id, ctx.user.id);
+      const detail = await db.getKitDetail(input.id, ctx.scope.dataUserId);
       if (!detail)
         throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
       return detail;
     }),
 
   /** A kit's contents priced at today's library values, item by item. */
-  price: protectedProcedure
+  price: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -118,19 +125,19 @@ export const kitsRouter = router({
       })
     )
     .query(async ({ input, ctx }) => {
-      const detail = await db.getKitDetail(input.id, ctx.user.id);
+      const detail = await db.getKitDetail(input.id, ctx.scope.dataUserId);
       if (!detail)
         throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
 
       const [modifiers, rates] = await Promise.all([
-        db.getLibraryModifiers(ctx.user.id, "active"),
-        db.getLibraryLaborRates(ctx.user.id),
+        db.getLibraryModifiers(ctx.scope.dataUserId, "active"),
+        db.getLibraryLaborRates(ctx.scope.dataUserId),
       ]);
 
       const priced = [];
       for (const item of detail.items) {
         const breakdown = await priceAssemblyAt(
-          ctx.user.id,
+          ctx.scope.dataUserId,
           item.assemblyId,
           Number(item.qty) * input.quantity,
           { modifiers, rates }
@@ -156,7 +163,7 @@ export const kitsRouter = router({
       };
     }),
 
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         name: nameSchema,
@@ -166,7 +173,7 @@ export const kitsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const existing = await db.getLibraryKits(ctx.user.id);
+      const existing = await db.getLibraryKits(ctx.scope.dataUserId);
       const clash = existing.find(
         k => k.name.toLowerCase() === input.name.toLowerCase()
       );
@@ -178,7 +185,7 @@ export const kitsRouter = router({
       }
 
       const id = await db.createKit({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         description: input.description,
         trade: input.trade,
@@ -190,11 +197,11 @@ export const kitsRouter = router({
           qty: toDecimal(i.qty),
         }))
       );
-      return db.getKitDetail(id, ctx.user.id);
+      return db.getKitDetail(id, ctx.scope.dataUserId);
     }),
 
   /** Edit a kit, forking a starter first if that is what was targeted. */
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -205,13 +212,13 @@ export const kitsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getKitById(input.id, ctx.user.id);
+      const target = await db.getKitById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
 
       const isBaseline = target.userId === null;
       const editableId = isBaseline
-        ? await db.forkKit(input.id, ctx.user.id)
+        ? await db.forkKit(input.id, ctx.scope.dataUserId)
         : input.id;
 
       const patch: Record<string, unknown> = {};
@@ -220,7 +227,7 @@ export const kitsRouter = router({
         patch.description = input.description;
       if (input.trade !== undefined) patch.trade = input.trade;
       if (Object.keys(patch).length > 0)
-        await db.updateKit(editableId, ctx.user.id, patch);
+        await db.updateKit(editableId, ctx.scope.dataUserId, patch);
 
       // Omitting `items` leaves the contents alone; sending [] empties the kit.
       if (input.items !== undefined) {
@@ -234,7 +241,7 @@ export const kitsRouter = router({
       }
 
       return {
-        kit: await db.getKitDetail(editableId, ctx.user.id),
+        kit: await db.getKitDetail(editableId, ctx.scope.dataUserId),
         forked: isBaseline,
       };
     }),
@@ -245,10 +252,10 @@ export const kitsRouter = router({
    * Not the same as forking. A fork replaces its starter and can be reverted;
    * a duplicate stands alongside the original with no link back at all.
    */
-  duplicate: protectedProcedure
+  duplicate: procedure
     .input(z.object({ id: z.number().int().positive(), name: nameSchema }))
     .mutation(async ({ input, ctx }) => {
-      const existing = await db.getLibraryKits(ctx.user.id);
+      const existing = await db.getLibraryKits(ctx.scope.dataUserId);
       const clash = existing.find(
         k => k.name.toLowerCase() === input.name.toLowerCase()
       );
@@ -258,15 +265,19 @@ export const kitsRouter = router({
           message: `A kit named "${clash.name}" already exists. Pick a different name.`,
         });
       }
-      const id = await db.duplicateKit(input.id, ctx.user.id, input.name);
-      return db.getKitDetail(id, ctx.user.id);
+      const id = await db.duplicateKit(
+        input.id,
+        ctx.scope.dataUserId,
+        input.name
+      );
+      return db.getKitDetail(id, ctx.scope.dataUserId);
     }),
 
-  revert: protectedProcedure
+  revert: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getKitById(input.id, ctx.user.id);
-      if (!target || target.userId !== ctx.user.id) {
+      const target = await db.getKitById(input.id, ctx.scope.dataUserId);
+      if (!target || target.userId !== ctx.scope.dataUserId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
       }
       if (target.baselineId == null) {
@@ -276,8 +287,8 @@ export const kitsRouter = router({
             "This kit was built from scratch, so there is no original to restore.",
         });
       }
-      await db.revertKitToBaseline(input.id, ctx.user.id);
-      return db.getKitDetail(input.id, ctx.user.id);
+      await db.revertKitToBaseline(input.id, ctx.scope.dataUserId);
+      return db.getKitDetail(input.id, ctx.scope.dataUserId);
     }),
 
   /**
@@ -288,24 +299,24 @@ export const kitsRouter = router({
    * never touched. The returned id may therefore differ from the input id —
    * callers refetch rather than patching the row they sent.
    */
-  archive: protectedProcedure
+  archive: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getKitById(input.id, ctx.user.id);
+      const target = await db.getKitById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
       if (target.status === "archived")
         return { id: input.id, alreadyArchived: true };
 
-      const archivedId = await db.archiveKit(input.id, ctx.user.id);
+      const archivedId = await db.archiveKit(input.id, ctx.scope.dataUserId);
       return { id: archivedId, alreadyArchived: false };
     }),
 
   /** Put an archived kit back on the working list. */
-  restore: protectedProcedure
+  restore: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getKitById(input.id, ctx.user.id);
+      const target = await db.getKitById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
       if (target.status !== "archived") {
@@ -314,7 +325,7 @@ export const kitsRouter = router({
           message: "That kit is not archived.",
         });
       }
-      await db.restoreKit(input.id, ctx.user.id);
+      await db.restoreKit(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
@@ -322,10 +333,10 @@ export const kitsRouter = router({
    * Permanent removal. Refuses anything not already archived, so there is no
    * path from the working list straight to destruction.
    */
-  deleteForever: protectedProcedure
+  deleteForever: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getKitById(input.id, ctx.user.id);
+      const target = await db.getKitById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({ code: "NOT_FOUND", message: "Kit not found." });
       if (target.status !== "archived") {
@@ -335,7 +346,7 @@ export const kitsRouter = router({
             "Only archived kits can be deleted permanently. Archive it first.",
         });
       }
-      await db.deleteKitForever(input.id, ctx.user.id);
+      await db.deleteKitForever(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 });

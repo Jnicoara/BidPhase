@@ -33,7 +33,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { groupStamps } from "../../shared/takeoffCounts";
 import { totalQuantities } from "../../shared/takeoffQuantities";
 import {
@@ -45,6 +45,13 @@ import {
 } from "../../shared/materialsList";
 import * as db from "../db";
 
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
+
 export const materialsListRouter = router({
   /**
    * The whole document for one bid.
@@ -53,17 +60,17 @@ export const materialsListRouter = router({
    * finished, so the caller never has to branch on completeness — an empty list
    * is a document with no entries, not an error.
    */
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }): Promise<MaterialsListDoc> => {
-      const bid = await db.getBidById(input.bidId, ctx.user.id);
+      const bid = await db.getBidById(input.bidId, ctx.scope.dataUserId);
       if (!bid)
         throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
 
       const [lineItems, stamps, runs] = await Promise.all([
         db.getBidLineItems(input.bidId),
-        db.getStampsForBid(input.bidId, ctx.user.id),
-        db.getRunsForBid(input.bidId, ctx.user.id),
+        db.getStampsForBid(input.bidId, ctx.scope.dataUserId),
+        db.getRunsForBid(input.bidId, ctx.scope.dataUserId),
       ]);
 
       // ── What each assembly is made of ──────────────────────────────────────
@@ -143,10 +150,13 @@ export const materialsListRouter = router({
       const entries = aggregateMaterials(sources);
 
       // ── Traced runs: footage, kept apart from the counted materials ────────
-      const scales = await db.getSheetScalesForBid(input.bidId, ctx.user.id);
+      const scales = await db.getSheetScalesForBid(
+        input.bidId,
+        ctx.scope.dataUserId
+      );
       const circuits = await db.getCircuitsForRuns(
         runs.map(run => run.id),
-        ctx.user.id
+        ctx.scope.dataUserId
       );
       const circuitsByRun = new Map<number, typeof circuits>();
       for (const circuit of circuits) {

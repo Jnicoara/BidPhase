@@ -108,6 +108,16 @@ import {
   takeoffRunCircuits,
   BidPdfSheet,
   bidPdfSheets,
+  companies,
+  companyMembers,
+  companyInvites,
+  COMPANY_ROLE_VALUES,
+  MEMBER_STATUS_VALUES,
+  ACCESS_TIER_VALUES,
+  type Company,
+  type CompanyMember,
+  type CompanyInvite,
+  type InsertCompanyInvite,
   InsertKit,
   Kit,
   kits,
@@ -5540,4 +5550,261 @@ export async function getSheetScalesForBid(
       },
     ])
   );
+}
+
+// ─── Companies, members, invitations ──────────────────────────────────────────
+/**
+ * Access-control storage. Every function here answers a question about WHO,
+ * never about whose data — scoping lives in `_core/companyScope.ts`.
+ *
+ * All of these take a `companyId` that the caller has already proved the actor
+ * belongs to. None of them derive a company from anything the client sent, and
+ * none of them are safe to call with an id straight off a request.
+ */
+
+/** Members of one company, newest role changes last. Bounded: see the cap. */
+export async function getCompanyMembers(
+  companyId: number,
+  limit = 200
+): Promise<
+  Array<{
+    id: number;
+    userId: number;
+    role: string;
+    status: string;
+    joinedAt: Date;
+    name: string | null;
+    email: string | null;
+    accessTier: string;
+  }>
+> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: companyMembers.id,
+      userId: companyMembers.userId,
+      role: companyMembers.role,
+      status: companyMembers.status,
+      joinedAt: companyMembers.joinedAt,
+      name: users.name,
+      email: users.email,
+      accessTier: users.accessTier,
+    })
+    .from(companyMembers)
+    .innerJoin(users, eq(companyMembers.userId, users.id))
+    .where(eq(companyMembers.companyId, companyId))
+    .orderBy(asc(companyMembers.id))
+    .limit(limit);
+}
+
+/** One membership, or undefined. The authorisation lookup. */
+export async function getMembership(
+  companyId: number,
+  userId: number
+): Promise<CompanyMember | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(companyMembers)
+    .where(
+      and(
+        eq(companyMembers.companyId, companyId),
+        eq(companyMembers.userId, userId)
+      )
+    )
+    .limit(1);
+  return row;
+}
+
+export async function getCompanyById(id: number): Promise<Company | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(companies)
+    .where(eq(companies.id, id))
+    .limit(1);
+  return row;
+}
+
+export async function renameCompany(id: number, name: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(companies).set({ name }).where(eq(companies.id, id));
+}
+
+export async function setMemberRole(
+  companyId: number,
+  userId: number,
+  role: (typeof COMPANY_ROLE_VALUES)[number]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(companyMembers)
+    .set({ role })
+    .where(
+      and(
+        eq(companyMembers.companyId, companyId),
+        eq(companyMembers.userId, userId)
+      )
+    );
+}
+
+export async function setMemberStatus(
+  companyId: number,
+  userId: number,
+  status: (typeof MEMBER_STATUS_VALUES)[number]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(companyMembers)
+    .set({ status })
+    .where(
+      and(
+        eq(companyMembers.companyId, companyId),
+        eq(companyMembers.userId, userId)
+      )
+    );
+}
+
+/** Outstanding invitations. Never returns the code — only its hash exists. */
+export async function getCompanyInvites(
+  companyId: number,
+  limit = 100
+): Promise<CompanyInvite[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(companyInvites)
+    .where(eq(companyInvites.companyId, companyId))
+    .orderBy(desc(companyInvites.id))
+    .limit(limit);
+}
+
+export async function createInvite(data: InsertCompanyInvite): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(companyInvites).values(data);
+  return result.insertId;
+}
+
+/**
+ * Find an invitation by the hash of its code.
+ *
+ * By hash and nothing else: there is no company id in the lookup, because the
+ * person redeeming a code does not yet belong to the company and has no way to
+ * name it. The hash IS the credential, which is why it is unique-indexed and
+ * why the plaintext is never stored.
+ */
+export async function getInviteByCodeHash(
+  codeHash: string
+): Promise<CompanyInvite | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(companyInvites)
+    .where(eq(companyInvites.codeHash, codeHash))
+    .limit(1);
+  return row;
+}
+
+export async function revokeInvite(
+  id: number,
+  companyId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(companyInvites)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(eq(companyInvites.id, id), eq(companyInvites.companyId, companyId))
+    );
+}
+
+/**
+ * Redeem an invitation: mark it used and add the membership.
+ *
+ * The two writes are ordered so the invite is consumed FIRST. If the second
+ * fails, the code is spent and nobody joined — recoverable by issuing another.
+ * The other order would leave a usable code after someone had already joined
+ * with it, which is a second stranger in the company.
+ */
+export async function acceptInvite(
+  invite: CompanyInvite,
+  userId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(companyInvites)
+    .set({ acceptedAt: new Date(), acceptedByUserId: userId })
+    .where(eq(companyInvites.id, invite.id));
+  await db.insert(companyMembers).values({
+    companyId: invite.companyId,
+    userId,
+    role: invite.role,
+    status: "active",
+    invitedByUserId: invite.createdByUserId,
+  });
+}
+
+/** Platform-level tier change. Admin only — see the router. */
+export async function setUserAccessTier(
+  userId: number,
+  accessTier: (typeof ACCESS_TIER_VALUES)[number]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(users).set({ accessTier }).where(eq(users.id, userId));
+}
+
+/**
+ * Point a user at the company they are working in.
+ *
+ * Only ever called with a company the caller has already been proved a member
+ * of — see companyRouter. Setting it to a company they cannot reach is not a
+ * privilege grant (the resolver re-checks membership every request) but it
+ * would strand them, so the check belongs at the call site.
+ */
+export async function setActiveCompany(
+  userId: number,
+  companyId: number | null
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(users)
+    .set({ activeCompanyId: companyId })
+    .where(eq(users.id, userId));
+}
+
+/** Every company this user can act in, for the switcher. */
+export async function getMembershipsForUser(
+  userId: number
+): Promise<Array<{ companyId: number; name: string; role: string }>> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      companyId: companies.id,
+      name: companies.name,
+      role: companyMembers.role,
+    })
+    .from(companyMembers)
+    .innerJoin(companies, eq(companyMembers.companyId, companies.id))
+    .where(
+      and(
+        eq(companyMembers.userId, userId),
+        eq(companyMembers.status, "active")
+      )
+    )
+    .orderBy(asc(companyMembers.id))
+    .limit(50);
 }

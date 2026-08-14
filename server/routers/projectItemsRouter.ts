@@ -1,16 +1,23 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import * as db from "../db";
 
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
+
 export const projectItemsRouter = router({
-  list: protectedProcedure
+  list: procedure
     .input(z.object({ projectId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      return db.getProjectItems(input.projectId, ctx.user.id);
+      return db.getProjectItems(input.projectId, ctx.scope.dataUserId);
     }),
 
-  add: protectedProcedure
+  add: procedure
     .input(
       z.object({
         projectId: z.number().int().positive(),
@@ -27,7 +34,10 @@ export const projectItemsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const project = await db.getProjectById(input.projectId, ctx.user.id);
+      const project = await db.getProjectById(
+        input.projectId,
+        ctx.scope.dataUserId
+      );
       if (!project)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -56,7 +66,7 @@ export const projectItemsRouter = router({
       return { success: true };
     }),
 
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -78,23 +88,23 @@ export const projectItemsRouter = router({
         data.overrideLaborHours = String(overrideLaborHours);
       await db.updateProjectItem(
         id,
-        ctx.user.id,
+        ctx.scope.dataUserId,
         data as Parameters<typeof db.updateProjectItem>[2]
       );
       return { success: true };
     }),
 
-  resetToMaster: protectedProcedure
+  resetToMaster: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.resetProjectItemToMaster(input.id, ctx.user.id);
+      await db.resetProjectItemToMaster(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.deleteProjectItem(input.id, ctx.user.id);
+      await db.deleteProjectItem(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 });

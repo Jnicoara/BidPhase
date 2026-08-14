@@ -22,9 +22,16 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { SCOPE_NOTE_KINDS } from "../../drizzle/schema";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
 
 const nameSchema = z.string().trim().min(1).max(255);
 const textSchema = z.string().trim().min(1).max(512);
@@ -44,17 +51,17 @@ async function requireBid(bidId: number, userId: number) {
 
 const expenses = router({
   /** The reusable list. */
-  list: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await db.getExpenseItems(ctx.user.id);
+  list: procedure.query(async ({ ctx }) => {
+    const rows = await db.getExpenseItems(ctx.scope.dataUserId);
     return rows.map(row => ({ ...row, amount: Number(row.amount) }));
   }),
 
-  archived: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await db.getArchivedExpenseItems(ctx.user.id);
+  archived: procedure.query(async ({ ctx }) => {
+    const rows = await db.getArchivedExpenseItems(ctx.scope.dataUserId);
     return rows.map(row => ({ ...row, amount: Number(row.amount) }));
   }),
 
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         name: nameSchema,
@@ -70,18 +77,18 @@ const expenses = router({
     )
     .mutation(async ({ input, ctx }) => {
       const id = await db.createExpenseItem({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         amount: toDecimal4(input.amount),
         notes: input.notes || null,
         taxable: input.taxable,
         markedUp: input.markedUp,
       });
-      const row = await db.getExpenseItemById(id, ctx.user.id);
+      const row = await db.getExpenseItemById(id, ctx.scope.dataUserId);
       return row ? { ...row, amount: Number(row.amount) } : null;
     }),
 
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -94,7 +101,7 @@ const expenses = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { id, ...rest } = input;
-      const existing = await db.getExpenseItemById(id, ctx.user.id);
+      const existing = await db.getExpenseItemById(id, ctx.scope.dataUserId);
       if (!existing)
         throw new TRPCError({ code: "NOT_FOUND", message: "Not found." });
 
@@ -106,13 +113,13 @@ const expenses = router({
       if (rest.markedUp !== undefined) patch.markedUp = rest.markedUp;
 
       if (Object.keys(patch).length > 0)
-        await db.updateExpenseItem(id, ctx.user.id, patch);
-      const row = await db.getExpenseItemById(id, ctx.user.id);
+        await db.updateExpenseItem(id, ctx.scope.dataUserId, patch);
+      const row = await db.getExpenseItemById(id, ctx.scope.dataUserId);
       return row ? { ...row, amount: Number(row.amount) } : null;
     }),
 
   /** Archive rather than delete — bids that used it keep their snapshot. */
-  setArchived: protectedProcedure
+  setArchived: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -120,22 +127,25 @@ const expenses = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const existing = await db.getExpenseItemById(input.id, ctx.user.id);
+      const existing = await db.getExpenseItemById(
+        input.id,
+        ctx.scope.dataUserId
+      );
       if (!existing)
         throw new TRPCError({ code: "NOT_FOUND", message: "Not found." });
       await db.setExpenseItemArchived(
         input.id,
-        ctx.user.id,
+        ctx.scope.dataUserId,
         input.archived ? new Date() : null
       );
       return { success: true };
     }),
 
   /** Everything charged on one bid. */
-  onBid: protectedProcedure
+  onBid: procedure
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       const rows = await db.getBidExpenses(input.bidId);
       return rows.map(row => ({ ...row, amount: Number(row.amount) }));
     }),
@@ -147,7 +157,7 @@ const expenses = router({
    * are frozen onto the bid. Without one, the name and amount given are used
    * directly and nothing is saved to the library.
    */
-  addToBid: protectedProcedure
+  addToBid: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -165,7 +175,7 @@ const expenses = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
 
       let name = input.name;
       let amount = input.amount;
@@ -175,7 +185,10 @@ const expenses = router({
       if (input.itemId !== null) {
         // Checked, not trusted: an item id is a small integer and must belong
         // to this user before its amount lands on their bid.
-        const item = await db.getExpenseItemById(input.itemId, ctx.user.id);
+        const item = await db.getExpenseItemById(
+          input.itemId,
+          ctx.scope.dataUserId
+        );
         if (!item)
           throw new TRPCError({
             code: "NOT_FOUND",
@@ -209,7 +222,7 @@ const expenses = router({
         .map(r => ({ ...r, amount: Number(r.amount) }))[0];
     }),
 
-  updateOnBid: protectedProcedure
+  updateOnBid: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -221,7 +234,7 @@ const expenses = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       const patch: Record<string, unknown> = {};
       if (input.name !== undefined) patch.name = input.name;
       if (input.amount !== undefined) patch.amount = toDecimal4(input.amount);
@@ -232,7 +245,7 @@ const expenses = router({
       return { success: true };
     }),
 
-  removeFromBid: protectedProcedure
+  removeFromBid: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -240,7 +253,7 @@ const expenses = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       await db.deleteBidExpense(input.id, input.bidId);
       return { success: true };
     }),
@@ -252,7 +265,7 @@ const expenses = router({
    * bid into the library, and links the two so the bid shows where it came
    * from. The bid's snapshot is untouched — promoting is a library operation.
    */
-  saveToLibrary: protectedProcedure
+  saveToLibrary: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -260,7 +273,7 @@ const expenses = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       const onBid = (await db.getBidExpenses(input.bidId)).find(
         row => row.id === input.id
       );
@@ -271,7 +284,7 @@ const expenses = router({
       }
 
       const itemId = await db.createExpenseItem({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: onBid.name,
         amount: onBid.amount,
         // The switches travel with it — a charge saved for reuse should behave
@@ -289,15 +302,15 @@ const expenses = router({
 // ─── Includes / excludes ──────────────────────────────────────────────────────
 
 const scope = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return db.getScopeNotes(ctx.user.id);
+  list: procedure.query(async ({ ctx }) => {
+    return db.getScopeNotes(ctx.scope.dataUserId);
   }),
 
-  archived: protectedProcedure.query(async ({ ctx }) => {
-    return db.getArchivedScopeNotes(ctx.user.id);
+  archived: procedure.query(async ({ ctx }) => {
+    return db.getArchivedScopeNotes(ctx.scope.dataUserId);
   }),
 
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         kind: z.enum(SCOPE_NOTE_KINDS),
@@ -306,14 +319,14 @@ const scope = router({
     )
     .mutation(async ({ input, ctx }) => {
       const id = await db.createScopeNote({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         kind: input.kind,
         text: input.text,
       });
-      return db.getScopeNoteById(id, ctx.user.id);
+      return db.getScopeNoteById(id, ctx.scope.dataUserId);
     }),
 
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -323,18 +336,18 @@ const scope = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { id, ...rest } = input;
-      const existing = await db.getScopeNoteById(id, ctx.user.id);
+      const existing = await db.getScopeNoteById(id, ctx.scope.dataUserId);
       if (!existing)
         throw new TRPCError({ code: "NOT_FOUND", message: "Not found." });
       const patch: Record<string, unknown> = {};
       if (rest.kind !== undefined) patch.kind = rest.kind;
       if (rest.text !== undefined) patch.text = rest.text;
       if (Object.keys(patch).length > 0)
-        await db.updateScopeNote(id, ctx.user.id, patch);
-      return db.getScopeNoteById(id, ctx.user.id);
+        await db.updateScopeNote(id, ctx.scope.dataUserId, patch);
+      return db.getScopeNoteById(id, ctx.scope.dataUserId);
     }),
 
-  setArchived: protectedProcedure
+  setArchived: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -342,25 +355,28 @@ const scope = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const existing = await db.getScopeNoteById(input.id, ctx.user.id);
+      const existing = await db.getScopeNoteById(
+        input.id,
+        ctx.scope.dataUserId
+      );
       if (!existing)
         throw new TRPCError({ code: "NOT_FOUND", message: "Not found." });
       await db.setScopeNoteArchived(
         input.id,
-        ctx.user.id,
+        ctx.scope.dataUserId,
         input.archived ? new Date() : null
       );
       return { success: true };
     }),
 
-  onBid: protectedProcedure
+  onBid: procedure
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       return db.getBidScopeNotes(input.bidId);
     }),
 
-  addToBid: protectedProcedure
+  addToBid: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -370,13 +386,16 @@ const scope = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
 
       let kind = input.kind;
       let text = input.text;
 
       if (input.noteId !== null) {
-        const note = await db.getScopeNoteById(input.noteId, ctx.user.id);
+        const note = await db.getScopeNoteById(
+          input.noteId,
+          ctx.scope.dataUserId
+        );
         if (!note)
           throw new TRPCError({
             code: "NOT_FOUND",
@@ -403,7 +422,7 @@ const scope = router({
       return (await db.getBidScopeNotes(input.bidId)).find(r => r.id === id);
     }),
 
-  updateOnBid: protectedProcedure
+  updateOnBid: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -413,7 +432,7 @@ const scope = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       const patch: Record<string, unknown> = {};
       if (input.kind !== undefined) patch.kind = input.kind;
       if (input.text !== undefined) patch.text = input.text;
@@ -422,7 +441,7 @@ const scope = router({
       return { success: true };
     }),
 
-  removeFromBid: protectedProcedure
+  removeFromBid: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -430,12 +449,12 @@ const scope = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       await db.deleteBidScopeNote(input.id, input.bidId);
       return { success: true };
     }),
 
-  saveToLibrary: protectedProcedure
+  saveToLibrary: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -443,7 +462,7 @@ const scope = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       const onBid = (await db.getBidScopeNotes(input.bidId)).find(
         row => row.id === input.id
       );
@@ -453,7 +472,7 @@ const scope = router({
         return { success: true, alreadySaved: true as const };
       }
       const noteId = await db.createScopeNote({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         kind: onBid.kind,
         text: onBid.text,
       });
