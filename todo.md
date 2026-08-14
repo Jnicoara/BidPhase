@@ -812,3 +812,8 @@ left as written rather than rewritten to match the rename.
 ## v5.98 — Approved Stale Test Data Cleanup
 - [x] Remove only the four approved stale test bid/PDF records: Trace test, Copilot test, Stamp test, and Sheet test
 - [x] Confirm the four `test/...` PDF references are gone before rerunning the backup
+
+## v5.99 — Exact GitHub Main Deployment Sync
+- [x] Synchronize the local project exactly with the latest GitHub `main` branch without local feature edits
+- [x] Apply only the pending migrations provided by GitHub `main` using `pnpm db:push`
+- [x] Validate the GitHub-aligned build and save the exact publish-ready checkpoint
