@@ -4,6 +4,12 @@ Plain-English record of what changed and when. Newest first.
 
 This is the human-readable companion to the git history — read this to see what happened, read the commits for the technical detail.
 
+## [2026-08-14]
+
+- **The backup now runs itself, nightly.** It exports to Cloudflare R2 every night at 2am UTC without anyone triggering it. It runs an hour and a half before the archive purge that permanently deletes expired bids, so each night's copy still contains whatever the purge is about to remove.
+- **A failed nightly run is loud, in three places at once** — the platform records the failure and retries, the full summary goes to the server log, and a record of exactly what failed is written into the backup bucket beside the data. A partial backup counts as a failed one. If the credentials are ever missing from the deployed app, every run fails visibly rather than quietly doing nothing.
+- **A retry will not repeat a backup that already worked.** If a night's backup succeeded and the platform retries anyway, it checks the bucket, sees the finished copy and stops. A run that failed halfway leaves no such record, so the retry does the work.
+
 ## [2026-08-13]
 
 - **There is now an independent backup of everything.** One command exports every database table and every uploaded file — plan PDFs, company logos — to a Cloudflare R2 bucket that has nothing to do with Manus. Each run lands in its own timestamped folder alongside a manifest saying exactly what was copied and what, if anything, failed. Run it with `pnpm tsx scripts/backup.mts`; there is also an admin-only button-equivalent for taking one in a hurry.

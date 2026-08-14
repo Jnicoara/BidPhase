@@ -64,7 +64,79 @@ There is also an admin-only route — `backup.run` and `backup.status`
 answering "is this even configured?" without a terminal. A large backup may
 outlast the HTTP request; that is expected, and the CLI is the answer.
 
-## 4. What lands in the bucket
+## 4. Running it automatically
+
+The nightly cron is **two pieces that ship separately** (`CLAUDE.md` §
+Scheduled work). The handler is in the code:
+`server/scheduled/backupToR2.ts`, mounted at `/api/scheduled/backupToR2`.
+
+The cron itself is created **once, on the Manus platform, from a sandbox
+terminal, after the site is deployed** — a dev machine is unreachable from the
+platform, so this cannot be done from a local checkout:
+
+```bash
+manus-heartbeat create \
+  --name nightly-backup-to-r2 \
+  --cron "0 0 2 * * *" \
+  --path /api/scheduled/backupToR2 \
+  --description "Export every table and stored file to Cloudflare R2"
+```
+
+Six fields, seconds first, UTC. **Until that command is run, nothing is backed
+up automatically** — the manual trigger keeps working throughout, which is the
+safe direction for the failure to point.
+
+### Environment
+
+**Nothing changes in `.env.production.local`.** That file is local-only and is
+never read by the deployed app. The four R2 variables must exist in the
+**deployed environment**, set through Manus:
+
+```
+R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
+```
+
+`DATABASE_URL`, `BUILT_IN_FORGE_API_URL` and `BUILT_IN_FORGE_API_KEY` are
+already there — they are what the app runs on.
+
+Check before registering the cron, from a sandbox terminal:
+
+```bash
+node -e "console.log(['R2_ACCOUNT_ID','R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY','R2_BUCKET'].filter(k=>!process.env[k]))"
+```
+
+An empty array means it is ready. Anything listed is missing, and every
+scheduled run will fail loudly until it is set.
+
+### Why 02:00, and why daily
+
+Daily, because the data is one contractor's working day; an hourly export of
+the same few thousand rows is cost without benefit.
+
+02:00 specifically, because `purgeArchivedBids` runs at **03:30** and
+permanently destroys bids whose 30-day archive has closed. Backing up first
+means the night's export still contains what the purge is about to remove, so a
+purge that fires on the wrong row stays recoverable for a day. Reverse the order
+and the backup faithfully records the deletion. `server/scheduledBackup.test.ts`
+asserts the ordering, so it cannot drift.
+
+### Retries
+
+The platform retries a `5xx` up to three times. A full backup is not cheap, so a
+retry first checks the bucket: if a **successful** backup already exists for
+today it returns 200 having done nothing. A failed or half-finished run leaves
+no successful manifest, so the retry does the work — which is what a retry is
+for. If the bucket cannot be read at all, it backs up rather than skipping: a
+duplicate is harmless, a skipped night is not.
+
+### Failure
+
+Identical to the manual run, in three places at once — a `500` so the platform
+retries and its Investigate flow shows it, the full summary in the server log,
+and a manifest recording the failure beside the data in the bucket. A partial
+backup is a failed backup.
+
+## 5. What lands in the bucket
 
 ```
 <prefix>/<timestamp>/manifest.json      what ran, what it found, what failed
@@ -78,7 +150,7 @@ already gone wrong cannot destroy the good one before it.
 The manifest carries the same failures the terminal printed, so the record of
 what went wrong sits beside the data rather than in a window someone closed.
 
-## 5. Proving a backup actually works
+## 6. Proving a backup actually works
 
 A backup that has been written but never read back is a hypothesis.
 
@@ -109,7 +181,7 @@ Run this after the first backup against a new bucket, and any time
 actually fail: it takes a real backup, corrupts the SQL inside the gzip the way
 the JSON bug did, and requires rejection. A checker that cannot fail is theatre.
 
-## 6. Restoring
+## 7. Restoring
 
 ```bash
 gunzip -c database.sql.gz | mysql -u USER -p DBNAME
@@ -123,7 +195,7 @@ Files restore by uploading `files/<key>` back to whatever storage the app is
 using, at the same key. The keys in the database are unchanged by a restore, so
 they line up as long as the object keys are preserved.
 
-## 7. The failure this design is most afraid of
+## 8. The failure this design is most afraid of
 
 A backup nobody finds out is broken until the day the original is gone.
 
@@ -145,13 +217,10 @@ run was corrupt. Every other test passed. Only the restore caught it.
 
 If you change anything in `server/backup/`, run that test.
 
-## 8. Not built yet
+## 9. Not built yet
 
-- **Scheduling.** Manual only, on purpose, until the manual version has been
-  proven against the real bucket. When it is added it belongs on the platform
-  cron (`CLAUDE.md` § Scheduled work), not a `setInterval`.
 - **Retention.** Nothing deletes old backups. For now that is the safe
   direction; revisit before the bucket becomes expensive.
-- **Restore automation.** Restoring is the documented manual sequence in § 6.
+- **Restore automation.** Restoring is the documented manual sequence in § 7.
   Verifying that a backup _can_ be restored is automated (§ 5); actually
   putting one back is deliberately a human decision.

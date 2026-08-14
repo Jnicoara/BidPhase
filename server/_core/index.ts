@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { purgeArchivedBidsHandler } from "../scheduled/purgeArchivedBids";
+import { BACKUP_PATH, backupToR2Handler } from "../scheduled/backupToR2";
 import {
   seedBaselineAssemblies,
   seedBaselineKits,
@@ -49,6 +50,9 @@ async function startServer() {
   // must be mounted before the Vite/static fallthrough or the platform's POST
   // lands on the SPA index instead of the handler.
   app.post("/api/scheduled/purgeArchivedBids", purgeArchivedBidsHandler);
+  // The nightly export to Cloudflare R2. Path comes from the handler module so
+  // the mount, the registration command and the test cannot drift apart.
+  app.post(BACKUP_PATH, backupToR2Handler);
   // tRPC API
   app.use(
     "/api/trpc",
