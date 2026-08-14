@@ -797,8 +797,9 @@ left as written rather than rewritten to match the rename.
 - [x] Validate the migrated release, synchronize GitHub main, and save the publish-ready checkpoint
 
 ## v5.96 — R2 Backup Release & Verification
-- [ ] Pull the latest GitHub main and inspect the independent R2 backup tool plus all pending migrations
-- [ ] Re-run the GitHub release inspection cleanly from the newest main branch before any merge or migration action
-- [ ] Apply verified schema migrations, validate the backup-enabled release, and save a publish-ready checkpoint
+- [x] Pull the latest GitHub main and inspect the independent R2 backup tool plus all pending migrations
+- [x] Re-run the GitHub release inspection cleanly from the newest main branch before any merge or migration action
+- [x] Apply verified schema migrations and validate the backup-enabled release (checkpoint pending)
 - [ ] Add the four encrypted, server-only Cloudflare R2 credentials after production deployment
+- [ ] Add the required encrypted `R2_BUCKET` name and validate the R2 destination before running the backup
 - [ ] Run the real production backup and verify the database and stored-file objects in Cloudflare R2
