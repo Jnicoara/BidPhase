@@ -6,6 +6,13 @@ This is the human-readable companion to the git history — read this to see wha
 
 ## [2026-08-14]
 
+- **A bid can now be sent to accounting as a QuickBooks CSV.** Customer, a reference, the date and the money — labor, materials, each additional charge, sales tax and the total. It imports through QuickBooks Online's own invoice importer (Settings → Import data → Invoices).
+- **Your overhead, profit and cost figures do not go with it.** This needed more care than it sounds: the labor and material numbers on the bid are what you PAY, before overhead and profit, so exporting those two would have handed your margin on every job to anyone the file was forwarded to. What goes out is the split of what the customer is CHARGED, and the two lines add up to the bid price exactly. No percentage of any kind appears in the file.
+- **The exported total always equals the bid's Total due**, and the export screen shows the lines and the total before writing anything, so it can be checked against the bid on screen.
+- **Sales tax goes out as its own line at your figure, not as a tax code.** QuickBooks will not accept a tax amount on import — given a code it recalculates the tax from its own rate tables, which could quietly turn a bid your customer approved into an invoice for a different amount. The trade-off, worth knowing once: point the "Sales tax" product/service at your sales-tax liability account the first time you import.
+- **It says what it cannot fix rather than staying quiet.** A bid with no customer name is flagged, because QuickBooks rejects those rows without saying so; a bid that has not been won is flagged too, since importing it creates an invoice for work you have not got.
+- One bid at a time for now. Exporting several at once can follow if it turns out to be wanted.
+
 - **Fixed a price import bug that quietly divided expensive prices.** A supply-house line reading `$1,250.00` was imported as **$250.00** — and reported as a success, so nothing on screen said anything had gone wrong. Any item over $1,000 was affected, which is exactly the expensive gear where being wrong costs the most. Prices now import at their real value.
 - **Materials with a comma in their name can be priced now.** Thirty shipped materials — `#10 bare copper, stranded` and its relatives — could never be priced from a sheet, because the importer cut the name at the comma and reported it as unrecognised.
 - **Pasting straight out of Excel works.** It used to import nothing at all and say "0 rows ready", because a spreadsheet paste is separated by tabs and the importer only understood commas. Tabs, semicolons and pipes are all read now, with or without a header row, and the importer says which it found.

@@ -30,6 +30,7 @@ import {
   CalendarDays,
   Check,
   ClipboardList,
+  Receipt,
   FileSignature,
   FileText,
   Plus,
@@ -54,6 +55,7 @@ import { UnitLinkBadge } from "@/components/UnitLinkBadge";
 import { UnitTemplateActions } from "@/components/UnitTemplateActions";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
 import { MaterialsListDialog } from "@/components/MaterialsListDialog";
+import { AccountingExportDialog } from "@/components/AccountingExportDialog";
 import { ClientLinkField } from "@/components/ClientLinkField";
 import { BidTaxControls } from "@/components/BidTaxControls";
 import { BidExtrasPanel } from "@/components/BidExtrasPanel";
@@ -176,6 +178,7 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
   const [addQty, setAddQty] = useState("1");
   const [addUnit, setAddUnit] = useState("");
   const [materialsListOpen, setMaterialsListOpen] = useState(false);
+  const [accountingOpen, setAccountingOpen] = useState(false);
 
   const utils = trpc.useUtils();
   const detailQuery = trpc.bids.get.useQuery({ id: bidId });
@@ -306,6 +309,11 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
         open={materialsListOpen}
         onOpenChange={setMaterialsListOpen}
       />
+      <AccountingExportDialog
+        bidId={bidId}
+        open={accountingOpen}
+        onOpenChange={setAccountingOpen}
+      />
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-center gap-3">
           <Button
@@ -355,6 +363,21 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
           >
             <ClipboardList className="w-3.5 h-3.5" />
             Materials list
+          </Button>
+
+          {/* The third document, and the third audience: the bookkeeper. Sits
+              beside the other two because all three are ways this bid leaves
+              the app, and they differ only in who receives them and therefore
+              in what they are allowed to carry. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setAccountingOpen(true)}
+            title="Accounting export — the numbers, as a QuickBooks CSV"
+          >
+            <Receipt className="w-3.5 h-3.5" />
+            Accounting
           </Button>
 
           {/* The way out of the app: this bid as a document a client receives.

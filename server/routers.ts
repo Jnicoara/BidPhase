@@ -18,6 +18,7 @@ import { clientsRouter } from "./routers/clientsRouter";
 import { salesTaxRouter } from "./routers/salesTaxRouter";
 import { bidExtrasRouter } from "./routers/bidExtrasRouter";
 import { materialsListRouter } from "./routers/materialsListRouter";
+import { accountingRouter } from "./routers/accountingRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
@@ -56,6 +57,7 @@ export const appRouter = router({
   // to a bid. Both snapshot onto the bid, as every library in this app does.
   bidExtras: bidExtrasRouter,
   materialsList: materialsListRouter,
+  accounting: accountingRouter,
   proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,
