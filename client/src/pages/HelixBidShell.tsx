@@ -7,10 +7,7 @@
  * Routing (hash-based):
  *   /           → Dashboard (the app has no separate splash; see § below)
  *   /dashboard  → Dashboard (all bids by status; replaced the Projects grid)
- *   /project/:id → Legacy project detail (PDF plan viewer / takeoff). Still
- *                  routed, but nothing links to it since Projects was removed.
  *   /settings    → Settings
- *   /trash       → Trash
  *   /matdb       → Supplier Pricing (prices the real materials catalog)
  *   /library/materials   → Materials (Foundation library catalog)
  *   /library/labor-rates → Labor Rates (roles and what they cost per hour)
@@ -25,9 +22,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
-import TrashPage from "@/pages/TrashPage";
 import DashboardPage from "@/pages/DashboardPage";
-import ProjectDetailPage from "@/pages/ProjectDetailPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
 import MaterialsLibraryPage from "@/pages/MaterialsLibraryPage";
 import LaborRatesPage from "@/pages/LaborRatesPage";
@@ -63,9 +58,7 @@ import { APP_VERSION_LABEL } from "@shared/version";
 
 type Route =
   | "dashboard"
-  | "project-detail"
   | "settings"
-  | "trash"
   | "matdb"
   | "library-materials"
   | "library-labor-rates"
@@ -94,20 +87,15 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   // Bare / and the old /home both land on the Dashboard. The splash page they
   // used to show was removed — see the § comment above renderContent.
   if (p === "" || p === "home") return { route: "dashboard" };
-  // The Dashboard replaced the old Projects list. /projects still resolves so
-  // existing links and bookmarks land somewhere sensible rather than on Home.
+  // The Dashboard replaced the old Projects list. /projects is still spelled
+  // out rather than left to the fallthrough, so the intent is on the record:
+  // it is a retired address kept pointing somewhere real, not an oversight.
   if (p === "dashboard" || p === "projects") return { route: "dashboard" };
-  if (p === "project" && parts[1]) {
-    const id = parseInt(parts[1]);
-    if (!isNaN(id)) return { route: "project-detail", projectId: id };
-  }
   if (p === "matdb") return { route: "matdb" };
   if (p === "settings") return { route: "settings" };
-  if (p === "trash") return { route: "trash" };
-  // Foundation bid layer. Distinct from /projects, which is the legacy
-  // master_* system with its PDF/takeoff state.
-  // The archive of soft-deleted BIDS. Distinct from /trash, which belongs to
-  // the legacy projects system and is client-state only.
+  // The archive of soft-deleted BIDS. The legacy projects system had its own
+  // "trash" for soft-deleted projects; that screen and its route are gone, and
+  // this is the only archive left.
   if (p === "archive") return { route: "bid-archive" };
   if (p === "bids") {
     // /bids/:id opens straight into one bid, which is what the Dashboard links to.
@@ -176,8 +164,6 @@ export default function HelixBidShell() {
       window.location.hash = `/bids/${id}/proposal`;
     } else if (r === "bid-archive") {
       window.location.hash = "/archive";
-    } else if (r === "project-detail" && id) {
-      window.location.hash = `/project/${id}`;
     } else if (r === "library-materials") {
       window.location.hash = "/library/materials";
     } else if (r === "library-labor-rates") {
@@ -221,9 +207,7 @@ export default function HelixBidShell() {
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const isOnDashboard = route === "dashboard";
-  const isOnProjectDetail = route === "project-detail";
   const isInSettings = route === "settings";
-  const isInTrash = route === "trash";
   const isInMatDb = route === "matdb";
   const isInLibraryMats = route === "library-materials";
   const isInLaborRates = route === "library-labor-rates";
@@ -268,14 +252,6 @@ export default function HelixBidShell() {
           onQuickBid={() => navigate("quickbid")}
         />
       );
-    if (isOnProjectDetail && activeProjectId)
-      return (
-        <ProjectDetailPage
-          projectId={activeProjectId}
-          onBack={() => navigate("dashboard")}
-        />
-      );
-    if (isInTrash) return <TrashPage onBack={goBack} />;
     if (isInSettings) return <SettingsTab onBack={goBack} />;
     if (isInLibraryMats) return <MaterialsLibraryPage />;
     if (isInLaborRates) return <LaborRatesPage />;
@@ -332,8 +308,7 @@ export default function HelixBidShell() {
     );
   };
 
-  const routeKey =
-    route === "project-detail" ? `project-${activeProjectId}` : route;
+  const routeKey = route;
 
   // ── Sidebar nav item helper ────────────────────────────────────────────────
   const NavBtn = ({
@@ -448,13 +423,20 @@ export default function HelixBidShell() {
           forget. See NavSection for how the grouping survives the collapsed
           64px state.
 
-          Two screens are deliberately absent. `assemblies` (the old
-          master_*-backed Assembly Builder) is superseded by Library §
-          Assemblies, and having both in one list meant two entries called
-          almost the same thing pointing at two different systems. `trash`
-          holds soft-deleted LEGACY projects and is superseded by the bid
-          Archive below. Both routes still resolve so no link or bookmark
-          breaks — they are just no longer advertised.
+          Two screens are deliberately absent, and are now GONE rather than
+          merely unadvertised. `assemblies` (the old master_*-backed Assembly
+          Builder) is superseded by Library § Assemblies, and having both in
+          one list meant two entries called almost the same thing pointing at
+          two different systems. `trash` held soft-deleted LEGACY projects and
+          is superseded by the bid Archive below.
+
+          They were left routed-but-hidden for a while so no bookmark would
+          break. That has outlived its usefulness: the legacy `projects` system
+          they belong to is being retired, and a hidden door into it is a way
+          to reach a screen that reports on tables nothing else writes to. Both
+          paths now fall through to the Dashboard like any other unrecognised
+          address, which is a bookmark landing somewhere real rather than in a
+          dead wing of the app.
 
           Takeoff is absent for a different reason: it is not a destination.
           It lives at /bids/:id/plans and needs a bid to open, so a top-level
@@ -469,7 +451,7 @@ export default function HelixBidShell() {
           <NavSection label="Workspace">
             <NavBtn
               onClick={() => navigate("dashboard")}
-              isActive={isOnDashboard || isOnProjectDetail}
+              isActive={isOnDashboard}
               icon={LayoutDashboard}
               label="Dashboard"
               title="Dashboard — every bid by stage"
@@ -610,19 +592,15 @@ export default function HelixBidShell() {
             <span className="capitalize">
               {isOnDashboard
                 ? "Dashboard"
-                : isOnProjectDetail
-                  ? "Project"
-                  : isInTrash
-                    ? "Trash"
-                    : isInSettings
-                      ? "Settings"
-                      : isInMatDb
-                        ? "Supplier Pricing"
-                        : isInLibraryMats
-                          ? "Materials"
-                          : isInAdmin
-                            ? "Admin Settings"
-                            : "Workspace"}
+                : isInSettings
+                  ? "Settings"
+                  : isInMatDb
+                    ? "Supplier Pricing"
+                    : isInLibraryMats
+                      ? "Materials"
+                      : isInAdmin
+                        ? "Admin Settings"
+                        : "Workspace"}
             </span>
           </div>
         </header>
@@ -654,7 +632,7 @@ export default function HelixBidShell() {
             {
               label: "Dashboard",
               icon: LayoutDashboard,
-              active: isOnDashboard || isOnProjectDetail,
+              active: isOnDashboard,
               go: () => navigate("dashboard"),
             },
             {

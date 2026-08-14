@@ -6,6 +6,9 @@ This is the human-readable companion to the git history — read this to see wha
 
 ## [2026-08-14]
 
+- **This is v6.0.** The trade axis now runs through the whole data model rather than just the assembly library, clients are a real record with their own screen, and the way into the app changed — so the number moved a major rather than a decimal point. (v5.98 was skipped; it was already used as a label for an unrelated data cleanup.)
+- **The last of the old project system is gone from the app.** Six leftover screens that nothing linked to have been deleted, and the two that were still reachable by typing their address — the old project detail page and its Trash — no longer resolve. They belonged to the superseded projects system; their addresses now land on the Dashboard like any other retired link.
+
 - **Starting a bid from a plan is now one click on the Dashboard.** Two cards sit at the top — "Upload a plan" and "Quick bid" — as the two ways a job actually arrives. Uploading takes the file first, creates the bid named after it, and drops you straight into the takeoff screen with the upload already running; you no longer have to create a bid and then go hunting for a Plans tab inside it. The old "New bid" button is still there for setting up an empty shell, just quieter.
 - **The old splash page is gone.** Signing in used to land on a leftover marketing page — logo, tagline, four feature cards and a "Go to Projects" button — that predated the Dashboard and did not fit the screen properly. The Dashboard is now the landing page, and old links to it go there too.
 - **Modifiers moved below Assemblies in the sidebar.** The Library now reads in the order you build things: parts, rates, the recipes, what tunes them, then bundles.

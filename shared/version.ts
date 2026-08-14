@@ -10,7 +10,25 @@
  * The number tracks the `vX.YY` checkpoint convention used in commit messages
  * (see CLAUDE.md § Conventions) — bump it here when a checkpoint ships.
  */
-export const APP_VERSION = "v5.97";
+/**
+ * ── Why this went to 6.0 rather than 5.98 ────────────────────────────────────
+ * Two reasons, one bookkeeping and one real.
+ *
+ * The bookkeeping one: `v5.98` is already spoken for. todo.md uses it as the
+ * heading for a Manus-side stale-test-data cleanup, and there is no
+ * `Ship v5.98` commit and no bump behind it. Reusing the number would put two
+ * different things under one label in the only two places versions are written
+ * down.
+ *
+ * The real one: what shipped between v5.97 and here is not a point release.
+ * The trade axis reached the whole data model, so the claim CLAUDE.md opens
+ * with — electrical-first by sequencing, not electrical-only by design — is now
+ * true of the schema rather than only of the plan. Clients became a first-class
+ * record with a screen. And the way into the app changed: the splash page went,
+ * and the Dashboard grew the two real entry points. A major is the honest label
+ * for a foundation change plus a new entity plus a new front door.
+ */
+export const APP_VERSION = "v6.0";
 
 /** Edition suffix — the app is field-first, and the tag has always said so. */
 export const APP_EDITION = "Field Edition";
