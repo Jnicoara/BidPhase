@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { purgeArchivedBidsHandler } from "../scheduled/purgeArchivedBids";
 import { BACKUP_PATH, backupToR2Handler } from "../scheduled/backupToR2";
+import { PLAN_UPLOAD_PATH, planUploadHandler } from "../planUpload";
 import {
   seedBaselineAssemblies,
   seedBaselineKits,
@@ -41,6 +42,11 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  // The same-origin plan upload, mounted BEFORE the body parsers so the PDF
+  // arrives as a stream this handler forwards, rather than something a parser
+  // has already tried to read. It is the fallback used when the browser is
+  // blocked from PUTting to storage directly — see server/planUpload.ts.
+  app.post(PLAN_UPLOAD_PATH, planUploadHandler);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

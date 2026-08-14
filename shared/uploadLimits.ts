@@ -8,16 +8,60 @@
  * being written down twice — the previous pair drifted apart the moment either
  * moved.
  *
- * ── Why 150MB and not "no limit" ─────────────────────────────────────────────
- * A scanned commercial set genuinely runs to a hundred megabytes or more, and
- * the old 30MB ceiling turned those away. But an unbounded upload is a way to
- * fill a bucket by accident or on purpose, and there is no honest error to show
- * once it has happened. 150MB clears real plan sets with room to spare while
- * staying a bound.
+ * ── Why 500MB ────────────────────────────────────────────────────────────────
+ * The number tracks what a real plan set weighs, not what feels tidy.
+ *
+ *   Vector set, 100 sheets, architectural + MEP      20 – 80MB
+ *   SCANNED set, 300dpi colour, same size            200 – 600MB
+ *   Big commercial package with addenda              can pass 500MB
+ *
+ * Scanned sets are the case that matters. They are what an estimator receives
+ * from a general contractor who printed and re-scanned the drawings, they are
+ * the single most common large file in this trade, and the previous 150MB
+ * ceiling turned a good number of them away — the same mistake the 30MB ceiling
+ * made before it, one order of magnitude up.
+ *
+ * It also sits sensibly against comparable tools, which is the check on whether
+ * a number is realistic or merely generous: Procore and Autodesk Construction
+ * Cloud accept multi-gigabyte files, Bluebeam Studio and PlanGrid land around
+ * 1GB per document, and the takeoff-focused tools sit in the mid hundreds of
+ * megabytes. 500MB puts HelixBid in that last group rather than at the bottom
+ * of it, without pretending to be a document management system.
+ *
+ * ── And why not "no limit" ───────────────────────────────────────────────────
+ * An unbounded upload is a way to fill a bucket by accident or on purpose, and
+ * there is no honest error to show once it has happened. A bound that is
+ * generous and enforced beats no bound.
+ *
+ * ── The limit is not the only ceiling, and never was ─────────────────────────
+ * Raising this number alone moves a figure on screen. It did last time: the
+ * 30MB → 150MB change had to route the bytes around a 32 MiB platform request
+ * limit before the new number meant anything (see bidPdfsRouter's header). Two
+ * ceilings sit above this one today and both are outside this file:
+ *
+ *   • the transport — the browser PUTs straight to storage, so whatever sits
+ *     between them governs what actually completes;
+ *   • the VIEWER — TakeoffPage reads the whole document into an ArrayBuffer
+ *     before handing it to pdfjs, so a file this size is fully resident in tab
+ *     memory. Ranged loading is the fix and is not built yet.
+ *
+ * Both are tracked as follow-ups. This constant is what the app PROMISES to
+ * accept; it is worth nothing on its own.
  */
 
 /** Largest plan PDF the app accepts. */
-export const MAX_PDF_BYTES = 150 * 1024 * 1024;
+export const MAX_PDF_BYTES = 500 * 1024 * 1024;
+
+/**
+ * Above this, the document is accepted but the viewer is likely to struggle.
+ *
+ * Not a refusal — a file between this and MAX_PDF_BYTES uploads and attaches
+ * normally. It exists so the app can SAY something before an estimator watches
+ * a 400MB scan take the tab down, rather than presenting a limit that implies
+ * everything under it opens comfortably. Honest about a real constraint beats
+ * silence followed by a crash.
+ */
+export const VIEWER_COMFORTABLE_BYTES = 150 * 1024 * 1024;
 
 /** Human-readable size, matching how the UI prints every other file size. */
 export function formatBytes(bytes: number): string {

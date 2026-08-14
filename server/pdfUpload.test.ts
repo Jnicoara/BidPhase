@@ -4,7 +4,7 @@
  * ── Why the boundary is tested from both sides ───────────────────────────────
  * A limit is only two things: the largest file that works and the smallest that
  * does not. Everything between is the same code path. So these press right up
- * against 150MB from each side rather than sampling somewhere in the middle,
+ * against the limit from each side rather than sampling somewhere in the middle,
  * because an off-by-one here either turns away a plan set the app promised to
  * take or quietly accepts one past the bound.
  *
@@ -91,8 +91,18 @@ beforeEach(async () => {
 // ── The rule itself ──────────────────────────────────────────────────────────
 
 describe("the size limit", () => {
-  it("is 150MB", () => {
-    expect(MAX_PDF_BYTES).toBe(150 * 1024 * 1024);
+  it("is 500MB", () => {
+    expect(MAX_PDF_BYTES).toBe(500 * 1024 * 1024);
+  });
+
+  it("clears a scanned commercial set, which is why it was raised", () => {
+    // The case the 150MB ceiling turned away: a full set printed and re-scanned
+    // at 300dpi colour, which is the most common large file in this trade.
+    for (const size of [200 * MB, 300 * MB, 450 * MB]) {
+      expect(
+        checkPdfUpload({ filename: "Scanned set.pdf", byteSize: size }).ok
+      ).toBe(true);
+    }
   });
 
   it("accepts a file one byte under the limit", () => {
@@ -102,7 +112,7 @@ describe("the size limit", () => {
   });
 
   it("accepts a file exactly at the limit", () => {
-    // The limit is inclusive: "up to 150MB" has to mean 150MB works.
+    // The limit is inclusive: "up to 500MB" has to mean 500MB works.
     expect(
       checkPdfUpload({ filename: "E1.pdf", byteSize: MAX_PDF_BYTES }).ok
     ).toBe(true);
@@ -116,8 +126,10 @@ describe("the size limit", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("accepts the large sets the old 30MB ceiling turned away", () => {
-    for (const size of [40 * MB, 80 * MB, 120 * MB, 149 * MB]) {
+  it("accepts every size the earlier ceilings turned away", () => {
+    // 30MB was the original limit, 150MB the one after it. Each of these was
+    // refused by one of them and must not be refused again.
+    for (const size of [40 * MB, 80 * MB, 120 * MB, 149 * MB, 160 * MB]) {
       expect(
         checkPdfUpload({ filename: "Scanned set.pdf", byteSize: size }).ok
       ).toBe(true);
@@ -135,15 +147,15 @@ describe("what the refusal says", () => {
   it("names the file, its size, the limit, and what to do", () => {
     const result = checkPdfUpload({
       filename: "Tower A - Electrical.pdf",
-      byteSize: 200 * MB,
+      byteSize: 600 * MB,
     });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a refusal");
 
     // Each of these is load-bearing: which file, how far over, and the way out.
     expect(result.message).toContain("Tower A - Electrical.pdf");
-    expect(result.message).toContain("200MB");
-    expect(result.message).toContain("150MB");
+    expect(result.message).toContain("600MB");
+    expect(result.message).toContain(formatBytes(MAX_PDF_BYTES));
     expect(result.message).toMatch(/split/i);
   });
 
@@ -154,11 +166,14 @@ describe("what the refusal says", () => {
     expect(result.message).toContain("Plans.dwg");
     expect(result.message).toMatch(/PDF/);
     // Not the size message — a 4MB file is nowhere near the limit.
-    expect(result.message).not.toMatch(/150MB/);
+    expect(result.message).not.toContain(formatBytes(MAX_PDF_BYTES));
   });
 
   it("does not read like a validation error", () => {
-    const result = checkPdfUpload({ filename: "E1.pdf", byteSize: 500 * MB });
+    const result = checkPdfUpload({
+      filename: "E1.pdf",
+      byteSize: MAX_PDF_BYTES + MB,
+    });
     if (result.ok) throw new Error("expected a refusal");
     for (const jargon of [
       "invalid",
@@ -180,7 +195,7 @@ describe("what the refusal says", () => {
 
 describe("formatting a size", () => {
   it("prints the limit as a round number", () => {
-    expect(formatBytes(MAX_PDF_BYTES)).toBe("150MB");
+    expect(formatBytes(MAX_PDF_BYTES)).toBe("500MB");
   });
 
   it("prints a real file size to one decimal", () => {
@@ -219,16 +234,23 @@ describe("recognising a PDF by its bytes", () => {
 describe.skipIf(!hasDb)("asking for an upload ticket", () => {
   it("refuses an oversized file before it ever reaches storage", async () => {
     // The distinction that matters: this comes back as the SIZE message, not
-    // as a storage error. Validation has to happen first, or a 200MB upload
-    // starts and dies somewhere the user cannot read.
+    // as a storage error. Validation has to happen first, or an oversized
+    // upload starts and dies somewhere the user cannot read.
+    //
+    // Sized off the constant rather than a literal — the previous literal was
+    // 200MB, which stopped being oversized the moment the limit was raised and
+    // turned this into a test that reached storage and failed for the wrong
+    // reason.
     const bid = await newBid();
     await expect(
       caller().bidPdfs.createUploadTicket({
         bidId: bid.id,
         filename: "Huge.pdf",
-        byteSize: 200 * MB,
+        byteSize: MAX_PDF_BYTES + MB,
       })
-    ).rejects.toThrow(/over the 150MB limit/i);
+    ).rejects.toThrow(
+      new RegExp(`over the ${formatBytes(MAX_PDF_BYTES)} limit`, "i")
+    );
   });
 
   it("refuses a file that is not a PDF by name", async () => {
@@ -303,7 +325,9 @@ describe.skipIf(!hasDb)("confirming an upload", () => {
         storageKey: keyFor(bid.id, "One byte too far.pdf"),
         byteSize: MAX_PDF_BYTES + 1,
       })
-    ).rejects.toThrow(/over the 150MB limit/i);
+    ).rejects.toThrow(
+      new RegExp(`over the ${formatBytes(MAX_PDF_BYTES)} limit`, "i")
+    );
 
     // The check that a rejected upload leaves no half-attached sheet behind.
     expect(await caller().bidPdfs.list({ bidId: bid.id })).toHaveLength(0);

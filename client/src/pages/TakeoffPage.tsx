@@ -72,10 +72,16 @@ import { ScaleControl } from "@/components/takeoff/ScaleControl";
 import { UploadProgress } from "@/components/takeoff/UploadProgress";
 import {
   MAX_PDF_BYTES,
+  VIEWER_COMFORTABLE_BYTES,
   checkPdfUpload,
   formatBytes,
   looksLikePdf,
 } from "@shared/uploadLimits";
+import {
+  postViaServer,
+  putDirectToStorage,
+  type UploadError,
+} from "@/lib/planUploadTransport";
 import { TraceLayer } from "@/components/takeoff/TraceLayer";
 import { RunsPanel } from "@/components/takeoff/RunsPanel";
 import {
@@ -119,6 +125,15 @@ type UploadJob = {
   sent: number;
   state: "waiting" | "uploading" | "finishing" | "done" | "failed";
   error?: string;
+  /**
+   * The technical line behind `error`, when there is one worth keeping.
+   *
+   * Separate so the message stays one readable sentence while the thing an
+   * engineer needs — bytes transferred, HTTP status, why zero bytes points at
+   * configuration — survives on screen instead of only in a toast that has
+   * already gone.
+   */
+  errorDetail?: string | null;
 };
 
 type Document = {
@@ -1317,43 +1332,63 @@ export default function TakeoffPage({
           continue;
         }
 
+        // Accepted, but say so before the viewer struggles with it. The app
+        // takes files up to MAX_PDF_BYTES; it opens them comfortably up to
+        // rather less, because the whole document is read into memory (see
+        // VIEWER_COMFORTABLE_BYTES). Warning beats a limit that implies
+        // everything under it will open.
+        if (file.size > VIEWER_COMFORTABLE_BYTES) {
+          toast.warning(
+            `${file.name} is ${formatBytes(file.size)}. It will attach, but a set this large can be slow to open and may not render on a low-memory device.`
+          );
+        }
+
         try {
           setState({ state: "uploading" });
-          const ticket = await createTicket.mutateAsync({
-            bidId,
-            filename: file.name,
-            byteSize: file.size,
-          });
 
-          // XHR rather than fetch: fetch cannot report upload progress, and a
-          // 150MB transfer with no feedback is indistinguishable from a hang.
-          await new Promise<void>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhrRef.current = xhr;
-            xhr.open("PUT", ticket.uploadUrl, true);
-            xhr.setRequestHeader("Content-Type", "application/pdf");
-            xhr.upload.onprogress = e => {
-              if (e.lengthComputable) setState({ sent: e.loaded });
-            };
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) resolve();
-              else
-                reject(
-                  new Error(`Storage refused the upload (${xhr.status}).`)
-                );
-            };
-            xhr.onerror = () =>
-              reject(new Error("The connection dropped during upload."));
-            xhr.onabort = () => reject(new Error("Upload cancelled."));
-            xhr.send(file);
-          });
+          const handle = {
+            onProgress: (sent: number) => setState({ sent }),
+            onStart: (xhr: XMLHttpRequest) => {
+              xhrRef.current = xhr;
+            },
+          };
+
+          // The direct path first: browser straight to storage, no size ceiling
+          // and nothing buffered on our server. See lib/planUploadTransport.ts.
+          let storageKey: string;
+          try {
+            const ticket = await createTicket.mutateAsync({
+              bidId,
+              filename: file.name,
+              byteSize: file.size,
+            });
+            await putDirectToStorage(ticket.uploadUrl, file, handle);
+            storageKey = ticket.storageKey;
+          } catch (directError) {
+            // Only a `blocked` failure is worth another attempt. It means zero
+            // bytes left the browser — the request was refused before its body
+            // was read, which is what a storage bucket with no CORS rule for
+            // this origin does to every upload at every size. Our own origin
+            // cannot be refused that way, so the same file goes through the
+            // server instead.
+            //
+            // Anything else — dropped, stalled, an HTTP rejection — would fail
+            // the same way through a smaller pipe, so it is reported as-is
+            // rather than turned into two errors.
+            if ((directError as UploadError).kind !== "blocked")
+              throw directError;
+
+            setState({ sent: 0 });
+            storageKey = await postViaServer(bidId, file, handle);
+          }
           xhrRef.current = null;
 
           setState({ state: "finishing", sent: file.size });
+          // One place records a sheet, whichever path carried the bytes.
           const attached = await confirmAttach.mutateAsync({
             bidId,
             filename: file.name,
-            storageKey: ticket.storageKey,
+            storageKey,
             byteSize: file.size,
           });
 
@@ -1367,7 +1402,11 @@ export default function TakeoffPage({
             err instanceof Error
               ? err.message
               : "That file could not be attached.";
-          setState({ state: "failed", error: message });
+          const detail =
+            err instanceof Error
+              ? ((err as Error & { detail?: string | null }).detail ?? null)
+              : null;
+          setState({ state: "failed", error: message, errorDetail: detail });
           toast.error(message);
         }
       }

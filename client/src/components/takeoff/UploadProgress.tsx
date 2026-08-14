@@ -34,6 +34,8 @@ export type UploadJobView = {
   sent: number;
   state: "waiting" | "uploading" | "finishing" | "done" | "failed";
   error?: string;
+  /** The technical line behind `error`. Shown small, under it. */
+  errorDetail?: string | null;
 };
 
 export function UploadProgress({
@@ -110,9 +112,18 @@ export function UploadProgress({
             </div>
 
             {failed ? (
-              <p className="text-[0.7rem] text-destructive mt-0.5 ml-5.5 pl-0.5">
-                {job.error}
-              </p>
+              <div className="mt-0.5 ml-5.5 pl-0.5">
+                <p className="text-[0.7rem] text-destructive">{job.error}</p>
+                {/* The engineer's line. Kept out of the sentence above so the
+                    user-facing message stays one readable thing, and kept ON
+                    SCREEN rather than only in a toast, because this is what
+                    someone pastes into a bug report an hour later. */}
+                {job.errorDetail ? (
+                  <p className="text-[0.65rem] text-muted-foreground mt-0.5">
+                    {job.errorDetail}
+                  </p>
+                ) : null}
+              </div>
             ) : (
               <div
                 className="h-1 mt-1.5 rounded-full bg-muted overflow-hidden"
