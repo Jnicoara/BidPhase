@@ -789,3 +789,9 @@ left as written rather than rewritten to match the rename.
 - [x] Inspect and apply the verified database migration 0026 required by the current HelixBid GitHub main branch
 - [x] Register the documented 30-day archive-cleanup heartbeat for the deployed application
 - [x] Validate the migration and active scheduled job, then save a checkpoint synchronized with GitHub main
+
+## v5.95 — Pre-Deploy Migration Synchronization
+- [x] Pull the latest GitHub main branch and inspect migrations 0029, 0030, and 0031
+- [x] Apply the verified pending schema migrations with `pnpm db:push` before release
+- [x] Correct the discovered missing `pricing_defaults.productivityPct` column required by the merged release
+- [x] Validate the migrated release, synchronize GitHub main, and save the publish-ready checkpoint
