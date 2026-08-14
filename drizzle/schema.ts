@@ -522,6 +522,15 @@ export const TRADE_DEFAULT_TRADE_GATED = "electrical";
 export const TRADE_DEFAULT_SHARED = "all";
 
 /**
+ * Whether sales tax is charged on the marked-up price or the underlying cost.
+ *
+ * Declared up here with the other shared vocabularies because `pricing_defaults`
+ * uses it and that table is defined before the tax tables. The full explanation
+ * of what the two mean is on `pricing_defaults.taxApplyTo`.
+ */
+export const TAX_APPLY_TO = ["price", "cost"] as const;
+
+/**
  * How the material catalog is shelved. Curated, NOT user-extendable.
  *
  * Declaration order is the display order on the Materials screen — keep them in
@@ -1036,6 +1045,41 @@ export const pricingDefaults = mysqlTable(
       { onDelete: "set null" }
     ),
 
+    // ── Sales tax ────────────────────────────────────────────────────────────
+    //
+    // What is taxable is a COMPANY decision, because it follows from the
+    // jurisdiction the contractor operates under and the kind of work they do
+    // — not from anything about an individual bid. The rate comes from the job
+    // address (tax_jurisdictions); these three say what the rate is applied to.
+    //
+    // All three ship OFF and taxing nothing. A tax feature that arrives switched
+    // on with assumed rules would put a number on a bid that nobody chose, and
+    // sales tax is the last place in this app where a plausible default is
+    // acceptable. See the header of shared/salesTax.ts.
+
+    /** Master switch. Off means no tax line exists anywhere. */
+    salesTaxEnabled: boolean("salesTaxEnabled").default(false).notNull(),
+
+    /**
+     * Whether materials / labor are taxable. Both false is a legitimate
+     * configuration and reports as "nothing taxable" rather than as $0 tax —
+     * an explicit statement beats a silent zero.
+     */
+    taxMaterials: boolean("taxMaterials").default(false).notNull(),
+    taxLabor: boolean("taxLabor").default(false).notNull(),
+
+    /**
+     * "price" — tax the customer-facing amount, after overhead and profit.
+     * "cost"  — tax the underlying cost, before markup.
+     *
+     * These give materially different numbers on the same bid, which is why it
+     * is a setting. Some jurisdictions write the rule against what the
+     * contractor charges; others against what they paid.
+     */
+    taxApplyTo: mysqlEnum("taxApplyTo", TAX_APPLY_TO)
+      .default("price")
+      .notNull(),
+
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -1291,6 +1335,93 @@ export const clients = mysqlTable(
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = typeof clients.$inferInsert;
 
+// ─── Tax jurisdictions ────────────────────────────────────────────────────────
+/**
+ * A place, and the sales tax it charges — as the CONTRACTOR entered it.
+ *
+ * ── Nothing is shipped, and that is the design ───────────────────────────────
+ * There is no seeded rate table and there must never be one. Rates change
+ * constantly across state, county, city and special districts, and a stale
+ * hardcoded rate is worse than none: it looks identical to a correct one on
+ * screen, gets bid, gets won, and the difference comes out of a margin or an
+ * audit. Every row here was typed in by someone who checked it, which is the
+ * only basis on which this app should apply a tax rate at all.
+ *
+ * See shared/salesTax.ts for the fuller statement of that constraint.
+ *
+ * ── Components, not one number ───────────────────────────────────────────────
+ * `components` is the stack — `[{label:"State", ratePct:6.25}, {label:"Cook
+ * County", ratePct:1.75}]` — because that is how a rate is quoted and how it is
+ * checked. A single 9.5% gives a contractor nothing to verify against their
+ * accountant's figures, and an itemised proposal is what makes the number
+ * defensible to a customer.
+ *
+ * ── Matching is by text, and openly so ───────────────────────────────────────
+ * `state` / `county` / `city` are optional matching keys tested against the
+ * bid's job address (matchJurisdiction). It is substring matching, not
+ * geocoding: it can miss and it can be fooled. That is tolerable only because
+ * the match is always displayed with what it matched on, and is always
+ * overridable on the bid.
+ */
+export const taxJurisdictions = mysqlTable(
+  "tax_jurisdictions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** What the user calls it — "Illinois — Chicago", "Travis County TX". */
+    name: varchar("name", { length: 255 }).notNull(),
+
+    /**
+     * The matching keys. All optional; every one that is SET must appear in the
+     * job address for the row to match, and a row with none set matches
+     * nothing rather than everything.
+     */
+    state: varchar("state", { length: 64 }),
+    county: varchar("county", { length: 128 }),
+    city: varchar("city", { length: 128 }),
+
+    /** `[{ label, ratePct }]`, percent as typed — 6.25 means 6.25%. */
+    components: json("components")
+      .$type<{ label: string; ratePct: number }[]>()
+      .notNull(),
+
+    /**
+     * Free text for where the rate came from and when it was checked — a link
+     * to the state's rate lookup, an accountant's name, a date.
+     *
+     * It exists because the one question anybody asks about a tax rate is "says
+     * who?", and the answer needs somewhere to live next to the number rather
+     * than in an email.
+     */
+    sourceNote: varchar("sourceNote", { length: 512 }),
+
+    /**
+     * When the user last confirmed this rate is still current.
+     *
+     * Deliberately NOT `updatedAt`, for the same reason materials price
+     * staleness is not: `updatedAt` moves when anything changes — a rename, a
+     * note — so ageing a rate off it would show a two-year-old rate as freshly
+     * checked because somebody fixed its spelling. Only an explicit confirm
+     * touches this.
+     */
+    verifiedAt: timestamp("verifiedAt"),
+
+    archivedAt: timestamp("archivedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("tax_jurisdictions_userId_idx").on(t.userId),
+    index("tax_jurisdictions_archivedAt_idx").on(t.archivedAt),
+  ]
+);
+
+export type TaxJurisdictionRow = typeof taxJurisdictions.$inferSelect;
+export type InsertTaxJurisdiction = typeof taxJurisdictions.$inferInsert;
+
 // ─── Bids ─────────────────────────────────────────────────────────────────────
 // The Foundation bid layer. Deliberately NOT the legacy `projects` table, which
 // belongs to the master_* system and carries PDF/takeoff state — see the divider
@@ -1393,6 +1524,52 @@ export const bids = mysqlTable(
     clientName: varchar("clientName", { length: 255 }),
     siteAddress: varchar("siteAddress", { length: 512 }),
     proposalNote: text("proposalNote"),
+
+    // ── Sales tax, per bid ───────────────────────────────────────────────────
+    //
+    // The rate normally comes from matching `siteAddress` against the user's
+    // tax areas. These three exist because that must never be the only path:
+    // an automatic tax with no way to correct it is a way to send a wrong
+    // number to a customer with no recourse, and exemptions are ordinary.
+
+    /**
+     * Use THIS tax area rather than whatever the job address matched.
+     *
+     * For the address the matcher cannot read, the job that straddles a
+     * boundary, and the case where the user simply knows better. `set null` on
+     * delete: removing a tax area must not silently re-rate every bid that
+     * pointed at it — it drops back to matching, and the bid says so.
+     */
+    taxJurisdictionId: int("taxJurisdictionId").references(
+      () => taxJurisdictions.id,
+      { onDelete: "set null" }
+    ),
+
+    /**
+     * A rate typed straight onto this bid, as a percent. Outranks both the
+     * matched area and `taxJurisdictionId`.
+     *
+     * The last resort, and the reason it exists: a contractor who cannot make
+     * the app produce the right number must still be able to send the right
+     * bid. NULL means "not overridden", which is different from 0 — zero is a
+     * deliberate zero-rate and is applied as one.
+     */
+    taxRateOverridePct: decimal("taxRateOverridePct", {
+      precision: 7,
+      scale: 4,
+    }),
+
+    /**
+     * This customer pays no sales tax. Outranks every rate above.
+     *
+     * Government bodies, resale, registered exempt organisations. The reason is
+     * stored alongside because "why was this bid untaxed" is the first question
+     * asked in an audit, and a bare boolean cannot answer it. Shown on the
+     * proposal as an explicit $0 line rather than by omission — a customer
+     * entitled to an exemption should see that they got it.
+     */
+    taxExempt: boolean("taxExempt").default(false).notNull(),
+    taxExemptReason: varchar("taxExemptReason", { length: 255 }),
 
     /**
      * When the bid was archived, or NULL if it is live. This single column is

@@ -57,6 +57,9 @@ import {
   InsertClient,
   Client,
   clients,
+  InsertTaxJurisdiction,
+  TaxJurisdictionRow,
+  taxJurisdictions,
   InsertBidLineItem,
   InsertBidUnitLink,
   BidUnitLink,
@@ -2647,6 +2650,32 @@ export async function seedBaselineAssemblies(): Promise<void> {
 
 // ─── Pricing Defaults (company level) ─────────────────────────────────────────
 
+/**
+ * Is this the unique-key collision two concurrent create-on-read calls produce?
+ *
+ * The settings tables below all create their row on first READ, which is a
+ * convenience that hides a race: two requests for the same user arriving
+ * together both find nothing and both insert, and the loser gets ER_DUP_ENTRY.
+ *
+ * It went unnoticed for as long as nothing fetched the same row twice at once.
+ * Adding sales tax did exactly that — `companyDefaultsFor` and `taxRulesFor`
+ * sit in the same Promise.all — and it surfaced as a bid failing to price at
+ * all. Losing the race is not an error: the row the caller wanted now exists,
+ * so the right response is to read it back.
+ */
+function isDuplicateKey(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    ("code" in error
+      ? (error as { code?: string }).code === "ER_DUP_ENTRY"
+      : false ||
+        // drizzle wraps the driver error; the cause carries the code.
+        ("cause" in error &&
+          isDuplicateKey((error as { cause: unknown }).cause)))
+  );
+}
+
 /** The shipped defaults for a user who has never opened the settings. */
 const FALLBACK_PRICING_DEFAULTS = {
   overheadEnabled: false,
@@ -2687,9 +2716,15 @@ export async function getPricingDefaults(
   // Nothing at all for this user yet. The first row is created for whatever
   // trade was asked for, which for every caller today is `all`.
   const wanted = normalizeTradeId(trade);
-  await db
-    .insert(pricingDefaults)
-    .values({ userId, trade: wanted, ...FALLBACK_PRICING_DEFAULTS });
+  try {
+    await db
+      .insert(pricingDefaults)
+      .values({ userId, trade: wanted, ...FALLBACK_PRICING_DEFAULTS });
+  } catch (error) {
+    // Another request created it between our read and our write. See
+    // isDuplicateKey — the row exists now, which is all the caller wanted.
+    if (!isDuplicateKey(error)) throw error;
+  }
   const created = await db
     .select()
     .from(pricingDefaults)
@@ -2726,9 +2761,14 @@ export async function updatePricingDefaults(
     .where(eq(pricingDefaults.userId, userId));
   const exact = rows.find(row => normalizeTradeId(row.trade) === wanted);
   if (!exact) {
-    await db
-      .insert(pricingDefaults)
-      .values({ userId, trade: wanted, ...FALLBACK_PRICING_DEFAULTS });
+    try {
+      await db
+        .insert(pricingDefaults)
+        .values({ userId, trade: wanted, ...FALLBACK_PRICING_DEFAULTS });
+    } catch (error) {
+      // Lost the create race; the UPDATE below writes the winner's row.
+      if (!isDuplicateKey(error)) throw error;
+    }
   }
 
   const safe: Record<string, unknown> = { ...data };
@@ -2774,7 +2814,11 @@ export async function getCompanyBranding(
   if (existing) return existing;
 
   const wanted = normalizeTradeId(trade);
-  await db.insert(companyBranding).values({ userId, trade: wanted });
+  try {
+    await db.insert(companyBranding).values({ userId, trade: wanted });
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+  }
   const created = await db
     .select()
     .from(companyBranding)
@@ -2796,7 +2840,11 @@ export async function updateCompanyBranding(
     .from(companyBranding)
     .where(eq(companyBranding.userId, userId));
   if (!rows.some(row => normalizeTradeId(row.trade) === wanted)) {
-    await db.insert(companyBranding).values({ userId, trade: wanted });
+    try {
+      await db.insert(companyBranding).values({ userId, trade: wanted });
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+    }
   }
 
   const safe: Record<string, unknown> = { ...data };
@@ -2832,7 +2880,11 @@ export async function getProposalSettings(
   if (existing) return existing;
 
   const wanted = normalizeTradeId(trade);
-  await db.insert(proposalSettings).values({ userId, trade: wanted });
+  try {
+    await db.insert(proposalSettings).values({ userId, trade: wanted });
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+  }
   const created = await db
     .select()
     .from(proposalSettings)
@@ -2854,7 +2906,11 @@ export async function updateProposalSettings(
     .from(proposalSettings)
     .where(eq(proposalSettings.userId, userId));
   if (!rows.some(row => normalizeTradeId(row.trade) === wanted)) {
-    await db.insert(proposalSettings).values({ userId, trade: wanted });
+    try {
+      await db.insert(proposalSettings).values({ userId, trade: wanted });
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+    }
   }
 
   const safe: Record<string, unknown> = { ...data };
@@ -3028,6 +3084,135 @@ export async function countBidsPerClient(
     if (row.clientId != null) counts.set(row.clientId, Number(row.n));
   }
   return counts;
+}
+
+// ─── Tax jurisdictions ────────────────────────────────────────────────────────
+//
+// Scoped by userId like everything else. Nothing is seeded — see the schema
+// comment and shared/salesTax.ts for why shipping a rate table would be worse
+// than shipping none.
+
+/** The user's live tax areas, A–Z. */
+export async function getTaxJurisdictions(
+  userId: number
+): Promise<TaxJurisdictionRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(taxJurisdictions)
+    .where(
+      and(
+        eq(taxJurisdictions.userId, userId),
+        isNull(taxJurisdictions.archivedAt)
+      )
+    )
+    .orderBy(asc(taxJurisdictions.name));
+}
+
+export async function getArchivedTaxJurisdictions(
+  userId: number
+): Promise<TaxJurisdictionRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(taxJurisdictions)
+    .where(
+      and(
+        eq(taxJurisdictions.userId, userId),
+        isNotNull(taxJurisdictions.archivedAt)
+      )
+    )
+    .orderBy(desc(taxJurisdictions.archivedAt));
+}
+
+/**
+ * One tax area, archived or not.
+ *
+ * Archived rows resolve on purpose, the same as clients: a bid pinned to an
+ * area the user has since archived must still be able to say what rate it is
+ * using rather than silently dropping to no tax.
+ */
+export async function getTaxJurisdictionById(
+  id: number,
+  userId: number
+): Promise<TaxJurisdictionRow | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(taxJurisdictions)
+    .where(
+      and(eq(taxJurisdictions.id, id), eq(taxJurisdictions.userId, userId))
+    )
+    .limit(1);
+  return row;
+}
+
+export async function createTaxJurisdiction(
+  data: InsertTaxJurisdiction
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(taxJurisdictions).values(data);
+  return result.insertId;
+}
+
+export async function updateTaxJurisdiction(
+  id: number,
+  userId: number,
+  data: Partial<InsertTaxJurisdiction>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(taxJurisdictions)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(
+      and(eq(taxJurisdictions.id, id), eq(taxJurisdictions.userId, userId))
+    );
+}
+
+export async function archiveTaxJurisdiction(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(taxJurisdictions)
+    .set({ archivedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(taxJurisdictions.id, id),
+        eq(taxJurisdictions.userId, userId),
+        isNull(taxJurisdictions.archivedAt)
+      )
+    );
+}
+
+export async function restoreTaxJurisdiction(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(taxJurisdictions)
+    .set({ archivedAt: null, updatedAt: now })
+    .where(
+      and(
+        eq(taxJurisdictions.id, id),
+        eq(taxJurisdictions.userId, userId),
+        isNotNull(taxJurisdictions.archivedAt)
+      )
+    );
 }
 
 // ─── Bids ─────────────────────────────────────────────────────────────────────

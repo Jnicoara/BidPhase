@@ -34,8 +34,14 @@ import {
   PROPOSAL_SECTION_IDS,
   type BrandingFields,
 } from "../../shared/proposal";
-import { bidRollup, companyDefaultsFor } from "../bidPricing";
+import {
+  bidRollup,
+  companyDefaultsFor,
+  taxRulesFor,
+  toTaxJurisdiction,
+} from "../bidPricing";
 import { resolveBidClient } from "../../shared/bidClient";
+import { explainTaxStatus } from "../../shared/salesTax";
 import { storagePresignPut } from "../storage";
 import * as db from "../db";
 
@@ -261,18 +267,38 @@ export const proposalsRouter = router({
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const bid = await requireBid(input.bidId, ctx.user.id);
-      const [lines, company, brandingRow, settingsRow, client] =
-        await Promise.all([
-          db.getBidLineItems(bid.id),
-          companyDefaultsFor(ctx.user.id),
-          db.getCompanyBranding(ctx.user.id),
-          db.getProposalSettings(ctx.user.id),
-          bid.clientId
-            ? db.getClientById(bid.clientId, ctx.user.id)
-            : Promise.resolve(undefined),
-        ]);
+      const [
+        lines,
+        company,
+        brandingRow,
+        settingsRow,
+        client,
+        taxRules,
+        jurisdictionRows,
+      ] = await Promise.all([
+        db.getBidLineItems(bid.id),
+        companyDefaultsFor(ctx.user.id),
+        db.getCompanyBranding(ctx.user.id),
+        db.getProposalSettings(ctx.user.id),
+        bid.clientId
+          ? db.getClientById(bid.clientId, ctx.user.id)
+          : Promise.resolve(undefined),
+        taxRulesFor(ctx.user.id),
+        db.getTaxJurisdictions(ctx.user.id),
+      ]);
 
-      const { priced, units, totals } = bidRollup(bid, lines, company);
+      // Same rollup, same tax context as the bid screen. Two callers computing
+      // their own tax is how a client receives a document whose total does not
+      // match the bid it was approved from.
+      const { priced, units, totals, salesTax } = bidRollup(
+        bid,
+        lines,
+        company,
+        {
+          rules: taxRules,
+          jurisdictions: jurisdictionRows.map(toTaxJurisdiction),
+        }
+      );
 
       // The bid's own text still wins; a linked client only fills in what was
       // left blank. With no client this returns bid.clientName/siteAddress
@@ -288,6 +314,8 @@ export const proposalsRouter = router({
           proposalNote: bid.proposalNote,
         },
         totals,
+        salesTax,
+        taxExemptReason: bid.taxExemptReason,
         units: units.map(u => ({ label: u.label, directCost: u.directCost })),
         lines: priced.map(({ line }) => ({
           name: line.name,
@@ -321,6 +349,17 @@ export const proposalsRouter = router({
         client: client
           ? { id: client.id, name: client.name, address: client.address }
           : null,
+        /**
+         * Sales tax, and — when there is none — why.
+         *
+         * The composer needs the `no-rate` case especially: the DOCUMENT cannot
+         * invent a tax it does not know, so it silently prints without one.
+         * That is the right behaviour for the document and the wrong thing to
+         * leave unsaid to the person about to send it, so the warning surfaces
+         * here, beside the preview, where it can still be fixed.
+         */
+        salesTax,
+        taxNote: explainTaxStatus(salesTax.status, bid.siteAddress),
         bid: {
           id: bid.id,
           name: bid.name,

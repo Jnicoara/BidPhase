@@ -325,6 +325,22 @@ export type BuildProposalInput = {
     finalPrice: number;
     totalLaborHours: number;
   };
+  /**
+   * The sales tax on this bid, as bidRollup computed it.
+   *
+   * Optional so a caller with no tax context produces exactly the document it
+   * produced before tax existed — which is also the document a user who never
+   * switched tax on should get.
+   */
+  salesTax?: {
+    status: string;
+    amount: number;
+    ratePct: number | null;
+    components: { label: string; ratePct: number }[];
+    totalWithTax: number;
+  };
+  /** Printed on an exempt line so the document says why it was not taxed. */
+  taxExemptReason?: string | null;
   /** Unit subtotals at DIRECT cost, as bids.get returns them. */
   units: Array<{ label: string; directCost: number }>;
   lines: ProposalScopeLine[];
@@ -376,8 +392,36 @@ export type ProposalDocument = {
   laborHours: number;
   unitPricing: ProposalUnitPrice[];
   investment: {
-    /** The only money figure on the document. Everything is inside it. */
+    /**
+     * What the customer owes, tax included. The bottom line.
+     *
+     * This used to be the ONLY money figure on the document, and without sales
+     * tax it still is — `salesTax` is null and `subtotal` equals it. Once tax
+     * applies the document has to show three numbers, because a total with tax
+     * silently inside it is one the customer cannot check and the contractor
+     * cannot defend.
+     */
     total: number;
+    /** The price before tax. Equal to `total` when there is no tax line. */
+    subtotal: number;
+    /**
+     * The tax line, or null when the document carries none.
+     *
+     * Null covers every "no tax" case EXCEPT exemption: an exempt customer gets
+     * an explicit $0 line, because someone entitled to an exemption should see
+     * on the document that they received it. Absence would look like an
+     * oversight to exactly the customer most likely to check.
+     */
+    salesTax: {
+      amount: number;
+      /** Percent, e.g. 9.25. Null on an exempt line. */
+      ratePct: number | null;
+      /** The stack — "State 6.25%", "Cook County 1.75%" — for showing the working. */
+      components: { label: string; ratePct: number }[];
+      exempt: boolean;
+      /** Why, on an exempt line. Printed so the document explains itself. */
+      exemptReason: string | null;
+    } | null;
     /** True when overhead or profit is in the total — drives the wording. */
     includesIndirect: boolean;
   };
@@ -416,8 +460,69 @@ function addressLines(value: string | null | undefined): string[] {
  * layouts cannot disagree about what is on the page — they only disagree about
  * how it looks.
  */
+/**
+ * The money block at the foot of the document.
+ *
+ * ── Three numbers or one ─────────────────────────────────────────────────────
+ * Without tax the document keeps exactly the shape it always had: one figure,
+ * everything inside it. With tax it becomes subtotal / tax / total, because a
+ * total with tax folded in is a number the customer cannot verify against
+ * their own understanding of the rate — and sales tax is the one line on a
+ * proposal a customer is most likely to check.
+ *
+ * An exempt bid is the case worth spelling out: it renders a $0 tax line with
+ * the reason, rather than no line at all. Someone entitled to an exemption
+ * should be able to see they got it; silence looks like an oversight to
+ * precisely the customer who will notice.
+ */
+function buildInvestment(
+  totals: BuildProposalInput["totals"],
+  salesTax: BuildProposalInput["salesTax"],
+  taxExemptReason: string | null | undefined
+): ProposalDocument["investment"] {
+  const subtotal = totals.finalPrice;
+  const includesIndirect = totals.overheadAmount > 0 || totals.profitAmount > 0;
+
+  if (salesTax?.status === "exempt") {
+    return {
+      total: subtotal,
+      subtotal,
+      salesTax: {
+        amount: 0,
+        ratePct: null,
+        components: [],
+        exempt: true,
+        exemptReason: taxExemptReason?.trim() || null,
+      },
+      includesIndirect,
+    };
+  }
+
+  // Anything other than a real applied tax leaves the document as it was:
+  // disabled, nothing marked taxable, or — importantly — no rate found. The
+  // document cannot invent a tax it does not know, so the warning about that
+  // belongs in the composer, where the person who can fix it is looking.
+  if (salesTax?.status !== "ok" || salesTax.amount <= 0) {
+    return { total: subtotal, subtotal, salesTax: null, includesIndirect };
+  }
+
+  return {
+    total: salesTax.totalWithTax,
+    subtotal,
+    salesTax: {
+      amount: salesTax.amount,
+      ratePct: salesTax.ratePct,
+      components: salesTax.components,
+      exempt: false,
+      exemptReason: null,
+    },
+    includesIndirect,
+  };
+}
+
 export function buildProposal(input: BuildProposalInput): ProposalDocument {
-  const { bid, totals, branding, design, now } = input;
+  const { bid, totals, branding, design, now, salesTax, taxExemptReason } =
+    input;
 
   const visible = (id: ProposalSectionId) =>
     isSectionVisible(design.hiddenSections, id);
@@ -515,10 +620,7 @@ export function buildProposal(input: BuildProposalInput): ProposalDocument {
     scope,
     laborHours: Math.round(totals.totalLaborHours * 100) / 100,
     unitPricing,
-    investment: {
-      total: totals.finalPrice,
-      includesIndirect: totals.overheadAmount > 0 || totals.profitAmount > 0,
-    },
+    investment: buildInvestment(totals, salesTax, taxExemptReason),
     terms: blank(design.termsText) ? null : design.termsText!.trim(),
   };
 }

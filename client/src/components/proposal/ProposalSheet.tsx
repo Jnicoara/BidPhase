@@ -492,8 +492,74 @@ export function ProposalSheet({
       case "investment": {
         const filled = L.totalPanel === "filled";
         const outlined = L.totalPanel === "outlined";
+        const tax = doc.investment.salesTax;
         return (
           <section key={id} style={{ marginBottom: 22 }}>
+            {/*
+              Subtotal and tax, ABOVE the total, and only when there is tax.
+              Without a tax line the document keeps its original shape — one
+              figure, everything inside it. With one, the customer has to be
+              able to see the three numbers separately: sales tax is the line
+              they are most likely to check, and a total with it folded in is
+              a total nobody can verify.
+            */}
+            {tax && (
+              <div style={{ marginBottom: 8 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    fontSize: 11.5,
+                    color: INK_SOFT,
+                    padding: "3px 0",
+                  }}
+                >
+                  <span>Subtotal</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {money(doc.investment.subtotal)}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    fontSize: 11.5,
+                    color: INK_SOFT,
+                    padding: "3px 0",
+                    borderBottom: `1px solid ${INK_SOFT}40`,
+                  }}
+                >
+                  <span>
+                    {tax.exempt ? (
+                      <>
+                        Sales tax — exempt
+                        {tax.exemptReason ? ` (${tax.exemptReason})` : ""}
+                      </>
+                    ) : (
+                      <>
+                        Sales tax
+                        {tax.ratePct !== null ? ` (${tax.ratePct}%)` : ""}
+                        {/* The stack, itemised — what makes the rate checkable
+                            rather than a number the customer has to accept. */}
+                        {tax.components.length > 1 && (
+                          <span style={{ color: INK_SOFT }}>
+                            {" · "}
+                            {tax.components
+                              .map(c => `${c.label} ${c.ratePct}%`)
+                              .join(" + ")}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {money(tax.amount)}
+                  </span>
+                </div>
+              </div>
+            )}
             <div
               style={{
                 display: "flex",
@@ -531,6 +597,7 @@ export function ProposalSheet({
                   {doc.investment.includesIndirect
                     ? "Includes all materials, labor, equipment and overhead."
                     : "Includes all materials and labor."}
+                  {tax && !tax.exempt ? " Sales tax included above." : ""}
                 </div>
               </div>
               <div

@@ -18,7 +18,14 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { BID_STATUSES } from "../../drizzle/schema";
-import { bidRollup, companyDefaultsFor, rollUpBid } from "../bidPricing";
+import {
+  bidRollup,
+  companyDefaultsFor,
+  rollUpBid,
+  taxRulesFor,
+  toTaxJurisdiction,
+} from "../bidPricing";
+import { explainTaxStatus } from "../../shared/salesTax";
 import {
   daysRemaining,
   purgeDueAt,
@@ -151,6 +158,19 @@ export const bidsRouter = router({
         clientName: z.string().trim().max(255).nullable().optional(),
         siteAddress: z.string().trim().max(512).nullable().optional(),
         proposalNote: z.string().trim().max(4000).nullable().optional(),
+
+        /**
+         * Sales tax overrides. Every one of these exists so the automatic
+         * answer is never the only answer — see the schema comments on `bids`.
+         *
+         * `taxRateOverridePct` is nullable-optional with a deliberate
+         * distinction: null CLEARS the override and goes back to matching,
+         * while 0 is a real zero-rate that gets applied as one.
+         */
+        taxJurisdictionId: z.number().int().positive().nullable().optional(),
+        taxRateOverridePct: z.number().min(0).max(25).nullable().optional(),
+        taxExempt: z.boolean().optional(),
+        taxExemptReason: z.string().trim().max(255).nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -204,6 +224,34 @@ export const bidsRouter = router({
         patch.siteAddress = rest.siteAddress || null;
       if (rest.proposalNote !== undefined)
         patch.proposalNote = rest.proposalNote || null;
+
+      // Checked, not trusted — the same rule the client link follows. A tax
+      // area id is a small integer, and pointing a bid at someone else's rate
+      // would charge a customer a number from another contractor's settings.
+      if (rest.taxJurisdictionId !== undefined) {
+        if (rest.taxJurisdictionId !== null) {
+          const area = await db.getTaxJurisdictionById(
+            rest.taxJurisdictionId,
+            ctx.user.id
+          );
+          if (!area)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Tax area not found.",
+            });
+        }
+        patch.taxJurisdictionId = rest.taxJurisdictionId;
+      }
+      if (rest.taxRateOverridePct !== undefined) {
+        // null clears the override; 0 is a real zero-rate and is kept.
+        patch.taxRateOverridePct =
+          rest.taxRateOverridePct === null
+            ? null
+            : toDecimal4(rest.taxRateOverridePct);
+      }
+      if (rest.taxExempt !== undefined) patch.taxExempt = rest.taxExempt;
+      if (rest.taxExemptReason !== undefined)
+        patch.taxExemptReason = rest.taxExemptReason || null;
 
       if (Object.keys(patch).length > 0)
         await db.updateBid(id, ctx.user.id, patch);
@@ -318,19 +366,26 @@ export const bidsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const bid = await requireBid(input.id, ctx.user.id);
-      const [lines, company, client] = await Promise.all([
-        db.getBidLineItems(bid.id),
-        companyDefaultsFor(ctx.user.id),
-        // Null for the great majority of bids, which have no client assigned.
-        bid.clientId
-          ? db.getClientById(bid.clientId, ctx.user.id)
-          : Promise.resolve(undefined),
-      ]);
+      const [lines, company, client, taxRules, jurisdictionRows] =
+        await Promise.all([
+          db.getBidLineItems(bid.id),
+          companyDefaultsFor(ctx.user.id),
+          // Null for the great majority of bids, which have no client assigned.
+          bid.clientId
+            ? db.getClientById(bid.clientId, ctx.user.id)
+            : Promise.resolve(undefined),
+          taxRulesFor(ctx.user.id),
+          db.getTaxJurisdictions(ctx.user.id),
+        ]);
 
-      const { settings, priced, units, totals } = bidRollup(
+      const { settings, priced, units, totals, salesTax, taxRate } = bidRollup(
         bid,
         lines,
-        company
+        company,
+        {
+          rules: taxRules,
+          jurisdictions: jurisdictionRows.map(toTaxJurisdiction),
+        }
       );
 
       return {
@@ -342,6 +397,18 @@ export const bidsRouter = router({
         company,
         /** The linked client record, or null. */
         client: client ?? null,
+        /**
+         * The tax figure, and where its rate came from.
+         *
+         * `salesTax.status` carries WHY when there is no amount — disabled,
+         * exempt, nothing marked taxable, or no rate found. The screen shows
+         * that sentence rather than an unexplained $0, because a silent zero
+         * and a genuine exemption look identical and cost very differently.
+         */
+        salesTax,
+        taxRate,
+        /** Plain-language reason there is no tax, or null when there is. */
+        taxNote: explainTaxStatus(salesTax.status, bid.siteAddress),
         /**
          * Name and site address after the bid's own text and the linked record
          * have been reconciled — the same resolution the proposal prints, so

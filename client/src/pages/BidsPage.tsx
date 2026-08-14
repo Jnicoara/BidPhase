@@ -53,6 +53,7 @@ import { UnitLinkBadge } from "@/components/UnitLinkBadge";
 import { UnitTemplateActions } from "@/components/UnitTemplateActions";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
 import { ClientLinkField } from "@/components/ClientLinkField";
+import { BidTaxControls } from "@/components/BidTaxControls";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { RETENTION_DAYS } from "@shared/retention";
 
@@ -272,7 +273,17 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     );
   }
 
-  const { bid, lines, totals, settings, company, client } = detailQuery.data;
+  const {
+    bid,
+    lines,
+    totals,
+    settings,
+    company,
+    client,
+    salesTax,
+    taxRate,
+    taxNote,
+  } = detailQuery.data;
 
   /** Lines grouped by unit, with un-labelled lines last under a null key. */
   const groups: Array<{ label: string | null; lines: typeof lines }> = [];
@@ -635,7 +646,90 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   {money(totals.finalPrice)}
                 </span>
               </div>
+
+              {/*
+                Sales tax, BELOW the bid price and never inside it.
+
+                A tax line folded into the total is one the estimator cannot
+                check against the rate they believe applies — and the reason
+                there is no tax is as important as the amount when there is,
+                which is why `taxNote` gets a line of its own rather than
+                leaving an unexplained absence.
+              */}
+              {salesTax.status !== "disabled" && (
+                <>
+                  <div className="border-t border-border my-2" />
+                  <div className="flex items-baseline justify-between gap-3 py-1">
+                    <span className="text-xs text-muted-foreground">
+                      Sales tax
+                      {salesTax.status === "ok" && salesTax.ratePct !== null
+                        ? ` (${salesTax.ratePct}%)`
+                        : ""}
+                      {salesTax.status === "exempt" ? " — exempt" : ""}
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-sm",
+                        salesTax.status === "no-rate" && "text-destructive"
+                      )}
+                    >
+                      {salesTax.status === "no-rate"
+                        ? "not set"
+                        : money(salesTax.amount)}
+                    </span>
+                  </div>
+
+                  {taxNote && (
+                    <p
+                      className={cn(
+                        "text-xs",
+                        salesTax.status === "no-rate"
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {taxNote}
+                    </p>
+                  )}
+
+                  {/* Where the rate came from — a tax figure nobody can trace
+                      is a tax figure nobody can defend in an audit. */}
+                  {salesTax.status === "ok" && taxRate.source !== "none" && (
+                    <p className="text-xs text-muted-foreground">
+                      {taxRate.source === "bid-override"
+                        ? "Rate entered on this bid."
+                        : taxRate.source === "bid-jurisdiction"
+                          ? `${taxRate.jurisdictionName} — chosen on this bid.`
+                          : `${taxRate.jurisdictionName} — matched on ${taxRate.matchedOn.join(", ")}.`}
+                    </p>
+                  )}
+
+                  {salesTax.status !== "no-rate" && (
+                    <div className="flex items-baseline justify-between gap-3 py-1">
+                      <span className="text-sm font-medium">Total due</span>
+                      <span className="font-mono text-base text-[#F5C518]">
+                        {money(totals.totalWithTax)}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+
+            {salesTax.status !== "disabled" && (
+              <BidTaxControls
+                bidId={bid.id}
+                exempt={bid.taxExempt}
+                exemptReason={bid.taxExemptReason}
+                jurisdictionId={bid.taxJurisdictionId}
+                rateOverridePct={
+                  bid.taxRateOverridePct === null
+                    ? null
+                    : Number(bid.taxRateOverridePct)
+                }
+                onChange={patch => updateBid.mutate({ id: bid.id, ...patch })}
+              />
+            )}
 
             {/* Settings, with their source stated */}
             <div className="rounded-xl border border-border bg-card p-4 space-y-3">

@@ -185,7 +185,15 @@ export default function ProposalPage({
     );
   }
 
-  const { document: doc, bid, client, internalTotals, lineCount } = data;
+  const {
+    document: doc,
+    bid,
+    client,
+    salesTax,
+    taxNote,
+    internalTotals,
+    lineCount,
+  } = data;
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -283,6 +291,38 @@ export default function ProposalPage({
                 }}
               >
                 Open branding settings
+              </Button>
+            </div>
+          )}
+
+          {/*
+            Tax that cannot be worked out is a composer problem, not a document
+            problem. The document prints without a tax line because it cannot
+            invent one; this is the only place the person about to SEND it will
+            see that something is missing, so it is loud and it links to the fix.
+          */}
+          {salesTax?.status === "no-rate" && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive space-y-2">
+              <div className="flex items-start gap-2">
+                <TriangleAlert className="w-4 h-4 shrink-0 mt-px" aria-hidden />
+                <div>
+                  <div className="font-medium">
+                    Sales tax is on, but this bid has no rate
+                  </div>
+                  <div className="mt-0.5 text-destructive/85">
+                    {taxNote} This proposal will go out with no tax on it.
+                  </div>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 w-full text-xs border-destructive/40 text-destructive hover:bg-destructive/15"
+                onClick={() => {
+                  window.location.hash = "/settings";
+                }}
+              >
+                Open tax settings
               </Button>
             </div>
           )}

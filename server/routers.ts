@@ -15,6 +15,7 @@ import { modifiersRouter } from "./routers/modifiersRouter";
 import { assembliesRouter } from "./routers/assembliesRouter";
 import { bidsRouter } from "./routers/bidsRouter";
 import { clientsRouter } from "./routers/clientsRouter";
+import { salesTaxRouter } from "./routers/salesTaxRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
@@ -45,6 +46,10 @@ export const appRouter = router({
   // Who the work is for. A bid points at one optionally — see shared/bidClient.ts
   // for how a linked record and a bid's own typed-in name are reconciled.
   clients: clientsRouter,
+  // Sales tax areas and the company rules that say what is taxable. Nothing
+  // here is seeded — see shared/salesTax.ts for why a shipped rate table
+  // would be worse than none.
+  salesTax: salesTaxRouter,
   proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,

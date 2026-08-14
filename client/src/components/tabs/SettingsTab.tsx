@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { BidPricingDefaultsSection } from "@/components/BidPricingDefaultsSection";
 import { BrandingSection } from "@/components/BrandingSection";
+import { SalesTaxSection } from "@/components/SalesTaxSection";
 import { ProposalDesignControls } from "@/components/proposal/ProposalDesignControls";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
@@ -306,6 +307,13 @@ export default function SettingsTab({ onBack }: { onBack?: () => void }) {
           for the same reason: it is set up once and reaches everything the
           contractor sends out. */}
       <BrandingSection />
+
+      {/* ── Sales tax ────────────────────────────────────────────────
+          After branding and before the document controls: it reaches every
+          bid like the pricing defaults do, but unlike them it ships OFF and
+          carries a disclaimer, so it reads as a deliberate opt-in rather than
+          as another dial to nudge. */}
+      <SalesTaxSection />
 
       {/* ── Proposal document ────────────────────────────────────────
           The same controls that sit beside the live preview on the proposal

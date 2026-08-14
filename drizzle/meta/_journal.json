@@ -253,6 +253,13 @@
       "when": 1786719300000,
       "tag": "0035_backfill_trade_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1786733720062,
+      "tag": "0036_spotty_pandemic",
+      "breakpoints": true
     }
   ]
 }
