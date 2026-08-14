@@ -16,6 +16,7 @@ import { assembliesRouter } from "./routers/assembliesRouter";
 import { bidsRouter } from "./routers/bidsRouter";
 import { clientsRouter } from "./routers/clientsRouter";
 import { salesTaxRouter } from "./routers/salesTaxRouter";
+import { bidExtrasRouter } from "./routers/bidExtrasRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
@@ -50,6 +51,9 @@ export const appRouter = router({
   // here is seeded — see shared/salesTax.ts for why a shipped rate table
   // would be worse than none.
   salesTax: salesTaxRouter,
+  // Flat charges and includes/excludes — reusable lists plus what is attached
+  // to a bid. Both snapshot onto the bid, as every library in this app does.
+  bidExtras: bidExtrasRouter,
   proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,

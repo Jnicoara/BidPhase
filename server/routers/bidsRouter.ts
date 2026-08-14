@@ -366,7 +366,7 @@ export const bidsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const bid = await requireBid(input.id, ctx.user.id);
-      const [lines, company, client, taxRules, jurisdictionRows] =
+      const [lines, company, client, taxRules, jurisdictionRows, expenseRows] =
         await Promise.all([
           db.getBidLineItems(bid.id),
           companyDefaultsFor(ctx.user.id),
@@ -376,7 +376,13 @@ export const bidsRouter = router({
             : Promise.resolve(undefined),
           taxRulesFor(ctx.user.id),
           db.getTaxJurisdictions(ctx.user.id),
+          db.getBidExpenses(bid.id),
         ]);
+
+      const expenses = expenseRows.map(row => ({
+        name: row.name,
+        amount: Number(row.amount),
+      }));
 
       const { settings, priced, units, totals, salesTax, taxRate } = bidRollup(
         bid,
@@ -385,7 +391,8 @@ export const bidsRouter = router({
         {
           rules: taxRules,
           jurisdictions: jurisdictionRows.map(toTaxJurisdiction),
-        }
+        },
+        expenses
       );
 
       return {

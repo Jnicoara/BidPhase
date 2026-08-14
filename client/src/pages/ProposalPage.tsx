@@ -136,7 +136,15 @@ export default function ProposalPage({
   onBack: () => void;
 }) {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.proposals.document.useQuery({ bidId });
+  /**
+   * Which document is on screen.
+   *
+   * Local state, not stored: a persisted preference is one that can be left on
+   * scope-only and then printed as though it were the priced proposal. Every
+   * visit starts on the real document, and switching is one click.
+   */
+  const [mode, setMode] = useState<"full" | "scope-only">("full");
+  const { data, isLoading } = trpc.proposals.document.useQuery({ bidId, mode });
   const [showDesign, setShowDesign] = useState(false);
   /** Screen zoom only — the printed page is always full size. */
   const [zoom, setZoom] = useState(0.8);
@@ -212,9 +220,30 @@ export default function ProposalPage({
             Proposal — {bid.name}
           </h1>
           <p className="text-xs text-muted-foreground">
-            {lineCount} line{lineCount === 1 ? "" : "s"} · priced from the
-            snapshot taken when each was added
+            {mode === "scope-only"
+              ? "Scope only — no prices anywhere on this version"
+              : `${lineCount} line${lineCount === 1 ? "" : "s"} · priced from the snapshot taken when each was added`}
           </p>
+        </div>
+
+        {/* Scope only / priced. Beside the zoom because it changes what the
+            page IS rather than how it is dressed, and it has to be visible at
+            a glance — printing the wrong one is the failure to avoid. */}
+        <div className="inline-flex rounded-lg border border-border p-0.5 mr-2 bp-no-print">
+          {(["full", "scope-only"] as const).map(value => (
+            <button
+              key={value}
+              onClick={() => setMode(value)}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-xs transition-colors",
+                mode === value
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {value === "full" ? "Priced" : "Scope only"}
+            </button>
+          ))}
         </div>
 
         <div className="flex items-center gap-1 mr-1">

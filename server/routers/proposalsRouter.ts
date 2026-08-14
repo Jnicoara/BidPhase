@@ -28,6 +28,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { PROPOSAL_LAYOUTS } from "../../drizzle/schema";
+import { PROPOSAL_MODES } from "../../shared/bidExtras";
 import {
   buildProposal,
   isValidAccent,
@@ -264,7 +265,19 @@ export const proposalsRouter = router({
    * proposal quotes the same figure.
    */
   document: protectedProcedure
-    .input(z.object({ bidId: z.number().int().positive() }))
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        /**
+         * Which document to build.
+         *
+         * Transient — deliberately NOT stored. A stored preference is one that
+         * can be left on scope-only by accident and then printed as if it were
+         * the priced proposal. Every visit starts from the real document.
+         */
+        mode: z.enum(PROPOSAL_MODES).default("full"),
+      })
+    )
     .query(async ({ input, ctx }) => {
       const bid = await requireBid(input.bidId, ctx.user.id);
       const [
@@ -275,6 +288,8 @@ export const proposalsRouter = router({
         client,
         taxRules,
         jurisdictionRows,
+        expenseRows,
+        scopeNoteRows,
       ] = await Promise.all([
         db.getBidLineItems(bid.id),
         companyDefaultsFor(ctx.user.id),
@@ -285,11 +300,18 @@ export const proposalsRouter = router({
           : Promise.resolve(undefined),
         taxRulesFor(ctx.user.id),
         db.getTaxJurisdictions(ctx.user.id),
+        db.getBidExpenses(bid.id),
+        db.getBidScopeNotes(bid.id),
       ]);
 
       // Same rollup, same tax context as the bid screen. Two callers computing
       // their own tax is how a client receives a document whose total does not
       // match the bid it was approved from.
+      const expenses = expenseRows.map(row => ({
+        name: row.name,
+        amount: Number(row.amount),
+      }));
+
       const { priced, units, totals, salesTax } = bidRollup(
         bid,
         lines,
@@ -297,7 +319,8 @@ export const proposalsRouter = router({
         {
           rules: taxRules,
           jurisdictions: jurisdictionRows.map(toTaxJurisdiction),
-        }
+        },
+        expenses
       );
 
       // The bid's own text still wins; a linked client only fills in what was
@@ -316,6 +339,12 @@ export const proposalsRouter = router({
         totals,
         salesTax,
         taxExemptReason: bid.taxExemptReason,
+        expenses,
+        scopeNotes: scopeNoteRows.map(row => ({
+          kind: row.kind,
+          text: row.text,
+        })),
+        mode: input.mode,
         units: units.map(u => ({ label: u.label, directCost: u.directCost })),
         lines: priced.map(({ line }) => ({
           name: line.name,

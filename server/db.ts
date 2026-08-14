@@ -60,6 +60,18 @@ import {
   InsertTaxJurisdiction,
   TaxJurisdictionRow,
   taxJurisdictions,
+  InsertExpenseItem,
+  ExpenseItem,
+  expenseItems,
+  InsertBidExpense,
+  BidExpense,
+  bidExpenses,
+  InsertScopeNote,
+  ScopeNote,
+  scopeNotes,
+  InsertBidScopeNote,
+  BidScopeNote,
+  bidScopeNotes,
   InsertBidLineItem,
   InsertBidUnitLink,
   BidUnitLink,
@@ -3084,6 +3096,263 @@ export async function countBidsPerClient(
     if (row.clientId != null) counts.set(row.clientId, Number(row.n));
   }
   return counts;
+}
+
+// ─── Additional expenses ──────────────────────────────────────────────────────
+//
+// Two levels, as everywhere: a reusable library scoped by userId, and the
+// snapshotted copies that sit on a bid. A bid expense with no library id is a
+// one-off, and nothing about it is second class.
+
+export async function getExpenseItems(userId: number): Promise<ExpenseItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(expenseItems)
+    .where(
+      and(eq(expenseItems.userId, userId), isNull(expenseItems.archivedAt))
+    )
+    .orderBy(asc(expenseItems.name));
+}
+
+export async function getArchivedExpenseItems(
+  userId: number
+): Promise<ExpenseItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(expenseItems)
+    .where(
+      and(eq(expenseItems.userId, userId), isNotNull(expenseItems.archivedAt))
+    )
+    .orderBy(desc(expenseItems.archivedAt));
+}
+
+export async function getExpenseItemById(
+  id: number,
+  userId: number
+): Promise<ExpenseItem | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(expenseItems)
+    .where(and(eq(expenseItems.id, id), eq(expenseItems.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+export async function createExpenseItem(
+  data: InsertExpenseItem
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(expenseItems).values(data);
+  return result.insertId;
+}
+
+export async function updateExpenseItem(
+  id: number,
+  userId: number,
+  data: Partial<InsertExpenseItem>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(expenseItems)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(expenseItems.id, id), eq(expenseItems.userId, userId)));
+}
+
+export async function setExpenseItemArchived(
+  id: number,
+  userId: number,
+  archivedAt: Date | null
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(expenseItems)
+    .set({ archivedAt, updatedAt: new Date() })
+    .where(and(eq(expenseItems.id, id), eq(expenseItems.userId, userId)));
+}
+
+/** The expenses on one bid, in the order they were added. */
+export async function getBidExpenses(bidId: number): Promise<BidExpense[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bidExpenses)
+    .where(eq(bidExpenses.bidId, bidId))
+    .orderBy(asc(bidExpenses.sortOrder), asc(bidExpenses.id));
+}
+
+export async function createBidExpense(
+  data: InsertBidExpense
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(bidExpenses).values(data);
+  return result.insertId;
+}
+
+export async function updateBidExpense(
+  id: number,
+  bidId: number,
+  data: Partial<InsertBidExpense>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.bidId;
+  await db
+    .update(bidExpenses)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(bidExpenses.id, id), eq(bidExpenses.bidId, bidId)));
+}
+
+export async function deleteBidExpense(id: number, bidId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(bidExpenses)
+    .where(and(eq(bidExpenses.id, id), eq(bidExpenses.bidId, bidId)));
+}
+
+export async function nextBidExpenseSortOrder(bidId: number): Promise<number> {
+  const rows = await getBidExpenses(bidId);
+  return rows.length === 0 ? 0 : Math.max(...rows.map(r => r.sortOrder)) + 1;
+}
+
+// ─── Includes / excludes ──────────────────────────────────────────────────────
+
+export async function getScopeNotes(userId: number): Promise<ScopeNote[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(scopeNotes)
+    .where(and(eq(scopeNotes.userId, userId), isNull(scopeNotes.archivedAt)))
+    .orderBy(asc(scopeNotes.kind), asc(scopeNotes.text));
+}
+
+export async function getArchivedScopeNotes(
+  userId: number
+): Promise<ScopeNote[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(scopeNotes)
+    .where(and(eq(scopeNotes.userId, userId), isNotNull(scopeNotes.archivedAt)))
+    .orderBy(desc(scopeNotes.archivedAt));
+}
+
+export async function getScopeNoteById(
+  id: number,
+  userId: number
+): Promise<ScopeNote | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(scopeNotes)
+    .where(and(eq(scopeNotes.id, id), eq(scopeNotes.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+export async function createScopeNote(data: InsertScopeNote): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(scopeNotes).values(data);
+  return result.insertId;
+}
+
+export async function updateScopeNote(
+  id: number,
+  userId: number,
+  data: Partial<InsertScopeNote>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(scopeNotes)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(scopeNotes.id, id), eq(scopeNotes.userId, userId)));
+}
+
+export async function setScopeNoteArchived(
+  id: number,
+  userId: number,
+  archivedAt: Date | null
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(scopeNotes)
+    .set({ archivedAt, updatedAt: new Date() })
+    .where(and(eq(scopeNotes.id, id), eq(scopeNotes.userId, userId)));
+}
+
+export async function getBidScopeNotes(bidId: number): Promise<BidScopeNote[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bidScopeNotes)
+    .where(eq(bidScopeNotes.bidId, bidId))
+    .orderBy(asc(bidScopeNotes.sortOrder), asc(bidScopeNotes.id));
+}
+
+export async function createBidScopeNote(
+  data: InsertBidScopeNote
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(bidScopeNotes).values(data);
+  return result.insertId;
+}
+
+export async function updateBidScopeNote(
+  id: number,
+  bidId: number,
+  data: Partial<InsertBidScopeNote>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.bidId;
+  await db
+    .update(bidScopeNotes)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(bidScopeNotes.id, id), eq(bidScopeNotes.bidId, bidId)));
+}
+
+export async function deleteBidScopeNote(id: number, bidId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(bidScopeNotes)
+    .where(and(eq(bidScopeNotes.id, id), eq(bidScopeNotes.bidId, bidId)));
+}
+
+export async function nextBidScopeNoteSortOrder(
+  bidId: number
+): Promise<number> {
+  const rows = await getBidScopeNotes(bidId);
+  return rows.length === 0 ? 0 : Math.max(...rows.map(r => r.sortOrder)) + 1;
 }
 
 // ─── Tax jurisdictions ────────────────────────────────────────────────────────

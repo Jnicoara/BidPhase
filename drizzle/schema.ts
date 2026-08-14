@@ -1335,6 +1335,171 @@ export const clients = mysqlTable(
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = typeof clients.$inferInsert;
 
+// ─── Additional expenses ──────────────────────────────────────────────────────
+/**
+ * A flat charge that is neither material nor labor — a permit, an inspection,
+ * a dispatch fee, a minimum service charge.
+ *
+ * ── Why it is not a material with zero labor ─────────────────────────────────
+ * It would price correctly that way and read wrongly everywhere. A permit fee
+ * is not something you take off a plan, stock in a van or mark up per unit; it
+ * is a number the job carries. Filing it in the material catalog would put it
+ * in every material search, give it a unit of sale it does not have, and make
+ * the bid's material total wrong as a description of what was bought.
+ *
+ * ── Library plus one-offs, the same shape as everything else ─────────────────
+ * This table is the reusable list. A charge that applies to exactly one bid is
+ * written straight onto `bid_expenses` with no row here — see that table.
+ */
+export const expenseItems = mysqlTable(
+  "expense_items",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** "Permit fee", "Minimum service call", "Dispatch". */
+    name: varchar("name", { length: 255 }).notNull(),
+    /** A flat dollar amount. Not a rate and not per-unit. */
+    amount: decimal("amount", { precision: 12, scale: 4 })
+      .default("0")
+      .notNull(),
+    /** Optional note for the user — never printed on a proposal. */
+    notes: varchar("notes", { length: 512 }),
+
+    archivedAt: timestamp("archivedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("expense_items_userId_idx").on(t.userId),
+    index("expense_items_archivedAt_idx").on(t.archivedAt),
+  ]
+);
+
+export type ExpenseItem = typeof expenseItems.$inferSelect;
+export type InsertExpenseItem = typeof expenseItems.$inferInsert;
+
+/**
+ * One expense placed on one bid, with its amount SNAPSHOT.
+ *
+ * Same rule as `bid_line_items`: the name and the amount are frozen when the
+ * expense is added, so raising the permit fee in the library next month cannot
+ * silently re-price a bid already sent. `expenseItemId` is provenance only and
+ * is `set null` on delete — removing a library entry must never alter a bid
+ * that used it.
+ *
+ * `expenseItemId` NULL is also how a ONE-OFF is stored: an amount typed onto
+ * this bid and deliberately not saved to the library. Nothing distinguishes the
+ * two once they are on the bid, which is the point — the library is a
+ * convenience for adding, not a container the bid depends on.
+ */
+export const bidExpenses = mysqlTable(
+  "bid_expenses",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+    /** Provenance. NULL for a one-off typed straight onto the bid. */
+    expenseItemId: int("expenseItemId").references(() => expenseItems.id, {
+      onDelete: "set null",
+    }),
+
+    /** Frozen at add time — the bid reads the same after a library rename. */
+    name: varchar("name", { length: 255 }).notNull(),
+    amount: decimal("amount", { precision: 12, scale: 4 })
+      .default("0")
+      .notNull(),
+
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [index("bid_expenses_bidId_idx").on(t.bidId)]
+);
+
+export type BidExpense = typeof bidExpenses.$inferSelect;
+export type InsertBidExpense = typeof bidExpenses.$inferInsert;
+
+// ─── Includes / excludes ──────────────────────────────────────────────────────
+/**
+ * A line of scope: something the price covers, or something it explicitly does
+ * not.
+ *
+ * ── Why excludes matter as much as includes ──────────────────────────────────
+ * Standard construction bidding practice, and it is a dispute-prevention
+ * device rather than a formatting one. "Excludes: permit pulled by owner" on
+ * the proposal is what settles the argument three months later about who was
+ * supposed to pull it. That is why these print on the client document and why
+ * they are worth a reusable list — a contractor's exclusions are close to
+ * identical job to job, and retyping them is how one gets left off.
+ */
+export const SCOPE_NOTE_KINDS = ["include", "exclude"] as const;
+export type ScopeNoteKind = (typeof SCOPE_NOTE_KINDS)[number];
+
+export const scopeNotes = mysqlTable(
+  "scope_notes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    kind: mysqlEnum("kind", SCOPE_NOTE_KINDS).notNull(),
+    /** One line, as it will read on the document. */
+    text: varchar("text", { length: 512 }).notNull(),
+
+    archivedAt: timestamp("archivedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("scope_notes_userId_idx").on(t.userId),
+    index("scope_notes_kind_idx").on(t.userId, t.kind),
+    index("scope_notes_archivedAt_idx").on(t.archivedAt),
+  ]
+);
+
+export type ScopeNote = typeof scopeNotes.$inferSelect;
+export type InsertScopeNote = typeof scopeNotes.$inferInsert;
+
+/**
+ * One include or exclude on one bid, with its text SNAPSHOT.
+ *
+ * Frozen for the same reason an expense and a line item are: editing a stock
+ * exclusion must not silently change the wording of a proposal already in a
+ * client's hands — and with exclusions that wording is the whole point of
+ * having them. NULL `scopeNoteId` is a one-off typed for this bid.
+ */
+export const bidScopeNotes = mysqlTable(
+  "bid_scope_notes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+    scopeNoteId: int("scopeNoteId").references(() => scopeNotes.id, {
+      onDelete: "set null",
+    }),
+
+    kind: mysqlEnum("kind", SCOPE_NOTE_KINDS).notNull(),
+    text: varchar("text", { length: 512 }).notNull(),
+
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("bid_scope_notes_bidId_idx").on(t.bidId),
+    index("bid_scope_notes_kind_idx").on(t.bidId, t.kind),
+  ]
+);
+
+export type BidScopeNote = typeof bidScopeNotes.$inferSelect;
+export type InsertBidScopeNote = typeof bidScopeNotes.$inferInsert;
+
 // ─── Tax jurisdictions ────────────────────────────────────────────────────────
 /**
  * A place, and the sales tax it charges — as the CONTRACTOR entered it.

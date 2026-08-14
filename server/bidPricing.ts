@@ -22,6 +22,7 @@ import {
   calculateBidPrice,
   calculateLineItem,
   resolveBidPricingSettings,
+  roundMoney,
   sumDirectCost,
   type CompanyPricingDefaults,
 } from "../shared/pricing";
@@ -35,6 +36,7 @@ import {
   type TaxRateComponent,
   type TaxRules,
 } from "../shared/salesTax";
+import { sumExpenses } from "../shared/bidExtras";
 import * as db from "./db";
 
 /**
@@ -248,7 +250,12 @@ export function bidRollup(
    * working unchanged — omit it and the bid prices exactly as it did before
    * tax existed, which is also what a user who never switched tax on gets.
    */
-  tax?: { rules: TaxRules; jurisdictions: TaxJurisdiction[] }
+  tax?: { rules: TaxRules; jurisdictions: TaxJurisdiction[] },
+  /**
+   * Flat charges on the bid — permits, inspections, dispatch. Optional for the
+   * same reason: a bid with none prices exactly as it did before they existed.
+   */
+  expenses: readonly { name: string; amount: number }[] = []
 ) {
   const { settings, breakdowns, bidPrice } = rollUpBid(bid, lines, company);
   const priced = lines.map((line, index) => ({
@@ -294,6 +301,16 @@ export function bidRollup(
         precision: "none",
       } as ResolvedTaxRate);
 
+  /**
+   * Flat charges, added after profit and NOT marked up.
+   *
+   * Deliberately outside the sales-tax base as well: `calculateSalesTax` is
+   * still handed the bid price without expenses in it, so every tax figure the
+   * previous release established is unchanged. See shared/bidExtras.ts for why
+   * both of those are decisions rather than facts.
+   */
+  const expensesTotal = sumExpenses(expenses);
+
   const salesTax = calculateSalesTax({
     materialCost,
     laborCost,
@@ -303,6 +320,11 @@ export function bidRollup(
     components: rate.components,
     exempt: bid.taxExempt,
   });
+
+  /** Price + expenses, before tax. What the tax line sits under. */
+  const subtotal = roundMoney(bidPrice.finalPrice + expensesTotal);
+  /** Everything the customer owes. */
+  const totalDue = roundMoney(subtotal + salesTax.amount);
 
   return {
     settings,
@@ -342,9 +364,19 @@ export function bidRollup(
        * `finalPrice` rather than folded into it — a bid total that silently
        * includes tax is one nobody can check, and every screen that shows a
        * price needs to be able to show the two apart.
+       *
+       * `totalWithTax` is price + tax and excludes expenses; it is kept
+       * because the tax engine returns it and the tests pin it. `totalDue` is
+       * the number a customer actually owes.
        */
       salesTaxAmount: salesTax.amount,
       totalWithTax: salesTax.totalWithTax,
+      /** Flat charges, summed. Zero when the bid has none. */
+      expensesTotal,
+      /** finalPrice + expenses, before tax. */
+      subtotal,
+      /** finalPrice + expenses + tax. The bottom line. */
+      totalDue,
     },
   };
 }

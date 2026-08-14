@@ -54,6 +54,7 @@ import { UnitTemplateActions } from "@/components/UnitTemplateActions";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
 import { ClientLinkField } from "@/components/ClientLinkField";
 import { BidTaxControls } from "@/components/BidTaxControls";
+import { BidExtrasPanel } from "@/components/BidExtrasPanel";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { RETENTION_DAYS } from "@shared/retention";
 
@@ -647,6 +648,29 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                 </span>
               </div>
 
+              {totals.expensesTotal > 0 && (
+                <div className="flex items-baseline justify-between gap-3 py-1">
+                  <span className="text-xs text-muted-foreground">
+                    Additional expenses
+                  </span>
+                  <span className="font-mono text-sm">
+                    {money(totals.expensesTotal)}
+                  </span>
+                </div>
+              )}
+
+              {/* With tax switched off, the tax block below never renders — so
+                  a bid carrying expenses would show a Bid price and a charge
+                  with nothing tying them together. This is that total. */}
+              {totals.expensesTotal > 0 && salesTax.status === "disabled" && (
+                <div className="flex items-baseline justify-between gap-3 py-1">
+                  <span className="text-sm font-medium">Total due</span>
+                  <span className="font-mono text-base text-[#F5C518]">
+                    {money(totals.totalDue)}
+                  </span>
+                </div>
+              )}
+
               {/*
                 Sales tax, BELOW the bid price and never inside it.
 
@@ -708,13 +732,15 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                     <div className="flex items-baseline justify-between gap-3 py-1">
                       <span className="text-sm font-medium">Total due</span>
                       <span className="font-mono text-base text-[#F5C518]">
-                        {money(totals.totalWithTax)}
+                        {money(totals.totalDue)}
                       </span>
                     </div>
                   )}
                 </>
               )}
             </div>
+
+            <BidExtrasPanel bidId={bid.id} />
 
             {salesTax.status !== "disabled" && (
               <BidTaxControls
