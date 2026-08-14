@@ -29,6 +29,7 @@ import {
   ArrowLeft,
   CalendarDays,
   Check,
+  ClipboardList,
   FileSignature,
   FileText,
   Plus,
@@ -52,6 +53,7 @@ import { DuplicateUnitPanel } from "@/components/DuplicateUnitPanel";
 import { UnitLinkBadge } from "@/components/UnitLinkBadge";
 import { UnitTemplateActions } from "@/components/UnitTemplateActions";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
+import { MaterialsListDialog } from "@/components/MaterialsListDialog";
 import { ClientLinkField } from "@/components/ClientLinkField";
 import { BidTaxControls } from "@/components/BidTaxControls";
 import { BidExtrasPanel } from "@/components/BidExtrasPanel";
@@ -173,6 +175,7 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
   const [assemblyQuery, setAssemblyQuery] = useState("");
   const [addQty, setAddQty] = useState("1");
   const [addUnit, setAddUnit] = useState("");
+  const [materialsListOpen, setMaterialsListOpen] = useState(false);
 
   const utils = trpc.useUtils();
   const detailQuery = trpc.bids.get.useQuery({ id: bidId });
@@ -298,6 +301,11 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
   return (
     <div className="flex flex-col h-full bg-background">
+      <MaterialsListDialog
+        bidId={bidId}
+        open={materialsListOpen}
+        onOpenChange={setMaterialsListOpen}
+      />
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-center gap-3">
           <Button
@@ -331,6 +339,22 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
             {sheetCount > 0 && (
               <span className="text-muted-foreground">{sheetCount}</span>
             )}
+          </Button>
+
+          {/* The other document this bid produces, and the one that goes the
+              other way — out to a supplier rather than to the customer. Here as
+              well as on the Takeoff screen because a Quick Bid has line items
+              and no plan at all, and its materials still have to be quoted.
+              A dialog rather than a screen: it is read, exported and closed. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setMaterialsListOpen(true)}
+            title="Materials list — quantities only, for a supplier quote"
+          >
+            <ClipboardList className="w-3.5 h-3.5" />
+            Materials list
           </Button>
 
           {/* The way out of the app: this bid as a document a client receives.

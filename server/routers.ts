@@ -17,6 +17,7 @@ import { bidsRouter } from "./routers/bidsRouter";
 import { clientsRouter } from "./routers/clientsRouter";
 import { salesTaxRouter } from "./routers/salesTaxRouter";
 import { bidExtrasRouter } from "./routers/bidExtrasRouter";
+import { materialsListRouter } from "./routers/materialsListRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
@@ -54,6 +55,7 @@ export const appRouter = router({
   // Flat charges and includes/excludes — reusable lists plus what is attached
   // to a bid. Both snapshot onto the bid, as every library in this app does.
   bidExtras: bidExtrasRouter,
+  materialsList: materialsListRouter,
   proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,

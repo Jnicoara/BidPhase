@@ -43,6 +43,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  ClipboardList,
   Loader2,
   Plus,
   MapPin,
@@ -111,6 +112,7 @@ import { CoPilotPanel } from "@/components/takeoff/CoPilotPanel";
 import { snapshotPage } from "@/lib/planSnapshot";
 import { groupStamps } from "@shared/takeoffCounts";
 import { LayersPanel } from "@/components/takeoff/LayersPanel";
+import { MaterialsListDialog } from "@/components/MaterialsListDialog";
 import {
   SymbolCaptureForm,
   SymbolCaptureLayer,
@@ -542,6 +544,7 @@ export default function TakeoffPage({
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const uploading = isBusy(uploads);
   const [confirmRemove, setConfirmRemove] = useState<Document | null>(null);
+  const [materialsListOpen, setMaterialsListOpen] = useState(false);
   /**
    * Which sheets state NOT TO SCALE, by sheet id.
    *
@@ -1522,6 +1525,12 @@ export default function TakeoffPage({
         onChange={e => void acceptFiles(e.target.files)}
       />
 
+      <MaterialsListDialog
+        bidId={bidId}
+        open={materialsListOpen}
+        onOpenChange={setMaterialsListOpen}
+      />
+
       <div className="border-b border-border px-6 py-3 shrink-0">
         <div className="flex items-center gap-3">
           <Button
@@ -1540,6 +1549,20 @@ export default function TakeoffPage({
               Pick a sheet, set its scale. Measuring and counting come next.
             </p>
           </div>
+          {/* Left of "Add PDF" and available from the first mark, not at the
+              end: a supplier quote is how a contractor finds out what things
+              cost, so it must not sit behind a finished, priced bid. It stays
+              outlined rather than filled because adding a plan is still the
+              louder action on this screen. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setMaterialsListOpen(true)}
+            title="Materials list — quantities only, for a supplier quote"
+          >
+            <ClipboardList className="w-3.5 h-3.5" /> Materials list
+          </Button>
           {docs.length > 0 && (
             <Button
               size="sm"

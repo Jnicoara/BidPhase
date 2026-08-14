@@ -5454,3 +5454,90 @@ export async function createStampsReturningIds(
   const first = result.insertId;
   return rows.map((_, index) => first + index);
 }
+
+// ─── Materials list (supplier quote request) ──────────────────────────────────
+
+/**
+ * Material lines for several assemblies at once, WITHOUT their costs.
+ *
+ * A near-twin of `getAssemblyMaterialLines`, and deliberately not a parameter
+ * on it. That one joins `costPerUnit` because pricing needs it; this one does
+ * not select the column at all, so the rows it returns have no cost to leak
+ * into a document that is sent outside the company. The duplication is the
+ * safeguard: a `withCost: false` flag would put the cost one wrong argument
+ * away from a supplier, and the flag would be read as a display preference by
+ * the next person to touch it. Two functions cannot be confused that way.
+ *
+ * Batched over many assemblies because a takeoff of forty stamped types would
+ * otherwise be forty round trips.
+ */
+export async function getAssemblyMaterialQuantities(
+  assemblyIds: number[]
+): Promise<
+  Array<{
+    assemblyId: number;
+    materialId: number;
+    qty: string;
+    name: string;
+    unitOfSale: "each" | "foot" | "box";
+    category: string | null;
+  }>
+> {
+  if (assemblyIds.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      assemblyId: assemblyMaterials.assemblyId,
+      materialId: assemblyMaterials.materialId,
+      qty: assemblyMaterials.qty,
+      name: materials.name,
+      unitOfSale: materials.unitOfSale,
+      category: materials.category,
+    })
+    .from(assemblyMaterials)
+    .innerJoin(materials, eq(assemblyMaterials.materialId, materials.id))
+    .where(inArray(assemblyMaterials.assemblyId, assemblyIds))
+    .orderBy(asc(assemblyMaterials.sortOrder), asc(assemblyMaterials.id));
+}
+
+/**
+ * Scale facts for every sheet of a bid, keyed by sheet id.
+ *
+ * Runs record which sheet they were traced on, and a run cannot be turned into
+ * a footage without that sheet's scale. Fetched for the whole bid in one query
+ * because a run list spans sheets and documents.
+ */
+export async function getSheetScalesForBid(
+  bidId: number,
+  userId: number
+): Promise<
+  Map<
+    number,
+    { scaleRatio: number | null; scaleSource: string; notToScale: boolean }
+  >
+> {
+  const db = await getDb();
+  if (!db) return new Map();
+  const rows = await db
+    .select({
+      id: bidPdfSheets.id,
+      scaleRatio: bidPdfSheets.scaleRatio,
+      scaleSource: bidPdfSheets.scaleSource,
+      notToScale: bidPdfSheets.notToScale,
+    })
+    .from(bidPdfSheets)
+    .innerJoin(bidPdfs, eq(bidPdfSheets.bidPdfId, bidPdfs.id))
+    .where(and(eq(bidPdfs.bidId, bidId), eq(bidPdfSheets.userId, userId)));
+
+  return new Map(
+    rows.map(row => [
+      row.id,
+      {
+        scaleRatio: row.scaleRatio === null ? null : Number(row.scaleRatio),
+        scaleSource: row.scaleSource,
+        notToScale: row.notToScale,
+      },
+    ])
+  );
+}
