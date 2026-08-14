@@ -22,7 +22,7 @@
  * no credential, no network and no Cloudflare account.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import mysql from "mysql2/promise";
 import { dumpDatabase, listTables } from "./backup/dumpDatabase";
@@ -30,6 +30,11 @@ import { collectFiles, FILE_SOURCES } from "./backup/collectFiles";
 import { runBackup, runIdFor, summarise } from "./backup/runBackup";
 import { readR2Config, describeConfig, REQUIRED_VARS } from "./backup/config";
 import type { BackupTarget } from "./backup/target";
+import {
+  newestRunId,
+  summariseVerify,
+  verifyBackup,
+} from "./backup/verifyBackup";
 
 const databaseUrl = process.env.DATABASE_URL ?? "";
 const hasDb = Boolean(databaseUrl);
@@ -49,6 +54,14 @@ function fakeTarget(
     async put(key, body) {
       if (options.failOn?.test(key)) throw new Error(`refused ${key}`);
       written.set(key, body);
+    },
+    async get(key) {
+      const body = written.get(key);
+      if (!body) throw new Error(`no such object: ${key}`);
+      return body;
+    },
+    async list(prefix) {
+      return Array.from(written.keys()).filter(k => k.startsWith(prefix));
     },
   };
 }
@@ -464,6 +477,126 @@ runIf("the report says what actually happened", () => {
       report.errors.length === 0 && report.files.failed.length === 0
     );
   });
+});
+
+// ── Reading the backup back ──────────────────────────────────────────────────
+
+describe("finding the newest run", () => {
+  it("picks the latest by run id, ignoring other objects", () => {
+    expect(
+      newestRunId([
+        "2026-08-01T00-00-00Z/manifest.json",
+        "2026-08-14T06-12-33Z/manifest.json",
+        "2026-08-14T06-12-33Z/database.sql.gz",
+        "2026-08-03T09-30-00Z/manifest.json",
+        "stray-object.txt",
+      ])
+    ).toBe("2026-08-14T06-12-33Z");
+  });
+
+  it("returns null rather than guessing when the bucket is empty", () => {
+    expect(newestRunId([])).toBeNull();
+    expect(newestRunId(["notes.txt"])).toBeNull();
+  });
+});
+
+runIf("verifying a backup end to end", () => {
+  /**
+   * Back up, then read it back and restore it — the full loop, with the bucket
+   * faked but the dump, the gzip, the manifest and the restore all real.
+   *
+   * This is the loop that would have caught the JSON corruption bug on day one,
+   * so it is worth having as a test and not only as a script.
+   */
+  it("verifies a backup it just took", async () => {
+    const target = fakeTarget();
+    const report = await runBackup({
+      databaseUrl,
+      target,
+      fetchFile: async () => Buffer.from("file bytes"),
+    });
+    expect(report.ok).toBe(true);
+
+    const result = await verifyBackup({
+      target,
+      scratchDatabaseUrl: databaseUrl,
+      scratchSchema: "helixbid_verify_selftest",
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.mismatches).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.runId).toBe(report.runId);
+    // The restore reproduced exactly what the manifest claimed.
+    expect(result.restored).toEqual(result.claimed);
+    expect(result.restored!.tables).toBe(report.database!.tableCount);
+  }, 120_000);
+
+  it("REFUSES to verify a dump that has been corrupted", async () => {
+    /*
+     * The assertion that makes the verifier worth running. A checker that
+     * cannot fail is theatre — so this takes a real backup, damages the SQL
+     * inside the gzip the way the JSON bug did, and requires the verifier to
+     * notice.
+     */
+    const target = fakeTarget();
+    const report = await runBackup({
+      databaseUrl,
+      target,
+      fetchFile: async () => Buffer.from("x"),
+    });
+
+    const key = `${report.runId}/database.sql.gz`;
+    const sql = gunzipSync(target.written.get(key)!).toString("utf8");
+    // Exactly the shape of the original bug: an array spliced in as loose
+    // values, making the INSERT unparseable.
+    const damaged = sql.replace(
+      /INSERT INTO `assemblies`/,
+      'INSERT INTO `assemblies` (bogus, [{"x":1}])'
+    );
+    target.written.set(key, gzipSync(Buffer.from(damaged, "utf8")));
+
+    const result = await verifyBackup({
+      target,
+      scratchDatabaseUrl: databaseUrl,
+      scratchSchema: "helixbid_verify_corrupt",
+    });
+
+    expect(result.ok, "a corrupted dump must not verify").toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(summariseVerify(result)).toContain("NOT VERIFIED");
+  }, 120_000);
+
+  it("notices when the restore does not match the manifest", async () => {
+    // A dump that loads but produces different data than claimed is the subtler
+    // failure — silent partial loss rather than a parse error.
+    const target = fakeTarget();
+    const report = await runBackup({
+      databaseUrl,
+      target,
+      fetchFile: async () => Buffer.from("x"),
+    });
+
+    const manifestKey = `${report.runId}/manifest.json`;
+    const manifest = JSON.parse(
+      target.written.get(manifestKey)!.toString("utf8")
+    );
+    // Claim a table has more rows than it does.
+    manifest.database.tables[0].rows += 999;
+    target.written.set(
+      manifestKey,
+      Buffer.from(JSON.stringify(manifest), "utf8")
+    );
+
+    const result = await verifyBackup({
+      target,
+      scratchDatabaseUrl: databaseUrl,
+      scratchSchema: "helixbid_verify_mismatch",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.mismatches.join(" ")).toContain("manifest");
+  }, 120_000);
 });
 
 // ── Summaries a human reads at 2am ───────────────────────────────────────────

@@ -78,7 +78,38 @@ already gone wrong cannot destroy the good one before it.
 The manifest carries the same failures the terminal printed, so the record of
 what went wrong sits beside the data rather than in a window someone closed.
 
-## 5. Restoring
+## 5. Proving a backup actually works
+
+A backup that has been written but never read back is a hypothesis.
+
+```bash
+DOTENV_CONFIG_PATH=.env.production.local \
+VERIFY_DATABASE_URL=mysql://root:password@localhost:3306/mysql \
+pnpm tsx scripts/verifyBackup.mts            # newest run
+pnpm tsx scripts/verifyBackup.mts 2026-08-14T06-12-33Z   # a specific one
+```
+
+It downloads what is **actually in the bucket** — not what we think was
+uploaded — restores it into a scratch schema, and compares the result against
+the manifest that run wrote about itself. Exit 0 only on a clean match.
+
+```
+Backup VERIFIED — 2026-08-14T06-12-33Z restores cleanly
+  manifest says: 37 tables, 2266 rows
+  restored:      37 tables, 2266 rows
+```
+
+`VERIFY_DATABASE_URL` is **required and separate**, and the script refuses to
+run if it equals `DATABASE_URL`. Restoring a production backup on top of
+production is how a backup tool becomes an outage. Point it at a local MySQL;
+the scratch schema is created fresh and dropped afterwards.
+
+Run this after the first backup against a new bucket, and any time
+`server/backup/` changes. `server/backup.test.ts` proves the verifier can
+actually fail: it takes a real backup, corrupts the SQL inside the gzip the way
+the JSON bug did, and requires rejection. A checker that cannot fail is theatre.
+
+## 6. Restoring
 
 ```bash
 gunzip -c database.sql.gz | mysql -u USER -p DBNAME
@@ -92,7 +123,7 @@ Files restore by uploading `files/<key>` back to whatever storage the app is
 using, at the same key. The keys in the database are unchanged by a restore, so
 they line up as long as the object keys are preserved.
 
-## 6. The failure this design is most afraid of
+## 7. The failure this design is most afraid of
 
 A backup nobody finds out is broken until the day the original is gone.
 
@@ -114,11 +145,13 @@ run was corrupt. Every other test passed. Only the restore caught it.
 
 If you change anything in `server/backup/`, run that test.
 
-## 7. Not built yet
+## 8. Not built yet
 
 - **Scheduling.** Manual only, on purpose, until the manual version has been
   proven against the real bucket. When it is added it belongs on the platform
   cron (`CLAUDE.md` § Scheduled work), not a `setInterval`.
 - **Retention.** Nothing deletes old backups. For now that is the safe
   direction; revisit before the bucket becomes expensive.
-- **Restore automation.** Restoring is the documented manual sequence above.
+- **Restore automation.** Restoring is the documented manual sequence in § 6.
+  Verifying that a backup _can_ be restored is automated (§ 5); actually
+  putting one back is deliberately a human decision.
