@@ -55,14 +55,17 @@ export const electrical: TradeContent = {
       {
         title: "Trace the plans",
         body: "Load the PDF the architect sent, set the sheet's scale, and stamp each device where it sits. The count builds as you go.",
+        icon: "ruler",
       },
       {
         title: "Price it from your own numbers",
         body: "Every device is an assembly of materials and hours, costed against your rates rather than a catalog's idea of them.",
+        icon: "calculator",
       },
       {
         title: "Send the proposal",
         body: "Your letterhead, the work included, one price. Out the same day, not next week.",
+        icon: "fileText",
       },
     ],
     // All that survives of the old differentiator grid: the one claim the three

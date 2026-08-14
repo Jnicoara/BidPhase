@@ -42,10 +42,39 @@ export type TradeShot = {
   height: number;
 };
 
-/** One step of the three. Title plus a single sentence — no icon, no card. */
+/**
+ * Icons a step may name.
+ *
+ * A config names a key; it never imports a component. That keeps a content file
+ * from being able to break the render, and it is the same closed-set instinct
+ * used by the navigation helper and the co-pilot's action list — choose between
+ * options, never construct one.
+ *
+ * Deliberately short. If a trade needs a symbol this cannot express, add one
+ * entry here; that is a shared-chrome decision, and the only thing about a new
+ * trade that should touch code.
+ */
+export const STEP_ICONS = [
+  "ruler",
+  "calculator",
+  "fileText",
+  "layers",
+  "gauge",
+  "zap",
+] as const;
+
+export type StepIconKey = (typeof STEP_ICONS)[number];
+
+/**
+ * One step of the three: an icon, a title and a single sentence.
+ *
+ * The icon is content rather than chrome because it describes the step, and a
+ * plumbing "trace the plans" may well want a different one.
+ */
 export type TradeStep = {
   title: string;
   body: string;
+  icon: StepIconKey;
 };
 
 export type TradeContent = {

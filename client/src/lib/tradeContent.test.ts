@@ -33,6 +33,7 @@ import {
   DEFAULT_TRADE,
   TRADES,
   resolveTrade,
+  STEP_ICONS,
   type TradeContent,
 } from "@/content/trades";
 import { electrical } from "@/content/trades/electrical";
@@ -69,9 +70,9 @@ const plumbing: TradeContent = {
   howItWorks: {
     heading: "ZZTOP how heading",
     steps: [
-      { title: "ZZTOP step one", body: "ZZTOP step one body" },
-      { title: "ZZTOP step two", body: "ZZTOP step two body" },
-      { title: "ZZTOP step three", body: "ZZTOP step three body" },
+      { title: "ZZTOP step one", body: "ZZTOP step one body", icon: "gauge" },
+      { title: "ZZTOP step two", body: "ZZTOP step two body", icon: "layers" },
+      { title: "ZZTOP step three", body: "ZZTOP step three body", icon: "zap" },
     ],
     closingLine: "ZZTOP closing line",
   },
@@ -205,12 +206,20 @@ describe("the page stays as small as it was rebuilt to be", () => {
     expect((html.match(/<li\b/g) ?? []).length).toBe(3);
   });
 
-  it("shows one image and no decorative graphics", () => {
-    // One screenshot, and nothing else pictorial. The previous version carried
-    // icon components in every card; their absence is the point.
+  it("shows one image and only the three step icons", () => {
+    // One screenshot, and no second picture. The icons are deliberate — one
+    // per step, to stop the section reading as a draft — but three is the
+    // budget: the version before this had an icon tile on every card in a
+    // four-section grid.
     expect((html.match(/<img/g) ?? []).length).toBe(1);
-    // Two SVGs at most, and only from Button/Input chrome — never a card icon.
-    expect((html.match(/<svg/g) ?? []).length).toBeLessThanOrEqual(1);
+    expect((html.match(/<svg/g) ?? []).length).toBe(3);
+  });
+
+  it("draws one connector rail, and only where the steps sit side by side", () => {
+    // The rail is what makes three blocks read as a sequence. On a phone the
+    // steps stack, and a horizontal line across stacked items joins nothing.
+    expect(html).toMatch(/hidden h-px bg-border sm:block|sm:block[^"]*h-px/);
+    expect(html).toContain('aria-hidden="true"');
   });
 
   it("offers one destination, not a menu of calls to action", () => {
@@ -335,6 +344,43 @@ describe("the layout is mobile-first", () => {
     // Without width/height the browser reserves no space, and the largest image
     // on the page shoves everything below it down when it lands.
     expect(html).toMatch(/<img[^>]*width="\d+"[^>]*height="\d+"/);
+  });
+});
+
+// ── Icons come from a fixed set ──────────────────────────────────────────────
+
+describe("step icons", () => {
+  it("renders every declared icon key without a hole", () => {
+    // A config names an icon; it never imports one. Rendering all of them
+    // proves the map is complete — a missing entry would crash here rather
+    // than leave a blank square on a live page.
+    for (const icon of STEP_ICONS) {
+      const html = render({
+        ...plumbing,
+        howItWorks: {
+          ...plumbing.howItWorks,
+          steps: plumbing.howItWorks.steps.map(s => ({
+            ...s,
+            icon,
+          })) as (typeof plumbing)["howItWorks"]["steps"],
+        },
+      });
+      expect(
+        (html.match(/<svg/g) ?? []).length,
+        `icon "${icon}" did not render`
+      ).toBe(3);
+    }
+  });
+
+  it("uses the trade's chosen icons, not one hardcoded per position", () => {
+    // Two trades with different icons must produce different markup, or the
+    // icons are chrome pretending to be content.
+    const a = render(electrical);
+    const b = render(plumbing);
+    expect(a).not.toBe(b);
+    // lucide sets a class per icon, e.g. "lucide-ruler".
+    expect(a.toLowerCase()).toContain("ruler");
+    expect(b.toLowerCase()).not.toContain("ruler");
   });
 });
 

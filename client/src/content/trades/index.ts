@@ -15,7 +15,8 @@
 import type { TradeContent } from "./types";
 import { electrical } from "./electrical";
 
-export type { TradeContent, TradeStep, TradeShot } from "./types";
+export type { TradeContent, TradeStep, TradeShot, StepIconKey } from "./types";
+export { STEP_ICONS } from "./types";
 
 /** Every trade with published marketing copy. Order is display order. */
 export const TRADES: TradeContent[] = [electrical];

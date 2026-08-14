@@ -73,6 +73,13 @@
     />
     <meta name="twitter:image" content="/brand/shot-bid.jpg" />
 
+    <!--
+      The "HB" placeholder mark. Served from /favicon.svg rather than the old
+      /brand/ path deliberately: browsers cache a favicon hard per origin, and a
+      new URL is what actually dislodges the one cached before the brand revert.
+    -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

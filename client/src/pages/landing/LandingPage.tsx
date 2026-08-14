@@ -23,10 +23,37 @@
  * Not one word a visitor reads is in this file — it all comes from the trade
  * config. See content/trades/types.ts.
  */
-import { Check, Loader2 } from "lucide-react";
+import {
+  Calculator,
+  Check,
+  FileText,
+  Gauge,
+  Layers,
+  Loader2,
+  Ruler,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { TradeContent } from "@/content/trades";
+import type { StepIconKey, TradeContent } from "@/content/trades";
+
+/**
+ * The closed icon set, resolved.
+ *
+ * lucide-react, the same line-icon library every screen in the app already
+ * uses — no second icon set, and nothing drawn by hand. A config names a key
+ * and this turns it into a component; the key type makes an unknown one a
+ * compile error rather than a hole on the page.
+ */
+const STEP_ICON: Record<StepIconKey, LucideIcon> = {
+  ruler: Ruler,
+  calculator: Calculator,
+  fileText: FileText,
+  layers: Layers,
+  gauge: Gauge,
+  zap: Zap,
+};
 
 export type SignupStatus =
   | { kind: "idle" }
@@ -141,8 +168,8 @@ export function LandingPage({
         </section>
 
         {/* ── How it works ──────────────────────────────────────────────────
-            Three steps as text. No cards, no icons, no rules between them —
-            the numerals carry the sequence and the whitespace does the rest. */}
+            Three steps as text, with one icon each and a rail joining them.
+            Just enough weight to read as finished, not as cards. */}
         <section className="border-t border-border">
           <div className="mx-auto max-w-5xl px-6 py-16 sm:py-24">
             <h2
@@ -152,21 +179,45 @@ export function LandingPage({
               {trade.howItWorks.heading}
             </h2>
 
-            <ol className="mt-10 grid gap-10 sm:grid-cols-3 sm:gap-8">
-              {trade.howItWorks.steps.map((step, index) => (
-                <li key={step.title}>
-                  <span
-                    className="text-xs tabular-nums text-muted-foreground"
-                    style={{ fontFamily: "'JetBrains Mono', monospace" }}
-                  >
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <h3 className="mt-3 text-base font-semibold">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    {step.body}
-                  </p>
-                </li>
-              ))}
+            {/* The rail is what makes three blocks of text read as one
+                sequence. It sits behind the icon row and each icon knocks a
+                gap in it with the page background, so the line reads as
+                joining the steps rather than underlining them.
+
+                Only on `sm:` and up: once the steps stack on a phone, a
+                horizontal line across them connects nothing. */}
+            <ol className="relative mt-10 grid gap-10 sm:grid-cols-3 sm:gap-8">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-[11px] hidden h-px bg-border sm:block"
+              />
+
+              {trade.howItWorks.steps.map((step, index) => {
+                const Icon = STEP_ICON[step.icon];
+                return (
+                  <li key={step.title} className="relative">
+                    <span className="relative flex w-fit items-center gap-2.5 bg-background pr-4">
+                      <Icon
+                        className="h-[22px] w-[22px] text-primary"
+                        strokeWidth={1.5}
+                        aria-hidden
+                      />
+                      <span
+                        className="text-xs tabular-nums text-muted-foreground"
+                        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                      >
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                    </span>
+                    <h3 className="mt-4 text-base font-semibold">
+                      {step.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      {step.body}
+                    </p>
+                  </li>
+                );
+              })}
             </ol>
 
             {trade.howItWorks.closingLine && (
@@ -200,7 +251,7 @@ export function LandingPage({
                   className="mt-6 flex items-center gap-2 text-sm font-medium"
                   role="status"
                 >
-                  <Check className="h-4 w-4 shrink-0 text-[#F5C518]" />
+                  <Check className="h-4 w-4 shrink-0 text-primary" />
                   {status.kind === "already"
                     ? trade.cta.alreadyOn
                     : trade.cta.success}
