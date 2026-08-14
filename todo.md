@@ -800,6 +800,15 @@ left as written rather than rewritten to match the rename.
 - [x] Pull the latest GitHub main and inspect the independent R2 backup tool plus all pending migrations
 - [x] Re-run the GitHub release inspection cleanly from the newest main branch before any merge or migration action
 - [x] Apply verified schema migrations and validate the backup-enabled release (checkpoint pending)
-- [ ] Add the four encrypted, server-only Cloudflare R2 credentials after production deployment
-- [ ] Add the required encrypted `R2_BUCKET` name and validate the R2 destination before running the backup
-- [ ] Run the real production backup and verify the database and stored-file objects in Cloudflare R2
+- [x] Add the four encrypted, server-only Cloudflare R2 credentials after production deployment
+- [x] Add the required encrypted `R2_BUCKET` name and validate the R2 destination before running the backup
+- [ ] Resolve the Manus source-storage 403 responses blocking the four stored PDF copies, then rerun and verify a complete production backup
+
+## v5.97 — Source Storage Repair & Complete R2 Backup
+- [x] Classify the four 403 storage keys as development fixtures rather than customer data
+- [x] Resolve the 403 blocker by removing the four user-approved stale test references whose source objects no longer exist
+- [x] Rerun and verify a complete R2 backup containing the database, manifest, and every remaining stored-file reference
+
+## v5.98 — Approved Stale Test Data Cleanup
+- [x] Remove only the four approved stale test bid/PDF records: Trace test, Copilot test, Stamp test, and Sheet test
+- [x] Confirm the four `test/...` PDF references are gone before rerunning the backup
