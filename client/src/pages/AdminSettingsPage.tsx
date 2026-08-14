@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import EarlyAccessSignups from "@/components/EarlyAccessSignups";
 
 // ─── Feature Flag Row ─────────────────────────────────────────────────────────
 
@@ -140,6 +141,10 @@ export default function AdminSettingsPage() {
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        {/* Early access — first, because it is the one section here with new
+            information in it on any given day. */}
+        <EarlyAccessSignups />
+
         {/* Feature Flags section */}
         <div>
           <div className="flex items-center justify-between mb-3">

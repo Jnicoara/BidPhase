@@ -22,6 +22,7 @@ import { kitsRouter } from "./routers/kitsRouter";
 import { onboardingRouter } from "./routers/onboardingRouter";
 import { navigationRouter } from "./routers/navigationRouter";
 import { planCopilotRouter } from "./routers/planCopilotRouter";
+import { earlyAccessRouter } from "./routers/earlyAccessRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -49,6 +50,9 @@ export const appRouter = router({
   // Separate from `navigation` on purpose — separate scope, separate action
   // list, separate model call. See the header of planCopilotRouter.
   planCopilot: planCopilotRouter,
+  // The marketing landing page's waitlist. Carries the app's only public
+  // write — see the router header for what guards it instead of auth.
+  earlyAccess: earlyAccessRouter,
 });
 
 export type AppRouter = typeof appRouter;

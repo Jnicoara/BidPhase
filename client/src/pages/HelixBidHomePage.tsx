@@ -6,6 +6,7 @@
 import { Zap, FolderOpen, BarChart3, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@shared/version";
+import { BrandMark } from "@/components/brand/BrandMark";
 
 interface HelixBidHomePageProps {
   onGoToProjects: () => void;
@@ -43,12 +44,7 @@ export default function HelixBidHomePage({
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-20 text-center">
         {/* Logo mark */}
         <div className="w-20 h-20 rounded-2xl bg-[#F5C518]/10 border border-[#F5C518]/20 flex items-center justify-center mb-8 shadow-lg shadow-[#F5C518]/5">
-          <span
-            className="font-bold text-[#F5C518] text-3xl select-none"
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-          >
-            HB
-          </span>
+          <BrandMark size={44} />
         </div>
 
         {/* Wordmark */}

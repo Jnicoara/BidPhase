@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!--
+    The Coil mark, on its own dark tile.
+
+    A tab favicon sits on whatever colour the browser chrome is, so this one
+    carries its own background rather than relying on the page's — a yellow
+    coil alone vanishes into a light theme's tab strip. Kept in step with
+    BrandMark's `helix` variant by hand; there are only two copies, and an SVG
+    the browser can cache beats a runtime-rendered one for the first paint.
+  -->
+  <rect width="32" height="32" rx="7" fill="#0F1117"/>
+  <g stroke="#F5C518" stroke-width="2.6" stroke-linecap="round" fill="none">
+    <path d="M10 7c0 2.6 12 2.6 12 5s-12 2.6-12 5 12 2.6 12 5-12 2.6-12 3" stroke-opacity="0.35"/>
+    <path d="M22 7c0 2.6-12 2.6-12 5s12 2.6 12 5-12 2.6-12 5 12 2.6 12 3"/>
+  </g>
+  <circle cx="22" cy="7" r="2.2" fill="#F5C518"/>
+  <circle cx="10" cy="25" r="2.2" fill="#F5C518"/>
+</svg>

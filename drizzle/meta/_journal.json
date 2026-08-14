@@ -225,6 +225,13 @@
       "when": 1786651812875,
       "tag": "0031_typical_wrecking_crew",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1786674985328,
+      "tag": "0032_minor_reavers",
+      "breakpoints": true
     }
   ]
 }

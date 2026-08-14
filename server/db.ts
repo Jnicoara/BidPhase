@@ -74,6 +74,8 @@ import {
   InsertSymbolLink,
   SymbolLink,
   symbolLinks,
+  EarlyAccessSignup,
+  earlyAccessSignups,
   InsertPlanCopilotRun,
   PlanCopilotRun,
   planCopilotRuns,
@@ -4420,6 +4422,79 @@ export async function deleteSymbolLink(id: number, userId: number) {
   await db
     .delete(symbolLinks)
     .where(and(eq(symbolLinks.id, id), eq(symbolLinks.userId, userId)));
+}
+
+// ─── Early access signups ─────────────────────────────────────────────────────
+
+/**
+ * Record a signup, or recognise one already on the list.
+ *
+ * Returns whether the row was new, because the two cases read completely
+ * differently to the person at the form: "you're on the list" and "you're
+ * already on the list" are both good news, and a duplicate must never surface
+ * as an error. The unique index on email is what makes this safe under two
+ * simultaneous submissions of the same address.
+ */
+export async function addEarlyAccessSignup(data: {
+  email: string;
+  tradeId: string;
+}): Promise<{ created: boolean }> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [existing] = await db
+    .select()
+    .from(earlyAccessSignups)
+    .where(eq(earlyAccessSignups.email, data.email))
+    .limit(1);
+  if (existing) return { created: false };
+
+  try {
+    await db.insert(earlyAccessSignups).values(data);
+    return { created: true };
+  } catch (error) {
+    // Lost a race with another submission of the same address. That is the
+    // unique index doing its job, not a failure worth showing anyone.
+    const [now] = await db
+      .select()
+      .from(earlyAccessSignups)
+      .where(eq(earlyAccessSignups.email, data.email))
+      .limit(1);
+    if (now) return { created: false };
+    throw error;
+  }
+}
+
+/** The list, newest first — what the admin screen and the export both read. */
+export async function getEarlyAccessSignups(
+  limit = 1000
+): Promise<EarlyAccessSignup[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(earlyAccessSignups)
+    .orderBy(desc(earlyAccessSignups.createdAt))
+    .limit(limit);
+}
+
+export async function countEarlyAccessSignups(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ total: sql<number>`count(*)` })
+    .from(earlyAccessSignups);
+  return Number(row?.total ?? 0);
+}
+
+/** Mark someone as contacted, or undo that. */
+export async function setEarlyAccessNotified(id: number, notified: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(earlyAccessSignups)
+    .set({ notifiedAt: notified ? new Date() : null, updatedAt: new Date() })
+    .where(eq(earlyAccessSignups.id, id));
 }
 
 // ─── Plan co-pilot ────────────────────────────────────────────────────────────
