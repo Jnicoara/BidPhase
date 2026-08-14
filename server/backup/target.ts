@@ -15,9 +15,11 @@
  * to work when things are going wrong.
  */
 import {
+  GetObjectCommand,
+  HeadBucketCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
-  HeadBucketCommand,
 } from "@aws-sdk/client-s3";
 import type { R2Config } from "./config";
 
@@ -34,6 +36,15 @@ export type BackupTarget = {
    * between a typo and a wasted hour.
    */
   check(): Promise<void>;
+  /**
+   * Read an object back.
+   *
+   * Only the verifier uses this, and that is the point: a backup nobody has
+   * ever read back is a hypothesis. See scripts/verifyBackup.mts.
+   */
+  get(key: string): Promise<Buffer>;
+  /** Object keys under a prefix, so the verifier can find the newest run. */
+  list(prefix: string): Promise<string[]>;
 };
 
 export function createR2Target(config: R2Config): BackupTarget {
@@ -62,6 +73,47 @@ export function createR2Target(config: R2Config): BackupTarget {
           ContentType: contentType,
         })
       );
+    },
+
+    async get(key) {
+      const response = await client.send(
+        new GetObjectCommand({
+          Bucket: config.bucket,
+          Key: `${config.prefix}/${key}`.replace(/\/+/g, "/"),
+        })
+      );
+      const chunks: Buffer[] = [];
+      // The SDK hands back a Node stream here; collect it rather than using
+      // transformToByteArray(), which is not present on every SDK version.
+      const stream = response.Body as AsyncIterable<Uint8Array>;
+      for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+      return Buffer.concat(chunks);
+    },
+
+    async list(prefix) {
+      const full = `${config.prefix}/${prefix}`.replace(/\/+/g, "/");
+      const keys: string[] = [];
+      let token: string | undefined;
+      do {
+        const response = await client.send(
+          new ListObjectsV2Command({
+            Bucket: config.bucket,
+            Prefix: full,
+            ContinuationToken: token,
+          })
+        );
+        for (const item of response.Contents ?? []) {
+          if (item.Key) {
+            // Hand back keys relative to the prefix, so callers never have to
+            // know it — the same shape `put` and `get` accept.
+            keys.push(item.Key.slice(`${config.prefix}/`.length));
+          }
+        }
+        token = response.IsTruncated
+          ? response.NextContinuationToken
+          : undefined;
+      } while (token);
+      return keys;
     },
   };
 }
