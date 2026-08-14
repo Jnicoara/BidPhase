@@ -2067,6 +2067,64 @@ export const kitAssemblies = mysqlTable(
 export type KitAssembly = typeof kitAssemblies.$inferSelect;
 export type InsertKitAssembly = typeof kitAssemblies.$inferInsert;
 
+// ─── Early access signups (marketing landing page) ────────────────────────────
+/**
+ * Somebody asked to be told when early access opens.
+ *
+ * ── Why this is a table and not an email to the owner ───────────────────────
+ * A signup form that sends a thank-you and keeps no record is a form that has
+ * lost every address typed into it. The landing page is the first impression
+ * for every prospective user, and the list it collects is the only asset it
+ * produces — so the address is stored, and there is an admin screen and a CSV
+ * export that read it back (see server/routers/earlyAccessRouter.ts and the
+ * Early access section of AdminSettingsPage).
+ *
+ * ── Deliberately outside the user tree ──────────────────────────────────────
+ * Every other table in this schema hangs off `users` with a cascade delete.
+ * This one does not, and must not: the whole point is that these people do not
+ * have accounts yet. There is no userId to scope it by, which is also why the
+ * procedure that writes it is the app's only public write and carries its own
+ * validation and rate limit.
+ *
+ * `email` is unique, so signing up twice is idempotent rather than an error —
+ * someone who forgets they already asked should be told they are on the list,
+ * not shown a failure.
+ */
+export const earlyAccessSignups = mysqlTable(
+  "early_access_signups",
+  {
+    id: int("id").autoincrement().primaryKey(),
+
+    /** Lower-cased and trimmed before insert. 320 is the RFC ceiling. */
+    email: varchar("email", { length: 320 }).notNull().unique(),
+
+    /**
+     * Which trade's landing page they came from.
+     *
+     * Stored from the first signup so that when a second trade launches, the
+     * list can say who was waiting for what. Matches the `trade` axis on
+     * assemblies and the ids in client/src/content/trades.
+     */
+    tradeId: varchar("tradeId", { length: 64 }).default("electrical").notNull(),
+
+    /**
+     * When they have been contacted, so the list can be worked through rather
+     * than only read. NULL means not yet invited.
+     */
+    notifiedAt: timestamp("notifiedAt"),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("early_access_signups_createdAt_idx").on(t.createdAt),
+    index("early_access_signups_tradeId_idx").on(t.tradeId),
+  ]
+);
+
+export type EarlyAccessSignup = typeof earlyAccessSignups.$inferSelect;
+export type InsertEarlyAccessSignup = typeof earlyAccessSignups.$inferInsert;
+
 // ─── Feature Flags ────────────────────────────────────────────────────────────
 // Admin-controlled toggles that gate features for the Contractor role.
 // Each row is identified by a unique flagKey string.

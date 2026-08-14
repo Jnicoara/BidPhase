@@ -5,6 +5,16 @@ const templateRoot = path.resolve(import.meta.dirname);
 
 export default defineConfig({
   root: templateRoot,
+  /**
+   * Compile JSX with the automatic runtime, the way vite.config.ts does.
+   *
+   * Needed since a test started rendering real components — the landing page's
+   * architecture test renders it with renderToStaticMarkup. Without this,
+   * esbuild emits classic `React.createElement` calls into files that never
+   * import React, and every render fails with "React is not defined". The app
+   * build was always fine; only this config lacked the setting.
+   */
+  esbuild: { jsx: "automatic" },
   resolve: {
     alias: {
       "@": path.resolve(templateRoot, "client", "src"),
