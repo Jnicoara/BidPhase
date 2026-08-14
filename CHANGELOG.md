@@ -6,6 +6,11 @@ This is the human-readable companion to the git history — read this to see wha
 
 ## [2026-08-14]
 
+- **Clients now have a screen.** Workspace → Clients lists everyone you bid for — companies or individuals, with a contact, address, phone, email and private notes — and lets you add and edit them. Search covers all of it, so you can find a customer by the street they are on or a phone number, not just the company name.
+- **Removing a client archives it, the same as everywhere else in the app.** It comes off the working list and can be restored at any time. There is deliberately no permanent delete: the bids attached to a client are what make the record worth keeping, and destroying it would quietly detach every one of them. The confirmation says how many bids are attached and that none of them are touched.
+- **A bid can now be attached to a client.** The bid screen has a Client box: search the list, pick one, or type a name and add them on the spot without leaving the bid. Attaching one fills the client's details into the proposal.
+- **A name typed on the bid still wins.** If you have written a client name on the Proposal screen, attaching a record does not overwrite it — the bid keeps what you typed, and the box says so plainly and names what it is superseding, so an attached client and a different name on the document is never a mystery. Bids with no client behave exactly as before.
+
 - **A failed plan upload now has a Retry button.** It reuses the file you already picked, so there is no hunting through folders for it again and no reloading the page. Retrying is the same code path as the first attempt, so it behaves identically rather than being a slightly different second version. Failures that the file itself causes — too large, or not really a PDF — offer only Dismiss, because sending the same bytes again could never work and a button that cannot succeed is worse than no button.
 - **Picking another file no longer wipes a failed one off the list.** New files are added to the list instead of replacing it, so the row explaining what went wrong stays until you dismiss it. Also fixed: dismissing one upload while another was still going could send the second one's progress to the wrong row.
 

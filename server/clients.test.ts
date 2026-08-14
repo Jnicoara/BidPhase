@@ -469,3 +469,189 @@ describe.skipIf(!hasDb)("a bid with no client keeps working", () => {
     }
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// The flows the screens actually perform
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * These mirror what ClientsPage and ClientLinkField do, procedure for
+ * procedure. The pure display logic is covered in
+ * client/src/lib/clientPicker.test.ts; what is checked here is that the
+ * sequence of calls those screens make produces the right rows — the half a
+ * unit test of a render function cannot see.
+ */
+describe.skipIf(!hasDb)("the Clients screen", () => {
+  it("creates from the form, with every optional field filled", async () => {
+    const created = await caller().clients.create({
+      name: "Harbour Construction Group",
+      kind: "company",
+      contactName: "Dana Reyes",
+      address: "88 Water St, Unit 4",
+      phone: "555-0142",
+      email: "dana@harbour.example",
+      notes: "Pays on time. Always wants a breakdown.",
+    });
+
+    const listed = await caller().clients.list();
+    const row = listed.find(c => c.id === created!.id)!;
+    expect(row.name).toBe("Harbour Construction Group");
+    expect(row.notes).toMatch(/pays on time/i);
+    expect(row.bidCount).toBe(0);
+  });
+
+  it("edits through the form, which sends every field at once", async () => {
+    // The edit form submits the whole draft, not a diff. Fields the user
+    // emptied arrive as null and must clear rather than being ignored.
+    const created = await caller().clients.create({
+      name: "Before Co",
+      contactName: "Old Contact",
+      phone: "555-0000",
+      email: "old@example.com",
+    });
+
+    const updated = await caller().clients.update({
+      id: created!.id,
+      name: "After Co",
+      kind: "individual",
+      contactName: null,
+      address: "New Address",
+      phone: null,
+      email: null,
+      notes: null,
+    });
+
+    expect(updated!.name).toBe("After Co");
+    expect(updated!.kind).toBe("individual");
+    expect(updated!.address).toBe("New Address");
+    expect(updated!.contactName).toBeNull();
+    expect(updated!.phone).toBeNull();
+    expect(updated!.email).toBeNull();
+  });
+
+  it("moves a client between the two tabs and back", async () => {
+    const created = await newClient("Tab Traveller Ltd");
+
+    await caller().clients.archive({ id: created.id });
+    expect((await caller().clients.list()).map(c => c.id)).not.toContain(
+      created.id
+    );
+    expect((await caller().clients.archived()).map(c => c.id)).toContain(
+      created.id
+    );
+
+    await caller().clients.restore({ id: created.id });
+    expect((await caller().clients.list()).map(c => c.id)).toContain(
+      created.id
+    );
+    expect((await caller().clients.archived()).map(c => c.id)).not.toContain(
+      created.id
+    );
+  });
+
+  it("reports the bid count the list badge shows", async () => {
+    const created = await newClient("Counted Co");
+    const a = await newBid();
+    const b = await newBid();
+    await caller().bids.update({ id: a.id, clientId: created.id });
+    await caller().bids.update({ id: b.id, clientId: created.id });
+
+    const row = (await caller().clients.list()).find(c => c.id === created.id)!;
+    expect(row.bidCount).toBe(2);
+  });
+});
+
+describe.skipIf(!hasDb)("the client field on a bid", () => {
+  it("creates a client from a name alone and attaches it, in one go", async () => {
+    // The inline path in ClientLinkField: type a name, press Add and attach.
+    const bid = await newBid();
+    const created = await caller().clients.create({ name: "Quick Add Co" });
+    const updated = await caller().bids.update({
+      id: bid.id,
+      clientId: created!.id,
+    });
+
+    expect(updated!.clientId).toBe(created!.id);
+
+    const full = await caller().bids.get({ id: bid.id });
+    expect(full.client?.name).toBe("Quick Add Co");
+    // Nothing was typed on the bid, so the record is what the proposal uses.
+    expect(full.resolvedClient.clientName).toBe("Quick Add Co");
+    expect(full.resolvedClient.nameSource).toBe("client");
+  });
+
+  it("swaps one client for another without touching anything else", async () => {
+    const first = await newClient("First Client");
+    const second = await newClient("Second Client");
+    const bid = await newBid("Swap test");
+
+    await caller().bids.update({ id: bid.id, clientId: first.id });
+    await caller().bids.update({ id: bid.id, clientId: second.id });
+
+    const full = await caller().bids.get({ id: bid.id });
+    expect(full.client?.id).toBe(second.id);
+    expect(full.bid.name).toBe("Swap test");
+
+    // The first client is untouched and keeps its own bid count at zero.
+    const firstRow = (await caller().clients.list()).find(
+      c => c.id === first.id
+    )!;
+    expect(firstRow.bidCount).toBe(0);
+  });
+
+  it("removes the link and leaves the bid printing its own text", async () => {
+    const created = await newClient("Detachable Co");
+    const bid = await newBid();
+    await caller().bids.update({
+      id: bid.id,
+      clientId: created.id,
+      clientName: "Typed On The Bid",
+    });
+
+    await caller().bids.update({ id: bid.id, clientId: null });
+
+    const full = await caller().bids.get({ id: bid.id });
+    expect(full.client).toBeNull();
+    // The typed text was never the link's to remove.
+    expect(full.resolvedClient.clientName).toBe("Typed On The Bid");
+  });
+
+  it("keeps the bid's own name winning, exactly as the field warns", async () => {
+    // The rule the control explains on screen, asserted end to end: attaching a
+    // record does NOT change a name someone typed for this one document.
+    const created = await caller().clients.create({
+      name: "Harbour Construction Group",
+      address: "88 Water St, Unit 4",
+    });
+    const bid = await newBid();
+    await caller().bids.update({
+      id: bid.id,
+      clientName: "Harbour — North Division",
+    });
+    await caller().bids.update({ id: bid.id, clientId: created!.id });
+
+    const full = await caller().bids.get({ id: bid.id });
+    expect(full.resolvedClient.clientName).toBe("Harbour — North Division");
+    expect(full.resolvedClient.nameSource).toBe("bid");
+    // The address was blank on the bid, so the record still fills that in —
+    // resolution is per field, which is what the control renders.
+    expect(full.resolvedClient.siteAddress).toBe("88 Water St, Unit 4");
+    expect(full.resolvedClient.addressSource).toBe("client");
+
+    // And the shared record was not edited on the way past.
+    const untouched = await caller().clients.get({ id: created!.id });
+    expect(untouched.name).toBe("Harbour Construction Group");
+  });
+
+  it("still works on a bid whose client was archived", async () => {
+    // Archiving is tidying the list, not detaching it from history.
+    const created = await newClient("Archived But Linked");
+    const bid = await newBid();
+    await caller().bids.update({ id: bid.id, clientId: created.id });
+    await caller().clients.archive({ id: created.id });
+
+    const full = await caller().bids.get({ id: bid.id });
+    expect(full.client?.name).toBe("Archived But Linked");
+    expect(full.resolvedClient.clientName).toBe("Archived But Linked");
+  });
+});

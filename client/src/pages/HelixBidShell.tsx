@@ -40,6 +40,7 @@ import TakeoffPage from "@/pages/TakeoffPage";
 import ProposalPage from "@/pages/ProposalPage";
 import BidArchivePage from "@/pages/BidArchivePage";
 import KitsPage from "@/pages/KitsPage";
+import ClientsPage from "@/pages/ClientsPage";
 import FirstRunPage from "@/pages/FirstRunPage";
 import { trpc } from "@/lib/trpc";
 import {
@@ -56,6 +57,7 @@ import {
   Zap,
   LayoutDashboard,
   Archive as ArchiveIcon,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@shared/version";
@@ -73,6 +75,7 @@ type Route =
   | "library-assemblies"
   | "library-kits"
   | "bids"
+  | "clients"
   | "quickbid"
   | "takeoff"
   | "proposal"
@@ -116,6 +119,7 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
     if (parts[2] === "proposal") return { route: "proposal", projectId: id };
     return { route: "bids", projectId: id };
   }
+  if (p === "clients") return { route: "clients" };
   if (p === "quickbid") return { route: "quickbid" };
   if (p === "welcome") return { route: "welcome" };
   // Library § …. Bare /library lands on Materials; Assemblies is still to come.
@@ -229,6 +233,7 @@ export default function HelixBidShell() {
   const isInLibraryAsms = route === "library-assemblies";
   const isInLibraryKits = route === "library-kits";
   const isInBids = route === "bids";
+  const isInClients = route === "clients";
   const isInTakeoff = route === "takeoff";
   const isInProposal = route === "proposal";
   const isInBidArchive = route === "bid-archive";
@@ -313,6 +318,7 @@ export default function HelixBidShell() {
           onOpenBid={id => navigate("bids", id)}
         />
       );
+    if (isInClients) return <ClientsPage />;
     if (isInQuickBid) return <QuickBidPage />;
     if (isOnWelcome) return <FirstRunPage />;
     if (isInAdmin) return <AdminSettingsPage />;
@@ -481,6 +487,16 @@ export default function HelixBidShell() {
               icon={FileText}
               label="Bids"
               title="Bids — open a bid, or its plans"
+            />
+            {/* Workspace rather than Library: the Library is what a bid is
+                assembled FROM, and a client is the other party, not a building
+                block. It sits next to Bids because that is what it attaches to. */}
+            <NavBtn
+              onClick={() => navigate("clients")}
+              isActive={isInClients}
+              icon={Users}
+              label="Clients"
+              title="Clients — who the work is for"
             />
           </NavSection>
 

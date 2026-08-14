@@ -52,6 +52,7 @@ import { DuplicateUnitPanel } from "@/components/DuplicateUnitPanel";
 import { UnitLinkBadge } from "@/components/UnitLinkBadge";
 import { UnitTemplateActions } from "@/components/UnitTemplateActions";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
+import { ClientLinkField } from "@/components/ClientLinkField";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { RETENTION_DAYS } from "@shared/retention";
 
@@ -271,7 +272,7 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     );
   }
 
-  const { bid, lines, totals, settings, company } = detailQuery.data;
+  const { bid, lines, totals, settings, company, client } = detailQuery.data;
 
   /** Lines grouped by unit, with un-labelled lines last under a null key. */
   const groups: Array<{ label: string | null; lines: typeof lines }> = [];
@@ -532,6 +533,22 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
           {/* Rollup */}
           <div className="lg:sticky lg:top-0 h-fit space-y-4">
+            {/* Who the work is for. Above the total because it is part of what
+                the bid IS rather than part of what it costs, and because the
+                proposal reads it. Entirely optional — see ClientLinkField. */}
+            <div className="rounded-xl border border-border bg-card p-4">
+              <ClientLinkField
+                bid={{
+                  id: bid.id,
+                  clientId: bid.clientId,
+                  clientName: bid.clientName,
+                  siteAddress: bid.siteAddress,
+                }}
+                client={client}
+                onLink={clientId => updateBid.mutate({ id: bid.id, clientId })}
+              />
+            </div>
+
             <div className="rounded-xl border border-border bg-card p-4 space-y-1">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Bid total
