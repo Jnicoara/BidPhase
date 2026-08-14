@@ -795,3 +795,10 @@ left as written rather than rewritten to match the rename.
 - [x] Apply the verified pending schema migrations with `pnpm db:push` before release
 - [x] Correct the discovered missing `pricing_defaults.productivityPct` column required by the merged release
 - [x] Validate the migrated release, synchronize GitHub main, and save the publish-ready checkpoint
+
+## v5.96 — R2 Backup Release & Verification
+- [ ] Pull the latest GitHub main and inspect the independent R2 backup tool plus all pending migrations
+- [ ] Re-run the GitHub release inspection cleanly from the newest main branch before any merge or migration action
+- [ ] Apply verified schema migrations, validate the backup-enabled release, and save a publish-ready checkpoint
+- [ ] Add the four encrypted, server-only Cloudflare R2 credentials after production deployment
+- [ ] Run the real production backup and verify the database and stored-file objects in Cloudflare R2
