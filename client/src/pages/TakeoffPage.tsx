@@ -93,6 +93,7 @@ import {
   resetForRetry,
   type UploadJob,
 } from "@/lib/uploadQueue";
+import { takePendingPlan } from "@/lib/pendingPlanUpload";
 import { TraceLayer } from "@/components/takeoff/TraceLayer";
 import { RunsPanel } from "@/components/takeoff/RunsPanel";
 import {
@@ -1474,6 +1475,26 @@ export default function TakeoffPage({
   const cancelUpload = useCallback(() => {
     xhrRef.current?.abort();
     xhrRef.current = null;
+  }, []);
+
+  /**
+   * Pick up a plan chosen on the Dashboard's "Upload a plan" card.
+   *
+   * That card takes the file before a bid exists, creates one named after it,
+   * and lands here — so the upload starts on arrival rather than asking the
+   * user to find the same file a second time. See lib/pendingPlanUpload.
+   *
+   * `takePendingPlan` clears as it reads, so returning to this screen later
+   * never re-uploads. The empty dependency list is deliberate: this runs once
+   * per mount, and a re-run on any changing value would be a second upload.
+   */
+  useEffect(() => {
+    const handed = takePendingPlan();
+    if (!handed) return;
+    const list = new DataTransfer();
+    list.items.add(handed);
+    void acceptFiles(list.files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

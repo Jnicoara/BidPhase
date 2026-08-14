@@ -37,6 +37,12 @@ import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
 import { NavigationHelper } from "@/components/NavigationHelper";
+import { StartBidCards } from "@/components/StartBidCards";
+import {
+  bidNameFromFilename,
+  clearPendingPlan,
+  putPendingPlan,
+} from "@/lib/pendingPlanUpload";
 import { RETENTION_DAYS } from "@shared/retention";
 import {
   BID_STATUS_ORDER,
@@ -91,9 +97,14 @@ const URGENCY_LABEL: Partial<Record<DueUrgency, string>> = {
 export default function DashboardPage({
   onOpenBid,
   onOpenArchive,
+  onOpenPlans,
+  onQuickBid,
 }: {
   onOpenBid: (id: number) => void;
   onOpenArchive: () => void;
+  /** Open a bid's Takeoff screen — where an uploaded plan lands. */
+  onOpenPlans: (id: number) => void;
+  onQuickBid: () => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -115,6 +126,38 @@ export default function DashboardPage({
       void utils.bids.list.invalidate();
     },
   });
+
+  /**
+   * "Upload a plan": make the bid the plan needs, then open its Takeoff screen
+   * with the file already in hand.
+   *
+   * The file is validated on the Takeoff screen rather than here, so there is
+   * one place that decides what a plan may be — checkPdfUpload, the same
+   * function the server runs. Checking it in two places is how the two answers
+   * start to differ.
+   */
+  const startFromPlan = trpc.bids.create.useMutation({
+    onError: error => {
+      clearPendingPlan();
+      toast.error(error.message);
+    },
+    onSuccess: bid => {
+      if (!bid) {
+        clearPendingPlan();
+        return;
+      }
+      onOpenPlans(bid.id);
+    },
+    onSettled: () => {
+      void utils.bids.dashboard.invalidate();
+      void utils.bids.list.invalidate();
+    },
+  });
+
+  const handleUploadPlan = (file: File) => {
+    putPendingPlan(file);
+    startFromPlan.mutate({ name: bidNameFromFilename(file.name) });
+  };
 
   /**
    * Optimistic: the card leaves the board the moment it is archived, per the
@@ -226,12 +269,17 @@ export default function DashboardPage({
               <span className="text-muted-foreground">{archived.length}</span>
             </Button>
           )}
+          {/* Deliberately quiet, and outlined rather than filled. The two cards
+              below are the ways in; this is the third case neither covers —
+              a shell to hold a name, a date and a client before any pricing
+              exists. Three loud buttons would be no emphasis at all. */}
           <Button
             size="sm"
+            variant="outline"
             className="h-8 gap-1.5 text-xs shrink-0"
             onClick={() => setAdding(v => !v)}
           >
-            <Plus className="w-3.5 h-3.5" /> New bid
+            <Plus className="w-3.5 h-3.5" /> Empty bid
           </Button>
         </div>
 
@@ -274,7 +322,16 @@ export default function DashboardPage({
             only thing on the screen worth reading. Both disappear once they
             have served their purpose — the checklist when every step is done,
             and neither ever blocks what is underneath. */}
+        {/* The two ways in, first — the question a new account has is "how do I
+            start", and everything below this answers "what have I got". They
+            stay for a returning user too, because starting the next job is the
+            other thing this screen is for. */}
         <div className="mb-5 space-y-3">
+          <StartBidCards
+            onUploadPlan={handleUploadPlan}
+            onQuickBid={onQuickBid}
+            busy={startFromPlan.isPending}
+          />
           <GettingStartedChecklist />
           <NavigationHelper className="max-w-xl" />
         </div>

@@ -309,6 +309,18 @@ export const proposalsRouter = router({
 
       return {
         document,
+        /**
+         * The linked client record, or null.
+         *
+         * The composer needs this to explain itself: with a client attached and
+         * the bid's own Client field empty, the field looks unfilled while the
+         * document is addressed to someone. Without saying where that name came
+         * from, the empty box invites a name to be typed into it — which
+         * silently overrides the record rather than editing it.
+         */
+        client: client
+          ? { id: client.id, name: client.name, address: client.address }
+          : null,
         bid: {
           id: bid.id,
           name: bid.name,

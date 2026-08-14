@@ -185,7 +185,7 @@ export default function ProposalPage({
     );
   }
 
-  const { document: doc, bid, internalTotals, lineCount } = data;
+  const { document: doc, bid, client, internalTotals, lineCount } = data;
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -292,7 +292,20 @@ export default function ProposalPage({
             <BidField
               label="Client"
               value={bid.clientName ?? ""}
-              placeholder="e.g. Harbour Construction Group"
+              placeholder={
+                // With a record attached, the placeholder shows the name the
+                // document is actually using rather than a generic example —
+                // an empty box beside a filled document otherwise reads as a
+                // field nobody has got to yet.
+                client ? client.name : "e.g. Harbour Construction Group"
+              }
+              hint={
+                client
+                  ? bid.clientName
+                    ? `Overrides ${client.name}, the attached client. Clear this to use the record.`
+                    : `Filled from ${client.name}, the attached client. Type here only to address this one proposal differently.`
+                  : undefined
+              }
               onSave={clientName =>
                 updateBid.mutate({ id: bidId, clientName: clientName || null })
               }

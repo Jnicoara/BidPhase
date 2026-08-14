@@ -6,6 +6,11 @@ This is the human-readable companion to the git history — read this to see wha
 
 ## [2026-08-14]
 
+- **Starting a bid from a plan is now one click on the Dashboard.** Two cards sit at the top — "Upload a plan" and "Quick bid" — as the two ways a job actually arrives. Uploading takes the file first, creates the bid named after it, and drops you straight into the takeoff screen with the upload already running; you no longer have to create a bid and then go hunting for a Plans tab inside it. The old "New bid" button is still there for setting up an empty shell, just quieter.
+- **The old splash page is gone.** Signing in used to land on a leftover marketing page — logo, tagline, four feature cards and a "Go to Projects" button — that predated the Dashboard and did not fit the screen properly. The Dashboard is now the landing page, and old links to it go there too.
+- **Modifiers moved below Assemblies in the sidebar.** The Library now reads in the order you build things: parts, rates, the recipes, what tunes them, then bundles.
+- **The Proposal screen now says where a client's name came from.** With a client attached and the proposal's own Client box empty, the box showed nothing while the document was addressed to someone — so it now shows the attached client's name and explains that typing there overrides it for this one document.
+
 - **Clients now have a screen.** Workspace → Clients lists everyone you bid for — companies or individuals, with a contact, address, phone, email and private notes — and lets you add and edit them. Search covers all of it, so you can find a customer by the street they are on or a phone number, not just the company name.
 - **Removing a client archives it, the same as everywhere else in the app.** It comes off the working list and can be restored at any time. There is deliberately no permanent delete: the bids attached to a client are what make the record worth keeping, and destroying it would quietly detach every one of them. The confirmation says how many bids are attached and that none of them are touched.
 - **A bid can now be attached to a client.** The bid screen has a Client box: search the list, pick one, or type a name and add them on the spot without leaving the bid. Attaching one fills the client's details into the proposal.
