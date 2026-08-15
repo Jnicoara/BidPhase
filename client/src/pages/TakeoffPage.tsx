@@ -235,6 +235,15 @@ function usePdfWorker() {
     });
   }, []);
 
+  const loadUrl = useCallback((url: string, hash: string) => {
+    return new Promise<number>((resolve, reject) => {
+      const worker = workerRef.current;
+      if (!worker) return reject(new Error("Viewer not ready"));
+      loadWaiters.current.push({ resolve, reject });
+      worker.postMessage({ type: "loadUrl", url, hash });
+    });
+  }, []);
+
   // Memoised as a whole. These go into effect dependency arrays, and a fresh
   // function identity per render restarts the document load on every render —
   // which cancels the one in flight, so the viewer spins forever and never
@@ -242,6 +251,7 @@ function usePdfWorker() {
   return useMemo(
     () => ({
       load,
+      loadUrl,
       render: (pageNum: number, scale: number, hash: string) =>
         ask<ImageBitmap>({ type: "render", pageNum, scale, hash }),
       outline: (hash: string) =>
@@ -249,7 +259,7 @@ function usePdfWorker() {
       pageText: (pageNum: number, hash: string) =>
         ask<string>({ type: "text", pageNum, hash }),
     }),
-    [load, ask]
+    [load, loadUrl, ask]
   );
 }
 
@@ -298,7 +308,7 @@ function PlanPane({
   }) => React.ReactNode;
 }) {
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const { load, render, outline, pageText } = usePdfWorker();
+  const { load, loadUrl, render, outline, pageText } = usePdfWorker();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pageCount, setPageCount] = useState(doc.pageCount ?? 0);
   const [loading, setLoading] = useState(true);
@@ -317,13 +327,22 @@ function PlanPane({
 
     (async () => {
       try {
-        const resp = await fetch(doc.url);
-        if (!resp.ok)
-          throw new Error(`Could not fetch the plan (${resp.status})`);
-        const buffer = await resp.arrayBuffer();
-        if (cancelled) return;
-
-        const pages = await load(buffer, hash);
+        // URL loading asks pdf.js to use byte ranges directly from storage.
+        // This keeps very large plan sets out of the main tab's memory. Some
+        // storage gateways cannot answer range requests; only in that case do
+        // we retain the previous complete-download path as a compatibility
+        // fallback for ordinary-sized files.
+        const pages = await loadUrl(doc.url, hash).catch(async rangeError => {
+          const resp = await fetch(doc.url);
+          if (!resp.ok)
+            throw new Error(`Could not fetch the plan (${resp.status})`);
+          const buffer = await resp.arrayBuffer();
+          try {
+            return await load(buffer, hash);
+          } catch {
+            throw rangeError;
+          }
+        });
         if (cancelled) return;
         setPageCount(pages);
         setLoading(false);
@@ -345,7 +364,7 @@ function PlanPane({
     return () => {
       cancelled = true;
     };
-  }, [doc.id, doc.url, hash, load, outline]);
+  }, [doc.id, doc.url, hash, load, loadUrl, outline]);
 
   // Paint the current page.
   useEffect(() => {

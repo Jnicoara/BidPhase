@@ -22,6 +22,7 @@
  */
 
 import * as pdfjs from "pdfjs-dist";
+import { pdfRangeLoadOptions } from "@shared/pdfRangeLoading";
 
 // pdfjs needs a real worker entry, even from inside a worker.
 //
@@ -44,13 +45,17 @@ let loadedHash: string | null = null;
 self.onmessage = async (e: MessageEvent) => {
   const msg = e.data;
 
-  if (msg.type === "load") {
-    // Load the PDF document from ArrayBuffer
+  if (msg.type === "load" || msg.type === "loadUrl") {
+    // Prefer pdf.js's URL transport. It uses HTTP Range requests when the
+    // storage response supports them, so a 500MB set does not need to be held
+    // in tab memory before the first sheet can render. ArrayBuffer remains the
+    // deliberate fallback for storage endpoints that do not support ranges.
     try {
       const t0 = performance.now();
-      const loadingTask = pdfjs.getDocument({
-        data: new Uint8Array(msg.pdfData),
-      });
+      const loadingTask =
+        msg.type === "loadUrl"
+          ? pdfjs.getDocument(pdfRangeLoadOptions(msg.url))
+          : pdfjs.getDocument({ data: new Uint8Array(msg.pdfData) });
       pdfDoc = await loadingTask.promise;
       loadedHash = msg.hash;
       const elapsed = (performance.now() - t0).toFixed(0);
