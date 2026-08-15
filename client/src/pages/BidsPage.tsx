@@ -29,6 +29,8 @@ import {
   ArrowLeft,
   CalendarDays,
   Check,
+  ClipboardList,
+  Receipt,
   FileSignature,
   FileText,
   Plus,
@@ -52,6 +54,14 @@ import { DuplicateUnitPanel } from "@/components/DuplicateUnitPanel";
 import { UnitLinkBadge } from "@/components/UnitLinkBadge";
 import { UnitTemplateActions } from "@/components/UnitTemplateActions";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
+import { MaterialsListDialog } from "@/components/MaterialsListDialog";
+import { useCompany } from "@/hooks/useCompany";
+import { BidSearchPanel } from "@/components/BidSearchPanel";
+import { AccountingExportDialog } from "@/components/AccountingExportDialog";
+import { ClientLinkField } from "@/components/ClientLinkField";
+import { BidTaxControls } from "@/components/BidTaxControls";
+import { BidExtrasPanel } from "@/components/BidExtrasPanel";
+import { CloseoutPanel } from "@/components/CloseoutPanel";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { RETENTION_DAYS } from "@shared/retention";
 
@@ -170,6 +180,9 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
   const [assemblyQuery, setAssemblyQuery] = useState("");
   const [addQty, setAddQty] = useState("1");
   const [addUnit, setAddUnit] = useState("");
+  const [materialsListOpen, setMaterialsListOpen] = useState(false);
+  const [accountingOpen, setAccountingOpen] = useState(false);
+  const access = useCompany();
 
   const utils = trpc.useUtils();
   const detailQuery = trpc.bids.get.useQuery({ id: bidId });
@@ -271,7 +284,17 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     );
   }
 
-  const { bid, lines, totals, settings, company } = detailQuery.data;
+  const {
+    bid,
+    lines,
+    totals,
+    settings,
+    company,
+    client,
+    salesTax,
+    taxRate,
+    taxNote,
+  } = detailQuery.data;
 
   /** Lines grouped by unit, with un-labelled lines last under a null key. */
   const groups: Array<{ label: string | null; lines: typeof lines }> = [];
@@ -285,6 +308,16 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
   return (
     <div className="flex flex-col h-full bg-background">
+      <MaterialsListDialog
+        bidId={bidId}
+        open={materialsListOpen}
+        onOpenChange={setMaterialsListOpen}
+      />
+      <AccountingExportDialog
+        bidId={bidId}
+        open={accountingOpen}
+        onOpenChange={setAccountingOpen}
+      />
       <div className="border-b border-border px-6 py-4">
         <div className="flex items-center gap-3">
           <Button
@@ -319,6 +352,43 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               <span className="text-muted-foreground">{sheetCount}</span>
             )}
           </Button>
+
+          {/* The other document this bid produces, and the one that goes the
+              other way — out to a supplier rather than to the customer. Here as
+              well as on the Takeoff screen because a Quick Bid has line items
+              and no plan at all, and its materials still have to be quoted.
+              A dialog rather than a screen: it is read, exported and closed. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => setMaterialsListOpen(true)}
+            title="Materials list — quantities only, for a supplier quote"
+          >
+            <ClipboardList className="w-3.5 h-3.5" />
+            Materials list
+          </Button>
+
+          {/* The third document, and the third audience: the bookkeeper. Sits
+              beside the other two because all three are ways this bid leaves
+              the app, and they differ only in who receives them and therefore
+              in what they are allowed to carry. */}
+          {/* Hidden rather than disabled when the feature is not available to
+              this account: the server returns NOT_FOUND, so a visible button
+              would announce an unreleased feature and then fail on click.
+              Hiding is the UI agreeing with the server, not protecting it. */}
+          {access.hasFeature("accounting.quickbooks") && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs shrink-0"
+              onClick={() => setAccountingOpen(true)}
+              title="Accounting export — the numbers, as a QuickBooks CSV"
+            >
+              <Receipt className="w-3.5 h-3.5" />
+              Accounting
+            </Button>
+          )}
 
           {/* The way out of the app: this bid as a document a client receives.
               Its own screen rather than a dialog, because it is a full page
@@ -532,6 +602,22 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
           {/* Rollup */}
           <div className="lg:sticky lg:top-0 h-fit space-y-4">
+            {/* Who the work is for. Above the total because it is part of what
+                the bid IS rather than part of what it costs, and because the
+                proposal reads it. Entirely optional — see ClientLinkField. */}
+            <div className="rounded-xl border border-border bg-card p-4">
+              <ClientLinkField
+                bid={{
+                  id: bid.id,
+                  clientId: bid.clientId,
+                  clientName: bid.clientName,
+                  siteAddress: bid.siteAddress,
+                }}
+                client={client}
+                onLink={clientId => updateBid.mutate({ id: bid.id, clientId })}
+              />
+            </div>
+
             <div className="rounded-xl border border-border bg-card p-4 space-y-1">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Bid total
@@ -615,10 +701,126 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               <div className="flex items-baseline justify-between gap-3 py-1">
                 <span className="text-sm font-medium">Bid price</span>
                 <span className="font-mono text-base text-[#F5C518]">
-                  {money(totals.finalPrice)}
+                  {/* The work alone. A marked-up charge is inside finalPrice
+                      but is billed on its own line below, so showing
+                      finalPrice here would count it twice. */}
+                  {money(totals.workPrice)}
                 </span>
               </div>
+
+              {totals.expensesTotal > 0 && (
+                <div className="flex items-baseline justify-between gap-3 py-1">
+                  <span className="text-xs text-muted-foreground">
+                    Additional expenses
+                  </span>
+                  <span className="font-mono text-sm">
+                    {money(totals.expensesTotal)}
+                  </span>
+                </div>
+              )}
+
+              {/* With tax switched off, the tax block below never renders — so
+                  a bid carrying expenses would show a Bid price and a charge
+                  with nothing tying them together. This is that total. */}
+              {totals.expensesTotal > 0 && salesTax.status === "disabled" && (
+                <div className="flex items-baseline justify-between gap-3 py-1">
+                  <span className="text-sm font-medium">Total due</span>
+                  <span className="font-mono text-base text-[#F5C518]">
+                    {money(totals.totalDue)}
+                  </span>
+                </div>
+              )}
+
+              {/*
+                Sales tax, BELOW the bid price and never inside it.
+
+                A tax line folded into the total is one the estimator cannot
+                check against the rate they believe applies — and the reason
+                there is no tax is as important as the amount when there is,
+                which is why `taxNote` gets a line of its own rather than
+                leaving an unexplained absence.
+              */}
+              {salesTax.status !== "disabled" && (
+                <>
+                  <div className="border-t border-border my-2" />
+                  <div className="flex items-baseline justify-between gap-3 py-1">
+                    <span className="text-xs text-muted-foreground">
+                      Sales tax
+                      {salesTax.status === "ok" && salesTax.ratePct !== null
+                        ? ` (${salesTax.ratePct}%)`
+                        : ""}
+                      {salesTax.status === "exempt" ? " — exempt" : ""}
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-sm",
+                        salesTax.status === "no-rate" && "text-destructive"
+                      )}
+                    >
+                      {salesTax.status === "no-rate"
+                        ? "not set"
+                        : money(salesTax.amount)}
+                    </span>
+                  </div>
+
+                  {taxNote && (
+                    <p
+                      className={cn(
+                        "text-xs",
+                        salesTax.status === "no-rate"
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {taxNote}
+                    </p>
+                  )}
+
+                  {/* Where the rate came from — a tax figure nobody can trace
+                      is a tax figure nobody can defend in an audit. */}
+                  {salesTax.status === "ok" && taxRate.source !== "none" && (
+                    <p className="text-xs text-muted-foreground">
+                      {taxRate.source === "bid-override"
+                        ? "Rate entered on this bid."
+                        : taxRate.source === "bid-jurisdiction"
+                          ? `${taxRate.jurisdictionName} — chosen on this bid.`
+                          : `${taxRate.jurisdictionName} — matched on ${taxRate.matchedOn.join(", ")}.`}
+                    </p>
+                  )}
+
+                  {salesTax.status !== "no-rate" && (
+                    <div className="flex items-baseline justify-between gap-3 py-1">
+                      <span className="text-sm font-medium">Total due</span>
+                      <span className="font-mono text-base text-[#F5C518]">
+                        {money(totals.totalDue)}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+
+            {/* After the bid is built, not before: closing out is something
+                that happens when the job is finished, and it sits shut until
+                somebody opens it. */}
+            <CloseoutPanel bidId={bid.id} />
+
+            <BidExtrasPanel bidId={bid.id} />
+
+            {salesTax.status !== "disabled" && (
+              <BidTaxControls
+                bidId={bid.id}
+                exempt={bid.taxExempt}
+                exemptReason={bid.taxExemptReason}
+                jurisdictionId={bid.taxJurisdictionId}
+                rateOverridePct={
+                  bid.taxRateOverridePct === null
+                    ? null
+                    : Number(bid.taxRateOverridePct)
+                }
+                onChange={patch => updateBid.mutate({ id: bid.id, ...patch })}
+              />
+            )}
 
             {/* Settings, with their source stated */}
             <div className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -868,7 +1070,9 @@ export default function BidsPage({
   );
 
   const utils = trpc.useUtils();
-  const { data: bids = [], isLoading } = trpc.bids.list.useQuery();
+  const access = useCompany();
+  // The list itself is BidSearchPanel, which paginates. Only the archive COUNT
+  // is read here, for the header button.
   const { data: archived = [] } = trpc.bids.archived.useQuery();
 
   const createBid = trpc.bids.create.useMutation({
@@ -1015,79 +1219,19 @@ export default function BidsPage({
           </div>
         )}
 
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
-            <span className="flex-1">Bid</span>
-            <span className="w-24 shrink-0">Status</span>
-            <span className="w-28 text-right shrink-0">Created</span>
-            <span className="w-8 shrink-0" />
-          </div>
-
-          {isLoading ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              Loading bids…
-            </div>
-          ) : bids.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              No bids yet. Create one to start pricing a job.
-            </div>
-          ) : (
-            bids.map(bid => (
-              <div
-                key={bid.id}
-                className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors group"
-              >
-                <button
-                  onClick={() => setOpenId(bid.id)}
-                  className="flex-1 min-w-0 text-left"
-                >
-                  <span className="text-sm font-medium truncate">
-                    {bid.name}
-                  </span>
-                  {bid.trades?.length ? (
-                    <div className="text-xs text-muted-foreground truncate">
-                      {bid.trades.join(", ")}
-                    </div>
-                  ) : null}
-                </button>
-                <span className="w-24 shrink-0">
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs",
-                      STATUS_STYLES[bid.status as Status]
-                    )}
-                  >
-                    {bid.status}
-                  </Badge>
-                </span>
-                <span className="w-28 text-right shrink-0 text-xs text-muted-foreground">
-                  {new Date(bid.createdAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </span>
-                {/* An Archive icon, not a trash can: this does not delete, and
-                    dressing a recoverable action as a destructive one teaches
-                    people to fear it. Confirmation comes from the shared
-                    dialog — this used to archive on a single click. */}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                  onClick={() =>
-                    setConfirmArchive({ id: bid.id, name: bid.name })
-                  }
-                  title="Archive — off this list, restorable for 30 days"
-                  aria-label={`Archive ${bid.name}`}
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
+        {/*
+          The list IS the search. It used to be an unpaginated bids.list with
+          the whole table in the browser, which is fine at 24 bids and is the
+          thing that stops working first as a contractor builds history. Every
+          filter and every page now comes from the query — see
+          shared/bidSearch.ts.
+        */}
+        <BidSearchPanel
+          onOpenBid={setOpenId}
+          onArchive={
+            access.can("bids.edit") ? bid => setConfirmArchive(bid) : undefined
+          }
+        />
       </div>
 
       <ArchiveBidDialog

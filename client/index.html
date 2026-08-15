@@ -80,6 +80,40 @@
     -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
+    <!--
+      ── Installing to a home screen ────────────────────────────────────────
+
+      The manifest is what Android and desktop Chrome read: name, icons,
+      colours, and the standalone display mode that drops the browser chrome.
+
+      iOS reads almost none of it. Safari has supported `manifest` for years
+      but still takes the home-screen icon from `apple-touch-icon` and the
+      standalone behaviour from its own `apple-mobile-web-app-*` meta tags, so
+      the four lines below are not belt-and-braces — without them "Add to Home
+      Screen" on an iPhone produces a bookmark with a screenshot for an icon
+      that opens in Safari with the address bar showing.
+
+      `apple-touch-icon` is a PNG at 180×180 because that is what iOS asks for
+      on a modern iPhone and it declines SVG entirely. It also gets no rounded
+      corners of its own — iOS applies its squircle regardless, and drawing
+      corners in as well leaves a dark halo.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!--
+      `black-translucent` puts the app's own dark ground behind the status bar
+      rather than a white strip above it. It only reads correctly because the
+      app is dark everywhere; on a light theme this would be the wrong choice.
+    -->
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="HelixBid" />
+    <meta name="application-name" content="HelixBid" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

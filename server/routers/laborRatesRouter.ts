@@ -11,13 +11,21 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { LABOR_RATE_TYPES, type LaborRate } from "../../drizzle/schema";
 import {
   DEFAULT_ANNUAL_HOURS,
   effectiveHourlyRate,
 } from "../../shared/pricing";
+import { TRADE_ALL } from "../../shared/trades";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `pricing.view`, a mutation needs `pricing.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("pricing.view", "pricing.edit");
 
 /** decimal(10,4) on hourlyCost — must stay under 10 total digits. */
 const MAX_HOURLY = 999999.9999;
@@ -97,24 +105,34 @@ function normalizeForRateType(input: {
   };
 }
 
+/**
+ * Which trade a role belongs to, or `all` for one that serves every trade.
+ *
+ * Defaults to `all` rather than `electrical`, matching the column — see the
+ * schema comment on `labor_rates.trade`. A shop's foreman does not stop being
+ * the foreman when a second trade unlocks.
+ */
+const tradeSchema = z.string().trim().toLowerCase().min(1).max(64);
+
 const rateBodySchema = z.object({
   rateType: z.enum(LABOR_RATE_TYPES),
   hourlyCost: hourlySchema.optional(),
   annualSalary: salarySchema.optional(),
   annualHours: annualHoursSchema.optional(),
+  trade: tradeSchema.optional(),
 });
 
 export const laborRatesRouter = router({
   /** Starter roles plus the user's own, with forked starters collapsed away. */
-  list: protectedProcedure.query(async ({ ctx }) => {
-    const rows = await db.getLibraryLaborRates(ctx.user.id);
+  list: procedure.query(async ({ ctx }) => {
+    const rows = await db.getLibraryLaborRates(ctx.scope.dataUserId);
     return rows.map(toView);
   }),
 
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const row = await db.getLaborRateById(input.id, ctx.user.id);
+      const row = await db.getLaborRateById(input.id, ctx.scope.dataUserId);
       if (!row)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -123,10 +141,10 @@ export const laborRatesRouter = router({
       return toView(row);
     }),
 
-  create: protectedProcedure
+  create: procedure
     .input(rateBodySchema.extend({ name: nameSchema }))
     .mutation(async ({ input, ctx }) => {
-      const existing = await db.getLibraryLaborRates(ctx.user.id);
+      const existing = await db.getLibraryLaborRates(ctx.scope.dataUserId);
       const clash = existing.find(
         r => r.name.toLowerCase() === input.name.toLowerCase()
       );
@@ -138,11 +156,13 @@ export const laborRatesRouter = router({
       }
 
       const id = await db.createLaborRate({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
+        // Omitted means `all` — the column default. Nothing sends this today.
+        trade: input.trade ?? TRADE_ALL,
         ...normalizeForRateType(input),
       });
-      const created = await db.getLaborRateById(id, ctx.user.id);
+      const created = await db.getLaborRateById(id, ctx.scope.dataUserId);
       return created ? toView(created) : null;
     }),
 
@@ -151,7 +171,7 @@ export const laborRatesRouter = router({
    * leaving the shipped row untouched. The returned row's id differs from the
    * input id when that happened, so callers should use what comes back.
    */
-  update: protectedProcedure
+  update: procedure
     .input(
       rateBodySchema.partial().extend({
         id: z.number().int().positive(),
@@ -161,7 +181,7 @@ export const laborRatesRouter = router({
     .mutation(async ({ input, ctx }) => {
       const { id, ...rest } = input;
 
-      const target = await db.getLaborRateById(id, ctx.user.id);
+      const target = await db.getLaborRateById(id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -170,7 +190,7 @@ export const laborRatesRouter = router({
 
       const isBaseline = target.userId === null;
       const editableId = isBaseline
-        ? await db.forkLaborRate(id, ctx.user.id)
+        ? await db.forkLaborRate(id, ctx.scope.dataUserId)
         : id;
 
       // Rate fields are normalised as a set, against the type the row will END
@@ -179,6 +199,7 @@ export const laborRatesRouter = router({
       const nextType = rest.rateType ?? target.rateType;
       const patch: Record<string, unknown> = {};
       if (rest.name !== undefined) patch.name = rest.name;
+      if (rest.trade !== undefined) patch.trade = rest.trade;
 
       const touchesRate =
         rest.rateType !== undefined ||
@@ -206,17 +227,17 @@ export const laborRatesRouter = router({
         );
       }
 
-      await db.updateLaborRate(editableId, ctx.user.id, patch);
+      await db.updateLaborRate(editableId, ctx.scope.dataUserId, patch);
 
-      const saved = await db.getLaborRateById(editableId, ctx.user.id);
+      const saved = await db.getLaborRateById(editableId, ctx.scope.dataUserId);
       return { laborRate: saved ? toView(saved) : null, forked: isBaseline };
     }),
 
   /** Take a private copy of a starter without changing anything yet. */
-  fork: protectedProcedure
+  fork: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getLaborRateById(input.id, ctx.user.id);
+      const target = await db.getLaborRateById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -224,17 +245,17 @@ export const laborRatesRouter = router({
         });
       if (target.userId !== null) return toView(target);
 
-      const forkId = await db.forkLaborRate(input.id, ctx.user.id);
-      const forked = await db.getLaborRateById(forkId, ctx.user.id);
+      const forkId = await db.forkLaborRate(input.id, ctx.scope.dataUserId);
+      const forked = await db.getLaborRateById(forkId, ctx.scope.dataUserId);
       return forked ? toView(forked) : null;
     }),
 
   /** Discard edits to a forked role and restore the shipped values. */
-  revert: protectedProcedure
+  revert: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getLaborRateById(input.id, ctx.user.id);
-      if (!target || target.userId !== ctx.user.id) {
+      const target = await db.getLaborRateById(input.id, ctx.scope.dataUserId);
+      if (!target || target.userId !== ctx.scope.dataUserId) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Labor rate not found.",
@@ -248,16 +269,19 @@ export const laborRatesRouter = router({
         });
       }
 
-      await db.revertLaborRateToBaseline(input.id, ctx.user.id);
-      const reverted = await db.getLaborRateById(input.id, ctx.user.id);
+      await db.revertLaborRateToBaseline(input.id, ctx.scope.dataUserId);
+      const reverted = await db.getLaborRateById(
+        input.id,
+        ctx.scope.dataUserId
+      );
       return reverted ? toView(reverted) : null;
     }),
 
   /** Hide a role. Soft-delete — assemblies may already price against it. */
-  remove: protectedProcedure
+  remove: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getLaborRateById(input.id, ctx.user.id);
+      const target = await db.getLaborRateById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -270,7 +294,7 @@ export const laborRatesRouter = router({
         });
       }
 
-      await db.deactivateLaborRate(input.id, ctx.user.id);
+      await db.deactivateLaborRate(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 });

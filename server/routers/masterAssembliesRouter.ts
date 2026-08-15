@@ -1,19 +1,26 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import * as db from "../db";
 
+/**
+ * This router's gate: a query needs `library.view`, a mutation needs `library.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("library.view", "library.edit");
+
 export const masterAssembliesRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return db.getMasterAssemblies(ctx.user.id);
+  list: procedure.query(async ({ ctx }) => {
+    return db.getMasterAssemblies(ctx.scope.dataUserId);
   }),
 
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
       const assembly = await db.getMasterAssemblyWithItems(
         input.id,
-        ctx.user.id
+        ctx.scope.dataUserId
       );
       if (!assembly)
         throw new TRPCError({
@@ -23,7 +30,7 @@ export const masterAssembliesRouter = router({
       return assembly;
     }),
 
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         name: z.string().min(1).max(255),
@@ -33,17 +40,17 @@ export const masterAssembliesRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       await db.createMasterAssembly({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         description: input.description ?? null,
         phase: input.phase ?? null,
       });
-      const assemblies = await db.getMasterAssemblies(ctx.user.id);
+      const assemblies = await db.getMasterAssemblies(ctx.scope.dataUserId);
       const created = assemblies.find(a => a.name === input.name);
       return created ?? { success: true };
     }),
 
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -54,18 +61,18 @@ export const masterAssembliesRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
-      await db.updateMasterAssembly(id, ctx.user.id, data);
+      await db.updateMasterAssembly(id, ctx.scope.dataUserId, data);
       return { success: true };
     }),
 
-  delete: protectedProcedure
+  delete: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.deleteMasterAssembly(input.id, ctx.user.id);
+      await db.deleteMasterAssembly(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
-  addItem: protectedProcedure
+  addItem: procedure
     .input(
       z.object({
         assemblyId: z.number().int().positive(),
@@ -84,7 +91,7 @@ export const masterAssembliesRouter = router({
       return { success: true };
     }),
 
-  updateItem: protectedProcedure
+  updateItem: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -104,7 +111,7 @@ export const masterAssembliesRouter = router({
       return { success: true };
     }),
 
-  removeItem: protectedProcedure
+  removeItem: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input }) => {
       await db.removeItemFromMasterAssembly(input.id);

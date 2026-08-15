@@ -5,6 +5,15 @@ import { sdk } from "./sdk";
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
+  /**
+   * The authenticated person. Identity, platform role and access tier.
+   *
+   * NOT the data scope. `ctx.user.id` answers "who is asking", never "whose
+   * rows may they touch" — for a member of someone else's company those are
+   * different ids, and using this one to filter a query returns their own empty
+   * data. `ctx.scope.dataUserId` is the scoping key; see
+   * `_core/companyScope.ts`.
+   */
   user: User | null;
 };
 

@@ -1,15 +1,24 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import * as db from "../db";
 
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
+
 export const bidSummaryRouter = router({
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ projectId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      return (await db.getBidSummary(input.projectId, ctx.user.id)) ?? null;
+      return (
+        (await db.getBidSummary(input.projectId, ctx.scope.dataUserId)) ?? null
+      );
     }),
 
-  upsert: protectedProcedure
+  upsert: procedure
     .input(
       z.object({
         projectId: z.number().int().positive(),
@@ -28,7 +37,7 @@ export const bidSummaryRouter = router({
           markupPct: String(input.markupPct),
           defaultLaborRateId: input.defaultLaborRateId ?? null,
         },
-        ctx.user.id
+        ctx.scope.dataUserId
       );
       return { success: true };
     }),

@@ -27,6 +27,41 @@ export const users = mysqlTable("users", {
   role: mysqlEnum("role", ["user", "admin", "contractor"])
     .default("user")
     .notNull(),
+
+  /**
+   * Which build of the product this person sees. See shared/permissions.ts.
+   *
+   * Deliberately NOT the same column as `role` above, and not part of the
+   * company membership either. `role` is platform staff vs customer and
+   * predates this; company role is what you may do inside one company; this is
+   * whether unreleased work is visible to you at all. A tester helping a
+   * customer debug something is internal AND a viewer in that company, and one
+   * enum cannot say both.
+   *
+   * Defaults to `standard`, so a new account never sees unfinished work.
+   */
+  accessTier: mysqlEnum("accessTier", ["standard", "internal"])
+    .default("standard")
+    .notNull(),
+
+  /**
+   * Which company this person is currently working in.
+   *
+   * Only meaningful for someone who belongs to more than one — a subcontractor
+   * who joined a GC's company keeps their own. NULL means "whichever they have
+   * had longest", which is every single-company account.
+   *
+   * It lives on the USER rather than being sent with each request, and that is
+   * the security-relevant part: a company id the client could supply would let
+   * a member name someone else's company and be authorised against their own
+   * role in their own. The resolver only ever honours this column, and only
+   * when the user still has an active membership in it.
+   *
+   * No foreign key, deliberately. A stale id resolves to no matching membership
+   * and falls back to their oldest one; an FK with ON DELETE SET NULL would add
+   * a write to every company deletion to achieve the same end state.
+   */
+  activeCompanyId: int("activeCompanyId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -499,6 +534,38 @@ export const PROJECT_TYPES = ["residential", "commercial", "both"] as const;
 export type ProjectType = (typeof PROJECT_TYPES)[number];
 
 /**
+ * The two trade defaults, restated as column literals.
+ *
+ * The registry itself is shared/trades.ts — that is the file to read for what
+ * the trade axis means and why the sentinel exists. These constants are copies
+ * because this schema is parsed by drizzle-kit as well as by the app and stays
+ * free of app imports (the same reason CONFIDENCE_TIER_VALUES is restated
+ * further down rather than imported from shared/copilotConfidence.ts).
+ *
+ * server/trades.test.ts asserts the copies still equal the originals, so the
+ * two cannot drift apart in silence.
+ *
+ * ── Which tables get which ───────────────────────────────────────────────────
+ * TRADE_DEFAULT_TRADE_GATED — materials, assemblies, kits. Rows that ARE a
+ *   trade's content, and that a future unlock filters on.
+ * TRADE_DEFAULT_SHARED — labor rates, pricing defaults, branding, proposal
+ *   settings. Rows ASSEMBLIES_PLAN.md § MULTI-TRADE STRUCTURE says are shared
+ *   across every trade regardless of unlock. `all` keeps that promise true
+ *   after a second trade lands instead of needing a backfill to restore it.
+ */
+export const TRADE_DEFAULT_TRADE_GATED = "electrical";
+export const TRADE_DEFAULT_SHARED = "all";
+
+/**
+ * Whether sales tax is charged on the marked-up price or the underlying cost.
+ *
+ * Declared up here with the other shared vocabularies because `pricing_defaults`
+ * uses it and that table is defined before the tax tables. The full explanation
+ * of what the two mean is on `pricing_defaults.taxApplyTo`.
+ */
+export const TAX_APPLY_TO = ["price", "cost"] as const;
+
+/**
  * How the material catalog is shelved. Curated, NOT user-extendable.
  *
  * Declaration order is the display order on the Materials screen — keep them in
@@ -590,7 +657,9 @@ export const materials = mysqlTable(
      * material list even when the same contractor pulls both — an electrical
      * estimator scrolling for a receptacle should not wade through Cat6 jacks.
      */
-    trade: varchar("trade", { length: 64 }).default("electrical").notNull(),
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_TRADE_GATED)
+      .notNull(),
     /**
      * A short clarifier, shown under the name. Deliberately sparse: it exists
      * only where two catalog entries could genuinely be mistaken for each other
@@ -707,6 +776,26 @@ export const laborRates = mysqlTable(
       .default("hourly")
       .notNull(),
 
+    /**
+     * Which trade this role belongs to, or `all` for one that serves every one.
+     *
+     * ── Defaults to `all`, unlike a material or an assembly ──────────────────
+     * ASSEMBLIES_PLAN.md § MULTI-TRADE STRUCTURE lists the labor rate structure
+     * as shared across all trades regardless of unlock, and that is also just
+     * true of a real shop: the foreman who runs the electrical crew is the same
+     * person on the day the company starts taking plumbing work. Tagging every
+     * existing rate `electrical` would hide the contractor's whole org chart
+     * the moment a second trade unlocked.
+     *
+     * So the column is opt-in. A rate is company-wide until somebody says
+     * otherwise, and naming a trade is how you say a role is specific to one —
+     * a plumbing journeyman priced differently from an electrical one. See
+     * TRADE_DEFAULT_SHARED and resolveForTrade in shared/trades.ts.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_SHARED)
+      .notNull(),
+
     /** The rate for an hourly role. Ignored when rateType is "salary". */
     hourlyCost: decimal("hourlyCost", { precision: 10, scale: 4 })
       .default("0")
@@ -731,6 +820,7 @@ export const laborRates = mysqlTable(
   t => [
     index("labor_rates_userId_idx").on(t.userId),
     index("labor_rates_baselineId_idx").on(t.baselineId),
+    index("labor_rates_trade_idx").on(t.trade),
   ]
 );
 
@@ -800,7 +890,9 @@ export const assemblies = mysqlTable(
     /** Curated list — users pick, never add. Also drives takeoff layer grouping. */
     category: mysqlEnum("category", ASSEMBLY_CATEGORIES).notNull(),
     /** Unlock-gated at the app layer, not the schema, so new trades need no migration. */
-    trade: varchar("trade", { length: 64 }).default("electrical").notNull(),
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_TRADE_GATED)
+      .notNull(),
     /** Optional library filter. See PROJECT_TYPES. */
     projectType: mysqlEnum("projectType", PROJECT_TYPES),
     baseLaborHours: decimal("baseLaborHours", { precision: 10, scale: 4 })
@@ -923,55 +1015,116 @@ export type InsertAssemblyModifier = typeof assemblyModifiers.$inferInsert;
 // Company-level defaults that auto-fill new estimates. The per-project override
 // layer is deliberately NOT here — that belongs to Bid/Project structure (build
 // step 3), so this table stays the single company-wide source.
-export const pricingDefaults = mysqlTable("pricing_defaults", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: "cascade" }),
+export const pricingDefaults = mysqlTable(
+  "pricing_defaults",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
-  // Overhead — optional, applied BEFORE profit.
-  overheadEnabled: boolean("overheadEnabled").default(false).notNull(),
-  overheadMode: mysqlEnum("overheadMode", ["percentage", "flat"])
-    .default("percentage")
-    .notNull(),
-  /** Fraction when percentage (0.10 = 10%); currency amount when flat. */
-  overheadValue: decimal("overheadValue", { precision: 12, scale: 4 })
-    .default("0")
-    .notNull(),
+    /**
+     * Which trade these defaults govern. `all` is the company-wide row.
+     *
+     * One row per user became one row per user PER TRADE so that a second
+     * trade can carry its own overhead and profit without disturbing the
+     * first — a plumbing division that runs on different margins is an
+     * ordinary fact about a multi-trade contractor, not an exception.
+     *
+     * Every existing row is `all` and every read still resolves to it, so this
+     * changed nothing on screen. See resolveForTrade in shared/trades.ts for
+     * the fallback, and TRADE_DEFAULT_SHARED for why the sentinel is a string
+     * rather than NULL — a nullable column would let the unique index below
+     * store two company-wide rows and never complain.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_SHARED)
+      .notNull(),
 
-  // Profit — the method is always an explicit choice, never assumed.
-  profitMethod: mysqlEnum("profitMethod", ["markup", "margin"])
-    .default("markup")
-    .notNull(),
-  /** Fraction: 0.20 = 20% markup, or 20% target margin, per profitMethod. */
-  profitValue: decimal("profitValue", { precision: 6, scale: 4 })
-    .default("0")
-    .notNull(),
+    // Overhead — optional, applied BEFORE profit.
+    overheadEnabled: boolean("overheadEnabled").default(false).notNull(),
+    overheadMode: mysqlEnum("overheadMode", ["percentage", "flat"])
+      .default("percentage")
+      .notNull(),
+    /** Fraction when percentage (0.10 = 10%); currency amount when flat. */
+    overheadValue: decimal("overheadValue", { precision: 12, scale: 4 })
+      .default("0")
+      .notNull(),
 
-  /**
-   * Company-wide productivity adjustment, as a fraction (0.10 = +10% hours).
-   *
-   * Applied at calculation time as a final multiplier AFTER job-condition
-   * modifiers have been summed — a separate step, never added into them. See
-   * applyProductivityToHours in shared/pricing.ts for why that separation
-   * matters. Ships at 0: no adjustment until the contractor has a reason.
-   *
-   * Signed, so scale(4) with a negative range — a crew that beats book hours
-   * is as real as one that does not.
-   */
-  productivityPct: decimal("productivityPct", { precision: 6, scale: 4 })
-    .default("0")
-    .notNull(),
+    // Profit — the method is always an explicit choice, never assumed.
+    profitMethod: mysqlEnum("profitMethod", ["markup", "margin"])
+      .default("markup")
+      .notNull(),
+    /** Fraction: 0.20 = 20% markup, or 20% target margin, per profitMethod. */
+    profitValue: decimal("profitValue", { precision: 6, scale: 4 })
+      .default("0")
+      .notNull(),
 
-  defaultLaborRateId: int("defaultLaborRateId").references(
-    () => laborRates.id,
-    { onDelete: "set null" }
-  ),
+    /**
+     * Company-wide productivity adjustment, as a fraction (0.10 = +10% hours).
+     *
+     * Applied at calculation time as a final multiplier AFTER job-condition
+     * modifiers have been summed — a separate step, never added into them. See
+     * applyProductivityToHours in shared/pricing.ts for why that separation
+     * matters. Ships at 0: no adjustment until the contractor has a reason.
+     *
+     * Signed, so scale(4) with a negative range — a crew that beats book hours
+     * is as real as one that does not.
+     */
+    productivityPct: decimal("productivityPct", { precision: 6, scale: 4 })
+      .default("0")
+      .notNull(),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+    defaultLaborRateId: int("defaultLaborRateId").references(
+      () => laborRates.id,
+      { onDelete: "set null" }
+    ),
+
+    // ── Sales tax ────────────────────────────────────────────────────────────
+    //
+    // What is taxable is a COMPANY decision, because it follows from the
+    // jurisdiction the contractor operates under and the kind of work they do
+    // — not from anything about an individual bid. The rate comes from the job
+    // address (tax_jurisdictions); these three say what the rate is applied to.
+    //
+    // All three ship OFF and taxing nothing. A tax feature that arrives switched
+    // on with assumed rules would put a number on a bid that nobody chose, and
+    // sales tax is the last place in this app where a plausible default is
+    // acceptable. See the header of shared/salesTax.ts.
+
+    /** Master switch. Off means no tax line exists anywhere. */
+    salesTaxEnabled: boolean("salesTaxEnabled").default(false).notNull(),
+
+    /**
+     * Whether materials / labor are taxable. Both false is a legitimate
+     * configuration and reports as "nothing taxable" rather than as $0 tax —
+     * an explicit statement beats a silent zero.
+     */
+    taxMaterials: boolean("taxMaterials").default(false).notNull(),
+    taxLabor: boolean("taxLabor").default(false).notNull(),
+
+    /**
+     * "price" — tax the customer-facing amount, after overhead and profit.
+     * "cost"  — tax the underlying cost, before markup.
+     *
+     * These give materially different numbers on the same bid, which is why it
+     * is a setting. Some jurisdictions write the rule against what the
+     * contractor charges; others against what they paid.
+     */
+    taxApplyTo: mysqlEnum("taxApplyTo", TAX_APPLY_TO)
+      .default("price")
+      .notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    // Was unique(userId). One row per user per trade now, which is what makes
+    // a second trade additive — and it still permits exactly one company-wide
+    // (`all`) row, because the sentinel is a real value the index can see.
+    unique("pricing_defaults_user_trade_uq").on(t.userId, t.trade),
+  ]
+);
 
 export type PricingDefaults = typeof pricingDefaults.$inferSelect;
 export type InsertPricingDefaults = typeof pricingDefaults.$inferInsert;
@@ -995,37 +1148,58 @@ export type InsertPricingDefaults = typeof pricingDefaults.$inferInsert;
  * fields it describes; the fields cannot disagree with themselves.
  * `needsBranding` in shared/proposal.ts is what reads them.
  */
-export const companyBranding = mysqlTable("company_branding", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: "cascade" }),
+export const companyBranding = mysqlTable(
+  "company_branding",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
-  /** Trading name, as the client should see it. */
-  companyName: varchar("companyName", { length: 255 }).default("").notNull(),
-  /** Contractor licence number — on many jobs a legal requirement to state. */
-  licenseNumber: varchar("licenseNumber", { length: 128 })
-    .default("")
-    .notNull(),
-  /** Free-form, multi-line. Rendered line by line, never parsed. */
-  address: varchar("address", { length: 512 }).default("").notNull(),
-  phone: varchar("phone", { length: 64 }).default("").notNull(),
-  email: varchar("email", { length: 320 }).default("").notNull(),
-  website: varchar("website", { length: 255 }).default("").notNull(),
+    /**
+     * Which trade this identity is for. `all` is the company-wide row.
+     *
+     * ── The licence number is why this is per trade ──────────────────────────
+     * Everything else here would happily be one row forever — a company has one
+     * name and one phone number. `licenseNumber` does not work that way: a
+     * contractor licensed for electrical and plumbing holds two separate
+     * numbers from two separate boards, and printing the electrical one on a
+     * plumbing proposal is a compliance problem, not a cosmetic one. That alone
+     * makes branding a per-trade record.
+     *
+     * Existing rows are `all` and every read falls back to it, so a
+     * single-trade contractor still has exactly one row and sees no change.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_SHARED)
+      .notNull(),
 
-  /**
-   * The logo in S3. Two columns for the same reason `bid_pdfs` splits them: the
-   * key is what this app owns and can re-sign, the URL is what a browser loads.
-   * NULL means no logo, which the document renders as a placeholder rather than
-   * as blank space.
-   */
-  logoKey: varchar("logoKey", { length: 1024 }),
-  logoUrl: varchar("logoUrl", { length: 1024 }),
+    /** Trading name, as the client should see it. */
+    companyName: varchar("companyName", { length: 255 }).default("").notNull(),
+    /** Contractor licence number — on many jobs a legal requirement to state. */
+    licenseNumber: varchar("licenseNumber", { length: 128 })
+      .default("")
+      .notNull(),
+    /** Free-form, multi-line. Rendered line by line, never parsed. */
+    address: varchar("address", { length: 512 }).default("").notNull(),
+    phone: varchar("phone", { length: 64 }).default("").notNull(),
+    email: varchar("email", { length: 320 }).default("").notNull(),
+    website: varchar("website", { length: 255 }).default("").notNull(),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+    /**
+     * The logo in S3. Two columns for the same reason `bid_pdfs` splits them:
+     * the key is what this app owns and can re-sign, the URL is what a browser
+     * loads. NULL means no logo, which the document renders as a placeholder
+     * rather than as blank space.
+     */
+    logoKey: varchar("logoKey", { length: 1024 }),
+    logoUrl: varchar("logoUrl", { length: 1024 }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [unique("company_branding_user_trade_uq").on(t.userId, t.trade)]
+);
 
 export type CompanyBranding = typeof companyBranding.$inferSelect;
 export type InsertCompanyBranding = typeof companyBranding.$inferInsert;
@@ -1050,36 +1224,450 @@ export type InsertCompanyBranding = typeof companyBranding.$inferInsert;
 export const PROPOSAL_LAYOUTS = ["classic", "modern", "minimal"] as const;
 export type ProposalLayout = (typeof PROPOSAL_LAYOUTS)[number];
 
-export const proposalSettings = mysqlTable("proposal_settings", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: "cascade" }),
+export const proposalSettings = mysqlTable(
+  "proposal_settings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
 
-  layout: mysqlEnum("layout", PROPOSAL_LAYOUTS).default("classic").notNull(),
-  /** Hex, `#RRGGBB`. Validated at the router, so the document can trust it. */
-  accentColor: varchar("accentColor", { length: 9 })
-    .default("#F5C518")
-    .notNull(),
-  /** Section ids the user switched off. See shared/proposal.ts. */
-  hiddenSections: json("hiddenSections").$type<string[]>(),
+    /**
+     * Which trade this presentation is for. `all` is the company-wide row.
+     *
+     * Layout and accent colour are the same on every document a contractor
+     * sends and would never need splitting. `termsText` is the field that does:
+     * what a proposal excludes and how long the price stands are trade-specific
+     * in practice — an electrical quote's exclusions are not a plumbing quote's
+     * — and boilerplate that has to be edited per job is boilerplate that ends
+     * up wrong. Splitting the whole row rather than that one field keeps the
+     * resolution rule identical across all three settings tables.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_SHARED)
+      .notNull(),
 
-  /**
-   * Boilerplate the contractor reuses on every proposal — payment terms, what
-   * is excluded, how long the price stands. Stored at company level because
-   * retyping it per bid is how it ends up inconsistent or missing.
-   */
-  termsText: text("termsText"),
-  /** How many days the quoted price is good for. 0 = do not state a validity. */
-  validDays: int("validDays").default(30).notNull(),
+    layout: mysqlEnum("layout", PROPOSAL_LAYOUTS).default("classic").notNull(),
+    /** Hex, `#RRGGBB`. Validated at the router, so the document can trust it. */
+    accentColor: varchar("accentColor", { length: 9 })
+      .default("#F5C518")
+      .notNull(),
+    /** Section ids the user switched off. See shared/proposal.ts. */
+    hiddenSections: json("hiddenSections").$type<string[]>(),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+    /**
+     * Boilerplate the contractor reuses on every proposal — payment terms, what
+     * is excluded, how long the price stands. Stored at company level because
+     * retyping it per bid is how it ends up inconsistent or missing.
+     */
+    termsText: text("termsText"),
+    /** How many days the quoted price is good for. 0 = do not state a validity. */
+    validDays: int("validDays").default(30).notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [unique("proposal_settings_user_trade_uq").on(t.userId, t.trade)]
+);
 
 export type ProposalSettings = typeof proposalSettings.$inferSelect;
 export type InsertProposalSettings = typeof proposalSettings.$inferInsert;
+
+// ─── Clients ──────────────────────────────────────────────────────────────────
+/**
+ * Who the work is for — a company or a person, with the details that identify
+ * them and the address the job is at.
+ *
+ * ── Why a table, when the bid already has clientName and siteAddress ─────────
+ * Those two columns are free text typed per bid, which is fine for printing one
+ * proposal and useless for everything after it. A general contractor a user
+ * bids for twenty times a year is twenty independent spellings of one name, so
+ * "show me everything I have quoted for Harbour Construction" cannot be
+ * answered, and neither can "what did I charge them last time". A record with
+ * an id makes both a lookup instead of a text search.
+ *
+ * Three named features are waiting on this, and none of them is built here:
+ *   • historical bid search, which queries this;
+ *   • sales tax, which needs the JOB address — jurisdiction follows where the
+ *     work happens, not where the invoice is posted, which is why `address` and
+ *     the bid's own `siteAddress` are separate things and both survive;
+ *   • government bids, which will hang contract and agency fields off a client.
+ * This pass is the structure they depend on and stops there.
+ *
+ * ── Optional, and permanently so ─────────────────────────────────────────────
+ * `bids.clientId` is nullable and nothing requires it. A contractor quoting a
+ * job at 7pm to get a number out the door must not be stopped by a form asking
+ * who they are billing, and every bid that already exists predates this table.
+ * A bid with no client behaves exactly as it did before — the proposal still
+ * reads the bid's own clientName, and the fallback is tested.
+ */
+export const CLIENT_KINDS = ["company", "individual"] as const;
+export type ClientKind = (typeof CLIENT_KINDS)[number];
+
+export const clients = mysqlTable(
+  "clients",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /**
+     * Company or individual. One field, not two tables, because everything
+     * about them is identical apart from what `name` means — a builder's
+     * trading name against a homeowner's own name — and the distinction is
+     * worth keeping only so a document can address them correctly.
+     */
+    kind: mysqlEnum("kind", CLIENT_KINDS).default("company").notNull(),
+
+    /** The company's trading name, or the person's name. The only required field. */
+    name: varchar("name", { length: 255 }).notNull(),
+    /**
+     * The person you actually deal with at a company. Nullable, and meaningless
+     * for an individual, whose name is already in `name`.
+     */
+    contactName: varchar("contactName", { length: 255 }),
+
+    /**
+     * Where the client is. Free-form and multi-line, matching
+     * `company_branding.address` — rendered line by line, never parsed.
+     *
+     * NOT the job address. `bids.siteAddress` stays per bid because one client
+     * has many jobs in many places, and it is the JOB's location that decides
+     * the tax jurisdiction. Collapsing the two would put the wrong rate on
+     * every bid a repeat customer places outside their own town.
+     */
+    address: varchar("address", { length: 512 }),
+    phone: varchar("phone", { length: 64 }),
+    email: varchar("email", { length: 320 }),
+
+    /** Anything the contractor wants to remember. Never printed on a document. */
+    notes: text("notes"),
+
+    /**
+     * When this client was archived, or NULL if live. Same single-column shape
+     * as `bids.archivedAt`, and the same reasoning: a flag and a date can
+     * disagree, one column cannot.
+     *
+     * Unlike a bid there is no countdown and nothing purges it. A client is a
+     * name and a phone number attached to bid history, so keeping one costs
+     * nothing — and deleting it would strand the bids that point at it.
+     */
+    archivedAt: timestamp("archivedAt"),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("clients_userId_idx").on(t.userId),
+    // Historical search lands here: "every bid for this client" starts by
+    // finding the client by name within one account.
+    index("clients_userId_name_idx").on(t.userId, t.name),
+    // The clients list is now cursor-paginated by name, so the sort key has
+    // to be indexed alongside the scope for the same reason bids are above.
+    index("clients_userId_archivedAt_name_idx").on(
+      t.userId,
+      t.archivedAt,
+      t.name
+    ),
+    index("clients_archivedAt_idx").on(t.archivedAt),
+  ]
+);
+
+export type Client = typeof clients.$inferSelect;
+export type InsertClient = typeof clients.$inferInsert;
+
+// ─── Additional expenses ──────────────────────────────────────────────────────
+/**
+ * A flat charge that is neither material nor labor — a permit, an inspection,
+ * a dispatch fee, a minimum service charge.
+ *
+ * ── Why it is not a material with zero labor ─────────────────────────────────
+ * It would price correctly that way and read wrongly everywhere. A permit fee
+ * is not something you take off a plan, stock in a van or mark up per unit; it
+ * is a number the job carries. Filing it in the material catalog would put it
+ * in every material search, give it a unit of sale it does not have, and make
+ * the bid's material total wrong as a description of what was bought.
+ *
+ * ── Library plus one-offs, the same shape as everything else ─────────────────
+ * This table is the reusable list. A charge that applies to exactly one bid is
+ * written straight onto `bid_expenses` with no row here — see that table.
+ */
+export const expenseItems = mysqlTable(
+  "expense_items",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** "Permit fee", "Minimum service call", "Dispatch". */
+    name: varchar("name", { length: 255 }).notNull(),
+    /** A flat dollar amount. Not a rate and not per-unit. */
+    amount: decimal("amount", { precision: 12, scale: 4 })
+      .default("0")
+      .notNull(),
+    /** Optional note for the user — never printed on a proposal. */
+    notes: varchar("notes", { length: 512 }),
+
+    /**
+     * Whether this charge is part of the sales-tax base.
+     *
+     * Off by default, which is the behaviour every existing expense already
+     * has. Independent of `markedUp` on purpose: a permit may be marked up but
+     * untaxed, taxed but passed through at cost, both, or neither, and which
+     * combination is right varies by state AND by the kind of charge. Two
+     * booleans on the row beat a rules engine nobody can predict.
+     */
+    taxable: boolean("taxable").default(false).notNull(),
+    /**
+     * Whether the company's overhead and profit are applied to this charge.
+     *
+     * Off by default — a flat pass-through, as before. When on, the amount
+     * joins the direct cost and runs through exactly the same overhead and
+     * profit calculation as materials and labor, rather than through a second
+     * markup path that could drift from it.
+     */
+    markedUp: boolean("markedUp").default(false).notNull(),
+
+    archivedAt: timestamp("archivedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("expense_items_userId_idx").on(t.userId),
+    index("expense_items_archivedAt_idx").on(t.archivedAt),
+  ]
+);
+
+export type ExpenseItem = typeof expenseItems.$inferSelect;
+export type InsertExpenseItem = typeof expenseItems.$inferInsert;
+
+/**
+ * One expense placed on one bid, with its amount SNAPSHOT.
+ *
+ * Same rule as `bid_line_items`: the name and the amount are frozen when the
+ * expense is added, so raising the permit fee in the library next month cannot
+ * silently re-price a bid already sent. `expenseItemId` is provenance only and
+ * is `set null` on delete — removing a library entry must never alter a bid
+ * that used it.
+ *
+ * `expenseItemId` NULL is also how a ONE-OFF is stored: an amount typed onto
+ * this bid and deliberately not saved to the library. Nothing distinguishes the
+ * two once they are on the bid, which is the point — the library is a
+ * convenience for adding, not a container the bid depends on.
+ */
+export const bidExpenses = mysqlTable(
+  "bid_expenses",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+    /** Provenance. NULL for a one-off typed straight onto the bid. */
+    expenseItemId: int("expenseItemId").references(() => expenseItems.id, {
+      onDelete: "set null",
+    }),
+
+    /** Frozen at add time — the bid reads the same after a library rename. */
+    name: varchar("name", { length: 255 }).notNull(),
+    amount: decimal("amount", { precision: 12, scale: 4 })
+      .default("0")
+      .notNull(),
+
+    /**
+     * Whether this charge is part of the sales-tax base.
+     *
+     * Off by default, which is the behaviour every existing expense already
+     * has. Independent of `markedUp` on purpose: a permit may be marked up but
+     * untaxed, taxed but passed through at cost, both, or neither, and which
+     * combination is right varies by state AND by the kind of charge. Two
+     * booleans on the row beat a rules engine nobody can predict.
+     */
+    taxable: boolean("taxable").default(false).notNull(),
+    /**
+     * Whether the company's overhead and profit are applied to this charge.
+     *
+     * Off by default — a flat pass-through, as before. When on, the amount
+     * joins the direct cost and runs through exactly the same overhead and
+     * profit calculation as materials and labor, rather than through a second
+     * markup path that could drift from it.
+     */
+    markedUp: boolean("markedUp").default(false).notNull(),
+
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [index("bid_expenses_bidId_idx").on(t.bidId)]
+);
+
+export type BidExpense = typeof bidExpenses.$inferSelect;
+export type InsertBidExpense = typeof bidExpenses.$inferInsert;
+
+// ─── Includes / excludes ──────────────────────────────────────────────────────
+/**
+ * A line of scope: something the price covers, or something it explicitly does
+ * not.
+ *
+ * ── Why excludes matter as much as includes ──────────────────────────────────
+ * Standard construction bidding practice, and it is a dispute-prevention
+ * device rather than a formatting one. "Excludes: permit pulled by owner" on
+ * the proposal is what settles the argument three months later about who was
+ * supposed to pull it. That is why these print on the client document and why
+ * they are worth a reusable list — a contractor's exclusions are close to
+ * identical job to job, and retyping them is how one gets left off.
+ */
+export const SCOPE_NOTE_KINDS = ["include", "exclude"] as const;
+export type ScopeNoteKind = (typeof SCOPE_NOTE_KINDS)[number];
+
+export const scopeNotes = mysqlTable(
+  "scope_notes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    kind: mysqlEnum("kind", SCOPE_NOTE_KINDS).notNull(),
+    /** One line, as it will read on the document. */
+    text: varchar("text", { length: 512 }).notNull(),
+
+    archivedAt: timestamp("archivedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("scope_notes_userId_idx").on(t.userId),
+    index("scope_notes_kind_idx").on(t.userId, t.kind),
+    index("scope_notes_archivedAt_idx").on(t.archivedAt),
+  ]
+);
+
+export type ScopeNote = typeof scopeNotes.$inferSelect;
+export type InsertScopeNote = typeof scopeNotes.$inferInsert;
+
+/**
+ * One include or exclude on one bid, with its text SNAPSHOT.
+ *
+ * Frozen for the same reason an expense and a line item are: editing a stock
+ * exclusion must not silently change the wording of a proposal already in a
+ * client's hands — and with exclusions that wording is the whole point of
+ * having them. NULL `scopeNoteId` is a one-off typed for this bid.
+ */
+export const bidScopeNotes = mysqlTable(
+  "bid_scope_notes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+    scopeNoteId: int("scopeNoteId").references(() => scopeNotes.id, {
+      onDelete: "set null",
+    }),
+
+    kind: mysqlEnum("kind", SCOPE_NOTE_KINDS).notNull(),
+    text: varchar("text", { length: 512 }).notNull(),
+
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("bid_scope_notes_bidId_idx").on(t.bidId),
+    index("bid_scope_notes_kind_idx").on(t.bidId, t.kind),
+  ]
+);
+
+export type BidScopeNote = typeof bidScopeNotes.$inferSelect;
+export type InsertBidScopeNote = typeof bidScopeNotes.$inferInsert;
+
+// ─── Tax jurisdictions ────────────────────────────────────────────────────────
+/**
+ * A place, and the sales tax it charges — as the CONTRACTOR entered it.
+ *
+ * ── Nothing is shipped, and that is the design ───────────────────────────────
+ * There is no seeded rate table and there must never be one. Rates change
+ * constantly across state, county, city and special districts, and a stale
+ * hardcoded rate is worse than none: it looks identical to a correct one on
+ * screen, gets bid, gets won, and the difference comes out of a margin or an
+ * audit. Every row here was typed in by someone who checked it, which is the
+ * only basis on which this app should apply a tax rate at all.
+ *
+ * See shared/salesTax.ts for the fuller statement of that constraint.
+ *
+ * ── Components, not one number ───────────────────────────────────────────────
+ * `components` is the stack — `[{label:"State", ratePct:6.25}, {label:"Cook
+ * County", ratePct:1.75}]` — because that is how a rate is quoted and how it is
+ * checked. A single 9.5% gives a contractor nothing to verify against their
+ * accountant's figures, and an itemised proposal is what makes the number
+ * defensible to a customer.
+ *
+ * ── Matching is by text, and openly so ───────────────────────────────────────
+ * `state` / `county` / `city` are optional matching keys tested against the
+ * bid's job address (matchJurisdiction). It is substring matching, not
+ * geocoding: it can miss and it can be fooled. That is tolerable only because
+ * the match is always displayed with what it matched on, and is always
+ * overridable on the bid.
+ */
+export const taxJurisdictions = mysqlTable(
+  "tax_jurisdictions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** What the user calls it — "Illinois — Chicago", "Travis County TX". */
+    name: varchar("name", { length: 255 }).notNull(),
+
+    /**
+     * The matching keys. All optional; every one that is SET must appear in the
+     * job address for the row to match, and a row with none set matches
+     * nothing rather than everything.
+     */
+    state: varchar("state", { length: 64 }),
+    county: varchar("county", { length: 128 }),
+    city: varchar("city", { length: 128 }),
+
+    /** `[{ label, ratePct }]`, percent as typed — 6.25 means 6.25%. */
+    components: json("components")
+      .$type<{ label: string; ratePct: number }[]>()
+      .notNull(),
+
+    /**
+     * Free text for where the rate came from and when it was checked — a link
+     * to the state's rate lookup, an accountant's name, a date.
+     *
+     * It exists because the one question anybody asks about a tax rate is "says
+     * who?", and the answer needs somewhere to live next to the number rather
+     * than in an email.
+     */
+    sourceNote: varchar("sourceNote", { length: 512 }),
+
+    /**
+     * When the user last confirmed this rate is still current.
+     *
+     * Deliberately NOT `updatedAt`, for the same reason materials price
+     * staleness is not: `updatedAt` moves when anything changes — a rename, a
+     * note — so ageing a rate off it would show a two-year-old rate as freshly
+     * checked because somebody fixed its spelling. Only an explicit confirm
+     * touches this.
+     */
+    verifiedAt: timestamp("verifiedAt"),
+
+    archivedAt: timestamp("archivedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("tax_jurisdictions_userId_idx").on(t.userId),
+    index("tax_jurisdictions_archivedAt_idx").on(t.archivedAt),
+  ]
+);
+
+export type TaxJurisdictionRow = typeof taxJurisdictions.$inferSelect;
+export type InsertTaxJurisdiction = typeof taxJurisdictions.$inferInsert;
 
 // ─── Bids ─────────────────────────────────────────────────────────────────────
 // The Foundation bid layer. Deliberately NOT the legacy `projects` table, which
@@ -1137,6 +1725,26 @@ export const bids = mysqlTable(
     productivityPct: decimal("productivityPct", { precision: 6, scale: 4 }),
 
     /**
+     * The client this bid is for, if one has been assigned.
+     *
+     * ── Nullable, and it stays that way ──────────────────────────────────────
+     * Every bid written before this column existed has none, and a bid put
+     * together in a hurry never has to have one. Nothing reads it without
+     * handling absence — see resolveBidClient in shared/bidClient.ts, which is
+     * the single place the fallback to the free-text fields below lives.
+     *
+     * ── `set null`, never cascade ────────────────────────────────────────────
+     * Deleting a client must not delete their bids. That is the difference
+     * between tidying a contact list and destroying a year of quoting history,
+     * and the bid keeps its own `clientName` text, so an unlinked bid still
+     * prints the name it always printed. Same instinct as `assemblyId` on a bid
+     * line: a provenance link is severed, never followed into a deletion.
+     */
+    clientId: int("clientId").references(() => clients.id, {
+      onDelete: "set null",
+    }),
+
+    /**
      * Who the proposal is addressed to, and where the work is.
      *
      * Per-bid because they ARE the bid — unlike the branding and layout, which
@@ -1145,12 +1753,70 @@ export const bids = mysqlTable(
      * and prompt for it instead of printing a blank line where a client's name
      * belongs.
      *
+     * ── Kept after `clientId` landed, deliberately ───────────────────────────
+     * These are not made redundant by the link, they are the override layer
+     * over it: `clientName` set on the bid wins, and the client record fills in
+     * when it is blank. A bid addressed to one division of a customer, or a
+     * name corrected for one document, must not edit the shared client record
+     * and change every other bid pointing at it — the same
+     * snapshot-beats-library rule the whole bid layer runs on.
+     *
+     * `siteAddress` is more than an override: a client has one address and many
+     * jobs, so where THIS work happens is genuinely per bid. It is what sales
+     * tax will read.
+     *
      * `proposalNote` is the one or two sentences of scope summary that opens
      * the document — the part a contractor writes per job.
      */
     clientName: varchar("clientName", { length: 255 }),
     siteAddress: varchar("siteAddress", { length: 512 }),
     proposalNote: text("proposalNote"),
+
+    // ── Sales tax, per bid ───────────────────────────────────────────────────
+    //
+    // The rate normally comes from matching `siteAddress` against the user's
+    // tax areas. These three exist because that must never be the only path:
+    // an automatic tax with no way to correct it is a way to send a wrong
+    // number to a customer with no recourse, and exemptions are ordinary.
+
+    /**
+     * Use THIS tax area rather than whatever the job address matched.
+     *
+     * For the address the matcher cannot read, the job that straddles a
+     * boundary, and the case where the user simply knows better. `set null` on
+     * delete: removing a tax area must not silently re-rate every bid that
+     * pointed at it — it drops back to matching, and the bid says so.
+     */
+    taxJurisdictionId: int("taxJurisdictionId").references(
+      () => taxJurisdictions.id,
+      { onDelete: "set null" }
+    ),
+
+    /**
+     * A rate typed straight onto this bid, as a percent. Outranks both the
+     * matched area and `taxJurisdictionId`.
+     *
+     * The last resort, and the reason it exists: a contractor who cannot make
+     * the app produce the right number must still be able to send the right
+     * bid. NULL means "not overridden", which is different from 0 — zero is a
+     * deliberate zero-rate and is applied as one.
+     */
+    taxRateOverridePct: decimal("taxRateOverridePct", {
+      precision: 7,
+      scale: 4,
+    }),
+
+    /**
+     * This customer pays no sales tax. Outranks every rate above.
+     *
+     * Government bodies, resale, registered exempt organisations. The reason is
+     * stored alongside because "why was this bid untaxed" is the first question
+     * asked in an audit, and a bare boolean cannot answer it. Shown on the
+     * proposal as an explicit $0 line rather than by omission — a customer
+     * entitled to an exemption should see that they got it.
+     */
+    taxExempt: boolean("taxExempt").default(false).notNull(),
+    taxExemptReason: varchar("taxExemptReason", { length: 255 }),
 
     /**
      * When the bid was archived, or NULL if it is live. This single column is
@@ -1177,7 +1843,20 @@ export const bids = mysqlTable(
   },
   t => [
     index("bids_userId_idx").on(t.userId),
+    // Composite, and this is what makes historical search page at constant
+    // cost. Keyset pagination walks (userId, sortColumn) in order and stops
+    // at LIMIT; without the sort column in the index the database has to
+    // read every one of that company's bids and sort them to return twenty.
+    // Both columns are NOT NULL, which is why they are the only sorts the
+    // search offers — see shared/bidSearch.ts.
+    index("bids_userId_updatedAt_idx").on(t.userId, t.updatedAt),
+    index("bids_userId_createdAt_idx").on(t.userId, t.createdAt),
+    // dueDate is a filter, never a sort. Indexed so a date range narrows
+    // before anything else runs.
+    index("bids_userId_dueDate_idx").on(t.userId, t.dueDate),
     index("bids_status_idx").on(t.status),
+    // "Every bid for this client" — the query historical search is built on.
+    index("bids_clientId_idx").on(t.clientId),
     // The purge sweep scans this across every user, so it cannot be a table
     // scan that grows with the whole bid history.
     index("bids_archivedAt_idx").on(t.archivedAt),
@@ -2025,6 +2704,22 @@ export const kits = mysqlTable(
     name: varchar("name", { length: 255 }).notNull(),
     description: varchar("description", { length: 512 }),
 
+    /**
+     * Which trade's library this kit belongs to. Same varchar-not-enum
+     * treatment as `assemblies.trade`, for the same reason.
+     *
+     * Trade-gated rather than shared, and it follows from what a kit IS: a
+     * bundle of assemblies, and every assembly in it already carries a trade.
+     * A "Bedroom package" of receptacles and a switch is electrical work in the
+     * same sense its contents are, so it belongs behind the same unlock. A kit
+     * mixing trades is possible — the column names the shelf it is filed on,
+     * not a constraint on its contents — which is the same latitude a bid gets
+     * from `bids.trades`.
+     */
+    trade: varchar("trade", { length: 64 })
+      .default(TRADE_DEFAULT_TRADE_GATED)
+      .notNull(),
+
     /** active / archived / deleted. See materials.status — same lifecycle. */
     status: mysqlEnum("status", LIBRARY_STATUSES).default("active").notNull(),
     archivedAt: timestamp("archivedAt"),
@@ -2037,7 +2732,7 @@ export const kits = mysqlTable(
     index("kits_userId_idx").on(t.userId),
     index("kits_baselineId_idx").on(t.baselineId),
     index("kits_status_idx").on(t.status),
-    index("kits_status_idx").on(t.status),
+    index("kits_trade_idx").on(t.trade),
   ]
 );
 
@@ -2142,3 +2837,379 @@ export const featureFlags = mysqlTable("feature_flags", {
 
 export type FeatureFlag = typeof featureFlags.$inferSelect;
 export type InsertFeatureFlag = typeof featureFlags.$inferInsert;
+
+// ─── Companies, members and invitations ───────────────────────────────────────
+/**
+ * Multi-user access. Read this whole block before changing anything in it.
+ *
+ * ── The data-scoping decision, and why it is not a companyId column ──────────
+ * Every table in this app is filed under `userId`. The obvious way to add
+ * companies is to put a `companyId` on all forty of them and rewrite every
+ * query — and that is exactly the change that produces a half-migrated schema
+ * where some tables are company-scoped and some are still user-scoped, which is
+ * a data leak wearing a refactor's clothes.
+ *
+ * So a company does not re-file the data. It names an OWNER, and every member
+ * reads and writes under that owner's user id. `scope.dataUserId` is that id,
+ * resolved once per request. A brand-new user owns a company of one, where
+ * their own id is the owner id, so every existing row and every existing query
+ * is already correct and the migration touches no data.
+ *
+ * The failure mode if a query is ever missed is that a member sees NOTHING —
+ * their own id owns no rows — rather than seeing someone else's. That direction
+ * is deliberate, and `server/scopeDiscipline.test.ts` enforces it mechanically
+ * rather than by review.
+ *
+ * ── Roles live on the membership, tiers live on the user ─────────────────────
+ * `company_members.role` says what you may do here. `users.accessTier` says
+ * which build of the product you see anywhere. See shared/permissions.ts.
+ */
+export const COMPANY_ROLE_VALUES = [
+  "owner",
+  "admin",
+  "estimator",
+  "viewer",
+] as const;
+export const MEMBER_STATUS_VALUES = ["active", "suspended"] as const;
+export const ACCESS_TIER_VALUES = ["standard", "internal"] as const;
+
+export const companies = mysqlTable(
+  "companies",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    /**
+     * The user whose id every row of this company's data is filed under.
+     *
+     * Not a convenience field — it IS the scoping key, and the reason there is
+     * no `companyId` on forty other tables. Changing it moves the whole
+     * company's data, so ownership transfer updates this and the two
+     * memberships together or not at all.
+     */
+    ownerUserId: int("ownerUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [index("companies_ownerUserId_idx").on(t.ownerUserId)]
+);
+
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = typeof companies.$inferInsert;
+
+/**
+ * One person's place in one company.
+ *
+ * `unique(companyId, userId)` is what stops a second membership row quietly
+ * granting a second, higher role — the resolver takes one row, and two rows
+ * would make which one it takes an accident of insertion order.
+ *
+ * A user may belong to several companies; `companyId` is chosen per request
+ * (see companyScope.ts), never inferred from the data being touched.
+ */
+export const companyMembers = mysqlTable(
+  "company_members",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    companyId: int("companyId")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: mysqlEnum("role", COMPANY_ROLE_VALUES).default("estimator").notNull(),
+    /**
+     * `suspended` keeps the row and removes the access. Deleting a membership
+     * instead would lose who was in the company when a bid was priced, which is
+     * the question asked after something goes wrong.
+     */
+    status: mysqlEnum("status", MEMBER_STATUS_VALUES)
+      .default("active")
+      .notNull(),
+    invitedByUserId: int("invitedByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    joinedAt: timestamp("joinedAt").defaultNow().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    unique("company_members_company_user_unique").on(t.companyId, t.userId),
+    // The hot path: one indexed lookup per request resolves a user's scope.
+    // Without this, sign-in cost grows with the number of memberships in the
+    // system rather than with the number this user has.
+    index("company_members_userId_idx").on(t.userId),
+    index("company_members_companyId_idx").on(t.companyId),
+  ]
+);
+
+export type CompanyMember = typeof companyMembers.$inferSelect;
+export type InsertCompanyMember = typeof companyMembers.$inferInsert;
+
+/**
+ * An outstanding invitation to join a company.
+ *
+ * ── The code is stored hashed ────────────────────────────────────────────────
+ * `codeHash` is a SHA-256 of the code the inviter shares, never the code
+ * itself. There is no mail sender in this app, so the code travels by whatever
+ * channel the contractor uses — and a readable invite column would mean anyone
+ * with database access, or a leaked backup, could walk into any company. The
+ * plaintext exists exactly once, in the response that creates it.
+ *
+ * Looked up BY hash, which is why the hash is the unique index: a lookup by
+ * company followed by a comparison would need the plaintext to compare against.
+ */
+export const companyInvites = mysqlTable(
+  "company_invites",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    companyId: int("companyId")
+      .notNull()
+      .references(() => companies.id, { onDelete: "cascade" }),
+    /** Who it was meant for. Advisory — the code is what admits, not this. */
+    email: varchar("email", { length: 320 }),
+    role: mysqlEnum("role", COMPANY_ROLE_VALUES).default("estimator").notNull(),
+    codeHash: varchar("codeHash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    acceptedAt: timestamp("acceptedAt"),
+    acceptedByUserId: int("acceptedByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    revokedAt: timestamp("revokedAt"),
+    createdByUserId: int("createdByUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    unique("company_invites_codeHash_unique").on(t.codeHash),
+    index("company_invites_companyId_idx").on(t.companyId),
+  ]
+);
+
+export type CompanyInvite = typeof companyInvites.$inferSelect;
+export type InsertCompanyInvite = typeof companyInvites.$inferInsert;
+
+// ─── Job close-out ────────────────────────────────────────────────────────────
+/**
+ * What a finished job actually took, recorded against the bid that estimated it.
+ *
+ * ── Optional, and structurally so ────────────────────────────────────────────
+ * A bid with no close-out row behaves exactly as it did before this table
+ * existed. Nothing joins to it on a required path, nothing counts it, and no
+ * query in the bid layer is aware of it. That is the promise "closing out is
+ * optional" has to be kept by — a nullable column on `bids` would have made
+ * every bid query carry the concept.
+ *
+ * ── Shaped for the analytics that comes later ────────────────────────────────
+ * The eventual dashboard will ask two kinds of question — "how are we doing
+ * over time" and "which assemblies do we misjudge" — so the figures needed to
+ * answer both are stored on the rows rather than derived by joining back
+ * through bids and line items at query time. `estimatedHours` in particular is
+ * SNAPSHOTTED: re-deriving it later would mean an assembly edited today
+ * silently rewrites what a job in 2024 was estimated at, which would make the
+ * whole history unusable as evidence.
+ *
+ * The indexes are chosen for those two questions: (userId, closedAt) for a time
+ * series, and (userId, assemblyId) on the lines for per-assembly performance.
+ */
+export const CLOSEOUT_MODE_VALUES = ["total", "byAssembly"] as const;
+export const SUGGESTION_STATUS_VALUES = [
+  "pending",
+  "accepted",
+  "dismissed",
+] as const;
+
+export const bidCloseouts = mysqlTable(
+  "bid_closeouts",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    /**
+     * One close-out per bid. The unique constraint is the rule: a job finishes
+     * once, and two rows would make "what did this take" ambiguous.
+     */
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+    /** The company scope, same as every other table. See companyScope.ts. */
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /**
+     * `total` — one figure for the job. `byAssembly` — the lines are the
+     * answer and this row's total is their sum.
+     *
+     * Explicit rather than inferred from whether lines exist, so there is never
+     * a typed total sitting beside lines that disagree with it.
+     */
+    mode: mysqlEnum("mode", CLOSEOUT_MODE_VALUES).default("total").notNull(),
+
+    /** The single figure, in `total` mode. Null in `byAssembly` mode. */
+    totalActualHours: decimal("totalActualHours", {
+      precision: 10,
+      scale: 2,
+    }),
+
+    /**
+     * What the bid estimated, frozen at close-out.
+     *
+     * Snapshotted for the reason in the header: a comparison whose baseline
+     * moves is not a comparison. This is the figure the variance is computed
+     * against forever.
+     */
+    estimatedHours: decimal("estimatedHours", { precision: 10, scale: 2 })
+      .default("0")
+      .notNull(),
+
+    /** When the job finished — the date the contractor picks, not the row's. */
+    closedAt: timestamp("closedAt").defaultNow().notNull(),
+    /** Anything worth remembering about why it went the way it did. */
+    notes: text("notes"),
+
+    /** Who recorded it. Provenance for a figure that will drive suggestions. */
+    enteredByUserId: int("enteredByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    unique("bid_closeouts_bidId_unique").on(t.bidId),
+    // The time-series index the future dashboard wants.
+    index("bid_closeouts_userId_closedAt_idx").on(t.userId, t.closedAt),
+  ]
+);
+
+export type BidCloseout = typeof bidCloseouts.$inferSelect;
+export type InsertBidCloseout = typeof bidCloseouts.$inferInsert;
+
+/**
+ * One assembly's actual hours within a close-out.
+ *
+ * `assemblyId` is provenance and goes null if the library assembly is deleted;
+ * `assemblyName` is the snapshot that keeps an old close-out readable, exactly
+ * as bid line items and takeoff stamps do.
+ *
+ * `userId` is repeated here rather than reached through the close-out. That is
+ * denormalisation on purpose: every per-assembly analytics question filters by
+ * company first, and making it a join would put the scoping key one table away
+ * from the rows being scanned — which is how a scoping mistake becomes possible
+ * in the first place.
+ */
+export const bidCloseoutLines = mysqlTable(
+  "bid_closeout_lines",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    closeoutId: int("closeoutId")
+      .notNull()
+      .references(() => bidCloseouts.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** Null once the library assembly is gone. The name survives. */
+    assemblyId: int("assemblyId").references(() => assemblies.id, {
+      onDelete: "set null",
+    }),
+    assemblyName: varchar("assemblyName", { length: 255 }).notNull(),
+
+    /** How many of the assembly the bid carried, at close-out. */
+    qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
+    /** The bid's estimate for this line, at quantity, frozen. */
+    estimatedHours: decimal("estimatedHours", { precision: 10, scale: 2 })
+      .default("0")
+      .notNull(),
+    /** What it took. */
+    actualHours: decimal("actualHours", { precision: 10, scale: 2 })
+      .default("0")
+      .notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("bid_closeout_lines_closeoutId_idx").on(t.closeoutId),
+    // "How does this assembly perform for this company" — the query the
+    // suggestion engine runs, and the one the dashboard will run per assembly.
+    index("bid_closeout_lines_userId_assemblyId_idx").on(
+      t.userId,
+      t.assemblyId
+    ),
+  ]
+);
+
+export type BidCloseoutLine = typeof bidCloseoutLines.$inferSelect;
+export type InsertBidCloseoutLine = typeof bidCloseoutLines.$inferInsert;
+
+/**
+ * A proposal to change an assembly's base hours, and what the user did about it.
+ *
+ * ── Never applied by anything but a person ──────────────────────────────────
+ * Writing this row changes nothing about the assembly. Accepting it is a
+ * separate, explicit action that requires `library.edit` — because it edits the
+ * shared inputs every future bid is built from. The same suggest-then-confirm
+ * shape the alias suggestions and the plan co-pilot use.
+ *
+ * ── Scoped by company, even for a SHARED assembly ───────────────────────────
+ * This is the subtle one. Starter assemblies have `userId = NULL` and are
+ * visible to every company, so two contractors' close-outs can both reference
+ * assembly 412. The suggestion is keyed by (userId, assemblyId) so one
+ * company's field data can never produce a suggestion for another, and the
+ * unique constraint is on the PAIR rather than on the assembly alone. Keying it
+ * by assembly would have leaked one contractor's crew performance into another
+ * contractor's library.
+ *
+ * `dismissed` is kept rather than deleted: a suggestion the user has already
+ * said no to must not come back the next time the numbers are recomputed, and
+ * the record of having asked is what prevents that.
+ */
+export const assemblyHourSuggestions = mysqlTable(
+  "assembly_hour_suggestions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    assemblyId: int("assemblyId")
+      .notNull()
+      .references(() => assemblies.id, { onDelete: "cascade" }),
+
+    /** Snapshot of the library at the time, so a stale card reads honestly. */
+    currentHours: decimal("currentHours", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
+    suggestedHours: decimal("suggestedHours", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
+    /** How many closed-out jobs it rests on, and how strongly they agree. */
+    sampleSize: int("sampleSize").default(0).notNull(),
+    ratio: decimal("ratio", { precision: 8, scale: 4 }).default("1").notNull(),
+
+    status: mysqlEnum("status", SUGGESTION_STATUS_VALUES)
+      .default("pending")
+      .notNull(),
+    respondedAt: timestamp("respondedAt"),
+    respondedByUserId: int("respondedByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    unique("assembly_hour_suggestions_user_assembly_unique").on(
+      t.userId,
+      t.assemblyId
+    ),
+    index("assembly_hour_suggestions_userId_status_idx").on(t.userId, t.status),
+  ]
+);
+
+export type AssemblyHourSuggestion =
+  typeof assemblyHourSuggestions.$inferSelect;
+export type InsertAssemblyHourSuggestion =
+  typeof assemblyHourSuggestions.$inferInsert;

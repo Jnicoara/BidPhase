@@ -17,14 +17,30 @@
  * All the actual math is still delegated to shared/pricing.ts. Nothing in this
  * file computes a percentage.
  */
-import type { Bid, BidLineItem } from "../drizzle/schema";
+import type { Bid, BidLineItem, TaxJurisdictionRow } from "../drizzle/schema";
 import {
   calculateBidPrice,
   calculateLineItem,
   resolveBidPricingSettings,
+  roundMoney,
   sumDirectCost,
   type CompanyPricingDefaults,
 } from "../shared/pricing";
+import {
+  DEFAULT_TAX_RULES,
+  calculateSalesTax,
+  combinedRatePct,
+  matchJurisdiction,
+  type JurisdictionMatch,
+  type TaxJurisdiction,
+  type TaxRateComponent,
+  type TaxRules,
+} from "../shared/salesTax";
+import {
+  priceExpenses,
+  sumMarkedUpExpenses,
+  type ExpenseLine,
+} from "../shared/bidExtras";
 import * as db from "./db";
 
 /**
@@ -42,6 +58,109 @@ export async function companyDefaultsFor(
     profitMethod: defaults?.profitMethod ?? "markup",
     profitValue: Number(defaults?.profitValue ?? 0),
     productivityPct: Number(defaults?.productivityPct ?? 0),
+  };
+}
+
+/**
+ * The company's sales tax rules.
+ *
+ * Falls back to DEFAULT_TAX_RULES — off, taxing nothing — rather than to a
+ * plausible-looking configuration. A user who has never opened the tax settings
+ * has not decided anything, and inventing a decision for them is precisely what
+ * the header of shared/salesTax.ts forbids.
+ */
+export async function taxRulesFor(userId: number): Promise<TaxRules> {
+  const defaults = await db.getPricingDefaults(userId);
+  if (!defaults) return DEFAULT_TAX_RULES;
+  return {
+    enabled: defaults.salesTaxEnabled,
+    taxMaterials: defaults.taxMaterials,
+    taxLabor: defaults.taxLabor,
+    applyTo: defaults.taxApplyTo,
+  };
+}
+
+/** The row shape salesTax wants, from the stored jurisdiction. */
+export function toTaxJurisdiction(row: TaxJurisdictionRow): TaxJurisdiction {
+  return {
+    id: row.id,
+    name: row.name,
+    state: row.state,
+    county: row.county,
+    city: row.city,
+    components: Array.isArray(row.components) ? row.components : [],
+  };
+}
+
+/**
+ * Decide which rate governs a bid, and be able to say why.
+ *
+ * ── The order is the whole point ─────────────────────────────────────────────
+ *   1. an explicit rate typed on the bid          — the last resort, so it wins
+ *   2. a tax area pinned to the bid               — the user overrode matching
+ *   3. the area matched from the job address      — the automatic path
+ *
+ * Every step reports its `source`, because a tax figure nobody can trace is a
+ * tax figure nobody can defend. The UI shows this; it is not debug output.
+ */
+export type ResolvedTaxRate = {
+  ratePct: number | null;
+  components: TaxRateComponent[];
+  source: "bid-override" | "bid-jurisdiction" | "matched" | "none";
+  jurisdictionName: string | null;
+  /** What in the address the match keyed on. Empty unless source is "matched". */
+  matchedOn: string[];
+  precision: JurisdictionMatch["precision"];
+};
+
+export function resolveTaxRate(
+  bid: Pick<Bid, "taxJurisdictionId" | "taxRateOverridePct" | "siteAddress">,
+  jurisdictions: TaxJurisdiction[]
+): ResolvedTaxRate {
+  const none: ResolvedTaxRate = {
+    ratePct: null,
+    components: [],
+    source: "none",
+    jurisdictionName: null,
+    matchedOn: [],
+    precision: "none",
+  };
+
+  // A rate typed on the bid outranks everything. Note the null check rather
+  // than a truthiness test: 0 is a deliberate zero-rate, not "unset".
+  if (bid.taxRateOverridePct !== null) {
+    return {
+      ...none,
+      ratePct: Number(bid.taxRateOverridePct),
+      source: "bid-override",
+    };
+  }
+
+  if (bid.taxJurisdictionId !== null) {
+    const pinned = jurisdictions.find(j => j.id === bid.taxJurisdictionId);
+    if (pinned) {
+      return {
+        ratePct: combinedRatePct(pinned.components),
+        components: pinned.components,
+        source: "bid-jurisdiction",
+        jurisdictionName: pinned.name,
+        matchedOn: [],
+        precision: "none",
+      };
+    }
+    // Pinned to an area that has since been archived or deleted. Fall through
+    // to matching rather than silently charging nothing.
+  }
+
+  const match = matchJurisdiction(jurisdictions, bid.siteAddress);
+  if (!match.jurisdiction) return none;
+  return {
+    ratePct: combinedRatePct(match.jurisdiction.components),
+    components: match.jurisdiction.components,
+    source: "matched",
+    jurisdictionName: match.jurisdiction.name,
+    matchedOn: match.matchedOn,
+    precision: match.precision,
   };
 }
 
@@ -91,7 +210,9 @@ export function priceLine(line: BidLineItem, productivityPct: number) {
 export function rollUpBid(
   bid: Bid,
   lines: BidLineItem[],
-  company: CompanyPricingDefaults
+  company: CompanyPricingDefaults,
+  /** Charges on the bid. Only the marked-up ones affect the direct cost. */
+  expenses: readonly ExpenseLine[] = []
 ) {
   const settings = resolveBidPricingSettings(company, {
     overheadEnabled: bid.overheadEnabled,
@@ -107,14 +228,26 @@ export function rollUpBid(
   const breakdowns = lines.map(line =>
     priceLine(line, settings.productivityPct)
   );
-  const directCost = sumDirectCost(breakdowns);
+  /**
+   * Materials and labor, plus any charge the user marked up.
+   *
+   * A marked-up charge enters the direct cost so it runs through the SAME
+   * overhead and profit as everything else — that is what "the same
+   * calculation already used for materials and labor" has to mean if the two
+   * are never to disagree. Applying a markup to it separately here would be a
+   * second implementation of the thing shared/pricing.ts exists to own.
+   *
+   * Flat charges are absent by design; they are added after profit.
+   */
+  const workCost = sumDirectCost(breakdowns);
+  const directCost = roundMoney(workCost + sumMarkedUpExpenses(expenses));
   const bidPrice = calculateBidPrice({
     directCost,
     overhead: settings.overhead,
     profit: settings.profit,
   });
 
-  return { settings, breakdowns, directCost, bidPrice };
+  return { settings, breakdowns, workCost, directCost, bidPrice };
 }
 
 /**
@@ -129,9 +262,25 @@ export function rollUpBid(
 export function bidRollup(
   bid: Bid,
   lines: BidLineItem[],
-  company: CompanyPricingDefaults
+  company: CompanyPricingDefaults,
+  /**
+   * Sales tax context. Optional so every existing caller and test keeps
+   * working unchanged — omit it and the bid prices exactly as it did before
+   * tax existed, which is also what a user who never switched tax on gets.
+   */
+  tax?: { rules: TaxRules; jurisdictions: TaxJurisdiction[] },
+  /**
+   * Flat charges on the bid — permits, inspections, dispatch. Optional for the
+   * same reason: a bid with none prices exactly as it did before they existed.
+   */
+  expenses: readonly ExpenseLine[] = []
 ) {
-  const { settings, breakdowns, bidPrice } = rollUpBid(bid, lines, company);
+  const { settings, breakdowns, directCost, bidPrice } = rollUpBid(
+    bid,
+    lines,
+    company,
+    expenses
+  );
   const priced = lines.map((line, index) => ({
     line,
     breakdown: breakdowns[index],
@@ -150,6 +299,68 @@ export function bidRollup(
     unitTotals.set(line.unitLabel, current);
   }
 
+  const materialCost = priced.reduce(
+    (sum, p) => sum + p.breakdown.materialCost,
+    0
+  );
+  const laborCost = priced.reduce((sum, p) => sum + p.breakdown.laborCost, 0);
+
+  /**
+   * Sales tax, computed here so the bid screen and the proposal cannot differ.
+   *
+   * This is the same reasoning that put the rollup in this file at all: two
+   * callers each applying their own tax is how a customer receives a document
+   * whose total does not match the bid it was approved from — and with tax that
+   * is not just embarrassing, it is a wrong amount of money collected.
+   */
+  const rate = tax
+    ? resolveTaxRate(bid, tax.jurisdictions)
+    : ({
+        ratePct: null,
+        components: [],
+        source: "none",
+        jurisdictionName: null,
+        matchedOn: [],
+        precision: "none",
+      } as ResolvedTaxRate);
+
+  /**
+   * Charges, each priced according to its own two switches.
+   *
+   * A marked-up charge was already folded into `directCost` above, so it is
+   * inside `bidPrice.finalPrice` — scaled by the same overhead and profit the
+   * work got. Its billed value is recovered here so it can still appear as its
+   * own line: itemisation is the whole reason a permit is a separate charge,
+   * and losing it into the bid price would defeat that.
+   *
+   * `workPrice` is therefore the bid price with those charges taken back out —
+   * the marked-up materials and labor alone.
+   */
+  const uplift = directCost > 0 ? bidPrice.finalPrice / directCost : 1;
+  const pricedExpenses = priceExpenses(expenses, uplift);
+  const workPrice = roundMoney(
+    bidPrice.finalPrice - pricedExpenses.markedUpCharged
+  );
+
+  const salesTax = calculateSalesTax({
+    materialCost,
+    laborCost,
+    // The work only. Charges carry their own taxability and are passed
+    // separately rather than blended into a figure taxed wholesale.
+    finalPrice: workPrice,
+    expenses: pricedExpenses.lines,
+    rules: tax?.rules ?? DEFAULT_TAX_RULES,
+    ratePct: rate.ratePct,
+    components: rate.components,
+    exempt: bid.taxExempt,
+  });
+
+  /** Everything billed, before tax. What the tax line sits under. */
+  const expensesTotal = pricedExpenses.total;
+  const subtotal = roundMoney(workPrice + expensesTotal);
+  /** Everything the customer owes. */
+  const totalDue = roundMoney(subtotal + salesTax.amount);
+
   return {
     settings,
     priced,
@@ -157,6 +368,9 @@ export function bidRollup(
       label,
       ...totals,
     })),
+    /** Where the rate came from, so the number can be traced and defended. */
+    taxRate: rate,
+    salesTax,
     totals: {
       // bidPrice carries its own directCost (identical, rounded through the
       // engine) — spread it first so the authoritative one wins.
@@ -178,11 +392,37 @@ export function bidRollup(
         (sum, p) => sum + p.breakdown.hoursAfterModifiers * Number(p.line.qty),
         0
       ),
-      materialCost: priced.reduce(
-        (sum, p) => sum + p.breakdown.materialCost,
-        0
-      ),
-      laborCost: priced.reduce((sum, p) => sum + p.breakdown.laborCost, 0),
+      materialCost,
+      laborCost,
+      /**
+       * Tax, and the price with it. Kept as their own fields beside
+       * `finalPrice` rather than folded into it — a bid total that silently
+       * includes tax is one nobody can check, and every screen that shows a
+       * price needs to be able to show the two apart.
+       *
+       * `totalWithTax` is price + tax and excludes expenses; it is kept
+       * because the tax engine returns it and the tests pin it. `totalDue` is
+       * the number a customer actually owes.
+       */
+      salesTaxAmount: salesTax.amount,
+      totalWithTax: salesTax.totalWithTax,
+      /** Charges as billed, summed. Zero when the bid has none. */
+      expensesTotal,
+      /**
+       * The marked-up materials and labor alone.
+       *
+       * Differs from `finalPrice` only when a charge is marked up: that charge
+       * is inside finalPrice (it ran through overhead and profit with
+       * everything else) but is billed on its own line, so the screen shows
+       * this to avoid counting it twice.
+       */
+      workPrice,
+      /** Every charge with what it is billed at, for itemising. */
+      expenseLines: pricedExpenses.lines,
+      /** finalPrice + expenses, before tax. */
+      subtotal,
+      /** finalPrice + expenses + tax. The bottom line. */
+      totalDue,
     },
   };
 }

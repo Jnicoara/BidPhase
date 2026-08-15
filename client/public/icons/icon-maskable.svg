@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    The `maskable` variant. Two differences from icon.svg, both required.
+
+    FULL BLEED, no rounded corners. Android applies its own mask — a circle on
+    one launcher, a squircle on another, a rounded square on a third — and an
+    icon that draws its own corners gets them cut off inside the mask, leaving
+    a dark ring around a smaller tile.
+
+    THE MARK SITS IN THE SAFE ZONE. The spec guarantees only the central circle
+    of 80% diameter survives every mask, so anything outside a circle of radius
+    205px here may be trimmed. The HB is set at 168px against 240px on the
+    unmasked icon — about 70% — which keeps both letterforms comfortably inside
+    that circle with room for the tighter squircles.
+
+    The result looks over-padded viewed as a flat square. That is correct: it is
+    never seen as a flat square.
+  -->
+  <rect width="512" height="512" fill="#0F1117" />
+  <text
+    x="256" y="260"
+    text-anchor="middle"
+    dominant-baseline="central"
+    font-family="'Space Grotesk', 'Segoe UI', Helvetica, Arial, sans-serif"
+    font-size="168"
+    font-weight="700"
+    letter-spacing="-6"
+    fill="#F5C518"
+  >HB</text>
+</svg>

@@ -37,6 +37,7 @@ import {
   type TradeContent,
 } from "@/content/trades";
 import { electrical } from "@/content/trades/electrical";
+import { TRADE_ALL, isKnownTrade, normalizeTradeId } from "@shared/trades";
 
 // ── A trade that could not possibly be electrical ────────────────────────────
 
@@ -398,6 +399,25 @@ describe("the trade registry", () => {
     expect(resolveTrade("plumbing").id).toBe("electrical");
     expect(resolveTrade(null).id).toBe("electrical");
     expect(resolveTrade("  ELECTRICAL ").id).toBe("electrical");
+  });
+
+  it("only sells trades the data model can actually tag a row with", () => {
+    // The seam this closes: `TradeContent.id` is the SAME string that lands in
+    // `assemblies.trade`, `materials.trade` and `early_access_signups.tradeId`.
+    // That used to be a comment saying so, and a comment is not a connection —
+    // a landing page advertising a trade the registry has never heard of would
+    // collect signups nobody could match to a catalog.
+    for (const trade of TRADES) {
+      expect(isKnownTrade(trade.id)).toBe(true);
+      // Already in stored form: no stray case or whitespace to normalise away.
+      expect(normalizeTradeId(trade.id)).toBe(trade.id);
+    }
+  });
+
+  it("never uses the reserved `all` sentinel as a marketing trade", () => {
+    // `all` means "every trade" on the shared-settings tables. A page selling
+    // it would be a page selling nothing in particular.
+    expect(TRADES.map(t => t.id)).not.toContain(TRADE_ALL);
   });
 });
 

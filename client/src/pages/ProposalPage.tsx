@@ -136,7 +136,15 @@ export default function ProposalPage({
   onBack: () => void;
 }) {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.proposals.document.useQuery({ bidId });
+  /**
+   * Which document is on screen.
+   *
+   * Local state, not stored: a persisted preference is one that can be left on
+   * scope-only and then printed as though it were the priced proposal. Every
+   * visit starts on the real document, and switching is one click.
+   */
+  const [mode, setMode] = useState<"full" | "scope-only">("full");
+  const { data, isLoading } = trpc.proposals.document.useQuery({ bidId, mode });
   const [showDesign, setShowDesign] = useState(false);
   /** Screen zoom only — the printed page is always full size. */
   const [zoom, setZoom] = useState(0.8);
@@ -185,7 +193,15 @@ export default function ProposalPage({
     );
   }
 
-  const { document: doc, bid, internalTotals, lineCount } = data;
+  const {
+    document: doc,
+    bid,
+    client,
+    salesTax,
+    taxNote,
+    internalTotals,
+    lineCount,
+  } = data;
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -204,9 +220,30 @@ export default function ProposalPage({
             Proposal — {bid.name}
           </h1>
           <p className="text-xs text-muted-foreground">
-            {lineCount} line{lineCount === 1 ? "" : "s"} · priced from the
-            snapshot taken when each was added
+            {mode === "scope-only"
+              ? "Scope only — no prices anywhere on this version"
+              : `${lineCount} line${lineCount === 1 ? "" : "s"} · priced from the snapshot taken when each was added`}
           </p>
+        </div>
+
+        {/* Scope only / priced. Beside the zoom because it changes what the
+            page IS rather than how it is dressed, and it has to be visible at
+            a glance — printing the wrong one is the failure to avoid. */}
+        <div className="inline-flex rounded-lg border border-border p-0.5 mr-2 bp-no-print">
+          {(["full", "scope-only"] as const).map(value => (
+            <button
+              key={value}
+              onClick={() => setMode(value)}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-xs transition-colors",
+                mode === value
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {value === "full" ? "Priced" : "Scope only"}
+            </button>
+          ))}
         </div>
 
         <div className="flex items-center gap-1 mr-1">
@@ -287,12 +324,57 @@ export default function ProposalPage({
             </div>
           )}
 
+          {/*
+            Tax that cannot be worked out is a composer problem, not a document
+            problem. The document prints without a tax line because it cannot
+            invent one; this is the only place the person about to SEND it will
+            see that something is missing, so it is loud and it links to the fix.
+          */}
+          {salesTax?.status === "no-rate" && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive space-y-2">
+              <div className="flex items-start gap-2">
+                <TriangleAlert className="w-4 h-4 shrink-0 mt-px" aria-hidden />
+                <div>
+                  <div className="font-medium">
+                    Sales tax is on, but this bid has no rate
+                  </div>
+                  <div className="mt-0.5 text-destructive/85">
+                    {taxNote} This proposal will go out with no tax on it.
+                  </div>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 w-full text-xs border-destructive/40 text-destructive hover:bg-destructive/15"
+                onClick={() => {
+                  window.location.hash = "/settings";
+                }}
+              >
+                Open tax settings
+              </Button>
+            </div>
+          )}
+
           <section className="space-y-3">
             <h2 className="text-sm font-semibold">This proposal</h2>
             <BidField
               label="Client"
               value={bid.clientName ?? ""}
-              placeholder="e.g. Harbour Construction Group"
+              placeholder={
+                // With a record attached, the placeholder shows the name the
+                // document is actually using rather than a generic example —
+                // an empty box beside a filled document otherwise reads as a
+                // field nobody has got to yet.
+                client ? client.name : "e.g. Harbour Construction Group"
+              }
+              hint={
+                client
+                  ? bid.clientName
+                    ? `Overrides ${client.name}, the attached client. Clear this to use the record.`
+                    : `Filled from ${client.name}, the attached client. Type here only to address this one proposal differently.`
+                  : undefined
+              }
               onSave={clientName =>
                 updateBid.mutate({ id: bidId, clientName: clientName || null })
               }

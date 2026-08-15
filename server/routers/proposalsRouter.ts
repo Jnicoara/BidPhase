@@ -26,17 +26,32 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { PROPOSAL_LAYOUTS } from "../../drizzle/schema";
+import { PROPOSAL_MODES } from "../../shared/bidExtras";
 import {
   buildProposal,
   isValidAccent,
   PROPOSAL_SECTION_IDS,
   type BrandingFields,
 } from "../../shared/proposal";
-import { bidRollup, companyDefaultsFor } from "../bidPricing";
+import {
+  bidRollup,
+  companyDefaultsFor,
+  taxRulesFor,
+  toTaxJurisdiction,
+} from "../bidPricing";
+import { resolveBidClient } from "../../shared/bidClient";
+import { explainTaxStatus } from "../../shared/salesTax";
 import { storagePresignPut } from "../storage";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
 
 /** Logos are small. This is a letterhead image, not a plan sheet. */
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
@@ -78,8 +93,8 @@ export const proposalsRouter = router({
    * This user's letterhead. Always returns a row — blank for a new account,
    * which is exactly what the Settings screen and the document want to see.
    */
-  branding: protectedProcedure.query(async ({ ctx }) => {
-    const row = await db.getCompanyBranding(ctx.user.id);
+  branding: procedure.query(async ({ ctx }) => {
+    const row = await db.getCompanyBranding(ctx.scope.dataUserId);
     return {
       companyName: row?.companyName ?? "",
       licenseNumber: row?.licenseNumber ?? "",
@@ -99,7 +114,7 @@ export const proposalsRouter = router({
    * form can save field by field as the user leaves each one — the standing
    * rule for self-saving inputs (CLAUDE.md § Editing fields).
    */
-  setBranding: protectedProcedure
+  setBranding: procedure
     .input(
       z.object({
         companyName: z.string().trim().max(255).optional(),
@@ -116,9 +131,9 @@ export const proposalsRouter = router({
         if (value !== undefined) patch[key] = value;
       }
       if (Object.keys(patch).length > 0) {
-        await db.updateCompanyBranding(ctx.user.id, patch);
+        await db.updateCompanyBranding(ctx.scope.dataUserId, patch);
       }
-      return db.getCompanyBranding(ctx.user.id);
+      return db.getCompanyBranding(ctx.scope.dataUserId);
     }),
 
   /**
@@ -129,7 +144,7 @@ export const proposalsRouter = router({
    * logo on its own, but having one upload pattern in the app is worth more
    * than saving a round trip on a file people upload once.
    */
-  createLogoUploadTicket: protectedProcedure
+  createLogoUploadTicket: procedure
     .input(
       z.object({
         filename: z.string().trim().min(1).max(255),
@@ -146,7 +161,7 @@ export const proposalsRouter = router({
       }
 
       const { key, uploadUrl } = await storagePresignPut(
-        `company-logos/${ctx.user.id}/${input.filename}`,
+        `company-logos/${ctx.scope.dataUserId}/${input.filename}`,
         input.contentType
       );
       return { uploadUrl, storageKey: key };
@@ -159,37 +174,37 @@ export const proposalsRouter = router({
    * check a caller could set their logo to any object in the bucket by naming
    * its key, including another contractor's.
    */
-  confirmLogo: protectedProcedure
+  confirmLogo: procedure
     .input(z.object({ storageKey: z.string().min(1).max(1024) }))
     .mutation(async ({ input, ctx }) => {
-      const expectedPrefix = `company-logos/${ctx.user.id}/`;
+      const expectedPrefix = `company-logos/${ctx.scope.dataUserId}/`;
       if (!input.storageKey.startsWith(expectedPrefix)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "That upload does not belong to this account.",
         });
       }
-      await db.updateCompanyBranding(ctx.user.id, {
+      await db.updateCompanyBranding(ctx.scope.dataUserId, {
         logoKey: input.storageKey,
         // Served through the storage proxy, which 307s to a signed S3 URL.
         logoUrl: `/manus-storage/${input.storageKey}`,
       });
-      return db.getCompanyBranding(ctx.user.id);
+      return db.getCompanyBranding(ctx.scope.dataUserId);
     }),
 
   /** Remove the logo. The document goes back to prompting for one. */
-  clearLogo: protectedProcedure.mutation(async ({ ctx }) => {
-    await db.updateCompanyBranding(ctx.user.id, {
+  clearLogo: procedure.mutation(async ({ ctx }) => {
+    await db.updateCompanyBranding(ctx.scope.dataUserId, {
       logoKey: null,
       logoUrl: null,
     });
-    return db.getCompanyBranding(ctx.user.id);
+    return db.getCompanyBranding(ctx.scope.dataUserId);
   }),
 
   // ── Presentation ───────────────────────────────────────────────────────────
 
-  settings: protectedProcedure.query(async ({ ctx }) => {
-    const row = await db.getProposalSettings(ctx.user.id);
+  settings: procedure.query(async ({ ctx }) => {
+    const row = await db.getProposalSettings(ctx.scope.dataUserId);
     return {
       layout: row?.layout ?? "classic",
       accentColor: row?.accentColor ?? "#F5C518",
@@ -206,7 +221,7 @@ export const proposalsRouter = router({
    * price. Clicking through the three layouts on a finished bid is safe by
    * construction, not by care.
    */
-  setSettings: protectedProcedure
+  setSettings: procedure
     .input(
       z.object({
         layout: z.enum(PROPOSAL_LAYOUTS).optional(),
@@ -241,9 +256,9 @@ export const proposalsRouter = router({
       if (input.validDays !== undefined) patch.validDays = input.validDays;
 
       if (Object.keys(patch).length > 0) {
-        await db.updateProposalSettings(ctx.user.id, patch);
+        await db.updateProposalSettings(ctx.scope.dataUserId, patch);
       }
-      return db.getProposalSettings(ctx.user.id);
+      return db.getProposalSettings(ctx.scope.dataUserId);
     }),
 
   // ── The document ───────────────────────────────────────────────────────────
@@ -256,27 +271,92 @@ export const proposalsRouter = router({
    * the preview, so they can see the bid price they know and confirm the
    * proposal quotes the same figure.
    */
-  document: protectedProcedure
-    .input(z.object({ bidId: z.number().int().positive() }))
+  document: procedure
+    .input(
+      z.object({
+        bidId: z.number().int().positive(),
+        /**
+         * Which document to build.
+         *
+         * Transient — deliberately NOT stored. A stored preference is one that
+         * can be left on scope-only by accident and then printed as if it were
+         * the priced proposal. Every visit starts from the real document.
+         */
+        mode: z.enum(PROPOSAL_MODES).default("full"),
+      })
+    )
     .query(async ({ input, ctx }) => {
-      const bid = await requireBid(input.bidId, ctx.user.id);
-      const [lines, company, brandingRow, settingsRow] = await Promise.all([
+      const bid = await requireBid(input.bidId, ctx.scope.dataUserId);
+      const [
+        lines,
+        company,
+        brandingRow,
+        settingsRow,
+        client,
+        taxRules,
+        jurisdictionRows,
+        expenseRows,
+        scopeNoteRows,
+      ] = await Promise.all([
         db.getBidLineItems(bid.id),
-        companyDefaultsFor(ctx.user.id),
-        db.getCompanyBranding(ctx.user.id),
-        db.getProposalSettings(ctx.user.id),
+        companyDefaultsFor(ctx.scope.dataUserId),
+        db.getCompanyBranding(ctx.scope.dataUserId),
+        db.getProposalSettings(ctx.scope.dataUserId),
+        bid.clientId
+          ? db.getClientById(bid.clientId, ctx.scope.dataUserId)
+          : Promise.resolve(undefined),
+        taxRulesFor(ctx.scope.dataUserId),
+        db.getTaxJurisdictions(ctx.scope.dataUserId),
+        db.getBidExpenses(bid.id),
+        db.getBidScopeNotes(bid.id),
       ]);
 
-      const { priced, units, totals } = bidRollup(bid, lines, company);
+      // Same rollup, same tax context as the bid screen. Two callers computing
+      // their own tax is how a client receives a document whose total does not
+      // match the bid it was approved from.
+      const expenses = expenseRows.map(row => ({
+        name: row.name,
+        amount: Number(row.amount),
+        taxable: row.taxable,
+        markedUp: row.markedUp,
+      }));
+
+      const { priced, units, totals, salesTax } = bidRollup(
+        bid,
+        lines,
+        company,
+        {
+          rules: taxRules,
+          jurisdictions: jurisdictionRows.map(toTaxJurisdiction),
+        },
+        expenses
+      );
+
+      // The bid's own text still wins; a linked client only fills in what was
+      // left blank. With no client this returns bid.clientName/siteAddress
+      // unchanged, which is why attaching the link altered no existing
+      // proposal. See shared/bidClient.ts.
+      const resolved = resolveBidClient(bid, client);
 
       const document = buildProposal({
         bid: {
           name: bid.name,
-          clientName: bid.clientName,
-          siteAddress: bid.siteAddress,
+          clientName: resolved.clientName,
+          siteAddress: resolved.siteAddress,
           proposalNote: bid.proposalNote,
         },
         totals,
+        salesTax,
+        taxExemptReason: bid.taxExemptReason,
+        expenses: totals.expenseLines.map(line => ({
+          name: line.name,
+          amount: line.charged,
+        })),
+        scopeNotes: scopeNoteRows.map(row => ({
+          kind: row.kind,
+          text: row.text,
+        })),
+        mode: input.mode,
         units: units.map(u => ({ label: u.label, directCost: u.directCost })),
         lines: priced.map(({ line }) => ({
           name: line.name,
@@ -298,6 +378,29 @@ export const proposalsRouter = router({
 
       return {
         document,
+        /**
+         * The linked client record, or null.
+         *
+         * The composer needs this to explain itself: with a client attached and
+         * the bid's own Client field empty, the field looks unfilled while the
+         * document is addressed to someone. Without saying where that name came
+         * from, the empty box invites a name to be typed into it — which
+         * silently overrides the record rather than editing it.
+         */
+        client: client
+          ? { id: client.id, name: client.name, address: client.address }
+          : null,
+        /**
+         * Sales tax, and — when there is none — why.
+         *
+         * The composer needs the `no-rate` case especially: the DOCUMENT cannot
+         * invent a tax it does not know, so it silently prints without one.
+         * That is the right behaviour for the document and the wrong thing to
+         * leave unsaid to the person about to send it, so the warning surfaces
+         * here, beside the preview, where it can still be fixed.
+         */
+        salesTax,
+        taxNote: explainTaxStatus(salesTax.status, bid.siteAddress),
         bid: {
           id: bid.id,
           name: bid.name,

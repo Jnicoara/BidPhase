@@ -13,7 +13,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import {
   ASSEMBLY_CATEGORIES,
   LIBRARY_STATUSES,
@@ -22,6 +22,13 @@ import {
 import { calculateLineItem, calculateBidPrice } from "../../shared/pricing";
 import { hourlyCostOf, resolveLaborRate } from "../../shared/laborRateLookup";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `library.view`, a mutation needs `library.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("library.view", "library.edit");
 
 const nameSchema = z.string().trim().min(1).max(255);
 const tradeSchema = z.string().trim().min(1).max(64);
@@ -84,7 +91,7 @@ const toDecimal = (value: number) => value.toFixed(4);
 
 export const assembliesRouter = router({
   /** The working list, or the archive. Never returns `deleted` tombstones. */
-  list: protectedProcedure
+  list: procedure
     .input(
       z
         .object({
@@ -96,14 +103,17 @@ export const assembliesRouter = router({
         .optional()
     )
     .query(async ({ input, ctx }) => {
-      return db.getLibraryAssemblies(ctx.user.id, input?.status ?? "active");
+      return db.getLibraryAssemblies(
+        ctx.scope.dataUserId,
+        input?.status ?? "active"
+      );
     }),
 
   /** One assembly with its full recipe. */
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const detail = await db.getAssemblyDetail(input.id, ctx.user.id);
+      const detail = await db.getAssemblyDetail(input.id, ctx.scope.dataUserId);
       if (!detail)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -112,118 +122,114 @@ export const assembliesRouter = router({
       return detail;
     }),
 
-  create: protectedProcedure
-    .input(createSchema)
-    .mutation(async ({ input, ctx }) => {
-      const existing = await db.getLibraryAssemblies(ctx.user.id);
-      const clash = existing.find(
-        a => a.name.toLowerCase() === input.name.toLowerCase()
-      );
-      if (clash) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: `An assembly named "${clash.name}" already exists. Edit that one instead of adding a duplicate.`,
-        });
-      }
-
-      const id = await db.createAssembly({
-        userId: ctx.user.id,
-        name: input.name,
-        category: input.category,
-        trade: input.trade,
-        projectType: input.projectType,
-        baseLaborHours: toDecimal(input.baseLaborHours),
-        overheadLaborHours: toDecimal(input.overheadLaborHours),
-        laborRateId: input.laborRateId,
+  create: procedure.input(createSchema).mutation(async ({ input, ctx }) => {
+    const existing = await db.getLibraryAssemblies(ctx.scope.dataUserId);
+    const clash = existing.find(
+      a => a.name.toLowerCase() === input.name.toLowerCase()
+    );
+    if (clash) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: `An assembly named "${clash.name}" already exists. Edit that one instead of adding a duplicate.`,
       });
+    }
 
-      await db.setAssemblyMaterials(
-        id,
-        input.materials.map(line => ({
-          materialId: line.materialId,
-          qty: toDecimal(line.qty),
-        }))
-      );
-      await db.setAssemblyModifiers(id, input.modifierIds);
+    const id = await db.createAssembly({
+      userId: ctx.scope.dataUserId,
+      name: input.name,
+      category: input.category,
+      trade: input.trade,
+      projectType: input.projectType,
+      baseLaborHours: toDecimal(input.baseLaborHours),
+      overheadLaborHours: toDecimal(input.overheadLaborHours),
+      laborRateId: input.laborRateId,
+    });
 
-      return db.getAssemblyDetail(id, ctx.user.id);
-    }),
+    await db.setAssemblyMaterials(
+      id,
+      input.materials.map(line => ({
+        materialId: line.materialId,
+        qty: toDecimal(line.qty),
+      }))
+    );
+    await db.setAssemblyModifiers(id, input.modifierIds);
+
+    return db.getAssemblyDetail(id, ctx.scope.dataUserId);
+  }),
 
   /**
    * Save an assembly. Editing a starter forks it first and applies the edit to
    * the copy — so the returned id differs from the input id when that happened,
    * and callers must use what comes back.
    */
-  update: protectedProcedure
-    .input(updateSchema)
-    .mutation(async ({ input, ctx }) => {
-      const { id, materials, modifierIds, ...rest } = input;
+  update: procedure.input(updateSchema).mutation(async ({ input, ctx }) => {
+    const { id, materials, modifierIds, ...rest } = input;
 
-      const target = await db.getAssemblyById(id, ctx.user.id);
-      if (!target)
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Assembly not found.",
-        });
+    const target = await db.getAssemblyById(id, ctx.scope.dataUserId);
+    if (!target)
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Assembly not found.",
+      });
 
-      const isBaseline = target.userId === null;
-      const editableId = isBaseline
-        ? await db.forkAssembly(id, ctx.user.id)
-        : id;
+    const isBaseline = target.userId === null;
+    const editableId = isBaseline
+      ? await db.forkAssembly(id, ctx.scope.dataUserId)
+      : id;
 
-      const patch: Record<string, unknown> = {};
-      if (rest.name !== undefined) patch.name = rest.name;
-      if (rest.category !== undefined) patch.category = rest.category;
-      if (rest.trade !== undefined) patch.trade = rest.trade;
-      if (rest.projectType !== undefined) patch.projectType = rest.projectType;
-      if (rest.laborRateId !== undefined) patch.laborRateId = rest.laborRateId;
-      if (rest.baseLaborHours !== undefined)
-        patch.baseLaborHours = toDecimal(rest.baseLaborHours);
-      // Reaches the fork, never the starter — `editableId` above is already the
-      // user's own copy when the target was a shipped row. Setting overhead
-      // hours on a starter gives you your own assembly, exactly like editing
-      // its hours or its recipe does.
-      if (rest.overheadLaborHours !== undefined)
-        patch.overheadLaborHours = toDecimal(rest.overheadLaborHours);
+    const patch: Record<string, unknown> = {};
+    if (rest.name !== undefined) patch.name = rest.name;
+    if (rest.category !== undefined) patch.category = rest.category;
+    if (rest.trade !== undefined) patch.trade = rest.trade;
+    if (rest.projectType !== undefined) patch.projectType = rest.projectType;
+    if (rest.laborRateId !== undefined) patch.laborRateId = rest.laborRateId;
+    if (rest.baseLaborHours !== undefined)
+      patch.baseLaborHours = toDecimal(rest.baseLaborHours);
+    // Reaches the fork, never the starter — `editableId` above is already the
+    // user's own copy when the target was a shipped row. Setting overhead
+    // hours on a starter gives you your own assembly, exactly like editing
+    // its hours or its recipe does.
+    if (rest.overheadLaborHours !== undefined)
+      patch.overheadLaborHours = toDecimal(rest.overheadLaborHours);
 
-      if (Object.keys(patch).length > 0) {
-        await db.updateAssembly(editableId, ctx.user.id, patch);
-      }
+    if (Object.keys(patch).length > 0) {
+      await db.updateAssembly(editableId, ctx.scope.dataUserId, patch);
+    }
 
-      // Children are replaced only when the caller sent them. Omitting the key
-      // means "leave the recipe alone"; sending [] means "empty the recipe".
-      if (materials !== undefined) {
-        await db.setAssemblyMaterials(
-          editableId,
-          materials.map(line => ({
-            materialId: line.materialId,
-            qty: toDecimal(line.qty),
-          }))
-        );
-      }
-      if (modifierIds !== undefined) {
-        await db.setAssemblyModifiers(editableId, modifierIds);
-      }
+    // Children are replaced only when the caller sent them. Omitting the key
+    // means "leave the recipe alone"; sending [] means "empty the recipe".
+    if (materials !== undefined) {
+      await db.setAssemblyMaterials(
+        editableId,
+        materials.map(line => ({
+          materialId: line.materialId,
+          qty: toDecimal(line.qty),
+        }))
+      );
+    }
+    if (modifierIds !== undefined) {
+      await db.setAssemblyModifiers(editableId, modifierIds);
+    }
 
-      const detail = await db.getAssemblyDetail(editableId, ctx.user.id);
-      return { assembly: detail, forked: isBaseline };
-    }),
+    const detail = await db.getAssemblyDetail(editableId, ctx.scope.dataUserId);
+    return { assembly: detail, forked: isBaseline };
+  }),
 
   /** Take a private copy of a starter assembly without changing anything yet. */
-  fork: protectedProcedure
+  fork: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getAssemblyById(input.id, ctx.user.id);
+      const target = await db.getAssemblyById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Assembly not found.",
         });
       if (target.userId !== null)
-        return db.getAssemblyDetail(input.id, ctx.user.id);
+        return db.getAssemblyDetail(input.id, ctx.scope.dataUserId);
 
-      const forkId = await db.forkAssembly(input.id, ctx.user.id);
-      return db.getAssemblyDetail(forkId, ctx.user.id);
+      const forkId = await db.forkAssembly(input.id, ctx.scope.dataUserId);
+      return db.getAssemblyDetail(forkId, ctx.scope.dataUserId);
     }),
 
   /**
@@ -234,10 +240,10 @@ export const assembliesRouter = router({
    * can be reverted. A duplicate stands alongside the original with no link
    * back — editing it can never reach the thing it was copied from.
    */
-  duplicate: protectedProcedure
+  duplicate: procedure
     .input(z.object({ id: z.number().int().positive(), name: nameSchema }))
     .mutation(async ({ input, ctx }) => {
-      const existing = await db.getLibraryAssemblies(ctx.user.id);
+      const existing = await db.getLibraryAssemblies(ctx.scope.dataUserId);
       const clash = existing.find(
         a => a.name.toLowerCase() === input.name.toLowerCase()
       );
@@ -248,16 +254,20 @@ export const assembliesRouter = router({
         });
       }
 
-      const id = await db.duplicateAssembly(input.id, ctx.user.id, input.name);
-      return db.getAssemblyDetail(id, ctx.user.id);
+      const id = await db.duplicateAssembly(
+        input.id,
+        ctx.scope.dataUserId,
+        input.name
+      );
+      return db.getAssemblyDetail(id, ctx.scope.dataUserId);
     }),
 
   /** Discard edits and restore the starter recipe — header and lines together. */
-  revert: protectedProcedure
+  revert: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getAssemblyById(input.id, ctx.user.id);
-      if (!target || target.userId !== ctx.user.id) {
+      const target = await db.getAssemblyById(input.id, ctx.scope.dataUserId);
+      if (!target || target.userId !== ctx.scope.dataUserId) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: "Assembly not found.",
@@ -271,8 +281,8 @@ export const assembliesRouter = router({
         });
       }
 
-      await db.revertAssemblyToBaseline(input.id, ctx.user.id);
-      return db.getAssemblyDetail(input.id, ctx.user.id);
+      await db.revertAssemblyToBaseline(input.id, ctx.scope.dataUserId);
+      return db.getAssemblyDetail(input.id, ctx.scope.dataUserId);
     }),
 
   /**
@@ -284,10 +294,10 @@ export const assembliesRouter = router({
    * never touched. The returned id may therefore differ from the input id —
    * callers refetch rather than patching the row they sent.
    */
-  archive: protectedProcedure
+  archive: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getAssemblyById(input.id, ctx.user.id);
+      const target = await db.getAssemblyById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -296,15 +306,18 @@ export const assembliesRouter = router({
       if (target.status === "archived")
         return { id: input.id, alreadyArchived: true };
 
-      const archivedId = await db.archiveAssembly(input.id, ctx.user.id);
+      const archivedId = await db.archiveAssembly(
+        input.id,
+        ctx.scope.dataUserId
+      );
       return { id: archivedId, alreadyArchived: false };
     }),
 
   /** Put an archived assembly back on the working list. */
-  restore: protectedProcedure
+  restore: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getAssemblyById(input.id, ctx.user.id);
+      const target = await db.getAssemblyById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -316,7 +329,7 @@ export const assembliesRouter = router({
           message: "That assembly is not archived.",
         });
       }
-      await db.restoreAssembly(input.id, ctx.user.id);
+      await db.restoreAssembly(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
@@ -324,10 +337,10 @@ export const assembliesRouter = router({
    * Permanent removal. Refuses anything not already archived, so there is no
    * path from the working list straight to destruction.
    */
-  deleteForever: protectedProcedure
+  deleteForever: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const target = await db.getAssemblyById(input.id, ctx.user.id);
+      const target = await db.getAssemblyById(input.id, ctx.scope.dataUserId);
       if (!target)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -340,7 +353,7 @@ export const assembliesRouter = router({
             "Only archived assemblies can be deleted permanently. Archive it first.",
         });
       }
-      await db.deleteAssemblyForever(input.id, ctx.user.id);
+      await db.deleteAssemblyForever(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
@@ -352,7 +365,7 @@ export const assembliesRouter = router({
    * authoritative version: it reads what is actually saved, so a snapshot can
    * never capture an unsaved draft.
    */
-  price: protectedProcedure
+  price: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -373,7 +386,7 @@ export const assembliesRouter = router({
       })
     )
     .query(async ({ input, ctx }) => {
-      const detail = await db.getAssemblyDetail(input.id, ctx.user.id);
+      const detail = await db.getAssemblyDetail(input.id, ctx.scope.dataUserId);
       if (!detail)
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -381,8 +394,8 @@ export const assembliesRouter = router({
         });
 
       const [allModifiers, laborRates] = await Promise.all([
-        db.getLibraryModifiers(ctx.user.id, "active"),
-        db.getLibraryLaborRates(ctx.user.id),
+        db.getLibraryModifiers(ctx.scope.dataUserId, "active"),
+        db.getLibraryLaborRates(ctx.scope.dataUserId),
       ]);
 
       const applied = allModifiers

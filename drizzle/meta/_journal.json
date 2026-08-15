@@ -239,6 +239,69 @@
       "when": 1786674985328,
       "tag": "0033_minor_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1786719046544,
+      "tag": "0034_unusual_sentry",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1786719300000,
+      "tag": "0035_backfill_trade_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1786733720062,
+      "tag": "0036_spotty_pandemic",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1786736390902,
+      "tag": "0037_conscious_james_howlett",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1786738369162,
+      "tag": "0038_typical_titanium_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1786746339028,
+      "tag": "0039_oval_richard_fisk",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1786747136053,
+      "tag": "0040_eminent_miek",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1786748786585,
+      "tag": "0041_nervous_firestar",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "5",
+      "when": 1786761304587,
+      "tag": "0042_goofy_justice",
+      "breakpoints": true
     }
   ]
 }

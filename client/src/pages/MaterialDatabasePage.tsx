@@ -42,6 +42,7 @@ import { Input } from "@/components/ui/input";
 import { InlineNumberField } from "@/components/InlineNumberField";
 import { smartSearch } from "@/lib/smartSearch";
 import { sortMaterialsForDisplay } from "@shared/materialOrder";
+import { delimiterLabel, parsePriceList } from "@shared/priceListParse";
 import {
   PRICE_AGE_CLASSES,
   priceAgeDisplay,
@@ -369,6 +370,15 @@ export default function MaterialDatabasePage({
  * full of items this contractor does not stock; inserting each unmatched line
  * would rebuild the two-catalog problem one import at a time, with rows nobody
  * curated. Unmatched names come back as a list instead.
+ *
+ * ── The parsing lives in shared/priceListParse.ts, and used to live here ─────
+ * It was four lines of `line.split(",")` inline in this component, which made
+ * it the one part of the pricing path with no test — and it had a bug that
+ * priced `$1,250.00` at $250 while reporting success. It is now a tested module
+ * with one rule: never produce a number it is not certain of. This file shows
+ * what it read and what it refused, and the refusals are shown BEFORE the
+ * import runs, because a line silently skipped is a material left at a stale
+ * price that the user believes they just updated.
  */
 function ImportPriceListDialog({
   onClose,
@@ -398,23 +408,7 @@ function ImportPriceListDialog({
     },
   });
 
-  /** Name,Price — the two columns every supply-house export has. */
-  const parse = (raw: string) => {
-    const lines = raw.split(/\r?\n/).filter(l => l.trim());
-    const out: Array<{ name: string; costPerUnit: number }> = [];
-    for (const line of lines) {
-      const cells = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
-      if (cells.length < 2) continue;
-      const name = cells[0];
-      const cost = Number(cells[cells.length - 1].replace(/[$,]/g, ""));
-      // Skips the header row for free: "Price" is not a number.
-      if (!name || !Number.isFinite(cost) || cost < 0) continue;
-      out.push({ name, costPerUnit: cost });
-    }
-    return out;
-  };
-
-  const parsed = parse(text);
+  const { rows: parsed, problems, delimiter, header } = parsePriceList(text);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -422,7 +416,8 @@ function ImportPriceListDialog({
         <div>
           <h2 className="text-base font-semibold">Import a price list</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            Paste two columns — material name, then price. Names are matched
+            Paste a price sheet — material name and price. Commas, tabs and
+            semicolons all work, with or without a header row. Names are matched
             against your catalog; anything that matches nothing is reported back
             rather than added.
           </p>
@@ -465,10 +460,65 @@ function ImportPriceListDialog({
             )}
           </div>
         ) : (
-          parsed.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {parsed.length} row{parsed.length === 1 ? "" : "s"} ready.
-            </p>
+          (parsed.length > 0 || problems.length > 0) && (
+            <div className="text-xs space-y-2 max-h-48 overflow-y-auto">
+              <p className="text-muted-foreground">
+                {parsed.length} row{parsed.length === 1 ? "" : "s"} ready
+                {header ? ", header skipped" : ""} — {delimiterLabel(delimiter)}
+                .
+              </p>
+
+              {/* The first few rows as READ, not as typed. This is where a
+                  misread price is caught: a $1,250.00 that came through as
+                  250 is obvious here and invisible after the import. */}
+              {parsed.length > 0 && (
+                <table className="w-full">
+                  <tbody>
+                    {parsed.slice(0, 4).map((row, i) => (
+                      <tr key={`${row.name}-${i}`} className="text-foreground">
+                        <td className="py-0.5 pr-2 truncate">{row.name}</td>
+                        <td className="py-0.5 text-right font-mono tabular-nums">
+                          {row.costPerUnit.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                    {parsed.length > 4 && (
+                      <tr className="text-muted-foreground">
+                        <td className="py-0.5" colSpan={2}>
+                          …and {parsed.length - 4} more
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+
+              {/* Shown before the import, never after: a skipped line means a
+                  material keeps its old price while the user believes it was
+                  just updated. */}
+              {problems.length > 0 && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2 space-y-1">
+                  <p className="text-amber-400 font-medium">
+                    {problems.length} line{problems.length === 1 ? "" : "s"}{" "}
+                    skipped — these will NOT be priced.
+                  </p>
+                  {problems.slice(0, 5).map(problem => (
+                    <p key={problem.line} className="text-muted-foreground">
+                      <span className="font-mono">line {problem.line}</span>:{" "}
+                      {problem.reason}
+                      <span className="block font-mono opacity-60 truncate">
+                        {problem.text}
+                      </span>
+                    </p>
+                  ))}
+                  {problems.length > 5 && (
+                    <p className="text-muted-foreground">
+                      …and {problems.length - 5} more.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )
         )}
 

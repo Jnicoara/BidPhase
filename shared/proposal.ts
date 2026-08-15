@@ -33,6 +33,13 @@
  */
 
 import { PROPOSAL_LAYOUTS, type ProposalLayout } from "../drizzle/schema";
+import { roundMoney } from "./pricing";
+import {
+  groupScopeNotes,
+  sectionAllowedInMode,
+  sumExpenses,
+  type ProposalMode,
+} from "./bidExtras";
 
 export { PROPOSAL_LAYOUTS, type ProposalLayout };
 
@@ -84,6 +91,7 @@ export const PROPOSAL_SECTION_IDS = [
   "preparedFor",
   "summary",
   "scope",
+  "inclusions",
   "laborSummary",
   "unitPricing",
   "investment",
@@ -130,6 +138,12 @@ export const PROPOSAL_SECTIONS: SectionInfo[] = [
     label: "Scope of work",
     description:
       "What is included, by name and quantity. No unit costs — quantities only.",
+  },
+  {
+    id: "inclusions",
+    label: "Includes and excludes",
+    description:
+      "What the price covers, and what it explicitly does not. Hidden when the bid has neither.",
   },
   {
     id: "laborSummary",
@@ -323,8 +337,40 @@ export type BuildProposalInput = {
     overheadAmount: number;
     profitAmount: number;
     finalPrice: number;
+    /**
+     * The marked-up materials and labor alone.
+     *
+     * Falls back to finalPrice, which is what it equals on any bid with no
+     * marked-up charge — so a caller that predates them is unaffected.
+     */
+    workPrice?: number;
     totalLaborHours: number;
   };
+  /**
+   * The sales tax on this bid, as bidRollup computed it.
+   *
+   * Optional so a caller with no tax context produces exactly the document it
+   * produced before tax existed — which is also the document a user who never
+   * switched tax on should get.
+   */
+  salesTax?: {
+    status: string;
+    amount: number;
+    ratePct: number | null;
+    components: { label: string; ratePct: number }[];
+    totalWithTax: number;
+  };
+  /** Printed on an exempt line so the document says why it was not taxed. */
+  taxExemptReason?: string | null;
+  /** Flat charges on the bid — permits, inspections, dispatch. */
+  expenses?: readonly { name: string; amount: number }[];
+  /** What the price covers and what it does not. */
+  scopeNotes?: readonly { kind: "include" | "exclude"; text: string }[];
+  /**
+   * Which document to build. Defaults to the full priced proposal, so every
+   * existing caller is unchanged.
+   */
+  mode?: ProposalMode;
   /** Unit subtotals at DIRECT cost, as bids.get returns them. */
   units: Array<{ label: string; directCost: number }>;
   lines: ProposalScopeLine[];
@@ -372,12 +418,71 @@ export type ProposalDocument = {
     validUntilLabel: string | null;
     note: string | null;
   };
+  /**
+   * Which document this is.
+   *
+   * The renderer needs it for the wording that REFERS to a price — a labor
+   * line saying "included in the price below" is wrong on a page with no
+   * price below it, and a dangling reference like that is exactly the kind of
+   * thing a GC notices before the contractor does.
+   */
+  mode: ProposalMode;
   scope: ProposalScopeGroup[];
+  /**
+   * What the price covers and what it does not.
+   *
+   * Prints on the client document because that is its entire purpose: an
+   * exclusion nobody read is an exclusion that does not settle the argument.
+   */
+  inclusions: { includes: string[]; excludes: string[] };
   laborHours: number;
   unitPricing: ProposalUnitPrice[];
   investment: {
-    /** The only money figure on the document. Everything is inside it. */
+    /**
+     * What the customer owes — expenses and tax included. The bottom line.
+     *
+     * This used to be the ONLY money figure on the document, and on a bid with
+     * no expenses and no tax it still is. Each of those, when present, has to
+     * appear as its own line: a total with charges folded silently inside it is
+     * one the customer cannot check and the contractor cannot defend.
+     */
     total: number;
+    /**
+     * Work + expenses, before tax. Equal to `total` when there is no tax.
+     */
+    subtotal: number;
+    /**
+     * The flat charges, itemised, or null when the bid has none.
+     *
+     * Named individually rather than lumped as "Fees" because the whole reason
+     * a permit is its own line is so the customer can see WHAT they are paying
+     * for; an unlabelled block of charges invites exactly the query it was
+     * meant to prevent.
+     */
+    expenses: {
+      lines: { name: string; amount: number }[];
+      total: number;
+    } | null;
+    /** Work only — materials, labor, overhead and profit, before expenses. */
+    workTotal: number;
+    /**
+     * The tax line, or null when the document carries none.
+     *
+     * Null covers every "no tax" case EXCEPT exemption: an exempt customer gets
+     * an explicit $0 line, because someone entitled to an exemption should see
+     * on the document that they received it. Absence would look like an
+     * oversight to exactly the customer most likely to check.
+     */
+    salesTax: {
+      amount: number;
+      /** Percent, e.g. 9.25. Null on an exempt line. */
+      ratePct: number | null;
+      /** The stack — "State 6.25%", "Cook County 1.75%" — for showing the working. */
+      components: { label: string; ratePct: number }[];
+      exempt: boolean;
+      /** Why, on an exempt line. Printed so the document explains itself. */
+      exemptReason: string | null;
+    } | null;
     /** True when overhead or profit is in the total — drives the wording. */
     includesIndirect: boolean;
   };
@@ -416,10 +521,102 @@ function addressLines(value: string | null | undefined): string[] {
  * layouts cannot disagree about what is on the page — they only disagree about
  * how it looks.
  */
-export function buildProposal(input: BuildProposalInput): ProposalDocument {
-  const { bid, totals, branding, design, now } = input;
+/**
+ * The money block at the foot of the document.
+ *
+ * ── Three numbers or one ─────────────────────────────────────────────────────
+ * Without tax the document keeps exactly the shape it always had: one figure,
+ * everything inside it. With tax it becomes subtotal / tax / total, because a
+ * total with tax folded in is a number the customer cannot verify against
+ * their own understanding of the rate — and sales tax is the one line on a
+ * proposal a customer is most likely to check.
+ *
+ * An exempt bid is the case worth spelling out: it renders a $0 tax line with
+ * the reason, rather than no line at all. Someone entitled to an exemption
+ * should be able to see they got it; silence looks like an oversight to
+ * precisely the customer who will notice.
+ */
+function buildInvestment(
+  totals: BuildProposalInput["totals"],
+  salesTax: BuildProposalInput["salesTax"],
+  taxExemptReason: string | null | undefined,
+  expenseLines: readonly { name: string; amount: number }[] = []
+): ProposalDocument["investment"] {
+  const workTotal = totals.workPrice ?? totals.finalPrice;
+  const expensesTotal = sumExpenses(expenseLines);
+  const expenses =
+    expenseLines.length > 0
+      ? { lines: expenseLines.map(line => ({ ...line })), total: expensesTotal }
+      : null;
+  /** Work + charges. What tax sits under, and the price before tax. */
+  const subtotal = roundMoney(workTotal + expensesTotal);
+  const includesIndirect = totals.overheadAmount > 0 || totals.profitAmount > 0;
+  const base = { subtotal, workTotal, expenses, includesIndirect };
 
+  if (salesTax?.status === "exempt") {
+    return {
+      ...base,
+      total: subtotal,
+      salesTax: {
+        amount: 0,
+        ratePct: null,
+        components: [],
+        exempt: true,
+        exemptReason: taxExemptReason?.trim() || null,
+      },
+    };
+  }
+
+  // Anything other than a real applied tax leaves the document as it was:
+  // disabled, nothing marked taxable, or — importantly — no rate found. The
+  // document cannot invent a tax it does not know, so the warning about that
+  // belongs in the composer, where the person who can fix it is looking.
+  if (salesTax?.status !== "ok" || salesTax.amount <= 0) {
+    return { ...base, total: subtotal, salesTax: null };
+  }
+
+  return {
+    ...base,
+    // Recomputed from the subtotal rather than taken from salesTax.totalWithTax,
+    // which knows nothing about expenses.
+    total: roundMoney(subtotal + salesTax.amount),
+    salesTax: {
+      amount: salesTax.amount,
+      ratePct: salesTax.ratePct,
+      components: salesTax.components,
+      exempt: false,
+      exemptReason: null,
+    },
+  };
+}
+
+export function buildProposal(input: BuildProposalInput): ProposalDocument {
+  const {
+    bid,
+    totals,
+    branding,
+    design,
+    now,
+    salesTax,
+    taxExemptReason,
+    expenses = [],
+    scopeNotes = [],
+    mode = "full",
+  } = input;
+
+  const inclusions = groupScopeNotes(scopeNotes);
+
+  /**
+   * A section appears when the user has not hidden it AND the mode allows it.
+   *
+   * The second clause is the whole of scope-only mode. `isSectionVisible`
+   * refuses to hide `investment` because a proposal without a price is not a
+   * proposal — correct for the normal document and exactly wrong for this one,
+   * so the mode overrides it rather than the required-list being weakened.
+   * See MONEY_SECTION_IDS in shared/bidExtras.ts.
+   */
   const visible = (id: ProposalSectionId) =>
+    sectionAllowedInMode(id, mode) &&
     isSectionVisible(design.hiddenSections, id);
 
   const missing = missingBrandingFields(branding);
@@ -495,7 +692,13 @@ export function buildProposal(input: BuildProposalInput): ProposalDocument {
         // space, which reads as a fault rather than as a choice.
         !(section.id === "unitPricing" && unitPricing.length === 0) &&
         !(section.id === "terms" && blank(design.termsText)) &&
-        !(section.id === "scope" && scope.length === 0)
+        !(section.id === "scope" && scope.length === 0) &&
+        // Nothing to include or exclude is a heading over a blank space.
+        !(
+          section.id === "inclusions" &&
+          inclusions.includes.length === 0 &&
+          inclusions.excludes.length === 0
+        )
     ).map(section => section.id),
     letterhead,
     preparedFor: {
@@ -508,17 +711,21 @@ export function buildProposal(input: BuildProposalInput): ProposalDocument {
     summary: {
       projectName: bid.name,
       dateLabel: formatDate(now),
+      // "This price is good through …" is a claim about a price. On a
+      // scope-only document there is none, so the line is suppressed rather
+      // than left promising something the page does not contain.
       validUntilLabel:
-        validDays > 0 ? formatDate(addDays(now, validDays)) : null,
+        mode !== "scope-only" && validDays > 0
+          ? formatDate(addDays(now, validDays))
+          : null,
       note: blank(bid.proposalNote) ? null : bid.proposalNote!.trim(),
     },
     scope,
     laborHours: Math.round(totals.totalLaborHours * 100) / 100,
     unitPricing,
-    investment: {
-      total: totals.finalPrice,
-      includesIndirect: totals.overheadAmount > 0 || totals.profitAmount > 0,
-    },
+    mode,
+    inclusions,
+    investment: buildInvestment(totals, salesTax, taxExemptReason, expenses),
     terms: blank(design.termsText) ? null : design.termsText!.trim(),
   };
 }

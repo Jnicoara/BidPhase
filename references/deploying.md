@@ -147,3 +147,71 @@ reads `OPENAI_API_KEY is not configured` (`server/_core/llm.ts`). That string is
 mislabelled — the variable it actually wants is `BUILT_IN_FORGE_API_KEY`, and
 the app has no OpenAI dependency of any kind. It has sent one investigation down
 the wrong path already.
+
+## 9. Storage needs a CORS rule, and without it no plan uploads
+
+**This is a live issue.** Plan PDF upload fails for every file at every size,
+having transferred zero bytes, because the storage bucket does not publish a
+CORS rule for the site's origin.
+
+### Why a bucket setting breaks the app
+
+Uploads go browser → S3 directly through a presigned PUT, so the app can accept
+files far larger than a request body limit allows (`server/routers/bidPdfsRouter.ts`
+explains that design). A cross-origin `PUT` is **always** preflighted — there is
+no way to make one a "simple" request, because PUT is not a CORS-safelisted
+method. So the browser sends `OPTIONS` first, and if the bucket has no matching
+CORS configuration the upload is refused before a single byte of the file is
+sent.
+
+The tell is exact and worth memorising: **the progress bar never moves.** A
+transfer that climbs and then dies is a different problem. `shared/uploadDiagnosis.ts`
+now reports the two differently, so the message on screen says which.
+
+### The configuration required
+
+The bucket behind `BUILT_IN_FORGE_API_URL` needs a rule permitting the deployed
+origin to PUT, and exposing nothing it does not need to:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://<the deployed site origin>"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+`AllowedHeaders` must include `Content-Type`: the upload sends
+`Content-Type: application/pdf`, and that header is precisely what forces the
+preflight in the first place. Logo upload (`BrandingSection`) uses the identical
+mechanism and is fixed by the same rule.
+
+This is a Manus-side setting. It is not in this repo, there is no file here that
+can change it, and it cannot be tested from a local checkout — the storage
+credentials exist only on deployed infrastructure.
+
+### Until it is configured
+
+`server/planUpload.ts` is a fallback: the browser POSTs the file to
+`/api/plan-upload` on our own origin, which cannot be refused by a bucket
+policy, and the server forwards the bytes on. The client tries the direct PUT
+first and only falls back when it is blocked, so **the moment the CORS rule is
+added the app returns to the direct path on its own** with nothing to switch
+back.
+
+The fallback is capped at 25MB (`PROXY_UPLOAD_MAX_BYTES`) because it goes
+through the platform's request body limit — the very ceiling the direct upload
+was built to avoid. So while CORS is unconfigured, plan sets over 25MB cannot be
+attached at all, and the app says so in those words rather than claiming the
+file is too large.
+
+### Verifying the fix
+
+Attach a plan of any size after changing the bucket policy. If it uploads with
+the progress bar moving from 0%, the direct path is working. A quicker probe
+needing no large file: upload a company logo in Settings § Branding, which uses
+the same presign-and-PUT mechanism.

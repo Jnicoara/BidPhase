@@ -6,7 +6,9 @@ import {
   inArray,
   isNull,
   isNotNull,
+  gte,
   lte,
+  lt,
   or,
   like,
   sql,
@@ -54,6 +56,24 @@ import {
   InsertBid,
   Bid,
   bids,
+  InsertClient,
+  Client,
+  clients,
+  InsertTaxJurisdiction,
+  TaxJurisdictionRow,
+  taxJurisdictions,
+  InsertExpenseItem,
+  ExpenseItem,
+  expenseItems,
+  InsertBidExpense,
+  BidExpense,
+  bidExpenses,
+  InsertScopeNote,
+  ScopeNote,
+  scopeNotes,
+  InsertBidScopeNote,
+  BidScopeNote,
+  bidScopeNotes,
   InsertBidLineItem,
   InsertBidUnitLink,
   BidUnitLink,
@@ -90,6 +110,25 @@ import {
   takeoffRunCircuits,
   BidPdfSheet,
   bidPdfSheets,
+  BID_STATUSES,
+  bidCloseouts,
+  bidCloseoutLines,
+  assemblyHourSuggestions,
+  CLOSEOUT_MODE_VALUES,
+  SUGGESTION_STATUS_VALUES,
+  type BidCloseout,
+  type BidCloseoutLine,
+  type AssemblyHourSuggestion,
+  companies,
+  companyMembers,
+  companyInvites,
+  COMPANY_ROLE_VALUES,
+  MEMBER_STATUS_VALUES,
+  ACCESS_TIER_VALUES,
+  type Company,
+  type CompanyMember,
+  type CompanyInvite,
+  type InsertCompanyInvite,
   InsertKit,
   Kit,
   kits,
@@ -117,7 +156,14 @@ import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
 import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
 import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
 import { BASELINE_KITS } from "./seed/baselineKits";
+import { TRADE_ALL, normalizeTradeId, resolveForTrade } from "../shared/trades";
 import { hourlyCostFor } from "../shared/laborRateLookup";
+import {
+  containsPattern,
+  dateRangeBounds,
+  toSqlTimestamp,
+  usableTerm,
+} from "../shared/bidSearch";
 import { addAssemblyOverheadHours } from "../shared/pricing";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -2643,6 +2689,32 @@ export async function seedBaselineAssemblies(): Promise<void> {
 
 // ─── Pricing Defaults (company level) ─────────────────────────────────────────
 
+/**
+ * Is this the unique-key collision two concurrent create-on-read calls produce?
+ *
+ * The settings tables below all create their row on first READ, which is a
+ * convenience that hides a race: two requests for the same user arriving
+ * together both find nothing and both insert, and the loser gets ER_DUP_ENTRY.
+ *
+ * It went unnoticed for as long as nothing fetched the same row twice at once.
+ * Adding sales tax did exactly that — `companyDefaultsFor` and `taxRulesFor`
+ * sit in the same Promise.all — and it surfaced as a bid failing to price at
+ * all. Losing the race is not an error: the row the caller wanted now exists,
+ * so the right response is to read it back.
+ */
+function isDuplicateKey(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    ("code" in error
+      ? (error as { code?: string }).code === "ER_DUP_ENTRY"
+      : false ||
+        // drizzle wraps the driver error; the cause carries the code.
+        ("cause" in error &&
+          isDuplicateKey((error as { cause: unknown }).cause)))
+  );
+}
+
 /** The shipped defaults for a user who has never opened the settings. */
 const FALLBACK_PRICING_DEFAULTS = {
   overheadEnabled: false,
@@ -2652,45 +2724,102 @@ const FALLBACK_PRICING_DEFAULTS = {
   profitValue: "0",
 };
 
-/** A user's company-level pricing defaults, creating the row on first read. */
+/**
+ * A user's company-level pricing defaults, creating the row on first read.
+ *
+ * ── The `trade` parameter, and why it defaults ───────────────────────────────
+ * These are now one row per user PER TRADE, with `all` meaning the company-wide
+ * record (see the schema comment). Reads resolve through resolveForTrade: the
+ * trade's own row if it has one, otherwise the `all` row. Every caller today
+ * passes nothing and gets the `all` row, which is the single row each user
+ * already had — which is why adding the column changed nothing on screen.
+ *
+ * A `limit(1)` on userId alone would have been the bug here: correct while
+ * exactly one row exists, and quietly returning an arbitrary trade's settings
+ * the moment a second one does.
+ */
 export async function getPricingDefaults(
-  userId: number
+  userId: number,
+  trade: string = TRADE_ALL
 ): Promise<PricingDefaults | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const [existing] = await db
+  const rows = await db
     .select()
     .from(pricingDefaults)
-    .where(eq(pricingDefaults.userId, userId))
-    .limit(1);
+    .where(eq(pricingDefaults.userId, userId));
+  const existing = resolveForTrade(rows, trade);
   if (existing) return existing;
 
-  await db
-    .insert(pricingDefaults)
-    .values({ userId, ...FALLBACK_PRICING_DEFAULTS });
-  const [created] = await db
+  // Nothing at all for this user yet. The first row is created for whatever
+  // trade was asked for, which for every caller today is `all`.
+  const wanted = normalizeTradeId(trade);
+  try {
+    await db
+      .insert(pricingDefaults)
+      .values({ userId, trade: wanted, ...FALLBACK_PRICING_DEFAULTS });
+  } catch (error) {
+    // Another request created it between our read and our write. See
+    // isDuplicateKey — the row exists now, which is all the caller wanted.
+    if (!isDuplicateKey(error)) throw error;
+  }
+  const created = await db
     .select()
     .from(pricingDefaults)
-    .where(eq(pricingDefaults.userId, userId))
-    .limit(1);
-  return created;
+    .where(eq(pricingDefaults.userId, userId));
+  return resolveForTrade(created, trade);
 }
 
+/**
+ * Write the row for exactly this trade, creating it if it does not exist.
+ *
+ * Note the asymmetry with the read above, which is deliberate: a READ of
+ * plumbing settings may fall back to the company-wide row, but a WRITE must
+ * never land on it — editing plumbing's overhead would otherwise silently move
+ * electrical's too. So this targets `trade` exactly.
+ *
+ * A per-trade row created this way starts from the shipped fallback rather than
+ * inheriting the `all` row's current values. That choice is only reachable once
+ * a second trade ships and there is a screen to make it from; it is called out
+ * here so whoever builds that screen makes it deliberately rather than
+ * discovering it.
+ */
 export async function updatePricingDefaults(
   userId: number,
-  data: Partial<InsertPricingDefaults>
+  data: Partial<InsertPricingDefaults>,
+  trade: string = TRADE_ALL
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await getPricingDefaults(userId); // ensure the row exists
+  const wanted = normalizeTradeId(trade);
+
+  const rows = await db
+    .select()
+    .from(pricingDefaults)
+    .where(eq(pricingDefaults.userId, userId));
+  const exact = rows.find(row => normalizeTradeId(row.trade) === wanted);
+  if (!exact) {
+    try {
+      await db
+        .insert(pricingDefaults)
+        .values({ userId, trade: wanted, ...FALLBACK_PRICING_DEFAULTS });
+    } catch (error) {
+      // Lost the create race; the UPDATE below writes the winner's row.
+      if (!isDuplicateKey(error)) throw error;
+    }
+  }
+
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
+  delete safe.trade;
   await db
     .update(pricingDefaults)
     .set({ ...safe, updatedAt: new Date() })
-    .where(eq(pricingDefaults.userId, userId));
+    .where(
+      and(eq(pricingDefaults.userId, userId), eq(pricingDefaults.trade, wanted))
+    );
 }
 
 // ─── Company branding & proposal presentation ─────────────────────────────────
@@ -2701,82 +2830,685 @@ export async function updatePricingDefaults(
 // still empty". The row is created BLANK on purpose — see the schema comment on
 // `company_branding`. Nothing here ever invents a company name.
 
-/** A user's branding, creating the (blank) row on first read. */
+/**
+ * A user's branding, creating the (blank) row on first read.
+ *
+ * Trade-resolved exactly like getPricingDefaults above — see that function for
+ * why the read falls back to the `all` row and the write does not. The licence
+ * number is the field that makes this per trade: two trades mean two numbers
+ * from two boards, and printing the wrong one is a compliance problem.
+ */
 export async function getCompanyBranding(
-  userId: number
+  userId: number,
+  trade: string = TRADE_ALL
 ): Promise<CompanyBranding | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const [existing] = await db
+  const rows = await db
     .select()
     .from(companyBranding)
-    .where(eq(companyBranding.userId, userId))
-    .limit(1);
+    .where(eq(companyBranding.userId, userId));
+  const existing = resolveForTrade(rows, trade);
   if (existing) return existing;
 
-  await db.insert(companyBranding).values({ userId });
-  const [created] = await db
+  const wanted = normalizeTradeId(trade);
+  try {
+    await db.insert(companyBranding).values({ userId, trade: wanted });
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+  }
+  const created = await db
     .select()
     .from(companyBranding)
-    .where(eq(companyBranding.userId, userId))
-    .limit(1);
-  return created;
+    .where(eq(companyBranding.userId, userId));
+  return resolveForTrade(created, trade);
 }
 
 export async function updateCompanyBranding(
   userId: number,
-  data: Partial<InsertCompanyBranding>
+  data: Partial<InsertCompanyBranding>,
+  trade: string = TRADE_ALL
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await getCompanyBranding(userId); // ensure the row exists
+  const wanted = normalizeTradeId(trade);
+
+  const rows = await db
+    .select()
+    .from(companyBranding)
+    .where(eq(companyBranding.userId, userId));
+  if (!rows.some(row => normalizeTradeId(row.trade) === wanted)) {
+    try {
+      await db.insert(companyBranding).values({ userId, trade: wanted });
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+    }
+  }
+
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
+  delete safe.trade;
   await db
     .update(companyBranding)
     .set({ ...safe, updatedAt: new Date() })
-    .where(eq(companyBranding.userId, userId));
+    .where(
+      and(eq(companyBranding.userId, userId), eq(companyBranding.trade, wanted))
+    );
 }
 
-/** A user's proposal presentation settings, creating the row on first read. */
+/**
+ * A user's proposal presentation settings, creating the row on first read.
+ *
+ * Trade-resolved like the two above. `termsText` is what makes it worth
+ * splitting: an electrical quote's exclusions are not a plumbing quote's.
+ */
 export async function getProposalSettings(
-  userId: number
+  userId: number,
+  trade: string = TRADE_ALL
 ): Promise<ProposalSettings | undefined> {
   const db = await getDb();
   if (!db) return undefined;
 
-  const [existing] = await db
+  const rows = await db
     .select()
     .from(proposalSettings)
-    .where(eq(proposalSettings.userId, userId))
-    .limit(1);
+    .where(eq(proposalSettings.userId, userId));
+  const existing = resolveForTrade(rows, trade);
   if (existing) return existing;
 
-  await db.insert(proposalSettings).values({ userId });
-  const [created] = await db
+  const wanted = normalizeTradeId(trade);
+  try {
+    await db.insert(proposalSettings).values({ userId, trade: wanted });
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+  }
+  const created = await db
     .select()
     .from(proposalSettings)
-    .where(eq(proposalSettings.userId, userId))
-    .limit(1);
-  return created;
+    .where(eq(proposalSettings.userId, userId));
+  return resolveForTrade(created, trade);
 }
 
 export async function updateProposalSettings(
   userId: number,
-  data: Partial<InsertProposalSettings>
+  data: Partial<InsertProposalSettings>,
+  trade: string = TRADE_ALL
 ) {
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
-  await getProposalSettings(userId); // ensure the row exists
+  const wanted = normalizeTradeId(trade);
+
+  const rows = await db
+    .select()
+    .from(proposalSettings)
+    .where(eq(proposalSettings.userId, userId));
+  if (!rows.some(row => normalizeTradeId(row.trade) === wanted)) {
+    try {
+      await db.insert(proposalSettings).values({ userId, trade: wanted });
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+    }
+  }
+
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  delete safe.trade;
+  await db
+    .update(proposalSettings)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(
+      and(
+        eq(proposalSettings.userId, userId),
+        eq(proposalSettings.trade, wanted)
+      )
+    );
+}
+
+// ─── Clients ──────────────────────────────────────────────────────────────────
+//
+// Scoped by userId like everything else. Every read filters on it, and the
+// write paths take it as a parameter rather than trusting an id the caller
+// happened to have — a client id is a small integer and guessable, so "you knew
+// the number" must never be the only thing standing in the way.
+
+/** The user's live clients, A–Z. Archived ones are excluded. */
+export async function getClientsByUser(userId: number): Promise<Client[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.userId, userId), isNull(clients.archivedAt)))
+    .orderBy(asc(clients.name));
+}
+
+/** Archived clients, most recently archived first. */
+export async function getArchivedClients(userId: number): Promise<Client[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.userId, userId), isNotNull(clients.archivedAt)))
+    .orderBy(desc(clients.archivedAt));
+}
+
+/**
+ * One client, live or archived.
+ *
+ * Archived rows resolve on purpose: a bid linked to a client the user has since
+ * archived must still print that client's name. Hiding it from this lookup
+ * would turn tidying the contact list into silently blanking old proposals.
+ */
+export async function getClientById(
+  id: number,
+  userId: number
+): Promise<Client | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(clients)
+    .where(and(eq(clients.id, id), eq(clients.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+export async function createClient(data: InsertClient): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(clients).values(data);
+  return result.insertId;
+}
+
+export async function updateClient(
+  id: number,
+  userId: number,
+  data: Partial<InsertClient>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
   const safe: Record<string, unknown> = { ...data };
   delete safe.id;
   delete safe.userId;
   await db
-    .update(proposalSettings)
+    .update(clients)
     .set({ ...safe, updatedAt: new Date() })
-    .where(eq(proposalSettings.userId, userId));
+    .where(and(eq(clients.id, id), eq(clients.userId, userId)));
+}
+
+/**
+ * Take a client off the working list, keeping the row.
+ *
+ * There is no hard delete here and no countdown either. A client is a name and
+ * a phone number that bid history points at, so keeping one costs nothing —
+ * and destroying it would null the `clientId` on every bid that referenced it
+ * (the FK is `set null`), quietly unpicking the link the record existed for.
+ * Guarded on `archivedAt IS NULL` so a double-click cannot move the date.
+ */
+export async function archiveClient(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(clients)
+    .set({ archivedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(clients.id, id),
+        eq(clients.userId, userId),
+        isNull(clients.archivedAt)
+      )
+    );
+}
+
+export async function restoreClient(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(clients)
+    .set({ archivedAt: null, updatedAt: now })
+    .where(
+      and(
+        eq(clients.id, id),
+        eq(clients.userId, userId),
+        isNotNull(clients.archivedAt)
+      )
+    );
+}
+
+/**
+ * Every bid belonging to a client — what historical bid search will be built
+ * on, and what the client detail view lists today.
+ *
+ * Includes archived bids: "what have I quoted this customer" is a question
+ * about history, and history does not stop at the dashboard's edge.
+ */
+export async function getBidsForClient(
+  clientId: number,
+  userId: number
+): Promise<Bid[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bids)
+    .where(and(eq(bids.clientId, clientId), eq(bids.userId, userId)))
+    .orderBy(desc(bids.updatedAt));
+}
+
+/** How many bids point at each of a user's clients, for the list view. */
+export async function countBidsPerClient(
+  userId: number
+): Promise<Map<number, number>> {
+  const db = await getDb();
+  if (!db) return new Map();
+  const rows = await db
+    .select({ clientId: bids.clientId, n: sql<number>`count(*)` })
+    .from(bids)
+    .where(and(eq(bids.userId, userId), isNotNull(bids.clientId)))
+    .groupBy(bids.clientId);
+  const counts = new Map<number, number>();
+  for (const row of rows) {
+    if (row.clientId != null) counts.set(row.clientId, Number(row.n));
+  }
+  return counts;
+}
+
+// ─── Additional expenses ──────────────────────────────────────────────────────
+//
+// Two levels, as everywhere: a reusable library scoped by userId, and the
+// snapshotted copies that sit on a bid. A bid expense with no library id is a
+// one-off, and nothing about it is second class.
+
+export async function getExpenseItems(userId: number): Promise<ExpenseItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(expenseItems)
+    .where(
+      and(eq(expenseItems.userId, userId), isNull(expenseItems.archivedAt))
+    )
+    .orderBy(asc(expenseItems.name));
+}
+
+export async function getArchivedExpenseItems(
+  userId: number
+): Promise<ExpenseItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(expenseItems)
+    .where(
+      and(eq(expenseItems.userId, userId), isNotNull(expenseItems.archivedAt))
+    )
+    .orderBy(desc(expenseItems.archivedAt));
+}
+
+export async function getExpenseItemById(
+  id: number,
+  userId: number
+): Promise<ExpenseItem | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(expenseItems)
+    .where(and(eq(expenseItems.id, id), eq(expenseItems.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+export async function createExpenseItem(
+  data: InsertExpenseItem
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(expenseItems).values(data);
+  return result.insertId;
+}
+
+export async function updateExpenseItem(
+  id: number,
+  userId: number,
+  data: Partial<InsertExpenseItem>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(expenseItems)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(expenseItems.id, id), eq(expenseItems.userId, userId)));
+}
+
+export async function setExpenseItemArchived(
+  id: number,
+  userId: number,
+  archivedAt: Date | null
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(expenseItems)
+    .set({ archivedAt, updatedAt: new Date() })
+    .where(and(eq(expenseItems.id, id), eq(expenseItems.userId, userId)));
+}
+
+/** The expenses on one bid, in the order they were added. */
+export async function getBidExpenses(bidId: number): Promise<BidExpense[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bidExpenses)
+    .where(eq(bidExpenses.bidId, bidId))
+    .orderBy(asc(bidExpenses.sortOrder), asc(bidExpenses.id));
+}
+
+export async function createBidExpense(
+  data: InsertBidExpense
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(bidExpenses).values(data);
+  return result.insertId;
+}
+
+export async function updateBidExpense(
+  id: number,
+  bidId: number,
+  data: Partial<InsertBidExpense>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.bidId;
+  await db
+    .update(bidExpenses)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(bidExpenses.id, id), eq(bidExpenses.bidId, bidId)));
+}
+
+export async function deleteBidExpense(id: number, bidId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(bidExpenses)
+    .where(and(eq(bidExpenses.id, id), eq(bidExpenses.bidId, bidId)));
+}
+
+export async function nextBidExpenseSortOrder(bidId: number): Promise<number> {
+  const rows = await getBidExpenses(bidId);
+  return rows.length === 0 ? 0 : Math.max(...rows.map(r => r.sortOrder)) + 1;
+}
+
+// ─── Includes / excludes ──────────────────────────────────────────────────────
+
+export async function getScopeNotes(userId: number): Promise<ScopeNote[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(scopeNotes)
+    .where(and(eq(scopeNotes.userId, userId), isNull(scopeNotes.archivedAt)))
+    .orderBy(asc(scopeNotes.kind), asc(scopeNotes.text));
+}
+
+export async function getArchivedScopeNotes(
+  userId: number
+): Promise<ScopeNote[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(scopeNotes)
+    .where(and(eq(scopeNotes.userId, userId), isNotNull(scopeNotes.archivedAt)))
+    .orderBy(desc(scopeNotes.archivedAt));
+}
+
+export async function getScopeNoteById(
+  id: number,
+  userId: number
+): Promise<ScopeNote | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(scopeNotes)
+    .where(and(eq(scopeNotes.id, id), eq(scopeNotes.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+export async function createScopeNote(data: InsertScopeNote): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(scopeNotes).values(data);
+  return result.insertId;
+}
+
+export async function updateScopeNote(
+  id: number,
+  userId: number,
+  data: Partial<InsertScopeNote>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(scopeNotes)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(scopeNotes.id, id), eq(scopeNotes.userId, userId)));
+}
+
+export async function setScopeNoteArchived(
+  id: number,
+  userId: number,
+  archivedAt: Date | null
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(scopeNotes)
+    .set({ archivedAt, updatedAt: new Date() })
+    .where(and(eq(scopeNotes.id, id), eq(scopeNotes.userId, userId)));
+}
+
+export async function getBidScopeNotes(bidId: number): Promise<BidScopeNote[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bidScopeNotes)
+    .where(eq(bidScopeNotes.bidId, bidId))
+    .orderBy(asc(bidScopeNotes.sortOrder), asc(bidScopeNotes.id));
+}
+
+export async function createBidScopeNote(
+  data: InsertBidScopeNote
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(bidScopeNotes).values(data);
+  return result.insertId;
+}
+
+export async function updateBidScopeNote(
+  id: number,
+  bidId: number,
+  data: Partial<InsertBidScopeNote>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.bidId;
+  await db
+    .update(bidScopeNotes)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(and(eq(bidScopeNotes.id, id), eq(bidScopeNotes.bidId, bidId)));
+}
+
+export async function deleteBidScopeNote(id: number, bidId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(bidScopeNotes)
+    .where(and(eq(bidScopeNotes.id, id), eq(bidScopeNotes.bidId, bidId)));
+}
+
+export async function nextBidScopeNoteSortOrder(
+  bidId: number
+): Promise<number> {
+  const rows = await getBidScopeNotes(bidId);
+  return rows.length === 0 ? 0 : Math.max(...rows.map(r => r.sortOrder)) + 1;
+}
+
+// ─── Tax jurisdictions ────────────────────────────────────────────────────────
+//
+// Scoped by userId like everything else. Nothing is seeded — see the schema
+// comment and shared/salesTax.ts for why shipping a rate table would be worse
+// than shipping none.
+
+/** The user's live tax areas, A–Z. */
+export async function getTaxJurisdictions(
+  userId: number
+): Promise<TaxJurisdictionRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(taxJurisdictions)
+    .where(
+      and(
+        eq(taxJurisdictions.userId, userId),
+        isNull(taxJurisdictions.archivedAt)
+      )
+    )
+    .orderBy(asc(taxJurisdictions.name));
+}
+
+export async function getArchivedTaxJurisdictions(
+  userId: number
+): Promise<TaxJurisdictionRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(taxJurisdictions)
+    .where(
+      and(
+        eq(taxJurisdictions.userId, userId),
+        isNotNull(taxJurisdictions.archivedAt)
+      )
+    )
+    .orderBy(desc(taxJurisdictions.archivedAt));
+}
+
+/**
+ * One tax area, archived or not.
+ *
+ * Archived rows resolve on purpose, the same as clients: a bid pinned to an
+ * area the user has since archived must still be able to say what rate it is
+ * using rather than silently dropping to no tax.
+ */
+export async function getTaxJurisdictionById(
+  id: number,
+  userId: number
+): Promise<TaxJurisdictionRow | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(taxJurisdictions)
+    .where(
+      and(eq(taxJurisdictions.id, id), eq(taxJurisdictions.userId, userId))
+    )
+    .limit(1);
+  return row;
+}
+
+export async function createTaxJurisdiction(
+  data: InsertTaxJurisdiction
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(taxJurisdictions).values(data);
+  return result.insertId;
+}
+
+export async function updateTaxJurisdiction(
+  id: number,
+  userId: number,
+  data: Partial<InsertTaxJurisdiction>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const safe: Record<string, unknown> = { ...data };
+  delete safe.id;
+  delete safe.userId;
+  await db
+    .update(taxJurisdictions)
+    .set({ ...safe, updatedAt: new Date() })
+    .where(
+      and(eq(taxJurisdictions.id, id), eq(taxJurisdictions.userId, userId))
+    );
+}
+
+export async function archiveTaxJurisdiction(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(taxJurisdictions)
+    .set({ archivedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(taxJurisdictions.id, id),
+        eq(taxJurisdictions.userId, userId),
+        isNull(taxJurisdictions.archivedAt)
+      )
+    );
+}
+
+export async function restoreTaxJurisdiction(
+  id: number,
+  userId: number,
+  now: Date = new Date()
+) {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(taxJurisdictions)
+    .set({ archivedAt: null, updatedAt: now })
+    .where(
+      and(
+        eq(taxJurisdictions.id, id),
+        eq(taxJurisdictions.userId, userId),
+        isNotNull(taxJurisdictions.archivedAt)
+      )
+    );
 }
 
 // ─── Bids ─────────────────────────────────────────────────────────────────────
@@ -4748,4 +5480,921 @@ export async function createStampsReturningIds(
   const [result] = await db.insert(takeoffStamps).values(rows);
   const first = result.insertId;
   return rows.map((_, index) => first + index);
+}
+
+// ─── Materials list (supplier quote request) ──────────────────────────────────
+
+/**
+ * Material lines for several assemblies at once, WITHOUT their costs.
+ *
+ * A near-twin of `getAssemblyMaterialLines`, and deliberately not a parameter
+ * on it. That one joins `costPerUnit` because pricing needs it; this one does
+ * not select the column at all, so the rows it returns have no cost to leak
+ * into a document that is sent outside the company. The duplication is the
+ * safeguard: a `withCost: false` flag would put the cost one wrong argument
+ * away from a supplier, and the flag would be read as a display preference by
+ * the next person to touch it. Two functions cannot be confused that way.
+ *
+ * Batched over many assemblies because a takeoff of forty stamped types would
+ * otherwise be forty round trips.
+ */
+export async function getAssemblyMaterialQuantities(
+  assemblyIds: number[]
+): Promise<
+  Array<{
+    assemblyId: number;
+    materialId: number;
+    qty: string;
+    name: string;
+    unitOfSale: "each" | "foot" | "box";
+    category: string | null;
+  }>
+> {
+  if (assemblyIds.length === 0) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      assemblyId: assemblyMaterials.assemblyId,
+      materialId: assemblyMaterials.materialId,
+      qty: assemblyMaterials.qty,
+      name: materials.name,
+      unitOfSale: materials.unitOfSale,
+      category: materials.category,
+    })
+    .from(assemblyMaterials)
+    .innerJoin(materials, eq(assemblyMaterials.materialId, materials.id))
+    .where(inArray(assemblyMaterials.assemblyId, assemblyIds))
+    .orderBy(asc(assemblyMaterials.sortOrder), asc(assemblyMaterials.id));
+}
+
+/**
+ * Scale facts for every sheet of a bid, keyed by sheet id.
+ *
+ * Runs record which sheet they were traced on, and a run cannot be turned into
+ * a footage without that sheet's scale. Fetched for the whole bid in one query
+ * because a run list spans sheets and documents.
+ */
+export async function getSheetScalesForBid(
+  bidId: number,
+  userId: number
+): Promise<
+  Map<
+    number,
+    { scaleRatio: number | null; scaleSource: string; notToScale: boolean }
+  >
+> {
+  const db = await getDb();
+  if (!db) return new Map();
+  const rows = await db
+    .select({
+      id: bidPdfSheets.id,
+      scaleRatio: bidPdfSheets.scaleRatio,
+      scaleSource: bidPdfSheets.scaleSource,
+      notToScale: bidPdfSheets.notToScale,
+    })
+    .from(bidPdfSheets)
+    .innerJoin(bidPdfs, eq(bidPdfSheets.bidPdfId, bidPdfs.id))
+    .where(and(eq(bidPdfs.bidId, bidId), eq(bidPdfSheets.userId, userId)));
+
+  return new Map(
+    rows.map(row => [
+      row.id,
+      {
+        scaleRatio: row.scaleRatio === null ? null : Number(row.scaleRatio),
+        scaleSource: row.scaleSource,
+        notToScale: row.notToScale,
+      },
+    ])
+  );
+}
+
+// ─── Companies, members, invitations ──────────────────────────────────────────
+/**
+ * Access-control storage. Every function here answers a question about WHO,
+ * never about whose data — scoping lives in `_core/companyScope.ts`.
+ *
+ * All of these take a `companyId` that the caller has already proved the actor
+ * belongs to. None of them derive a company from anything the client sent, and
+ * none of them are safe to call with an id straight off a request.
+ */
+
+/** Members of one company, newest role changes last. Bounded: see the cap. */
+export async function getCompanyMembers(
+  companyId: number,
+  limit = 200
+): Promise<
+  Array<{
+    id: number;
+    userId: number;
+    role: string;
+    status: string;
+    joinedAt: Date;
+    name: string | null;
+    email: string | null;
+    accessTier: string;
+  }>
+> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: companyMembers.id,
+      userId: companyMembers.userId,
+      role: companyMembers.role,
+      status: companyMembers.status,
+      joinedAt: companyMembers.joinedAt,
+      name: users.name,
+      email: users.email,
+      accessTier: users.accessTier,
+    })
+    .from(companyMembers)
+    .innerJoin(users, eq(companyMembers.userId, users.id))
+    .where(eq(companyMembers.companyId, companyId))
+    .orderBy(asc(companyMembers.id))
+    .limit(limit);
+}
+
+/** One membership, or undefined. The authorisation lookup. */
+export async function getMembership(
+  companyId: number,
+  userId: number
+): Promise<CompanyMember | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(companyMembers)
+    .where(
+      and(
+        eq(companyMembers.companyId, companyId),
+        eq(companyMembers.userId, userId)
+      )
+    )
+    .limit(1);
+  return row;
+}
+
+export async function getCompanyById(id: number): Promise<Company | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(companies)
+    .where(eq(companies.id, id))
+    .limit(1);
+  return row;
+}
+
+export async function renameCompany(id: number, name: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(companies).set({ name }).where(eq(companies.id, id));
+}
+
+export async function setMemberRole(
+  companyId: number,
+  userId: number,
+  role: (typeof COMPANY_ROLE_VALUES)[number]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(companyMembers)
+    .set({ role })
+    .where(
+      and(
+        eq(companyMembers.companyId, companyId),
+        eq(companyMembers.userId, userId)
+      )
+    );
+}
+
+export async function setMemberStatus(
+  companyId: number,
+  userId: number,
+  status: (typeof MEMBER_STATUS_VALUES)[number]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(companyMembers)
+    .set({ status })
+    .where(
+      and(
+        eq(companyMembers.companyId, companyId),
+        eq(companyMembers.userId, userId)
+      )
+    );
+}
+
+/** Outstanding invitations. Never returns the code — only its hash exists. */
+export async function getCompanyInvites(
+  companyId: number,
+  limit = 100
+): Promise<CompanyInvite[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(companyInvites)
+    .where(eq(companyInvites.companyId, companyId))
+    .orderBy(desc(companyInvites.id))
+    .limit(limit);
+}
+
+export async function createInvite(data: InsertCompanyInvite): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  const [result] = await db.insert(companyInvites).values(data);
+  return result.insertId;
+}
+
+/**
+ * Find an invitation by the hash of its code.
+ *
+ * By hash and nothing else: there is no company id in the lookup, because the
+ * person redeeming a code does not yet belong to the company and has no way to
+ * name it. The hash IS the credential, which is why it is unique-indexed and
+ * why the plaintext is never stored.
+ */
+export async function getInviteByCodeHash(
+  codeHash: string
+): Promise<CompanyInvite | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(companyInvites)
+    .where(eq(companyInvites.codeHash, codeHash))
+    .limit(1);
+  return row;
+}
+
+export async function revokeInvite(
+  id: number,
+  companyId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(companyInvites)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(eq(companyInvites.id, id), eq(companyInvites.companyId, companyId))
+    );
+}
+
+/**
+ * Redeem an invitation: mark it used and add the membership.
+ *
+ * The two writes are ordered so the invite is consumed FIRST. If the second
+ * fails, the code is spent and nobody joined — recoverable by issuing another.
+ * The other order would leave a usable code after someone had already joined
+ * with it, which is a second stranger in the company.
+ */
+export async function acceptInvite(
+  invite: CompanyInvite,
+  userId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(companyInvites)
+    .set({ acceptedAt: new Date(), acceptedByUserId: userId })
+    .where(eq(companyInvites.id, invite.id));
+  await db.insert(companyMembers).values({
+    companyId: invite.companyId,
+    userId,
+    role: invite.role,
+    status: "active",
+    invitedByUserId: invite.createdByUserId,
+  });
+}
+
+/** Platform-level tier change. Admin only — see the router. */
+export async function setUserAccessTier(
+  userId: number,
+  accessTier: (typeof ACCESS_TIER_VALUES)[number]
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.update(users).set({ accessTier }).where(eq(users.id, userId));
+}
+
+/**
+ * Point a user at the company they are working in.
+ *
+ * Only ever called with a company the caller has already been proved a member
+ * of — see companyRouter. Setting it to a company they cannot reach is not a
+ * privilege grant (the resolver re-checks membership every request) but it
+ * would strand them, so the check belongs at the call site.
+ */
+export async function setActiveCompany(
+  userId: number,
+  companyId: number | null
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(users)
+    .set({ activeCompanyId: companyId })
+    .where(eq(users.id, userId));
+}
+
+/** Every company this user can act in, for the switcher. */
+export async function getMembershipsForUser(
+  userId: number
+): Promise<Array<{ companyId: number; name: string; role: string }>> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      companyId: companies.id,
+      name: companies.name,
+      role: companyMembers.role,
+    })
+    .from(companyMembers)
+    .innerJoin(companies, eq(companyMembers.companyId, companies.id))
+    .where(
+      and(
+        eq(companyMembers.userId, userId),
+        eq(companyMembers.status, "active")
+      )
+    )
+    .orderBy(asc(companyMembers.id))
+    .limit(50);
+}
+
+// ─── Historical search ────────────────────────────────────────────────────────
+/**
+ * Search a company's bids, one page at a time.
+ *
+ * ── Everything narrows in SQL ───────────────────────────────────────────────
+ * Nothing here reads a list into Node to filter it. The database is handed
+ * every predicate and returns at most `pageSize + 1` rows — the extra row being
+ * how the caller knows there is a next page without a second counting query
+ * that would scan what this one avoided.
+ *
+ * ── The join is not optional ────────────────────────────────────────────────
+ * A bid carries its client as free text, as a link, or both, and
+ * `shared/bidClient.ts` resolves which wins for display. Search has to look at
+ * both sources or it misses every bid created through the client picker, which
+ * carries only the link. That is a LEFT join: a bid with no client is a normal
+ * bid and must still be findable by name or address.
+ *
+ * ── Keyset, not OFFSET ──────────────────────────────────────────────────────
+ * The cursor is `(sortValue, id)` and the predicate is a row comparison against
+ * it, so the database seeks into `(userId, sortColumn)` and reads forward. Page
+ * 500 costs what page 1 costs, and a bid created mid-scroll cannot shift the
+ * window and cause a row to repeat or vanish.
+ *
+ * ── What is NOT indexed, and when that changes ──────────────────────────────
+ * `trades` is a JSON array matched with JSON_CONTAINS, which no b-tree can
+ * serve. It is a residual filter applied to rows already narrowed to one
+ * company, which is cheap while a company has thousands of bids rather than
+ * millions. MySQL 8.0.17+ has multi-valued indexes and this database is 8.0.46,
+ * so the escalation is available: index the array and switch the predicate to
+ * `MEMBER OF`. Worth doing when a trade filter on a large company starts
+ * showing up as slow, not before — drizzle cannot express that index, so it
+ * would have to live in a hand-written migration and drift from the schema.
+ */
+export async function searchBids(
+  userId: number,
+  filters: {
+    text?: string;
+    client?: string;
+    address?: string;
+    trade?: string;
+    status?: string;
+    dateField?: "created" | "due";
+    from?: string;
+    to?: string;
+    archive?: "live" | "archived" | "all";
+    sort?: "recent" | "created";
+  },
+  cursor: { at: number; id: number } | null,
+  pageSize: number
+): Promise<Bid[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const sortColumn =
+    filters.sort === "created" ? bids.createdAt : bids.updatedAt;
+  const conditions = [eq(bids.userId, userId)];
+
+  // Archived is its own axis, not a status. A won bid and an archived bid are
+  // different facts and a contractor searching history wants to say so.
+  if (filters.archive === "archived")
+    conditions.push(isNotNull(bids.archivedAt));
+  else if (filters.archive !== "all") conditions.push(isNull(bids.archivedAt));
+
+  /**
+   * A LIKE pattern with an explicit escape character.
+   *
+   * `escapeLike` has already neutralised any `%` or `_` the user typed; this
+   * tells MySQL that the backslash it used to do so is an escape rather than a
+   * literal. Without the ESCAPE clause the two halves disagree and a search for
+   * "50% deposit" matches everything the contractor owns.
+   *
+   * Four backslashes, and they are all doing something: two survive the
+   * TypeScript string to become `\\` in the SQL text, which MySQL then reads as
+   * one literal backslash. Writing two here emits `ESCAPE '\'`, an unterminated
+   * string literal, and every search fails at the driver.
+   */
+  const pat = (pattern: string) => sql`${pattern} ESCAPE '\\\\'`;
+
+  const text = usableTerm(filters.text);
+  if (text) {
+    const pattern = containsPattern(text);
+    conditions.push(
+      or(
+        sql`${bids.name} LIKE ${pat(pattern)}`,
+        sql`${bids.clientName} LIKE ${pat(pattern)}`,
+        sql`${bids.siteAddress} LIKE ${pat(pattern)}`,
+        sql`${clients.name} LIKE ${pat(pattern)}`,
+        sql`${clients.address} LIKE ${pat(pattern)}`
+      )!
+    );
+  }
+
+  const client = usableTerm(filters.client);
+  if (client) {
+    const pattern = containsPattern(client);
+    conditions.push(
+      or(
+        sql`${bids.clientName} LIKE ${pat(pattern)}`,
+        sql`${clients.name} LIKE ${pat(pattern)}`
+      )!
+    );
+  }
+
+  const address = usableTerm(filters.address);
+  if (address) {
+    const pattern = containsPattern(address);
+    conditions.push(
+      or(
+        sql`${bids.siteAddress} LIKE ${pat(pattern)}`,
+        sql`${clients.address} LIKE ${pat(pattern)}`
+      )!
+    );
+  }
+
+  const trade = usableTerm(filters.trade);
+  if (trade) {
+    conditions.push(
+      sql`JSON_CONTAINS(${bids.trades}, ${JSON.stringify(trade)})`
+    );
+  }
+
+  const status = usableTerm(filters.status);
+  if (status) {
+    conditions.push(eq(bids.status, status as (typeof BID_STATUSES)[number]));
+  }
+
+  const { start, end } = dateRangeBounds(filters.from, filters.to);
+  if (filters.dateField === "due") {
+    // dueDate is a DATE column read in string mode, so it compares against the
+    // same `YYYY-MM-DD` shape rather than against a timestamp. Both ends are
+    // inclusive here, which is what a person means by a date range.
+    if (filters.from) conditions.push(gte(bids.dueDate, filters.from));
+    if (filters.to) conditions.push(lte(bids.dueDate, filters.to));
+  } else {
+    if (start) conditions.push(gte(bids.createdAt, start));
+    // `end` is already the exclusive day-after, so this IS inclusive of `to`.
+    if (end) conditions.push(lt(bids.createdAt, end));
+  }
+
+  if (cursor) {
+    // Strictly after the cursor in descending order: an earlier sort value, or
+    // the same value with a lower id. The id half is what stops two bids saved
+    // in the same second from repeating across a page boundary.
+    // Formatted as a UTC string rather than passed as a Date: a raw sql
+    // parameter is serialised in the server's local timezone while the column
+    // is read back as UTC, and the gap between them skips rows at every page
+    // boundary. See toSqlTimestamp.
+    const at = toSqlTimestamp(new Date(cursor.at));
+    conditions.push(
+      sql`(${sortColumn} < ${at} OR (${sortColumn} = ${at} AND ${bids.id} < ${cursor.id}))`
+    );
+  }
+
+  const rows = await db
+    .select({ bid: bids })
+    .from(bids)
+    .leftJoin(clients, eq(clients.id, bids.clientId))
+    .where(and(...conditions))
+    .orderBy(desc(sortColumn), desc(bids.id))
+    .limit(pageSize + 1);
+
+  return rows.map(row => row.bid);
+}
+
+/**
+ * Search a company's clients, one page at a time.
+ *
+ * The same treatment as bids, and for the same reason: the Clients screen
+ * shipped with a client-side filter over an unpaginated list, flagged at the
+ * time as fine "if a user ever has hundreds of clients". A contractor with
+ * hundreds of clients is a successful contractor, so that condition was a
+ * promise to come back rather than a reason not to.
+ *
+ * Sorted by name, because that is how a person looks for one — so the cursor is
+ * a name and an id rather than a timestamp.
+ */
+export async function searchClients(
+  userId: number,
+  options: {
+    term?: string;
+    archived?: boolean;
+    cursorName?: string;
+    cursorId?: number;
+    pageSize: number;
+  }
+): Promise<Client[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [
+    eq(clients.userId, userId),
+    options.archived
+      ? isNotNull(clients.archivedAt)
+      : isNull(clients.archivedAt),
+  ];
+
+  const term = usableTerm(options.term);
+  if (term) {
+    const esc = sql`${containsPattern(term)} ESCAPE '\\\\'`;
+    conditions.push(
+      or(
+        sql`${clients.name} LIKE ${esc}`,
+        sql`${clients.address} LIKE ${esc}`,
+        sql`${clients.email} LIKE ${esc}`,
+        sql`${clients.phone} LIKE ${esc}`
+      )!
+    );
+  }
+
+  if (options.cursorName !== undefined && options.cursorId !== undefined) {
+    conditions.push(
+      sql`(${clients.name} > ${options.cursorName} OR (${clients.name} = ${options.cursorName} AND ${clients.id} > ${options.cursorId}))`
+    );
+  }
+
+  return db
+    .select()
+    .from(clients)
+    .where(and(...conditions))
+    .orderBy(asc(clients.name), asc(clients.id))
+    .limit(options.pageSize + 1);
+}
+
+/**
+ * Every distinct trade this company has actually bid, for the filter's picker.
+ *
+ * Read from the bids themselves rather than from a fixed list, so a company
+ * that has unlocked plumbing sees plumbing and one that has not is never
+ * offered a filter that can only return nothing.
+ *
+ * Bounded, because this is the one query here that does not paginate. At the
+ * scale where the cap bites, the answer is a `bid_trades` table rather than a
+ * bigger limit — the distinct-values question is what a junction table is for.
+ */
+export async function getUsedTrades(userId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ trades: bids.trades })
+    .from(bids)
+    .where(eq(bids.userId, userId))
+    .limit(5000);
+  const seen = new Set<string>();
+  for (const row of rows) {
+    for (const trade of row.trades ?? []) seen.add(trade);
+  }
+  return Array.from(seen).sort();
+}
+
+/**
+ * Bid counts for a specific set of clients — the page being displayed.
+ *
+ * The counterpart to pagination. `countBidsPerClient` groups over every bid the
+ * company has, which is exactly the unbounded query the paging was added to
+ * remove; this one is bounded by the ids handed to it.
+ */
+export async function countBidsForClients(
+  clientIds: number[]
+): Promise<Map<number, number>> {
+  if (clientIds.length === 0) return new Map();
+  const db = await getDb();
+  if (!db) return new Map();
+  const rows = await db
+    .select({ clientId: bids.clientId, n: sql<number>`count(*)` })
+    .from(bids)
+    .where(inArray(bids.clientId, clientIds))
+    .groupBy(bids.clientId);
+  const counts = new Map<number, number>();
+  for (const row of rows) {
+    if (row.clientId != null) counts.set(row.clientId, Number(row.n));
+  }
+  return counts;
+}
+
+// ─── Job close-out ────────────────────────────────────────────────────────────
+/**
+ * Storage for what a finished job actually took.
+ *
+ * Every function takes the company's scope id and filters on it. The suggestion
+ * queries are the ones to read carefully: a starter assembly is shared across
+ * every company, so "how has this assembly performed" is only ever a question
+ * about ONE company's close-outs and the userId predicate is what makes it so.
+ */
+
+export async function getCloseoutForBid(
+  bidId: number,
+  userId: number
+): Promise<BidCloseout | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(bidCloseouts)
+    .where(and(eq(bidCloseouts.bidId, bidId), eq(bidCloseouts.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+export async function getCloseoutLines(
+  closeoutId: number,
+  userId: number
+): Promise<BidCloseoutLine[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bidCloseoutLines)
+    .where(
+      and(
+        eq(bidCloseoutLines.closeoutId, closeoutId),
+        eq(bidCloseoutLines.userId, userId)
+      )
+    )
+    .orderBy(asc(bidCloseoutLines.id));
+}
+
+/**
+ * Create or replace a bid's close-out.
+ *
+ * Replace rather than patch: a close-out is one statement about a job, and
+ * editing it means restating it. The lines are deleted and rewritten together
+ * with the header so a mode change from byAssembly to total cannot leave
+ * orphaned lines behind that later queries would still count.
+ */
+export async function saveCloseout(
+  bidId: number,
+  userId: number,
+  data: {
+    mode: (typeof CLOSEOUT_MODE_VALUES)[number];
+    totalActualHours: string | null;
+    estimatedHours: string;
+    closedAt: Date;
+    notes: string | null;
+    enteredByUserId: number;
+    lines: Array<{
+      assemblyId: number | null;
+      assemblyName: string;
+      qty: string;
+      estimatedHours: string;
+      actualHours: string;
+    }>;
+  }
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const existing = await getCloseoutForBid(bidId, userId);
+  let closeoutId: number;
+
+  if (existing) {
+    await db
+      .update(bidCloseouts)
+      .set({
+        mode: data.mode,
+        totalActualHours: data.totalActualHours,
+        estimatedHours: data.estimatedHours,
+        closedAt: data.closedAt,
+        notes: data.notes,
+        enteredByUserId: data.enteredByUserId,
+      })
+      .where(eq(bidCloseouts.id, existing.id));
+    closeoutId = existing.id;
+    await db
+      .delete(bidCloseoutLines)
+      .where(eq(bidCloseoutLines.closeoutId, closeoutId));
+  } else {
+    const [inserted] = await db.insert(bidCloseouts).values({
+      bidId,
+      userId,
+      mode: data.mode,
+      totalActualHours: data.totalActualHours,
+      estimatedHours: data.estimatedHours,
+      closedAt: data.closedAt,
+      notes: data.notes,
+      enteredByUserId: data.enteredByUserId,
+    });
+    closeoutId = inserted.insertId;
+  }
+
+  if (data.lines.length > 0) {
+    await db.insert(bidCloseoutLines).values(
+      data.lines.map(line => ({
+        closeoutId,
+        userId,
+        assemblyId: line.assemblyId,
+        assemblyName: line.assemblyName,
+        qty: line.qty,
+        estimatedHours: line.estimatedHours,
+        actualHours: line.actualHours,
+      }))
+    );
+  }
+
+  return closeoutId;
+}
+
+/** Remove a close-out entirely — the job was never really finished. */
+export async function deleteCloseout(
+  bidId: number,
+  userId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(bidCloseouts)
+    .where(and(eq(bidCloseouts.bidId, bidId), eq(bidCloseouts.userId, userId)));
+}
+
+/**
+ * Every closed-out observation of one assembly, for THIS company.
+ *
+ * The userId predicate is the whole security of the suggestion engine. Assembly
+ * ids are shared — a starter assembly has `userId = NULL` and appears in every
+ * company's library — so without it, one contractor's crew performance would
+ * produce suggestions in another contractor's account.
+ */
+export async function getAssemblySamples(
+  userId: number,
+  assemblyId: number,
+  limit = 50
+): Promise<Array<{ estimatedHours: number; actualHours: number }>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      estimatedHours: bidCloseoutLines.estimatedHours,
+      actualHours: bidCloseoutLines.actualHours,
+    })
+    .from(bidCloseoutLines)
+    .where(
+      and(
+        eq(bidCloseoutLines.userId, userId),
+        eq(bidCloseoutLines.assemblyId, assemblyId)
+      )
+    )
+    .orderBy(desc(bidCloseoutLines.id))
+    .limit(limit);
+  return rows.map(row => ({
+    estimatedHours: Number(row.estimatedHours),
+    actualHours: Number(row.actualHours),
+  }));
+}
+
+/** Which assemblies this company has closed-out data for. */
+export async function getAssembliesWithSamples(
+  userId: number,
+  limit = 500
+): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({ assemblyId: bidCloseoutLines.assemblyId })
+    .from(bidCloseoutLines)
+    .where(
+      and(
+        eq(bidCloseoutLines.userId, userId),
+        isNotNull(bidCloseoutLines.assemblyId)
+      )
+    )
+    .limit(limit);
+  return rows
+    .map(row => row.assemblyId)
+    .filter((id): id is number => id !== null);
+}
+
+export async function getHourSuggestions(
+  userId: number,
+  status?: (typeof SUGGESTION_STATUS_VALUES)[number]
+): Promise<AssemblyHourSuggestion[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(assemblyHourSuggestions.userId, userId)];
+  if (status) conditions.push(eq(assemblyHourSuggestions.status, status));
+  return db
+    .select()
+    .from(assemblyHourSuggestions)
+    .where(and(...conditions))
+    .orderBy(desc(assemblyHourSuggestions.id))
+    .limit(200);
+}
+
+export async function getHourSuggestion(
+  userId: number,
+  assemblyId: number
+): Promise<AssemblyHourSuggestion | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(assemblyHourSuggestions)
+    .where(
+      and(
+        eq(assemblyHourSuggestions.userId, userId),
+        eq(assemblyHourSuggestions.assemblyId, assemblyId)
+      )
+    )
+    .limit(1);
+  return row;
+}
+
+/**
+ * Record a suggestion, or refresh the numbers on one already pending.
+ *
+ * A DISMISSED suggestion is left alone. That is the point of keeping the row:
+ * a user who has said "no, I know why those ran long" must not be asked again
+ * every time another job closes out. Only an explicit re-open brings it back.
+ */
+export async function upsertHourSuggestion(
+  userId: number,
+  assemblyId: number,
+  data: {
+    currentHours: string;
+    suggestedHours: string;
+    sampleSize: number;
+    ratio: string;
+  }
+): Promise<"created" | "refreshed" | "left-dismissed"> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const existing = await getHourSuggestion(userId, assemblyId);
+  if (existing) {
+    if (existing.status !== "pending") return "left-dismissed";
+    await db
+      .update(assemblyHourSuggestions)
+      .set(data)
+      .where(eq(assemblyHourSuggestions.id, existing.id));
+    return "refreshed";
+  }
+
+  await db
+    .insert(assemblyHourSuggestions)
+    .values({ userId, assemblyId, ...data, status: "pending" });
+  return "created";
+}
+
+/** Withdraw a suggestion whose evidence no longer supports it. */
+export async function clearPendingSuggestion(
+  userId: number,
+  assemblyId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(assemblyHourSuggestions)
+    .where(
+      and(
+        eq(assemblyHourSuggestions.userId, userId),
+        eq(assemblyHourSuggestions.assemblyId, assemblyId),
+        eq(assemblyHourSuggestions.status, "pending")
+      )
+    );
+}
+
+export async function respondToSuggestion(
+  userId: number,
+  suggestionId: number,
+  status: "accepted" | "dismissed",
+  respondedByUserId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(assemblyHourSuggestions)
+    .set({ status, respondedAt: new Date(), respondedByUserId })
+    .where(
+      and(
+        eq(assemblyHourSuggestions.id, suggestionId),
+        eq(assemblyHourSuggestions.userId, userId)
+      )
+    );
 }

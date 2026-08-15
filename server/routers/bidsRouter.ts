@@ -16,15 +16,40 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { requireCapability, router, scoped } from "../_core/trpc";
 import { BID_STATUSES } from "../../drizzle/schema";
-import { bidRollup, companyDefaultsFor, rollUpBid } from "../bidPricing";
+import {
+  bidRollup,
+  companyDefaultsFor,
+  rollUpBid,
+  taxRulesFor,
+  toTaxJurisdiction,
+} from "../bidPricing";
+import { explainTaxStatus } from "../../shared/salesTax";
 import {
   daysRemaining,
   purgeDueAt,
   retentionUrgency,
 } from "../../shared/retention";
+import { resolveBidClient } from "../../shared/bidClient";
+import {
+  ARCHIVE_SCOPES,
+  BID_DATE_FIELDS,
+  BID_SORTS,
+  PAGE_SIZE_MAX,
+  clampPageSize,
+  decodeCursor,
+  rangeIsBackwards,
+  toPage,
+} from "../../shared/bidSearch";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
 
 const nameSchema = z.string().trim().min(1).max(255);
 const qtySchema = z.number().min(0).max(999999);
@@ -54,8 +79,92 @@ async function requireBid(id: number, userId: number) {
 }
 
 export const bidsRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return db.getBidsByUser(ctx.user.id);
+  /**
+   * Historical search: find a bid out of thousands, by who it was for, what
+   * trade it was, where the job was, and when.
+   *
+   * ── Paginated at the query, not in the browser ──────────────────────────
+   * Returns one page and a cursor. Every filter is applied in SQL, so the
+   * response size is bounded by `pageSize` no matter how many bids the company
+   * has — see `db.searchBids` for the keyset reasoning.
+   *
+   * ── Scoped like everything else ─────────────────────────────────────────
+   * `ctx.scope.dataUserId`, so a member searches their company's bids and
+   * nobody else's, and a viewer can search but the `scoped()` gate still stops
+   * them changing anything they find.
+   */
+  search: procedure
+    .input(
+      z.object({
+        text: z.string().trim().max(200).optional(),
+        client: z.string().trim().max(200).optional(),
+        address: z.string().trim().max(200).optional(),
+        trade: z.string().trim().max(64).optional(),
+        status: z.enum(BID_STATUSES).optional(),
+        dateField: z.enum(BID_DATE_FIELDS).default("created"),
+        from: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        to: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        archive: z.enum(ARCHIVE_SCOPES).default("live"),
+        sort: z.enum(BID_SORTS).default("recent"),
+        cursor: z.string().max(200).nullish(),
+        pageSize: z.number().int().min(1).max(PAGE_SIZE_MAX).optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      const pageSize = clampPageSize(input.pageSize);
+
+      // A backwards range is a typo, not a query. Returning nothing would look
+      // like "no bids match" and send someone hunting for missing data.
+      if (rangeIsBackwards(input.from, input.to)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "The start of the date range is after its end.",
+        });
+      }
+
+      const rows = await db.searchBids(
+        ctx.scope.dataUserId,
+        input,
+        decodeCursor(input.cursor),
+        pageSize
+      );
+
+      // Priced through the same rollup the dashboard uses, so a search result
+      // and the card it corresponds to cannot show different money. Only the
+      // page's rows are priced — this is why the page is bounded.
+      const company = await companyDefaultsFor(ctx.scope.dataUserId);
+      const priced = await Promise.all(
+        rows.map(async bid => {
+          const lines = await db.getBidLineItems(bid.id);
+          const { directCost, bidPrice } = rollUpBid(bid, lines, company);
+          return {
+            ...bid,
+            lineCount: lines.length,
+            directCost,
+            finalPrice: bidPrice.finalPrice,
+          };
+        })
+      );
+
+      const page = toPage(priced, pageSize, row =>
+        input.sort === "created" ? row.createdAt : row.updatedAt
+      );
+      return { ...page, pageSize };
+    }),
+
+  /** The trades this company has actually bid, for the search filter. */
+  usedTrades: procedure.query(async ({ ctx }) =>
+    db.getUsedTrades(ctx.scope.dataUserId)
+  ),
+
+  list: procedure.query(async ({ ctx }) => {
+    return db.getBidsByUser(ctx.scope.dataUserId);
   }),
 
   /**
@@ -67,10 +176,10 @@ export const bidsRouter = router({
    * done here — those are presentation rules, they live in
    * client/src/lib/bidDashboard.ts, and they are tested there.
    */
-  dashboard: protectedProcedure.query(async ({ ctx }) => {
+  dashboard: procedure.query(async ({ ctx }) => {
     const [bids, company] = await Promise.all([
-      db.getBidsByUser(ctx.user.id),
-      companyDefaultsFor(ctx.user.id),
+      db.getBidsByUser(ctx.scope.dataUserId),
+      companyDefaultsFor(ctx.scope.dataUserId),
     ]);
 
     return Promise.all(
@@ -87,7 +196,7 @@ export const bidsRouter = router({
     );
   }),
 
-  create: protectedProcedure
+  create: procedure
     .input(
       z.object({
         name: nameSchema,
@@ -105,16 +214,16 @@ export const bidsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const id = await db.createBid({
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         status: input.status,
         trades: input.trades,
         dueDate: input.dueDate,
       });
-      return db.getBidById(id, ctx.user.id);
+      return db.getBidById(id, ctx.scope.dataUserId);
     }),
 
-  update: protectedProcedure
+  update: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -136,6 +245,13 @@ export const bidsRouter = router({
         profitValue: z.number().min(0).max(0.99).nullable().optional(),
         productivityPct: productivitySchema.nullable().optional(),
         /**
+         * Who this bid is for. Null unassigns, leaving the bid's own
+         * `clientName` text as the only source — which is the state every bid
+         * written before clients existed is already in, and it prints exactly
+         * as it did before.
+         */
+        clientId: z.number().int().positive().nullable().optional(),
+        /**
          * Proposal content. Null clears the field back to "not filled in", so
          * the document goes back to prompting for it rather than printing a
          * blank line where a client's name belongs.
@@ -143,11 +259,24 @@ export const bidsRouter = router({
         clientName: z.string().trim().max(255).nullable().optional(),
         siteAddress: z.string().trim().max(512).nullable().optional(),
         proposalNote: z.string().trim().max(4000).nullable().optional(),
+
+        /**
+         * Sales tax overrides. Every one of these exists so the automatic
+         * answer is never the only answer — see the schema comments on `bids`.
+         *
+         * `taxRateOverridePct` is nullable-optional with a deliberate
+         * distinction: null CLEARS the override and goes back to matching,
+         * while 0 is a real zero-rate that gets applied as one.
+         */
+        taxJurisdictionId: z.number().int().positive().nullable().optional(),
+        taxRateOverridePct: z.number().min(0).max(25).nullable().optional(),
+        taxExempt: z.boolean().optional(),
+        taxExemptReason: z.string().trim().max(255).nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
       const { id, ...rest } = input;
-      await requireBid(id, ctx.user.id);
+      await requireBid(id, ctx.scope.dataUserId);
 
       const patch: Record<string, unknown> = {};
       if (rest.name !== undefined) patch.name = rest.name;
@@ -174,6 +303,23 @@ export const bidsRouter = router({
             ? null
             : toDecimal4(rest.productivityPct);
       }
+      // Checked rather than trusted: a client id is a small integer, so
+      // assigning one must prove it belongs to this user or a bid could be
+      // pointed at a stranger's contact record.
+      if (rest.clientId !== undefined) {
+        if (rest.clientId !== null) {
+          const client = await db.getClientById(
+            rest.clientId,
+            ctx.scope.dataUserId
+          );
+          if (!client)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Client not found.",
+            });
+        }
+        patch.clientId = rest.clientId;
+      }
       // Emptied by hand is the same as never filled in: both mean the proposal
       // should prompt, not print an empty line.
       if (rest.clientName !== undefined)
@@ -183,9 +329,37 @@ export const bidsRouter = router({
       if (rest.proposalNote !== undefined)
         patch.proposalNote = rest.proposalNote || null;
 
+      // Checked, not trusted — the same rule the client link follows. A tax
+      // area id is a small integer, and pointing a bid at someone else's rate
+      // would charge a customer a number from another contractor's settings.
+      if (rest.taxJurisdictionId !== undefined) {
+        if (rest.taxJurisdictionId !== null) {
+          const area = await db.getTaxJurisdictionById(
+            rest.taxJurisdictionId,
+            ctx.scope.dataUserId
+          );
+          if (!area)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Tax area not found.",
+            });
+        }
+        patch.taxJurisdictionId = rest.taxJurisdictionId;
+      }
+      if (rest.taxRateOverridePct !== undefined) {
+        // null clears the override; 0 is a real zero-rate and is kept.
+        patch.taxRateOverridePct =
+          rest.taxRateOverridePct === null
+            ? null
+            : toDecimal4(rest.taxRateOverridePct);
+      }
+      if (rest.taxExempt !== undefined) patch.taxExempt = rest.taxExempt;
+      if (rest.taxExemptReason !== undefined)
+        patch.taxExemptReason = rest.taxExemptReason || null;
+
       if (Object.keys(patch).length > 0)
-        await db.updateBid(id, ctx.user.id, patch);
-      return db.getBidById(id, ctx.user.id);
+        await db.updateBid(id, ctx.scope.dataUserId, patch);
+      return db.getBidById(id, ctx.scope.dataUserId);
     }),
 
   /**
@@ -198,10 +372,10 @@ export const bidsRouter = router({
    *
    * Reversible for RETENTION_DAYS, then not. `restore` is the way back.
    */
-  archive: protectedProcedure
+  archive: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const bid = await requireBid(input.id, ctx.user.id);
+      const bid = await requireBid(input.id, ctx.scope.dataUserId);
       if (bid.archivedAt) {
         // Already counting down. Returning the ORIGINAL date rather than
         // re-archiving is the point: a double-click must not buy another 30
@@ -213,17 +387,17 @@ export const bidsRouter = router({
         };
       }
       const now = new Date();
-      await db.archiveBid(input.id, ctx.user.id, now);
+      await db.archiveBid(input.id, ctx.scope.dataUserId, now);
       return { success: true, archivedAt: now, alreadyArchived: false };
     }),
 
   /** Put an archived bid back on the dashboard, stopping the countdown. */
-  restore: protectedProcedure
+  restore: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const bid = await requireBid(input.id, ctx.user.id);
+      const bid = await requireBid(input.id, ctx.scope.dataUserId);
       if (!bid.archivedAt) return { success: true, alreadyLive: true };
-      await db.restoreBid(input.id, ctx.user.id);
+      await db.restoreBid(input.id, ctx.scope.dataUserId);
       return { success: true, alreadyLive: false };
     }),
 
@@ -234,11 +408,11 @@ export const bidsRouter = router({
    * machine with a wrong clock would otherwise show a wrong deadline for a real
    * deletion — and the deletion itself runs on server time. One clock decides.
    */
-  archived: protectedProcedure.query(async ({ ctx }) => {
+  archived: procedure.query(async ({ ctx }) => {
     const now = new Date();
     const [rows, company] = await Promise.all([
-      db.getArchivedBids(ctx.user.id),
-      companyDefaultsFor(ctx.user.id),
+      db.getArchivedBids(ctx.scope.dataUserId),
+      companyDefaultsFor(ctx.scope.dataUserId),
     ]);
 
     return Promise.all(
@@ -270,10 +444,10 @@ export const bidsRouter = router({
    * there is no path from the working list straight to destruction. The user
    * archives first, then confirms again from the archive.
    */
-  deleteForever: protectedProcedure
+  deleteForever: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const bid = await requireBid(input.id, ctx.user.id);
+      const bid = await requireBid(input.id, ctx.scope.dataUserId);
       if (!bid.archivedAt) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -281,7 +455,7 @@ export const bidsRouter = router({
             "Only archived bids can be deleted permanently. Archive it first.",
         });
       }
-      await db.deleteBidForever(input.id, ctx.user.id);
+      await db.deleteBidForever(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
@@ -292,19 +466,39 @@ export const bidsRouter = router({
    * grouped by repeating unit, summed to a direct cost, then run through
    * overhead and profit at whichever level supplied them.
    */
-  get: protectedProcedure
+  get: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const bid = await requireBid(input.id, ctx.user.id);
-      const [lines, company] = await Promise.all([
-        db.getBidLineItems(bid.id),
-        companyDefaultsFor(ctx.user.id),
-      ]);
+      const bid = await requireBid(input.id, ctx.scope.dataUserId);
+      const [lines, company, client, taxRules, jurisdictionRows, expenseRows] =
+        await Promise.all([
+          db.getBidLineItems(bid.id),
+          companyDefaultsFor(ctx.scope.dataUserId),
+          // Null for the great majority of bids, which have no client assigned.
+          bid.clientId
+            ? db.getClientById(bid.clientId, ctx.scope.dataUserId)
+            : Promise.resolve(undefined),
+          taxRulesFor(ctx.scope.dataUserId),
+          db.getTaxJurisdictions(ctx.scope.dataUserId),
+          db.getBidExpenses(bid.id),
+        ]);
 
-      const { settings, priced, units, totals } = bidRollup(
+      const expenses = expenseRows.map(row => ({
+        name: row.name,
+        amount: Number(row.amount),
+        taxable: row.taxable,
+        markedUp: row.markedUp,
+      }));
+
+      const { settings, priced, units, totals, salesTax, taxRate } = bidRollup(
         bid,
         lines,
-        company
+        company,
+        {
+          rules: taxRules,
+          jurisdictions: jurisdictionRows.map(toTaxJurisdiction),
+        },
+        expenses
       );
 
       return {
@@ -314,11 +508,31 @@ export const bidsRouter = router({
         totals,
         settings,
         company,
+        /** The linked client record, or null. */
+        client: client ?? null,
+        /**
+         * The tax figure, and where its rate came from.
+         *
+         * `salesTax.status` carries WHY when there is no amount — disabled,
+         * exempt, nothing marked taxable, or no rate found. The screen shows
+         * that sentence rather than an unexplained $0, because a silent zero
+         * and a genuine exemption look identical and cost very differently.
+         */
+        salesTax,
+        taxRate,
+        /** Plain-language reason there is no tax, or null when there is. */
+        taxNote: explainTaxStatus(salesTax.status, bid.siteAddress),
+        /**
+         * Name and site address after the bid's own text and the linked record
+         * have been reconciled — the same resolution the proposal prints, so
+         * the screen and the document cannot show different names.
+         */
+        resolvedClient: resolveBidClient(bid, client),
       };
     }),
 
   /** Add an assembly to the bid, freezing its costs as they are right now. */
-  addAssembly: protectedProcedure
+  addAssembly: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -334,10 +548,10 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       const { id, merged } = await db.addAssemblyToBid(
         input.bidId,
-        ctx.user.id,
+        ctx.scope.dataUserId,
         input.assemblyId,
         input.qty,
         input.unitLabel,
@@ -356,7 +570,7 @@ export const bidsRouter = router({
    * kit-shaped container in the way. `qty` multiplies through, so 2 x a package
    * containing 4 receptacles lands 8.
    */
-  addKit: protectedProcedure
+  addKit: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -366,11 +580,11 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       try {
         return await db.addKitToBid(
           input.bidId,
-          ctx.user.id,
+          ctx.scope.dataUserId,
           input.kitId,
           input.qty,
           input.unitLabel
@@ -384,7 +598,7 @@ export const bidsRouter = router({
       }
     }),
 
-  updateLine: protectedProcedure
+  updateLine: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -395,7 +609,7 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
 
       const patch: Record<string, unknown> = {};
       if (input.qty !== undefined) patch.qty = toDecimal4(input.qty);
@@ -411,7 +625,7 @@ export const bidsRouter = router({
       return db.getBidLineItem(input.id, input.bidId);
     }),
 
-  removeLine: protectedProcedure
+  removeLine: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -419,16 +633,16 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       await db.deleteBidLineItem(input.id, input.bidId);
       return { success: true };
     }),
 
   /** Distinct repeating units on a bid — the pick-list for mass duplicate. */
-  units: protectedProcedure
+  units: procedure
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       return db.getBidUnitLabels(input.bidId);
     }),
 
@@ -436,10 +650,10 @@ export const bidsRouter = router({
    * Every unit with its link role — template, linked copy, forked copy, or a
    * one-off label. Drives the badge on each unit and which actions it offers.
    */
-  unitStates: protectedProcedure
+  unitStates: procedure
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       return db.getBidUnitStates(input.bidId);
     }),
 
@@ -450,7 +664,7 @@ export const bidsRouter = router({
    * rooms then 5 ADA rooms produce Room 101–140, because a hotel numbers rooms
    * by position, not by spec. Restarting per group would mint two Room 101s.
    */
-  generateUnits: protectedProcedure
+  generateUnits: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -469,7 +683,7 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       try {
         return await db.generateBidUnits(
           input.bidId,
@@ -495,7 +709,7 @@ export const bidsRouter = router({
    * overwrites whole units and the estimator is the only one who knows whether
    * the edit they just made was meant for one room or forty.
    */
-  pushToLinkedCopies: protectedProcedure
+  pushToLinkedCopies: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -503,7 +717,7 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       try {
         return await db.pushTemplateToLinkedCopies(
           input.bidId,
@@ -521,7 +735,7 @@ export const bidsRouter = router({
     }),
 
   /** Archive every copy still following a template. Forked copies are left. */
-  archiveLinkedCopies: protectedProcedure
+  archiveLinkedCopies: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -529,12 +743,12 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       return db.archiveLinkedCopies(input.bidId, input.templateLabel);
     }),
 
   /** Undo a bulk archive — the copies come back still linked. */
-  restoreUnits: protectedProcedure
+  restoreUnits: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -542,12 +756,12 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       return db.restoreArchivedUnits(input.bidId, input.unitLabels);
     }),
 
   /** Break a copy's link by hand, without editing it first. */
-  forkUnit: protectedProcedure
+  forkUnit: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -555,7 +769,7 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       return { forked: await db.forkBidUnit(input.bidId, input.unitLabel) };
     }),
 
@@ -565,7 +779,7 @@ export const bidsRouter = router({
    * Copies carry the SOURCE's snapshot, not a fresh read of the library, so
    * every generated room prices identically no matter when it was made.
    */
-  duplicateUnit: protectedProcedure
+  duplicateUnit: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -577,7 +791,7 @@ export const bidsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
       try {
         return await db.duplicateBidUnit(
           input.bidId,
@@ -598,11 +812,23 @@ export const bidsRouter = router({
     }),
 
   /** Company-level pricing defaults — the fallback every bid inherits. */
-  pricingDefaults: protectedProcedure.query(async ({ ctx }) => {
-    return db.getPricingDefaults(ctx.user.id);
+  pricingDefaults: procedure.query(async ({ ctx }) => {
+    return db.getPricingDefaults(ctx.scope.dataUserId);
   }),
 
-  setPricingDefaults: protectedProcedure
+  /**
+   * `pricing.edit`, not this router's `bids.edit`.
+   *
+   * The exception that proves why `scoped()` needs one. Everything else here
+   * changes ONE bid; this changes overhead, profit and the productivity factor
+   * for the whole company — and because settings are inherited rather than
+   * copied (CLAUDE.md § Company defaults), it re-prices every existing bid
+   * still following them. An estimator adding a line and an estimator moving
+   * the company's margin are not the same act and must not share a gate.
+   *
+   * Caught by an adversarial test, not by review.
+   */
+  setPricingDefaults: requireCapability("pricing.edit")
     .input(
       z.object({
         overheadEnabled: z.boolean().optional(),
@@ -630,8 +856,8 @@ export const bidsRouter = router({
       }
 
       if (Object.keys(patch).length > 0) {
-        await db.updatePricingDefaults(ctx.user.id, patch);
+        await db.updatePricingDefaults(ctx.scope.dataUserId, patch);
       }
-      return db.getPricingDefaults(ctx.user.id);
+      return db.getPricingDefaults(ctx.scope.dataUserId);
     }),
 });

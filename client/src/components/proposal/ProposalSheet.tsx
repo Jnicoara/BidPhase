@@ -435,6 +435,65 @@ export function ProposalSheet({
           </section>
         );
 
+      // ── Includes / excludes ────────────────────────────────────────────────
+      //
+      // Two columns where there is room for them, because the pairing is the
+      // point: a reader compares what is covered against what is not, and
+      // stacking them turns that comparison into scrolling. The excludes carry
+      // the accent rule, since they are the half that prevents the argument.
+      case "inclusions": {
+        const { includes, excludes } = doc.inclusions;
+        const column = (
+          heading: string,
+          items: string[],
+          emphasise: boolean
+        ) =>
+          items.length === 0 ? null : (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontFamily: L.headingFont,
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  color: emphasise ? accent : INK_SOFT,
+                  borderBottom: `1px solid ${emphasise ? accent : INK_SOFT}55`,
+                  paddingBottom: 3,
+                  marginBottom: 6,
+                }}
+              >
+                {heading}
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                {items.map((text, i) => (
+                  <li
+                    key={i}
+                    style={{
+                      fontSize: 11,
+                      color: INK,
+                      lineHeight: 1.5,
+                      marginBottom: 2,
+                    }}
+                  >
+                    {text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+
+        return (
+          <section key={id} style={{ marginBottom: 20 }}>
+            {heading("Includes & excludes")}
+            <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+              {column("Included", includes, false)}
+              {column("Not included", excludes, true)}
+            </div>
+          </section>
+        );
+      }
+
       // ── Labor summary ──────────────────────────────────────────────────────
       case "laborSummary":
         return (
@@ -445,7 +504,10 @@ export function ProposalSheet({
               <strong style={{ fontVariantNumeric: "tabular-nums" }}>
                 {doc.laborHours.toLocaleString("en-US")} labor hours
               </strong>{" "}
-              of licensed work, included in the price below.
+              of licensed work
+              {doc.mode === "scope-only"
+                ? "."
+                : ", included in the price below."}
             </div>
           </section>
         );
@@ -492,8 +554,118 @@ export function ProposalSheet({
       case "investment": {
         const filled = L.totalPanel === "filled";
         const outlined = L.totalPanel === "outlined";
+        const tax = doc.investment.salesTax;
+        const expenses = doc.investment.expenses;
         return (
           <section key={id} style={{ marginBottom: 22 }}>
+            {/*
+              Subtotal and tax, ABOVE the total, and only when there is tax.
+              Without a tax line the document keeps its original shape — one
+              figure, everything inside it. With one, the customer has to be
+              able to see the three numbers separately: sales tax is the line
+              they are most likely to check, and a total with it folded in is
+              a total nobody can verify.
+            */}
+            {/*
+              Flat charges, each named. A permit is its own line so the customer
+              can see what they are paying for — a lump called "Fees" invites
+              exactly the question the itemisation exists to answer.
+            */}
+            {expenses && (
+              <div style={{ marginBottom: 8 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    fontSize: 11.5,
+                    color: INK_SOFT,
+                    padding: "3px 0",
+                  }}
+                >
+                  <span>Work</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {money(doc.investment.workTotal)}
+                  </span>
+                </div>
+                {expenses.lines.map((line, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 16,
+                      fontSize: 11.5,
+                      color: INK_SOFT,
+                      padding: "3px 0",
+                    }}
+                  >
+                    <span>{line.name}</span>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {money(line.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tax && (
+              <div style={{ marginBottom: 8 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    fontSize: 11.5,
+                    color: INK_SOFT,
+                    padding: "3px 0",
+                  }}
+                >
+                  <span>Subtotal</span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {money(doc.investment.subtotal)}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 16,
+                    fontSize: 11.5,
+                    color: INK_SOFT,
+                    padding: "3px 0",
+                    borderBottom: `1px solid ${INK_SOFT}40`,
+                  }}
+                >
+                  <span>
+                    {tax.exempt ? (
+                      <>
+                        Sales tax — exempt
+                        {tax.exemptReason ? ` (${tax.exemptReason})` : ""}
+                      </>
+                    ) : (
+                      <>
+                        Sales tax
+                        {tax.ratePct !== null ? ` (${tax.ratePct}%)` : ""}
+                        {/* The stack, itemised — what makes the rate checkable
+                            rather than a number the customer has to accept. */}
+                        {tax.components.length > 1 && (
+                          <span style={{ color: INK_SOFT }}>
+                            {" · "}
+                            {tax.components
+                              .map(c => `${c.label} ${c.ratePct}%`)
+                              .join(" + ")}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </span>
+                  <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                    {money(tax.amount)}
+                  </span>
+                </div>
+              </div>
+            )}
             <div
               style={{
                 display: "flex",
@@ -531,6 +703,7 @@ export function ProposalSheet({
                   {doc.investment.includesIndirect
                     ? "Includes all materials, labor, equipment and overhead."
                     : "Includes all materials and labor."}
+                  {tax && !tax.exempt ? " Sales tax included above." : ""}
                 </div>
               </div>
               <div

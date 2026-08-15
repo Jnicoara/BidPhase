@@ -786,17 +786,20 @@ left as written rather than rewritten to match the rename.
   itself stands; only the test was removed.
 
 ## v5.94 — Archive Cleanup Activation
+
 - [x] Inspect and apply the verified database migration 0026 required by the current HelixBid GitHub main branch
 - [x] Register the documented 30-day archive-cleanup heartbeat for the deployed application
 - [x] Validate the migration and active scheduled job, then save a checkpoint synchronized with GitHub main
 
 ## v5.95 — Pre-Deploy Migration Synchronization
+
 - [x] Pull the latest GitHub main branch and inspect migrations 0029, 0030, and 0031
 - [x] Apply the verified pending schema migrations with `pnpm db:push` before release
 - [x] Correct the discovered missing `pricing_defaults.productivityPct` column required by the merged release
 - [x] Validate the migrated release, synchronize GitHub main, and save the publish-ready checkpoint
 
 ## v5.96 — R2 Backup Release & Verification
+
 - [x] Pull the latest GitHub main and inspect the independent R2 backup tool plus all pending migrations
 - [x] Re-run the GitHub release inspection cleanly from the newest main branch before any merge or migration action
 - [x] Apply verified schema migrations and validate the backup-enabled release (checkpoint pending)
@@ -805,11 +808,13 @@ left as written rather than rewritten to match the rename.
 - [ ] Resolve the Manus source-storage 403 responses blocking the four stored PDF copies, then rerun and verify a complete production backup
 
 ## v5.97 — Source Storage Repair & Complete R2 Backup
+
 - [x] Classify the four 403 storage keys as development fixtures rather than customer data
 - [x] Resolve the 403 blocker by removing the four user-approved stale test references whose source objects no longer exist
 - [x] Rerun and verify a complete R2 backup containing the database, manifest, and every remaining stored-file reference
 
 ## v5.98 — Approved Stale Test Data Cleanup
+
 - [x] Remove only the four approved stale test bid/PDF records: Trace test, Copilot test, Stamp test, and Sheet test
 - [x] Confirm the four `test/...` PDF references are gone before rerunning the backup
 
@@ -817,3 +822,20 @@ left as written rather than rewritten to match the rename.
 - [x] Synchronize the local project exactly with the latest GitHub `main` branch without local feature edits
 - [x] Apply only the pending migrations provided by GitHub `main` using `pnpm db:push`
 - [x] Validate the GitHub-aligned build and save the exact publish-ready checkpoint
+
+## v6.0 — Multi-Trade Foundation, Clients & Dashboard Entry
+
+- [x] Add the `trade` axis to labor rates, kits and the company settings tables (migrations 0034/0035)
+- [x] Keep labor rates and settings shared across trades with the `all` sentinel rather than stamping them electrical
+- [x] Add client records (company/individual, address, phone, email, notes, archivable) linked to bids by a nullable `clientId`
+- [x] Diagnose plan upload failing entirely — storage refusing the browser before any bytes leave (bucket CORS)
+- [x] Replace the one vague upload error with six that say what happened and whether retrying helps
+- [x] Raise the plan limit to 500MB and add the same-origin fallback for while CORS is unconfigured
+- [x] Add a retry button to a failed upload, reusing the file already chosen
+- [x] Build the Clients screen and the client control on a bid
+- [x] Put "Upload a plan" and "Quick bid" on the Dashboard as the two ways to start
+- [x] Remove the legacy splash page; `/`, `/home` and unknown routes land on the Dashboard
+- [x] Delete six dead legacy page files and retire the `/trash` and `/project/:id` routes
+- [ ] Apply the storage bucket CORS rule (references/deploying.md § 9) — plan upload above 25MB stays broken until it lands
+- [ ] Ranged PDF loading, so a 500MB set does not have to be fully resident in tab memory
+- [ ] Verify plan tracing and scale-setting against a plan that actually uploaded

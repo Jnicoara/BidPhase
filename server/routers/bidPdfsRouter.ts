@@ -34,7 +34,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import { storagePresignPut } from "../storage";
 import {
   detectScaleFromText,
@@ -43,6 +43,13 @@ import {
 } from "../../shared/planScale";
 import { checkPdfUpload } from "../../shared/uploadLimits";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
 
 /** Filenames are shown, never used as a path. Kept sane rather than sanitised. */
 const filenameSchema = z.string().trim().min(1).max(512);
@@ -94,11 +101,11 @@ function toView(row: Awaited<ReturnType<typeof db.getBidPdf>> & object) {
 
 export const bidPdfsRouter = router({
   /** Every sheet on a bid, in the order they were attached. */
-  list: protectedProcedure
+  list: procedure
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
-      const rows = await db.getBidPdfs(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
+      const rows = await db.getBidPdfs(input.bidId, ctx.scope.dataUserId);
       return rows.map(toView);
     }),
 
@@ -114,7 +121,7 @@ export const bidPdfsRouter = router({
    * courtesy, not a control: the size is declared by the caller and must be
    * bounded before a signed URL is issued for it.
    */
-  createUploadTicket: protectedProcedure
+  createUploadTicket: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -123,7 +130,7 @@ export const bidPdfsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
 
       const check = checkPdfUpload({
         filename: input.filename,
@@ -134,7 +141,7 @@ export const bidPdfsRouter = router({
       }
 
       const { key, uploadUrl } = await storagePresignPut(
-        `bid-plans/${ctx.user.id}/${input.bidId}/${input.filename}`,
+        `bid-plans/${ctx.scope.dataUserId}/${input.bidId}/${input.filename}`,
         "application/pdf"
       );
 
@@ -149,7 +156,7 @@ export const bidPdfsRouter = router({
    * any object in the bucket, including another contractor's plans, simply by
    * naming its key.
    */
-  confirmAttach: protectedProcedure
+  confirmAttach: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -159,7 +166,7 @@ export const bidPdfsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireBid(input.bidId, ctx.user.id);
+      await requireBid(input.bidId, ctx.scope.dataUserId);
 
       const check = checkPdfUpload({
         filename: input.filename,
@@ -169,7 +176,7 @@ export const bidPdfsRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: check.message });
       }
 
-      const expectedPrefix = `bid-plans/${ctx.user.id}/${input.bidId}/`;
+      const expectedPrefix = `bid-plans/${ctx.scope.dataUserId}/${input.bidId}/`;
       if (!input.storageKey.startsWith(expectedPrefix)) {
         throw new TRPCError({
           code: "FORBIDDEN",
@@ -177,17 +184,20 @@ export const bidPdfsRouter = router({
         });
       }
 
-      const sortOrder = await db.nextBidPdfSortOrder(input.bidId, ctx.user.id);
+      const sortOrder = await db.nextBidPdfSortOrder(
+        input.bidId,
+        ctx.scope.dataUserId
+      );
       const id = await db.createBidPdf({
         bidId: input.bidId,
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         filename: input.filename,
         storageKey: input.storageKey,
         byteSize: input.byteSize,
         sortOrder,
       });
 
-      const row = await db.getBidPdf(id, ctx.user.id);
+      const row = await db.getBidPdf(id, ctx.scope.dataUserId);
       if (!row)
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
@@ -202,7 +212,7 @@ export const bidPdfsRouter = router({
    * Server-side page counting would mean a PDF parser on the server for a
    * number the client already has the moment it opens the file.
    */
-  setPageCount: protectedProcedure
+  setPageCount: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -210,10 +220,14 @@ export const bidPdfsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const row = await db.getBidPdf(input.id, ctx.user.id);
+      const row = await db.getBidPdf(input.id, ctx.scope.dataUserId);
       if (!row)
         throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
-      await db.setBidPdfPageCount(input.id, ctx.user.id, input.pageCount);
+      await db.setBidPdfPageCount(
+        input.id,
+        ctx.scope.dataUserId,
+        input.pageCount
+      );
       return { success: true };
     }),
 
@@ -224,24 +238,27 @@ export const bidPdfsRouter = router({
    * wrong job is a mistake to undo now, not something to hold for 30 days. The
    * bid it belonged to is untouched.
    */
-  remove: protectedProcedure
+  remove: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const row = await db.getBidPdf(input.id, ctx.user.id);
+      const row = await db.getBidPdf(input.id, ctx.scope.dataUserId);
       if (!row)
         throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
-      await db.deleteBidPdf(input.id, ctx.user.id);
+      await db.deleteBidPdf(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
   // ── Sheets (phase 2a) ──────────────────────────────────────────────────────
 
   /** Every page of one document, in order, with its name and scale. */
-  sheets: protectedProcedure
+  sheets: procedure
     .input(z.object({ bidPdfId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      await requirePdf(input.bidPdfId, ctx.user.id);
-      const rows = await db.getBidPdfSheets(input.bidPdfId, ctx.user.id);
+      await requirePdf(input.bidPdfId, ctx.scope.dataUserId);
+      const rows = await db.getBidPdfSheets(
+        input.bidPdfId,
+        ctx.scope.dataUserId
+      );
       return rows.map(toSheetView);
     }),
 
@@ -259,7 +276,7 @@ export const bidPdfsRouter = router({
    * the outline on each open would silently undo the user's corrections, which
    * is the whole reason renaming exists.
    */
-  ensureSheets: protectedProcedure
+  ensureSheets: procedure
     .input(
       z.object({
         bidPdfId: z.number().int().positive(),
@@ -277,9 +294,12 @@ export const bidPdfsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requirePdf(input.bidPdfId, ctx.user.id);
+      await requirePdf(input.bidPdfId, ctx.scope.dataUserId);
 
-      const existing = await db.getBidPdfSheets(input.bidPdfId, ctx.user.id);
+      const existing = await db.getBidPdfSheets(
+        input.bidPdfId,
+        ctx.scope.dataUserId
+      );
       const havePage = new Set(existing.map(s => s.pageNumber));
 
       // First outline entry wins per page: architectural outlines often nest a
@@ -297,7 +317,7 @@ export const bidPdfsRouter = router({
         const bookmarked = titleByPage.get(page);
         toInsert.push({
           bidPdfId: input.bidPdfId,
-          userId: ctx.user.id,
+          userId: ctx.scope.dataUserId,
           pageNumber: page,
           // Never blank. A PDF with no outline still gets a usable label rather
           // than leaving the index a column of bare numbers.
@@ -307,12 +327,15 @@ export const bidPdfsRouter = router({
       }
 
       await db.insertBidPdfSheets(toInsert);
-      const rows = await db.getBidPdfSheets(input.bidPdfId, ctx.user.id);
+      const rows = await db.getBidPdfSheets(
+        input.bidPdfId,
+        ctx.scope.dataUserId
+      );
       return { created: toInsert.length, sheets: rows.map(toSheetView) };
     }),
 
   /** Rename a sheet. Marks the name as the user's, so nothing overwrites it. */
-  renameSheet: protectedProcedure
+  renameSheet: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -320,10 +343,10 @@ export const bidPdfsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const sheet = await db.getBidPdfSheet(input.id, ctx.user.id);
+      const sheet = await db.getBidPdfSheet(input.id, ctx.scope.dataUserId);
       if (!sheet)
         throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
-      await db.updateBidPdfSheet(input.id, ctx.user.id, {
+      await db.updateBidPdfSheet(input.id, ctx.scope.dataUserId, {
         name: input.name,
         nameSource: "user",
       });
@@ -339,7 +362,7 @@ export const bidPdfsRouter = router({
    * the same `parseScaleText` detection uses, so a typed scale and a read one
    * produce an identical ratio and only `source` differs.
    */
-  setSheetScale: protectedProcedure
+  setSheetScale: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -348,7 +371,7 @@ export const bidPdfsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const sheet = await db.getBidPdfSheet(input.id, ctx.user.id);
+      const sheet = await db.getBidPdfSheet(input.id, ctx.scope.dataUserId);
       if (!sheet)
         throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
 
@@ -360,28 +383,28 @@ export const bidPdfsRouter = router({
         });
       }
 
-      await db.updateBidPdfSheet(input.id, ctx.user.id, {
+      await db.updateBidPdfSheet(input.id, ctx.scope.dataUserId, {
         scaleRatio: String(parsed.ratio),
         scaleText: parsed.text,
         scaleSource: "manual",
       });
-      const updated = await db.getBidPdfSheet(input.id, ctx.user.id);
+      const updated = await db.getBidPdfSheet(input.id, ctx.scope.dataUserId);
       return toSheetView(updated!);
     }),
 
   /** Remove a sheet's scale, putting it back to "not set". */
-  clearSheetScale: protectedProcedure
+  clearSheetScale: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const sheet = await db.getBidPdfSheet(input.id, ctx.user.id);
+      const sheet = await db.getBidPdfSheet(input.id, ctx.scope.dataUserId);
       if (!sheet)
         throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
-      await db.updateBidPdfSheet(input.id, ctx.user.id, {
+      await db.updateBidPdfSheet(input.id, ctx.scope.dataUserId, {
         scaleRatio: null,
         scaleText: null,
         scaleSource: "none",
       });
-      const updated = await db.getBidPdfSheet(input.id, ctx.user.id);
+      const updated = await db.getBidPdfSheet(input.id, ctx.scope.dataUserId);
       return toSheetView(updated!);
     }),
 
@@ -397,7 +420,7 @@ export const bidPdfsRouter = router({
    *
    * Never touches a scale the user set by hand.
    */
-  detectSheetScale: protectedProcedure
+  detectSheetScale: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -406,7 +429,7 @@ export const bidPdfsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const sheet = await db.getBidPdfSheet(input.id, ctx.user.id);
+      const sheet = await db.getBidPdfSheet(input.id, ctx.scope.dataUserId);
       if (!sheet)
         throw new TRPCError({ code: "NOT_FOUND", message: "Sheet not found." });
 
@@ -423,7 +446,7 @@ export const bidPdfsRouter = router({
       const suggestion = detection.best;
 
       if (suggestion && isAutoApplicable(detection)) {
-        await db.updateBidPdfSheet(input.id, ctx.user.id, {
+        await db.updateBidPdfSheet(input.id, ctx.scope.dataUserId, {
           scaleRatio: String(suggestion.ratio),
           scaleText: suggestion.text,
           scaleSource: "detected",
@@ -431,12 +454,12 @@ export const bidPdfsRouter = router({
         });
       } else {
         // Remember what was seen without acting on it.
-        await db.updateBidPdfSheet(input.id, ctx.user.id, {
+        await db.updateBidPdfSheet(input.id, ctx.scope.dataUserId, {
           detectedScaleText: suggestion?.text ?? null,
         });
       }
 
-      const updated = await db.getBidPdfSheet(input.id, ctx.user.id);
+      const updated = await db.getBidPdfSheet(input.id, ctx.scope.dataUserId);
       return {
         applied: Boolean(suggestion) && isAutoApplicable(detection),
         confidence: detection.confidence,

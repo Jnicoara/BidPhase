@@ -24,35 +24,52 @@
  * user needs to know WHICH file of five did not make it and why.
  */
 import { cn } from "@/lib/utils";
-import { AlertCircle, Loader2, X } from "lucide-react";
+import { AlertCircle, Loader2, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatBytes } from "@shared/uploadLimits";
 
 export type UploadJobView = {
+  id: string;
   filename: string;
   byteSize: number;
   sent: number;
   state: "waiting" | "uploading" | "finishing" | "done" | "failed";
   error?: string;
+  /** The technical line behind `error`. Shown small, under it. */
+  errorDetail?: string | null;
+  /**
+   * Whether sending the same bytes again could work.
+   *
+   * False for a file that is too large or is not a PDF — those fail
+   * identically forever, so a Retry button there is one that cannot succeed.
+   * Those rows offer only Dismiss, because the way forward is a different file.
+   */
+  retryable?: boolean;
 };
 
 export function UploadProgress({
   jobs,
   onCancel,
   onDismiss,
+  onRetry,
 }: {
   jobs: UploadJobView[];
   /** Abort the transfer in flight. */
   onCancel: () => void;
   /** Clear a failed row the user has read. */
-  onDismiss: (index: number) => void;
+  onDismiss: (id: string) => void;
+  /** Send a failed upload again, reusing the file already chosen. */
+  onRetry: (id: string) => void;
 }) {
   if (jobs.length === 0) return null;
 
   return (
     <div className="border-b border-border bg-card px-4 py-2.5 space-y-2 shrink-0">
-      {jobs.map((job, index) => {
+      {jobs.map(job => {
         const failed = job.state === "failed";
+        // Default true: most failures are transfer failures and are worth
+        // another go. Only the ones the file itself causes opt out.
+        const canRetry = failed && job.retryable !== false;
         // Guard the divide: a zero-byte file is refused before it gets here,
         // but a NaN width would break the bar rather than show an empty one.
         const pct =
@@ -61,7 +78,9 @@ export function UploadProgress({
             : 0;
 
         return (
-          <div key={`${job.filename}-${index}`}>
+          // Keyed by id, not by name or position: two files can share a name,
+          // and a row's position shifts when an earlier one is dismissed.
+          <div key={job.id}>
             <div className="flex items-center gap-2">
               {failed ? (
                 <AlertCircle className="w-3.5 h-3.5 shrink-0 text-destructive" />
@@ -77,15 +96,29 @@ export function UploadProgress({
               </span>
 
               {failed ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => onDismiss(index)}
-                  aria-label={`Dismiss ${job.filename}`}
-                >
-                  <X className="w-3 h-3" />
-                </Button>
+                <>
+                  {canRetry && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 shrink-0 text-[0.7rem] gap-1 text-muted-foreground hover:text-foreground"
+                      onClick={() => onRetry(job.id)}
+                      aria-label={`Retry ${job.filename}`}
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Retry
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 w-6 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => onDismiss(job.id)}
+                    aria-label={`Dismiss ${job.filename}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </Button>
+                </>
               ) : (
                 <>
                   <span className="text-[0.7rem] font-mono tabular-nums text-muted-foreground shrink-0">
@@ -110,9 +143,18 @@ export function UploadProgress({
             </div>
 
             {failed ? (
-              <p className="text-[0.7rem] text-destructive mt-0.5 ml-5.5 pl-0.5">
-                {job.error}
-              </p>
+              <div className="mt-0.5 ml-5.5 pl-0.5">
+                <p className="text-[0.7rem] text-destructive">{job.error}</p>
+                {/* The engineer's line. Kept out of the sentence above so the
+                    user-facing message stays one readable thing, and kept ON
+                    SCREEN rather than only in a toast, because this is what
+                    someone pastes into a bug report an hour later. */}
+                {job.errorDetail ? (
+                  <p className="text-[0.65rem] text-muted-foreground mt-0.5">
+                    {job.errorDetail}
+                  </p>
+                ) : null}
+              </div>
             ) : (
               <div
                 className="h-1 mt-1.5 rounded-full bg-muted overflow-hidden"

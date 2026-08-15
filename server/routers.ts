@@ -14,6 +14,13 @@ import { laborRatesRouter } from "./routers/laborRatesRouter";
 import { modifiersRouter } from "./routers/modifiersRouter";
 import { assembliesRouter } from "./routers/assembliesRouter";
 import { bidsRouter } from "./routers/bidsRouter";
+import { clientsRouter } from "./routers/clientsRouter";
+import { salesTaxRouter } from "./routers/salesTaxRouter";
+import { bidExtrasRouter } from "./routers/bidExtrasRouter";
+import { materialsListRouter } from "./routers/materialsListRouter";
+import { accountingRouter } from "./routers/accountingRouter";
+import { companyRouter } from "./routers/companyRouter";
+import { closeoutRouter } from "./routers/closeoutRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
@@ -41,6 +48,24 @@ export const appRouter = router({
   modifiers: modifiersRouter,
   assemblies: assembliesRouter,
   bids: bidsRouter,
+  // Who the work is for. A bid points at one optionally — see shared/bidClient.ts
+  // for how a linked record and a bid's own typed-in name are reconciled.
+  clients: clientsRouter,
+  // Sales tax areas and the company rules that say what is taxable. Nothing
+  // here is seeded — see shared/salesTax.ts for why a shipped rate table
+  // would be worse than none.
+  salesTax: salesTaxRouter,
+  // Flat charges and includes/excludes — reusable lists plus what is attached
+  // to a bid. Both snapshot onto the bid, as every library in this app does.
+  bidExtras: bidExtrasRouter,
+  materialsList: materialsListRouter,
+  accounting: accountingRouter,
+  // Access control: who is in the company and what they may do. Every route
+  // acts on ctx.scope.companyId — none of them take a company id.
+  company: companyRouter,
+  // Job close-out: actual hours against the estimate, and the suggestions that
+  // fall out of them. Nothing here writes to the library without a person.
+  closeout: closeoutRouter,
   proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,

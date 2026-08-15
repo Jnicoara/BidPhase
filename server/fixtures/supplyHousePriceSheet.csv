@@ -1,0 +1,204 @@
+Catalog #,Description,UOM,List Price,Net Price
+SKU-100000,"#14 bare copper, solid",FT,$0.57/FT,$0.18/FT
+SKU-100007,"#12 bare copper, solid",FT,$0.70/FT,$0.31/FT
+SKU-100014,"#10 bare copper, solid",FT,$0.83/FT,$0.44/FT
+SKU-100021,"#8 bare copper, solid",FT,$0.96/FT,$0.57/FT
+SKU-100028,"#10 bare copper, stranded",FT,$1.09/FT,$0.70/FT
+SKU-100035,"#8 bare copper, stranded",FT,$1.22/FT,$0.83/FT
+SKU-100042,"#6 bare copper, stranded",FT,$1.35/FT,$0.96/FT
+SKU-100049,"#4 bare copper, stranded",FT,$1.48/FT,$1.09/FT
+SKU-100056,"#2 bare copper, stranded",FT,$1.61/FT,$1.22/FT
+SKU-100063,"#1/0 bare copper, stranded",FT,$1.74/FT,$1.35/FT
+SKU-100070,"#2/0 bare copper, stranded",FT,$1.87/FT,$1.48/FT
+SKU-100077,"1-5/8"" x 1-5/8"" strut channel, 10 ft",EA,$5.06,$4.19
+SKU-100084,"1-5/8"" x 13/16"" strut channel, 10 ft",EA,$5.35,$4.48
+SKU-100091,"1-5/8"" x 1-1/4"" strut channel, 10 ft",EA,$5.64,$4.77
+SKU-100098,"1-5/8"" x 3-1/4"" strut channel, 10 ft",EA,$5.93,$5.06
+SKU-100105,"1-1/4"" x 1-1/4"" strut channel, 10 ft",EA,$6.22,$5.35
+SKU-100112,"1/4"" all-thread rod, 10 ft",EA,$6.51,$5.64
+SKU-100119,"3/8"" all-thread rod, 10 ft",EA,$6.80,$5.93
+SKU-100126,"1/2"" all-thread rod, 10 ft",EA,$7.09,$6.22
+SKU-100133,"5/8"" all-thread rod, 10 ft",EA,$7.38,$6.51
+SKU-100140,"Octagon box, plastic",EA,$7.67,$6.80
+SKU-100147,"Octagon box, metal",EA,$7.96,$7.09
+SKU-100154,"Weatherproof box, single-gang",EA,$8.25,$7.38
+SKU-100161,"Weatherproof box, double-gang",EA,$8.54,$7.67
+SKU-100168,"Ground rod, 8 ft",EA,$8.83,$7.96
+SKU-100175,"Wire nuts, small",EA,$9.12,$8.25
+SKU-100182,"Wire nuts, large",EA,$9.41,$8.54
+SKU-100189,"Lever wire connector, 2-port",EA,$9.70,$8.83
+SKU-100196,"Lever wire connector, 3-port",EA,$9.99,$9.12
+SKU-100203,"Lever wire connector, 5-port",EA,$10.28,$9.41
+SKU-100210,Panel filler plate,EA,"$5,521.31","$5,110.10"
+SKU-100217,100A main panel,EA,"$5,658.38","$5,247.17"
+SKU-100224,125A main panel,EA,"$5,795.45","$5,384.24"
+SKU-100231,150A main panel,EA,"$5,932.52","$5,521.31"
+SKU-100238,200A main panel,EA,"$6,069.59","$5,658.38"
+SKU-100245,400A main panel,EA,"$6,206.66","$5,795.45"
+SKU-100252,100A main-lug sub-panel,EA,"$6,343.73","$5,932.52"
+SKU-100259,125A main-lug sub-panel,EA,"$6,480.80","$6,069.59"
+SKU-100266,150A main-lug sub-panel,EA,"$6,617.87","$6,206.66"
+SKU-100273,200A main-lug sub-panel,EA,"$6,754.94","$6,343.73"
+SKU-100280,400A main-lug sub-panel,EA,"$6,891.01","$6,480.80"
+
+SKU-100287,100A meter base,EA,"$7,028.08","$6,617.87"
+SKU-100294,200A meter base,EA,"$7,165.15","$6,754.94"
+SKU-100301,400A meter base,EA,"$7,302.22","$6,891.01"
+SKU-100308,30A fused disconnect,EA,$14.63,$13.76
+SKU-100315,30A non-fused disconnect,EA,$14.92,$14.05
+SKU-100322,60A fused disconnect,EA,$15.21,$14.34
+SKU-100329,60A non-fused disconnect,EA,$15.50,$14.63
+SKU-100336,100A fused disconnect,EA,$15.79,$14.92
+SKU-100343,100A non-fused disconnect,EA,$16.08,$15.21
+SKU-100350,200A fused disconnect,EA,$16.37,$15.50
+SKU-100357,200A non-fused disconnect,EA,$16.66,$15.79
+SKU-100364,50A spa disconnect,EA,$16.95,$16.08
+SKU-100371,60A spa disconnect,EA,$17.24,$16.37
+SKU-100378,Fire alarm control panel,EA,"$8,809.99","$8,398.78"
+SKU-100385,Cat6 patch panel,EA,"$8,946.06","$8,535.85"
+SKU-100392,150W landscape transformer,EA,"$9,083.13","$8,672.92"
+SKU-100399,300W landscape transformer,EA,"$9,220.20","$8,809.99"
+SKU-100406,600W landscape transformer,EA,"$9,357.27","$8,946.06"
+SKU-100413,Generator interlock kit,EA,"$9,494.34","$9,083.13"
+SKU-100420,Doorbell transformer,EA,"$9,631.41","$9,220.20"
+SKU-100427,Dry-type transformer,EA,"$9,768.48","$9,357.27"
+SKU-100434,400A fused disconnect,EA,$19.85,$18.98
+SKU-100441,600A fused disconnect,EA,$20.14,$19.27
+SKU-100448,"1/2"" EMT",FT,$20.43,$19.56
+SKU-100455,"3/4"" EMT",FT,$20.72,$19.85
+SKU-100462,"1"" EMT",FT,$21.01,$20.14
+SKU-100469,"1-1/4"" EMT",FT,$21.30,$20.43
+SKU-100476,"1-1/2"" EMT",FT,$21.59,$20.72
+SKU-100483,"2"" EMT",FT,$21.88,$21.01
+SKU-100490,"2-1/2"" EMT",FT,$22.17,$21.30
+SKU-100497,"3"" EMT",FT,$22.46,$21.59
+SKU-100504,"4"" EMT",FT,$22.75,$21.88
+SKU-100511,"1/2"" EMT connector",EA,$23.04,$22.17
+SKU-100518,"1/2"" EMT coupling",EA,$23.33,$22.46
+SKU-100525,"1/2"" EMT 90-degree elbow",EA,$23.62,$22.75
+SKU-100532,"1/2"" EMT LB conduit body",EA,$23.91,$23.04
+SKU-100539,"3/4"" EMT connector",EA,$24.20,$23.33
+SKU-100546,"3/4"" EMT coupling",EA,$24.49,$23.62
+SKU-100553,"3/4"" EMT 90-degree elbow",EA,$24.78,$23.91
+SKU-100560,"3/4"" EMT LB conduit body",EA,$25.07,$24.20
+
+SKU-100567,"1"" EMT connector",EA,$25.36,$24.49
+SKU-100574,"1"" EMT coupling",EA,$25.65,$24.78
+SKU-100581,"1"" EMT 90-degree elbow",EA,$25.94,$25.07
+SKU-100588,"1"" EMT LB conduit body",EA,$26.23,$25.36
+SKU-100595,"1-1/4"" EMT connector",EA,$26.52,$25.65
+SKU-100602,"1-1/4"" EMT coupling",EA,$26.81,$25.94
+SKU-100609,"1-1/4"" EMT 90-degree elbow",EA,$27.10,$26.23
+SKU-100616,"1-1/4"" EMT LB conduit body",EA,$27.39,$26.52
+SKU-100623,#14 THHN,FT,$4.14/FT,$3.75/FT
+SKU-100630,#12 THHN,FT,$0.27/FT,$3.88/FT
+SKU-100637,#10 THHN,FT,$0.40/FT,$4.01/FT
+SKU-100644,#10 THHN stranded,FT,$0.53/FT,$4.14/FT
+SKU-100651,#8 THHN,FT,$0.66/FT,$0.27/FT
+SKU-100658,#6 THHN,FT,$0.79/FT,$0.40/FT
+SKU-100665,#4 THHN,FT,$0.92/FT,$0.53/FT
+SKU-100672,#3 THHN,FT,$1.05/FT,$0.66/FT
+SKU-100679,#2 THHN,FT,$1.18/FT,$0.79/FT
+SKU-100686,#1 THHN,FT,$1.31/FT,$0.92/FT
+SKU-100693,#1/0 THHN,FT,$1.44/FT,$1.05/FT
+SKU-100700,#2/0 THHN,FT,$1.57/FT,$1.18/FT
+SKU-100707,#3/0 THHN,FT,$1.70/FT,$1.31/FT
+SKU-100714,#4/0 THHN,FT,$1.83/FT,$1.44/FT
+SKU-100721,250 kcmil THHN,FT,$1.96/FT,$1.57/FT
+SKU-100728,300 kcmil THHN,FT,$2.09/FT,$1.70/FT
+SKU-100735,350 kcmil THHN,FT,$2.22/FT,$1.83/FT
+SKU-100742,400 kcmil THHN,FT,$2.35/FT,$1.96/FT
+SKU-100749,500 kcmil THHN,FT,$2.48/FT,$2.09/FT
+SKU-100756,#8 XHHW aluminum,FT,$2.61/FT,$2.22/FT
+SKU-100763,#6 XHHW aluminum,FT,$2.74/FT,$2.35/FT
+SKU-100770,#4 XHHW aluminum,FT,$2.87/FT,$2.48/FT
+SKU-100777,#2 XHHW aluminum,FT,$3.00/FT,$2.61/FT
+SKU-100784,#1 XHHW aluminum,FT,$3.13/FT,$2.74/FT
+SKU-100791,#1/0 XHHW aluminum,FT,$3.26/FT,$2.87/FT
+SKU-100798,#2/0 XHHW aluminum,FT,$3.39/FT,$3.00/FT
+SKU-100805,#3/0 XHHW aluminum,FT,$3.52/FT,$3.13/FT
+SKU-100812,#4/0 XHHW aluminum,FT,$3.65/FT,$3.26/FT
+SKU-100819,250 kcmil XHHW aluminum,FT,$3.78/FT,$3.39/FT
+SKU-100826,300 kcmil XHHW aluminum,FT,$3.91/FT,$3.52/FT
+SKU-100833,350 kcmil XHHW aluminum,FT,$4.04/FT,$3.65/FT
+SKU-100840,400 kcmil XHHW aluminum,FT,$4.17/FT,$3.78/FT
+
+SKU-100847,500 kcmil XHHW aluminum,FT,$0.30/FT,$3.91/FT
+SKU-100854,14-2 NM-B,FT,$0.43/FT,$4.04/FT
+SKU-100861,12-2 NM-B,FT,$0.56/FT,$4.17/FT
+SKU-100868,10-2 NM-B,FT,$0.69/FT,$0.30/FT
+SKU-100875,14-3 NM-B,FT,$0.82/FT,$0.43/FT
+SKU-100882,12-3 NM-B,FT,$0.95/FT,$0.56/FT
+SKU-100889,10-3 NM-B,FT,$1.08/FT,$0.69/FT
+SKU-100896,8-2 NM-B,FT,$1.21/FT,$0.82/FT
+SKU-100903,8-3 NM-B,FT,$1.34/FT,$0.95/FT
+SKU-100910,6-3 NM-B,FT,$1.47/FT,$1.08/FT
+SKU-100917,14-2 MC cable,FT,$1.60/FT,$1.21/FT
+SKU-100924,14-3 MC cable,FT,$1.73/FT,$1.34/FT
+SKU-100931,12-2 MC cable,FT,$1.86/FT,$1.47/FT
+SKU-100938,12-3 MC cable,FT,$1.99/FT,$1.60/FT
+SKU-100945,10-2 MC cable,FT,$2.12/FT,$1.73/FT
+SKU-100952,10-3 MC cable,FT,$2.25/FT,$1.86/FT
+SKU-100959,10-4 MC cable,FT,$2.38/FT,$1.99/FT
+SKU-100966,8-2 MC cable,FT,$2.51/FT,$2.12/FT
+SKU-100973,8-3 MC cable,FT,$2.64/FT,$2.25/FT
+SKU-100980,8-4 MC cable,FT,$2.77/FT,$2.38/FT
+SKU-100987,6-2 MC cable,FT,$2.90/FT,$2.51/FT
+SKU-100994,6-3 MC cable,FT,$3.03/FT,$2.64/FT
+SKU-101001,6-4 MC cable,FT,$3.16/FT,$2.77/FT
+SKU-101008,4-2 MC cable,FT,$3.29/FT,$2.90/FT
+SKU-101015,4-3 MC cable,FT,$3.42/FT,$3.03/FT
+SKU-101022,3-3 MC cable,FT,$3.55/FT,$3.16/FT
+SKU-101029,3-4 MC cable,FT,$3.68/FT,$3.29/FT
+SKU-101036,2-2 MC cable,FT,$3.81/FT,$3.42/FT
+SKU-101043,2-3 MC cable,FT,$3.94/FT,$3.55/FT
+SKU-101050,12-2 UF-B,EA,$45.37,$44.50
+SKU-101057,10-2 UF-B,EA,$45.66,$44.79
+SKU-101064,8-2 UF-B,EA,$45.95,$45.08
+SKU-101071,#16 fixture wire,EA,$46.24,$45.37
+SKU-101078,#18 fixture wire,EA,$46.53,$45.66
+SKU-101085,8-3 SER copper,FT,$0.72/FT,$0.33/FT
+SKU-101092,6-3 SER copper,FT,$0.85/FT,$0.46/FT
+SKU-101099,4-3 SER copper,FT,$0.98/FT,$0.59/FT
+SKU-101106,2-3 SER copper,FT,$1.11/FT,$0.72/FT
+SKU-101113,1-3 SER copper,FT,$1.24/FT,$0.85/FT
+SKU-101120,1/0-3 SER aluminum,EA,$48.27,$47.40
+
+SKU-101127,2/0-3 SER aluminum,EA,$48.56,$47.69
+SKU-101134,3/0-3 SER aluminum,EA,$48.85,$47.98
+SKU-101141,4/0-3 SER aluminum,EA,$49.14,$48.27
+SKU-101148,4/0-4/0-2/0 SER aluminum,EA,$49.43,$48.56
+SKU-101155,4/0-4/0-4/0-2/0 SER aluminum,EA,$49.72,$48.85
+SKU-101162,250-250-250 SER aluminum,EA,$50.01,$49.14
+SKU-101169,EMT strap,EA,$50.30,$49.43
+SKU-101176,Strut channel nut,EA,$50.59,$49.72
+SKU-101183,Strut angle bracket,EA,$50.88,$50.01
+SKU-101190,Strut post base,EA,$51.17,$50.30
+SKU-101197,Strut end cap,EA,$51.46,$50.59
+SKU-101204,Single-gang box,EA,$51.75,$50.88
+SKU-101211,Single-gang metal box,EA,$52.04,$51.17
+SKU-101218,Double-gang box,EA,$52.33,$51.46
+SKU-101225,Double-gang metal box,EA,$52.62,$51.75
+SKU-101232,Triple-gang box,EA,$52.91,$52.04
+SKU-101239,Triple-gang metal box,EA,$53.20,$52.33
+SKU-101246,Fan-rated ceiling box,EA,$53.49,$52.62
+SKU-101253,Handy box,EA,$53.78,$52.91
+SKU-101260,Floor box,EA,$54.07,$53.20
+SKU-101267,4x4 pull box,EA,$54.36,$53.49
+SKU-101274,6x6 pull box,EA,$54.65,$53.78
+SKU-101281,8x8 pull box,EA,$54.94,$54.07
+SKU-101288,12x12 pull box,EA,$55.23,$54.36
+SKU-101295,Duplex receptacle,EA,$55.52,$54.65
+SKU-101302,20A duplex receptacle,EA,$55.81,$54.94
+SKU-101309,GFCI receptacle,EA,$56.10,$55.23
+SKU-101316,AFCI receptacle,EA,$56.39,$55.52
+SKU-101323,Twist-lock receptacle,EA,$56.68,$55.81
+SKU-101330,50A range receptacle,EA,$56.97,$56.10
+SKU-101337,30A dryer receptacle,EA,$57.26,$56.39
+SKU-101344,USB combo receptacle,EA,$57.55,$56.68
+SKU-101351,Switch/receptacle combo device,EA,$57.84,$56.97
+SKU-101358,Single-pole switch,EA,$58.13,$57.26
+SKU-101365,3-way switch,EA,$58.42,$57.55
+SKU-101372,4-way switch,EA,$58.71,$57.84
+SKU-101379,Dimmer,EA,$59.00,$58.13
+SKU-101386,Smart switch,EA,$59.29,$58.42

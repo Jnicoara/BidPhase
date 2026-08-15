@@ -20,7 +20,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { router, scoped } from "../_core/trpc";
 import {
   RUN_PATH_TYPES,
   RUN_STATUSES,
@@ -34,6 +34,13 @@ import {
   type RunPathType,
 } from "../../shared/takeoffQuantities";
 import * as db from "../db";
+
+/**
+ * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
+ * Chosen by operation type in `scoped` so a route added later is covered
+ * without anyone remembering to tag it. See _core/trpc.ts.
+ */
+const procedure = scoped("bids.view", "bids.edit");
 
 const nameSchema = z.string().trim().min(1).max(255);
 
@@ -103,26 +110,29 @@ export const takeoffRunsRouter = router({
    * The UI asks before enabling the tool so it can show the actual reason and
    * the way out, rather than a disabled button with no explanation.
    */
-  measurability: protectedProcedure
+  measurability: procedure
     .input(z.object({ sheetId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const sheet = await requireSheet(input.sheetId, ctx.user.id);
+      const sheet = await requireSheet(input.sheetId, ctx.scope.dataUserId);
       return measurabilityOf(sheetScale(sheet));
     }),
 
   /** Every run on a sheet, with its measured quantities where possible. */
-  listForSheet: protectedProcedure
+  listForSheet: procedure
     .input(z.object({ sheetId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const sheet = await requireSheet(input.sheetId, ctx.user.id);
+      const sheet = await requireSheet(input.sheetId, ctx.scope.dataUserId);
       const scale = sheetScale(sheet);
       const measurability = measurabilityOf(scale);
       const ratio = measurability.ok ? measurability.ratio : null;
 
-      const runs = await db.getRunsForSheet(input.sheetId, ctx.user.id);
+      const runs = await db.getRunsForSheet(
+        input.sheetId,
+        ctx.scope.dataUserId
+      );
       const circuits = await db.getCircuitsForRuns(
         runs.map(r => r.id),
-        ctx.user.id
+        ctx.scope.dataUserId
       );
 
       return runs.map(run => {
@@ -170,7 +180,7 @@ export const takeoffRunsRouter = router({
    * marked draft. Losing an autosave to a schema that only accepts finished
    * work would defeat the point of having one.
    */
-  save: protectedProcedure
+  save: procedure
     .input(
       z.object({
         bidId: z.number().int().positive(),
@@ -187,8 +197,8 @@ export const takeoffRunsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const sheet = await requireSheet(input.sheetId, ctx.user.id);
-      const bid = await db.getBidById(input.bidId, ctx.user.id);
+      const sheet = await requireSheet(input.sheetId, ctx.scope.dataUserId);
+      const bid = await db.getBidById(input.bidId, ctx.scope.dataUserId);
       if (!bid)
         throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
 
@@ -202,7 +212,7 @@ export const takeoffRunsRouter = router({
       const values = {
         bidId: input.bidId,
         sheetId: input.sheetId,
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         pathType: input.pathType,
         points: input.points,
@@ -214,14 +224,14 @@ export const takeoffRunsRouter = router({
       };
 
       if (input.id) {
-        const existing = await requireRun(input.id, ctx.user.id);
+        const existing = await requireRun(input.id, ctx.scope.dataUserId);
         if (existing.sheetId !== input.sheetId) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "That run belongs to another sheet.",
           });
         }
-        await db.updateRun(input.id, ctx.user.id, values);
+        await db.updateRun(input.id, ctx.scope.dataUserId, values);
         return {
           id: input.id,
           measured: inches !== null,
@@ -244,11 +254,14 @@ export const takeoffRunsRouter = router({
    * a run enters the bill of materials, and an uncounted line there is worse
    * than a draft the user can see is unfinished.
    */
-  commit: protectedProcedure
+  commit: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const run = await requireRun(input.id, ctx.user.id);
-      const { ratio } = await requireMeasurableSheet(run.sheetId, ctx.user.id);
+      const run = await requireRun(input.id, ctx.scope.dataUserId);
+      const { ratio } = await requireMeasurableSheet(
+        run.sheetId,
+        ctx.scope.dataUserId
+      );
 
       const points = run.points ?? [];
       if (points.length < 2) {
@@ -266,7 +279,7 @@ export const takeoffRunsRouter = router({
         });
       }
 
-      await db.updateRun(input.id, ctx.user.id, {
+      await db.updateRun(input.id, ctx.scope.dataUserId, {
         status: "committed",
         isSuggestion: false,
         lengthInches: inches.toFixed(4),
@@ -281,18 +294,18 @@ export const takeoffRunsRouter = router({
    * Separate from `commit` so the act of accepting a suggestion is explicit in
    * the API as well as the UI. A suggestion never becomes real on its own.
    */
-  acceptSuggestion: protectedProcedure
+  acceptSuggestion: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const run = await requireRun(input.id, ctx.user.id);
+      const run = await requireRun(input.id, ctx.scope.dataUserId);
       if (!run.isSuggestion) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "That run is not a suggestion.",
         });
       }
-      await requireMeasurableSheet(run.sheetId, ctx.user.id);
-      await db.updateRun(input.id, ctx.user.id, {
+      await requireMeasurableSheet(run.sheetId, ctx.scope.dataUserId);
+      await db.updateRun(input.id, ctx.scope.dataUserId, {
         isSuggestion: false,
         status: "draft",
       });
@@ -300,7 +313,7 @@ export const takeoffRunsRouter = router({
     }),
 
   /** Tag a run's Location without disturbing its geometry. */
-  setLocation: protectedProcedure
+  setLocation: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -308,22 +321,24 @@ export const takeoffRunsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await requireRun(input.id, ctx.user.id);
-      await db.updateRun(input.id, ctx.user.id, { location: input.location });
+      await requireRun(input.id, ctx.scope.dataUserId);
+      await db.updateRun(input.id, ctx.scope.dataUserId, {
+        location: input.location,
+      });
       return { success: true };
     }),
 
-  remove: protectedProcedure
+  remove: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await requireRun(input.id, ctx.user.id);
-      await db.deleteRun(input.id, ctx.user.id);
+      await requireRun(input.id, ctx.scope.dataUserId);
+      await db.deleteRun(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
   // ── Circuits on a run ──────────────────────────────────────────────────────
 
-  addCircuit: protectedProcedure
+  addCircuit: procedure
     .input(
       z.object({
         runId: z.number().int().positive(),
@@ -333,7 +348,7 @@ export const takeoffRunsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const run = await requireRun(input.runId, ctx.user.id);
+      const run = await requireRun(input.runId, ctx.scope.dataUserId);
       if (run.pathType !== "conduit") {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -343,14 +358,14 @@ export const takeoffRunsRouter = router({
       }
       const id = await db.createRunCircuit({
         runId: input.runId,
-        userId: ctx.user.id,
+        userId: ctx.scope.dataUserId,
         name: input.name,
         conductorCount: input.conductorCount,
       });
       return { id };
     }),
 
-  updateCircuit: protectedProcedure
+  updateCircuit: procedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -360,14 +375,14 @@ export const takeoffRunsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { id, ...patch } = input;
-      await db.updateRunCircuit(id, ctx.user.id, patch);
+      await db.updateRunCircuit(id, ctx.scope.dataUserId, patch);
       return { success: true };
     }),
 
-  removeCircuit: protectedProcedure
+  removeCircuit: procedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      await db.deleteRunCircuit(input.id, ctx.user.id);
+      await db.deleteRunCircuit(input.id, ctx.scope.dataUserId);
       return { success: true };
     }),
 
@@ -379,20 +394,20 @@ export const takeoffRunsRouter = router({
    * counting either would put provisional footage into a total the user reads
    * as their quantity.
    */
-  totals: protectedProcedure
+  totals: procedure
     .input(z.object({ bidId: z.number().int().positive() }))
     .query(async ({ input, ctx }) => {
-      const bid = await db.getBidById(input.bidId, ctx.user.id);
+      const bid = await db.getBidById(input.bidId, ctx.scope.dataUserId);
       if (!bid)
         throw new TRPCError({ code: "NOT_FOUND", message: "Bid not found." });
 
-      const allRuns = await db.getRunsForBid(input.bidId, ctx.user.id);
+      const allRuns = await db.getRunsForBid(input.bidId, ctx.scope.dataUserId);
       const runs = allRuns.filter(
         r => r.status === "committed" && !r.isSuggestion
       );
       const circuits = await db.getCircuitsForRuns(
         runs.map(r => r.id),
-        ctx.user.id
+        ctx.scope.dataUserId
       );
 
       // Each run measures against ITS OWN sheet's scale — a bid can hold a site
@@ -400,7 +415,7 @@ export const takeoffRunsRouter = router({
       const sheetIds = Array.from(new Set(runs.map(r => r.sheetId)));
       const ratioBySheet = new Map<number, number | null>();
       for (const sheetId of sheetIds) {
-        const sheet = await db.getBidPdfSheet(sheetId, ctx.user.id);
+        const sheet = await db.getBidPdfSheet(sheetId, ctx.scope.dataUserId);
         if (!sheet) {
           ratioBySheet.set(sheetId, null);
           continue;

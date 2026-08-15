@@ -5,12 +5,9 @@
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
  *
  * Routing (hash-based):
- *   /           → HelixBid Homepage (BP logo destination)
+ *   /           → Dashboard (the app has no separate splash; see § below)
  *   /dashboard  → Dashboard (all bids by status; replaced the Projects grid)
- *   /project/:id → Legacy project detail (PDF plan viewer / takeoff). Still
- *                  routed, but nothing links to it since Projects was removed.
  *   /settings    → Settings
- *   /trash       → Trash
  *   /matdb       → Supplier Pricing (prices the real materials catalog)
  *   /library/materials   → Materials (Foundation library catalog)
  *   /library/labor-rates → Labor Rates (roles and what they cost per hour)
@@ -25,10 +22,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
-import TrashPage from "@/pages/TrashPage";
-import HelixBidHomePage from "@/pages/HelixBidHomePage";
 import DashboardPage from "@/pages/DashboardPage";
-import ProjectDetailPage from "@/pages/ProjectDetailPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
 import MaterialsLibraryPage from "@/pages/MaterialsLibraryPage";
 import LaborRatesPage from "@/pages/LaborRatesPage";
@@ -40,6 +34,8 @@ import TakeoffPage from "@/pages/TakeoffPage";
 import ProposalPage from "@/pages/ProposalPage";
 import BidArchivePage from "@/pages/BidArchivePage";
 import KitsPage from "@/pages/KitsPage";
+import ClientsPage from "@/pages/ClientsPage";
+import TeamPage from "@/pages/TeamPage";
 import FirstRunPage from "@/pages/FirstRunPage";
 import { trpc } from "@/lib/trpc";
 import {
@@ -56,16 +52,15 @@ import {
   Zap,
   LayoutDashboard,
   Archive as ArchiveIcon,
+  Users,
+  UsersRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@shared/version";
 
 type Route =
-  | "home"
   | "dashboard"
-  | "project-detail"
   | "settings"
-  | "trash"
   | "matdb"
   | "library-materials"
   | "library-labor-rates"
@@ -73,6 +68,8 @@ type Route =
   | "library-assemblies"
   | "library-kits"
   | "bids"
+  | "clients"
+  | "team"
   | "quickbid"
   | "takeoff"
   | "proposal"
@@ -90,21 +87,18 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   const parts = full.split("/");
   const p = parts[0];
 
-  if (p === "" || p === "home") return { route: "home" };
-  // The Dashboard replaced the old Projects list. /projects still resolves so
-  // existing links and bookmarks land somewhere sensible rather than on Home.
+  // Bare / and the old /home both land on the Dashboard. The splash page they
+  // used to show was removed — see the § comment above renderContent.
+  if (p === "" || p === "home") return { route: "dashboard" };
+  // The Dashboard replaced the old Projects list. /projects is still spelled
+  // out rather than left to the fallthrough, so the intent is on the record:
+  // it is a retired address kept pointing somewhere real, not an oversight.
   if (p === "dashboard" || p === "projects") return { route: "dashboard" };
-  if (p === "project" && parts[1]) {
-    const id = parseInt(parts[1]);
-    if (!isNaN(id)) return { route: "project-detail", projectId: id };
-  }
   if (p === "matdb") return { route: "matdb" };
   if (p === "settings") return { route: "settings" };
-  if (p === "trash") return { route: "trash" };
-  // Foundation bid layer. Distinct from /projects, which is the legacy
-  // master_* system with its PDF/takeoff state.
-  // The archive of soft-deleted BIDS. Distinct from /trash, which belongs to
-  // the legacy projects system and is client-state only.
+  // The archive of soft-deleted BIDS. The legacy projects system had its own
+  // "trash" for soft-deleted projects; that screen and its route are gone, and
+  // this is the only archive left.
   if (p === "archive") return { route: "bid-archive" };
   if (p === "bids") {
     // /bids/:id opens straight into one bid, which is what the Dashboard links to.
@@ -116,6 +110,8 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
     if (parts[2] === "proposal") return { route: "proposal", projectId: id };
     return { route: "bids", projectId: id };
   }
+  if (p === "clients") return { route: "clients" };
+  if (p === "team") return { route: "team" };
   if (p === "quickbid") return { route: "quickbid" };
   if (p === "welcome") return { route: "welcome" };
   // Library § …. Bare /library lands on Materials; Assemblies is still to come.
@@ -128,8 +124,9 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
       return { route: "library-materials" };
   }
   if (p === "admin") return { route: "admin" };
-  // Default: show homepage
-  return { route: "home" };
+  // Anything unrecognised lands on the Dashboard — the honest destination for
+  // an address that no longer exists.
+  return { route: "dashboard" };
 }
 
 function getCurrentRouteState(): { route: Route; projectId?: number } {
@@ -156,14 +153,12 @@ export default function HelixBidShell() {
     route: Route;
     projectId?: number;
   }>(() => getCurrentRouteState());
-  const [previousRoute, setPreviousRoute] = useState<Route>("home");
+  const [previousRoute, setPreviousRoute] = useState<Route>("dashboard");
 
   const { route, projectId: activeProjectId } = routeState;
 
   const navigate = useCallback((r: Route, id?: number) => {
-    if (r === "home") {
-      window.location.hash = "/home";
-    } else if (r === "dashboard") {
+    if (r === "dashboard") {
       window.location.hash = "/dashboard";
     } else if (r === "bids" && id) {
       window.location.hash = `/bids/${id}`;
@@ -173,8 +168,6 @@ export default function HelixBidShell() {
       window.location.hash = `/bids/${id}/proposal`;
     } else if (r === "bid-archive") {
       window.location.hash = "/archive";
-    } else if (r === "project-detail" && id) {
-      window.location.hash = `/project/${id}`;
     } else if (r === "library-materials") {
       window.location.hash = "/library/materials";
     } else if (r === "library-labor-rates") {
@@ -217,11 +210,8 @@ export default function HelixBidShell() {
   }, [setActiveTab]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
-  const isOnHome = route === "home";
   const isOnDashboard = route === "dashboard";
-  const isOnProjectDetail = route === "project-detail";
   const isInSettings = route === "settings";
-  const isInTrash = route === "trash";
   const isInMatDb = route === "matdb";
   const isInLibraryMats = route === "library-materials";
   const isInLaborRates = route === "library-labor-rates";
@@ -229,6 +219,8 @@ export default function HelixBidShell() {
   const isInLibraryAsms = route === "library-assemblies";
   const isInLibraryKits = route === "library-kits";
   const isInBids = route === "bids";
+  const isInClients = route === "clients";
+  const isInTeam = route === "team";
   const isInTakeoff = route === "takeoff";
   const isInProposal = route === "proposal";
   const isInBidArchive = route === "bid-archive";
@@ -249,30 +241,22 @@ export default function HelixBidShell() {
   const { data: onboarding } = trpc.onboarding.state.useQuery();
   useEffect(() => {
     if (!onboarding?.isFirstRun) return;
-    if (route !== "home" && route !== "dashboard") return;
+    if (route !== "dashboard") return;
     window.location.hash = "#/welcome";
   }, [onboarding?.isFirstRun, route]);
 
   // ── Content renderer ───────────────────────────────────────────────────────
   const renderContent = () => {
     if (isInMatDb) return <MaterialDatabasePage onBack={goBack} />;
-    if (isOnHome)
-      return <HelixBidHomePage onGoToProjects={() => navigate("dashboard")} />;
     if (isOnDashboard)
       return (
         <DashboardPage
           onOpenBid={id => navigate("bids", id)}
           onOpenArchive={() => navigate("bid-archive")}
+          onOpenPlans={id => navigate("takeoff", id)}
+          onQuickBid={() => navigate("quickbid")}
         />
       );
-    if (isOnProjectDetail && activeProjectId)
-      return (
-        <ProjectDetailPage
-          projectId={activeProjectId}
-          onBack={() => navigate("dashboard")}
-        />
-      );
-    if (isInTrash) return <TrashPage onBack={goBack} />;
     if (isInSettings) return <SettingsTab onBack={goBack} />;
     if (isInLibraryMats) return <MaterialsLibraryPage />;
     if (isInLaborRates) return <LaborRatesPage />;
@@ -313,6 +297,8 @@ export default function HelixBidShell() {
           onOpenBid={id => navigate("bids", id)}
         />
       );
+    if (isInClients) return <ClientsPage />;
+    if (isInTeam) return <TeamPage />;
     if (isInQuickBid) return <QuickBidPage />;
     if (isOnWelcome) return <FirstRunPage />;
     if (isInAdmin) return <AdminSettingsPage />;
@@ -322,12 +308,13 @@ export default function HelixBidShell() {
       <DashboardPage
         onOpenBid={id => navigate("bids", id)}
         onOpenArchive={() => navigate("bid-archive")}
+        onOpenPlans={id => navigate("takeoff", id)}
+        onQuickBid={() => navigate("quickbid")}
       />
     );
   };
 
-  const routeKey =
-    route === "project-detail" ? `project-${activeProjectId}` : route;
+  const routeKey = route;
 
   // ── Sidebar nav item helper ────────────────────────────────────────────────
   const NavBtn = ({
@@ -415,11 +402,11 @@ export default function HelixBidShell() {
         className="hidden md:flex flex-col shrink-0 w-16 hover:w-56 transition-[width] duration-200 ease-out
                    bg-sidebar border-r border-sidebar-border overflow-hidden group z-20"
       >
-        {/* Logo — click returns to homepage */}
+        {/* Logo — click returns to the Dashboard */}
         <div
-          onClick={() => navigate("home")}
+          onClick={() => navigate("dashboard")}
           className="flex items-center justify-center gap-2 px-3 py-4 h-16 border-b border-sidebar-border shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-          title="HelixBid Home"
+          title="HelixBid — Dashboard"
         >
           <span
             className="font-bold text-[#F5C518] text-sm shrink-0 group-hover:hidden"
@@ -442,13 +429,20 @@ export default function HelixBidShell() {
           forget. See NavSection for how the grouping survives the collapsed
           64px state.
 
-          Two screens are deliberately absent. `assemblies` (the old
-          master_*-backed Assembly Builder) is superseded by Library §
-          Assemblies, and having both in one list meant two entries called
-          almost the same thing pointing at two different systems. `trash`
-          holds soft-deleted LEGACY projects and is superseded by the bid
-          Archive below. Both routes still resolve so no link or bookmark
-          breaks — they are just no longer advertised.
+          Two screens are deliberately absent, and are now GONE rather than
+          merely unadvertised. `assemblies` (the old master_*-backed Assembly
+          Builder) is superseded by Library § Assemblies, and having both in
+          one list meant two entries called almost the same thing pointing at
+          two different systems. `trash` held soft-deleted LEGACY projects and
+          is superseded by the bid Archive below.
+
+          They were left routed-but-hidden for a while so no bookmark would
+          break. That has outlived its usefulness: the legacy `projects` system
+          they belong to is being retired, and a hidden door into it is a way
+          to reach a screen that reports on tables nothing else writes to. Both
+          paths now fall through to the Dashboard like any other unrecognised
+          address, which is a bookmark landing somewhere real rather than in a
+          dead wing of the app.
 
           Takeoff is absent for a different reason: it is not a destination.
           It lives at /bids/:id/plans and needs a bid to open, so a top-level
@@ -463,7 +457,7 @@ export default function HelixBidShell() {
           <NavSection label="Workspace">
             <NavBtn
               onClick={() => navigate("dashboard")}
-              isActive={isOnDashboard || isOnProjectDetail}
+              isActive={isOnDashboard}
               icon={LayoutDashboard}
               label="Dashboard"
               title="Dashboard — every bid by stage"
@@ -481,6 +475,28 @@ export default function HelixBidShell() {
               icon={FileText}
               label="Bids"
               title="Bids — open a bid, or its plans"
+            />
+            {/* Workspace rather than Library: the Library is what a bid is
+                assembled FROM, and a client is the other party, not a building
+                block. It sits next to Bids because that is what it attaches to. */}
+            <NavBtn
+              onClick={() => navigate("clients")}
+              isActive={isInClients}
+              icon={Users}
+              label="Clients"
+              title="Clients — who the work is for"
+            />
+            {/* Beside Clients because both answer "who", and deliberately NOT
+                buried in Settings: adding someone to the company is a thing a
+                contractor does while working, not a thing they configure once.
+                Shown to every member, whatever their role — a viewer needs to
+                be able to find out that they are a viewer. */}
+            <NavBtn
+              onClick={() => navigate("team")}
+              isActive={isInTeam}
+              icon={UsersRound}
+              label="Crew"
+              title="Crew — who can get into this company"
             />
           </NavSection>
 
@@ -500,18 +516,22 @@ export default function HelixBidShell() {
               title="Labor Rates — what an hour costs, by role"
             />
             <NavBtn
-              onClick={() => navigate("library-modifiers")}
-              isActive={isInModifiers}
-              icon={SlidersHorizontal}
-              label="Modifiers"
-              title="Modifiers — labor adjustments for job conditions"
-            />
-            <NavBtn
               onClick={() => navigate("library-assemblies")}
               isActive={isInLibraryAsms}
               icon={Layers}
               label="Assemblies"
               title="Assemblies — reusable recipes of materials and labor"
+            />
+            {/* After Assemblies, not before: a modifier adjusts an assembly's
+                labor, so it only means anything once you know what an assembly
+                is. The group now reads in build order — parts, then rates, then
+                the recipes, then what tunes them, then bundles of them. */}
+            <NavBtn
+              onClick={() => navigate("library-modifiers")}
+              isActive={isInModifiers}
+              icon={SlidersHorizontal}
+              label="Modifiers"
+              title="Modifiers — labor adjustments for job conditions"
             />
             <NavBtn
               onClick={() => navigate("library-kits")}
@@ -581,30 +601,24 @@ export default function HelixBidShell() {
           <span
             className="font-bold text-base text-foreground cursor-pointer"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-            onClick={() => navigate("home")}
+            onClick={() => navigate("dashboard")}
           >
             HelixBid
           </span>
           <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground font-mono">
             <ChevronRight size={12} />
             <span className="capitalize">
-              {isOnHome
-                ? "Home"
-                : isOnDashboard
-                  ? "Dashboard"
-                  : isOnProjectDetail
-                    ? "Project"
-                    : isInTrash
-                      ? "Trash"
-                      : isInSettings
-                        ? "Settings"
-                        : isInMatDb
-                          ? "Supplier Pricing"
-                          : isInLibraryMats
-                            ? "Materials"
-                            : isInAdmin
-                              ? "Admin Settings"
-                              : "Workspace"}
+              {isOnDashboard
+                ? "Dashboard"
+                : isInSettings
+                  ? "Settings"
+                  : isInMatDb
+                    ? "Supplier Pricing"
+                    : isInLibraryMats
+                      ? "Materials"
+                      : isInAdmin
+                        ? "Admin Settings"
+                        : "Workspace"}
             </span>
           </div>
         </header>
@@ -636,7 +650,7 @@ export default function HelixBidShell() {
             {
               label: "Dashboard",
               icon: LayoutDashboard,
-              active: isOnDashboard || isOnProjectDetail,
+              active: isOnDashboard,
               go: () => navigate("dashboard"),
             },
             {
