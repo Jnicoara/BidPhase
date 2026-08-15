@@ -4,6 +4,24 @@ Plain-English record of what changed and when. Newest first.
 
 This is the human-readable companion to the git history — read this to see what happened, read the commits for the technical detail.
 
+## [2026-08-15]
+
+- **A new Performance screen shows how the business is actually doing.** Win rate over time, how much work is out for bid, and — from the hours entered at job close-out — whether finished jobs earned the margin they were quoted at, broken down by trade. Built entirely from bids and close-outs you already have; there is nothing to set up and no new field to fill in.
+- **The win rate counts bids that were answered, not everything you quoted.** A bid still sitting on somebody's desk is not a loss, and counting it as one would make a busy month look like a bad one. The number of bids still out is shown right beside the rate everywhere it appears, so it can never be read out of context.
+- **Profitability compares the hours a job took against the hours it was quoted at, priced at that bid's own labor rate.** Materials are held at their estimate, because the app records actual hours and not actual material cost — the screen says so at the top of the panel rather than presenting a partial figure as a full profit-and-loss.
+- **Only owners and admins can see it.** Tighter than everything else in the bid layer: an estimator can open and price any bid, but company-wide win rate and margin are the owner's to share. Estimators and viewers do not see the menu item at all.
+- **It stays fast on years of history.** Everything is totalled inside the database rather than by loading bids into the browser, so a contractor with a decade of quoting opens the screen as quickly as one with a month of it.
+
+- **Tracked down the error on the archived-bids screen: nothing was wrong with the app, the database it was running against was out of date.** Opening the archive reads a bid's full record, which now includes the sales-tax fields and the sample marker added in recent updates. On an environment where those updates had not been applied to the database, that read failed outright and took the whole screen with it.
+- **There is now a one-command way to ask whether a database is behind the code**, so the same thing is caught before a deploy instead of by someone hitting a screen — and a check that fails while building, if a change is ever made without its database update.
+
+- **Fixed: anyone other than the account that owns the company could not attach a plan to a bid.** The stand-in upload route — the one every upload currently goes through, while the storage service is still waiting on a configuration change — looked the bid up under the person uploading rather than under the company. An admin or estimator attaching a plan to an ordinary company bid was told "Bid not found".
+- **A read-only account can no longer upload a file through that route.** It sat outside the normal permission checks, so a viewer could push a file into the company's storage even though they cannot change a bid anywhere else in the app.
+
+- **Closed a hole that let anyone who knew a file's address read it, signed in or not.** The address a plan sheet or company logo is served from used to hand over the file to whoever asked, with no check that they were logged in, let alone that the file was theirs. Knowing the address was the only thing protecting one contractor's plans from another's.
+- **Plan and logo addresses now expire.** Each one is issued for a single file, signed so it cannot be edited to point at a different one, and stops working after about half an hour — at which point the app quietly issues a fresh one. Nothing changes in normal use: plans open and logos appear exactly as before.
+- **A plan left open all afternoon keeps working.** If its address goes stale while you are still working in it, the viewer fetches a new one and carries on without saying anything. If the file genuinely cannot be read, you still get a plain error rather than a spinner that never stops.
+
 ## [2026-08-14]
 
 - **A new account can open a finished example bid in one click.** The Dashboard now offers "Show me an example bid" — a small commercial retail buildout, 2,400 sq ft, priced end to end at around $16,800: 76 devices and fixtures, a labor modifier for the 14 ft ceiling, a permit and a lift charge, a client, and a proposal you can print. It answers "what does this thing actually produce?" before you have entered anything of your own.

@@ -45,6 +45,7 @@ import { resolveBidClient } from "../../shared/bidClient";
 import { explainTaxStatus } from "../../shared/salesTax";
 import { storagePresignPut } from "../storage";
 import * as db from "../db";
+import { storageUrl } from "../storageTokens";
 
 /**
  * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
@@ -64,6 +65,20 @@ const LOGO_TYPES = [
 
 const sectionIdSchema = z.enum(PROPOSAL_SECTION_IDS);
 
+/**
+ * A fetchable URL for the logo, minted from its KEY.
+ *
+ * `company_branding.logoUrl` is a stored path from before the storage proxy
+ * required a token, and it no longer fetches anything on its own. The key is
+ * the durable fact; the URL is derived per read and expires. Null stays null —
+ * a company with no logo has no URL, and the document prints a placeholder.
+ */
+function logoUrlFor(
+  row: Awaited<ReturnType<typeof db.getCompanyBranding>>
+): string | null {
+  return row?.logoKey ? storageUrl(row.logoKey, new Date()) : null;
+}
+
 /** The branding row reduced to what the document needs, and nothing else. */
 function toBrandingFields(
   row: Awaited<ReturnType<typeof db.getCompanyBranding>>
@@ -75,7 +90,7 @@ function toBrandingFields(
     phone: row?.phone ?? "",
     email: row?.email ?? "",
     website: row?.website ?? "",
-    logoUrl: row?.logoUrl ?? null,
+    logoUrl: logoUrlFor(row),
   };
 }
 
@@ -103,7 +118,7 @@ export const proposalsRouter = router({
       email: row?.email ?? "",
       website: row?.website ?? "",
       logoKey: row?.logoKey ?? null,
-      logoUrl: row?.logoUrl ?? null,
+      logoUrl: logoUrlFor(row),
     };
   }),
 
@@ -186,10 +201,18 @@ export const proposalsRouter = router({
       }
       await db.updateCompanyBranding(ctx.scope.dataUserId, {
         logoKey: input.storageKey,
-        // Served through the storage proxy, which 307s to a signed S3 URL.
+        /**
+         * Kept for the rows that already have it, and for anything reading the
+         * column directly. It is NOT fetchable on its own any more — the proxy
+         * requires a signed token in the path — so every read mints a fresh URL
+         * from `logoKey` instead. See logoUrlFor.
+         */
         logoUrl: `/manus-storage/${input.storageKey}`,
       });
-      return db.getCompanyBranding(ctx.scope.dataUserId);
+      const row = await db.getCompanyBranding(ctx.scope.dataUserId);
+      // The minted URL, not the stored path, so a caller that uses this
+      // response directly gets one that actually loads.
+      return row ? { ...row, logoUrl: logoUrlFor(row) } : row;
     }),
 
   /** Remove the logo. The document goes back to prompting for one. */

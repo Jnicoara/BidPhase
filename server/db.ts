@@ -6574,3 +6574,400 @@ export async function removeSampleProject(
     }
   }
 }
+
+// ─── Business analytics ───────────────────────────────────────────────────────
+/**
+ * Aggregating a whole bid history in the database, never in Node.
+ *
+ * ── Why these are not just "get the bids and add them up" ────────────────────
+ * `bids.dashboard` loads every bid and then fetches each one's line items in a
+ * loop. That is fine there — it is a screen showing a handful of live bids and
+ * it needs each one's card anyway. It is exactly wrong here: analytics asks
+ * about YEARS of bids, and a query per bid over a decade of quoting is a page
+ * that gets slower every month a contractor uses the product, which is the
+ * worst failure shape a business dashboard has.
+ *
+ * So the table that grows fastest — `bid_line_items`, tens to hundreds of rows
+ * per bid — never leaves the database. It is summed in SQL, and what comes back
+ * is at most one narrow row per BID; for the win-rate counts, one row per period
+ * per status however many bids there are.
+ *
+ * ── The cost expression duplicates shared/pricing.ts, deliberately ───────────
+ * The per-line arithmetic below is `calculateLineItem` rewritten in SQL, down to
+ * where it rounds. That is a real duplication and it is the price of aggregating
+ * in the database at all — the alternative is loading the lines to run the real
+ * function over them, which is the thing this exists to avoid.
+ *
+ * It is kept safe by proof rather than by care: `server/analytics.test.ts`
+ * prices the same bids both ways and asserts they agree to the cent, so changing
+ * the pricing engine without changing this fails a test. Do not "tidy" the
+ * ROUND() calls away — each one matches a `toCents` in the engine, and dropping
+ * them lets the two drift by fractions of a cent per line.
+ *
+ * ── Scope ────────────────────────────────────────────────────────────────────
+ * Every query filters on `userId` — the company's scope id, resolved from the
+ * session in _core/companyScope.ts — and every one excludes `isSample`, because
+ * CLAUDE.md's sample rule is that fictional money never reaches a headline
+ * figure. The predicate sits on the outermost table and the joins hang off it,
+ * so there is no shape here that can read across companies.
+ */
+
+/** How many bids one call will price. See getClosedJobCosts. */
+export const ANALYTICS_MAX_BIDS = 20000;
+
+/**
+ * Hours for ONE of an assembly, after modifiers and productivity.
+ *
+ * Mirrors applyModifiersToHours followed by applyProductivityToHours, including
+ * both zero clamps — a modifier summing below −100% must not produce negative
+ * hours here while producing zero on the bid screen.
+ */
+function lineHoursSql(productivityPct: number) {
+  return sql`GREATEST(0, GREATEST(0, ${bidLineItems.snapshotLaborHours} * (1 + ${bidLineItems.snapshotModifierPct})) * (1 + COALESCE(${bids.productivityPct}, ${productivityPct})))`;
+}
+
+/**
+ * The sums that describe what a bid costs, in cents and hours.
+ *
+ * Material and labor are kept apart because profitability needs them apart —
+ * materials are carried at estimate and only labor is re-costed against actual
+ * hours (see shared/analytics.ts). `directCents` is its own sum rather than
+ * material + labor because the engine rounds each LINE's total, which on a
+ * fractional quantity lands a fraction of a cent from rounding the halves
+ * separately.
+ */
+function costSums(productivityPct: number) {
+  const hours = lineHoursSql(productivityPct);
+  const materialCents = sql`ROUND(${bidLineItems.snapshotMaterialCost} * 100) * ${bidLineItems.qty}`;
+  const laborCents = sql`ROUND(${hours} * ${bidLineItems.qty} * ${bidLineItems.snapshotLaborRate} * 100)`;
+  return {
+    materialCents: sql<string>`COALESCE(SUM(${materialCents}), 0)`,
+    laborCents: sql<string>`COALESCE(SUM(${laborCents}), 0)`,
+    directCents: sql<string>`COALESCE(SUM(ROUND(${materialCents} + ${laborCents})), 0)`,
+    totalHours: sql<string>`COALESCE(SUM(${hours} * ${bidLineItems.qty}), 0)`,
+  };
+}
+
+/**
+ * The period a bid falls in, as SQL.
+ *
+ * Produces the same string `bucketKeyFor` produces in TypeScript, and the tests
+ * assert the two agree — a disagreement would split a month in half and bend the
+ * trend line for no visible reason.
+ */
+function bucketSql(granularity: "month" | "quarter") {
+  return granularity === "quarter"
+    ? sql<string>`CONCAT(YEAR(${bids.createdAt}), '-Q', QUARTER(${bids.createdAt}))`
+    : sql<string>`DATE_FORMAT(${bids.createdAt}, '%Y-%m')`;
+}
+
+/** This company's real bids. The base of every analytics query. */
+function analyticsBase(userId: number) {
+  return [eq(bids.userId, userId), eq(bids.isSample, false)];
+}
+
+export type OutcomeBucketRow = {
+  bucket: string;
+  status: (typeof BID_STATUSES)[number];
+  bids: number;
+};
+
+/**
+ * How many bids of each status fall in each period.
+ *
+ * ── The cheap query, and the one the headline rests on ───────────────────────
+ * Touches `bids` alone — no join, no line items — and returns at most four rows
+ * per period. A decade of monthly buckets is 480 rows whether the contractor
+ * quoted ten jobs or a hundred thousand, and it runs off
+ * `bids_userId_createdAt_idx`.
+ *
+ * ── Archived bids are counted ────────────────────────────────────────────────
+ * Deliberate, and the opposite of what most lists in this app do. Archiving is
+ * "get it off my dashboard" and is explicitly independent of status (see the
+ * schema on `bids.archivedAt`): a job won in March and archived in June was
+ * still won, and dropping it would make a win rate rise or fall with the
+ * contractor's filing habits rather than with their business.
+ */
+export async function getOutcomeBuckets(
+  userId: number,
+  opts: {
+    start: Date | null;
+    end: Date | null;
+    granularity: "month" | "quarter";
+  }
+): Promise<OutcomeBucketRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const bucket = bucketSql(opts.granularity);
+  const conditions = analyticsBase(userId);
+  if (opts.start) conditions.push(gte(bids.createdAt, opts.start));
+  if (opts.end) conditions.push(lt(bids.createdAt, opts.end));
+
+  const rows = await db
+    .select({ bucket, status: bids.status, n: sql<string>`COUNT(*)` })
+    .from(bids)
+    .where(and(...conditions))
+    .groupBy(bucket, bids.status);
+
+  return rows.map(row => ({
+    bucket: String(row.bucket),
+    status: row.status,
+    bids: Number(row.n),
+  }));
+}
+
+/** One bid, reduced to what pricing it needs. Its line items stay in the DB. */
+export type BidCostRow = {
+  id: number;
+  name: string;
+  status: (typeof BID_STATUSES)[number];
+  trades: string[] | null;
+  bucket: string;
+  overheadEnabled: boolean | null;
+  overheadMode: "percentage" | "flat" | null;
+  overheadValue: number | null;
+  profitMethod: "markup" | "margin" | null;
+  profitValue: number | null;
+  productivityPct: number | null;
+  materialCost: number;
+  laborCost: number;
+  directCost: number;
+  totalHours: number;
+};
+
+function toBidCostRow(row: Record<string, unknown>): BidCostRow {
+  const num = (value: unknown) =>
+    value === null || value === undefined ? null : Number(value);
+  return {
+    id: Number(row.id),
+    name: String(row.name ?? ""),
+    status: row.status as (typeof BID_STATUSES)[number],
+    trades: Array.isArray(row.trades) ? (row.trades as string[]) : null,
+    bucket: String(row.bucket ?? ""),
+    overheadEnabled:
+      row.overheadEnabled === null || row.overheadEnabled === undefined
+        ? null
+        : Boolean(row.overheadEnabled),
+    overheadMode: (row.overheadMode ?? null) as BidCostRow["overheadMode"],
+    overheadValue: num(row.overheadValue),
+    profitMethod: (row.profitMethod ?? null) as BidCostRow["profitMethod"],
+    profitValue: num(row.profitValue),
+    productivityPct: num(row.productivityPct),
+    materialCost: Number(row.materialCents) / 100,
+    laborCost: Number(row.laborCents) / 100,
+    directCost: Number(row.directCents) / 100,
+    totalHours: Number(row.totalHours),
+  };
+}
+
+/** The columns both rollup queries select, in one place so they cannot drift. */
+function bidCostSelection(
+  bucket: ReturnType<typeof bucketSql>,
+  sums: ReturnType<typeof costSums>
+) {
+  return {
+    id: bids.id,
+    name: bids.name,
+    status: bids.status,
+    trades: bids.trades,
+    bucket,
+    overheadEnabled: bids.overheadEnabled,
+    overheadMode: bids.overheadMode,
+    overheadValue: bids.overheadValue,
+    profitMethod: bids.profitMethod,
+    profitValue: bids.profitValue,
+    productivityPct: bids.productivityPct,
+    ...sums,
+  };
+}
+
+/**
+ * Every bid created in the range, costed, one row each.
+ *
+ * ── Why valuing bids cannot join getOutcomeBuckets ───────────────────────────
+ * Counting bids can be done entirely in SQL; valuing them cannot. Overhead and
+ * profit resolve PER BID — a bid may override either, flat overhead is an amount
+ * per bid rather than a rate on a sum, and a target margin divides rather than
+ * multiplies. Summing direct costs first and applying one set of settings to the
+ * total would misprice every bid carrying an override, so that step happens in
+ * JS over these rows.
+ *
+ * What does NOT happen in JS is the line items. They are summed here, so this
+ * returns one row per bid however many lines each carries.
+ */
+export async function getBidCosts(
+  userId: number,
+  opts: {
+    start: Date | null;
+    end: Date | null;
+    granularity: "month" | "quarter";
+    /** The company default, for the bids that inherit it. See lineHoursSql. */
+    companyProductivityPct: number;
+    limit?: number;
+  }
+): Promise<BidCostRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const bucket = bucketSql(opts.granularity);
+  const sums = costSums(opts.companyProductivityPct);
+  const conditions = analyticsBase(userId);
+  if (opts.start) conditions.push(gte(bids.createdAt, opts.start));
+  if (opts.end) conditions.push(lt(bids.createdAt, opts.end));
+
+  const rows = await db
+    .select(bidCostSelection(bucket, sums))
+    .from(bids)
+    .leftJoin(
+      bidLineItems,
+      and(eq(bidLineItems.bidId, bids.id), isNull(bidLineItems.archivedAt))
+    )
+    .where(and(...conditions))
+    .groupBy(bids.id)
+    .limit(opts.limit ?? ANALYTICS_MAX_BIDS);
+
+  return rows.map(row => toBidCostRow(row as Record<string, unknown>));
+}
+
+/** A finished job: its bid costed, plus what the close-out says it took. */
+export type ClosedJobRow = BidCostRow & {
+  closedAt: Date;
+  /** The estimate FROZEN at close-out — see shared/closeout.ts. */
+  closeoutEstimatedHours: number;
+  mode: (typeof CLOSEOUT_MODE_VALUES)[number];
+  totalActualHours: number | null;
+  /** Sum of the per-assembly lines. Only meaningful in `byAssembly` mode. */
+  lineActualHours: number;
+};
+
+/**
+ * Every job closed out in the range, with its bid costed.
+ *
+ * ── An INNER join, which is what bounds this ─────────────────────────────────
+ * Only bids with a close-out appear, so the result grows with jobs the
+ * contractor actually finished and recorded, not with everything they ever
+ * quoted. `bid_closeouts_userId_closedAt_idx` exists for exactly this query —
+ * the schema comment calls it "the time-series index the future dashboard
+ * wants" — so the range narrows before a line item is touched.
+ *
+ * ── Why the close-out lines are a SECOND query ───────────────────────────────
+ * Joining `bid_closeout_lines` into the same statement would multiply the rows:
+ * a bid with 40 line items and 6 close-out lines produces 240, and both sums
+ * come out six and forty times too big. `SUM(DISTINCT ...)` cannot repair it
+ * either, because two assemblies that took the same hours are not duplicates.
+ * So the hours are summed in their own grouped query and merged by id — still
+ * two round trips whatever the size of the history, never one per job.
+ *
+ * The limit is a ceiling rather than a page. Beyond it the caller compares
+ * against `countClosedJobs` and says the figure is truncated, rather than
+ * quietly under-reporting a year of revenue.
+ */
+export async function getClosedJobCosts(
+  userId: number,
+  opts: {
+    start: Date | null;
+    end: Date | null;
+    granularity: "month" | "quarter";
+    companyProductivityPct: number;
+    limit?: number;
+  }
+): Promise<ClosedJobRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const bucket = bucketSql(opts.granularity);
+  const sums = costSums(opts.companyProductivityPct);
+  const conditions = analyticsBase(userId);
+  // The close-out's own scope id as well as the bid's. The two can only differ
+  // if a row was written wrongly, and this makes such a row invisible rather
+  // than letting it attribute another company's hours to this one.
+  conditions.push(eq(bidCloseouts.userId, userId));
+  if (opts.start) conditions.push(gte(bidCloseouts.closedAt, opts.start));
+  if (opts.end) conditions.push(lt(bidCloseouts.closedAt, opts.end));
+
+  const rows = await db
+    .select({
+      ...bidCostSelection(bucket, sums),
+      closeoutId: bidCloseouts.id,
+      closedAt: bidCloseouts.closedAt,
+      closeoutEstimatedHours: bidCloseouts.estimatedHours,
+      mode: bidCloseouts.mode,
+      totalActualHours: bidCloseouts.totalActualHours,
+    })
+    .from(bids)
+    .innerJoin(bidCloseouts, eq(bidCloseouts.bidId, bids.id))
+    .leftJoin(
+      bidLineItems,
+      and(eq(bidLineItems.bidId, bids.id), isNull(bidLineItems.archivedAt))
+    )
+    .where(and(...conditions))
+    .groupBy(bids.id, bidCloseouts.id)
+    .limit(opts.limit ?? ANALYTICS_MAX_BIDS);
+
+  if (rows.length === 0) return [];
+
+  const closeoutIds = rows.map(row => Number(row.closeoutId));
+  const lineRows = await db
+    .select({
+      closeoutId: bidCloseoutLines.closeoutId,
+      actual: sql<string>`COALESCE(SUM(${bidCloseoutLines.actualHours}), 0)`,
+    })
+    .from(bidCloseoutLines)
+    .where(
+      and(
+        eq(bidCloseoutLines.userId, userId),
+        inArray(bidCloseoutLines.closeoutId, closeoutIds)
+      )
+    )
+    .groupBy(bidCloseoutLines.closeoutId);
+
+  const actualByCloseout = new Map(
+    lineRows.map(row => [Number(row.closeoutId), Number(row.actual)])
+  );
+
+  return rows.map(row => ({
+    ...toBidCostRow(row as unknown as Record<string, unknown>),
+    closedAt: row.closedAt,
+    closeoutEstimatedHours: Number(row.closeoutEstimatedHours),
+    mode: row.mode,
+    totalActualHours:
+      row.totalActualHours === null ? null : Number(row.totalActualHours),
+    lineActualHours: actualByCloseout.get(Number(row.closeoutId)) ?? 0,
+  }));
+}
+
+/** How many jobs the range really holds, so a truncated answer can say so. */
+export async function countClosedJobs(
+  userId: number,
+  opts: { start: Date | null; end: Date | null }
+): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const conditions = [
+    ...analyticsBase(userId),
+    eq(bidCloseouts.userId, userId),
+  ];
+  if (opts.start) conditions.push(gte(bidCloseouts.closedAt, opts.start));
+  if (opts.end) conditions.push(lt(bidCloseouts.closedAt, opts.end));
+
+  const [row] = await db
+    .select({ n: sql<string>`COUNT(*)` })
+    .from(bids)
+    .innerJoin(bidCloseouts, eq(bidCloseouts.bidId, bids.id))
+    .where(and(...conditions));
+  return Number(row?.n ?? 0);
+}
+
+/** The oldest bid this company has, so "all time" knows where to start. */
+export async function getEarliestBidDate(userId: number): Promise<Date | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select({ createdAt: bids.createdAt })
+    .from(bids)
+    .where(and(...analyticsBase(userId)))
+    .orderBy(asc(bids.createdAt))
+    .limit(1);
+  return row?.createdAt ?? null;
+}

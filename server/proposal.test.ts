@@ -41,6 +41,7 @@ import {
   users,
 } from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
+import { verifyStorageToken } from "./storageTokens";
 import {
   buildProposal,
   DEFAULT_ACCENT,
@@ -52,6 +53,23 @@ import {
   setSectionVisible,
   type BuildProposalInput,
 } from "../shared/proposal";
+
+/**
+ * Split a minted storage URL back into its two halves.
+ *
+ * `/manus-storage/<token>/<key…>` — the key keeps its own slashes, so the
+ * token is the first segment and everything after it is the key, decoded the
+ * way the proxy decodes it.
+ */
+const tokenFrom = (url: string) =>
+  url.replace("/manus-storage/", "").split("/")[0];
+const keyFrom = (url: string) =>
+  url
+    .replace("/manus-storage/", "")
+    .split("/")
+    .slice(1)
+    .map(decodeURIComponent)
+    .join("/");
 
 const hasDb = !!process.env.DATABASE_URL;
 const USER = 9713;
@@ -562,9 +580,21 @@ describe.skipIf(!hasDb)("proposals end to end", () => {
       "1420 Foundry Rd",
       "Asheville, NC 28801",
     ]);
-    expect(document.letterhead.logoUrl).toBe(
-      `/manus-storage/company-logos/${USER}/logo.png`
-    );
+    /**
+     * The logo URL is minted per read and carries a signed token, so it is not
+     * a fixed string any more — see server/storageTokens.ts.
+     *
+     * What is asserted is what actually matters: it points at THIS company's
+     * logo key, and it is tokenized. A bare `/manus-storage/<key>` here would
+     * mean the document had been handed a URL the proxy now refuses, and the
+     * letterhead would render a broken image.
+     */
+    const logoUrl = document.letterhead.logoUrl!;
+    expect(logoUrl.endsWith(`/company-logos/${USER}/logo.png`)).toBe(true);
+    expect(logoUrl).not.toBe(`/manus-storage/company-logos/${USER}/logo.png`);
+    expect(
+      verifyStorageToken(tokenFrom(logoUrl), keyFrom(logoUrl), new Date())
+    ).toBe(true);
     expect(document.letterhead.needsSetup).toBe(false);
   });
 

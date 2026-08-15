@@ -43,6 +43,7 @@
 import type { Request, Response } from "express";
 import { Readable } from "node:stream";
 import { sdk } from "./_core/sdk";
+import { resolveScope } from "./_core/companyScope";
 import { storagePresignPut } from "./storage";
 import { checkPdfUpload, formatBytes } from "../shared/uploadLimits";
 import * as db from "./db";
@@ -158,7 +159,35 @@ export function checkProxyUpload(raw: {
  * same harmless outcome the direct path already has.
  */
 export async function planUploadHandler(req: Request, res: Response) {
-  let userId: number;
+  /**
+   * The company's scope id, NOT the signed-in person's.
+   *
+   * ── This route is outside tRPC, so it has to do by hand what `scoped()`
+   * does for every other path into a bid ──────────────────────────────────
+   * Every row in this app is filed under the company OWNER's id, and a member
+   * reads and writes under that same id — see _core/companyScope.ts. This
+   * handler used `user.id`, the ACTOR, which is the same number only for an
+   * owner working in their own company. For anybody else it broke two ways at
+   * once, both silently wrong rather than obviously so:
+   *
+   *   • `getBidById(bidId, actorId)` finds nothing, so an admin or estimator
+   *     uploading to a perfectly ordinary bid was told "Bid not found";
+   *   • the key it minted was `bid-plans/{actorId}/…`, which `confirmAttach`
+   *     then refuses, because its prefix check is built from `dataUserId`.
+   *
+   * That was invisible for as long as the direct browser PUT worked, because
+   * this route is only a fallback. With the bucket's CORS rule still
+   * unapplied (todo.md) the fallback is the ONLY path that works, so it
+   * became "no non-owner can attach a plan at all".
+   *
+   * ── The capability check is here for the same reason ─────────────────────
+   * `bidPdfs.createUploadTicket` is a mutation behind `scoped("bids.view",
+   * "bids.edit")`. This route bypassed tRPC and therefore bypassed that too,
+   * so a viewer — an account deliberately given read-only access — could push
+   * a file into storage under the company's prefix. Both upload paths have to
+   * apply the same rules or the weaker one is the real rule.
+   */
+  let dataUserId: number;
   try {
     const user = await sdk.authenticateRequest(req);
     // A cron identity has no business uploading a plan.
@@ -166,8 +195,19 @@ export async function planUploadHandler(req: Request, res: Response) {
       res.status(403).json({ message: "Not permitted." });
       return;
     }
-    userId = user.id;
+    const scope = await resolveScope(user);
+    if (!scope.capabilities.includes("bids.edit")) {
+      res.status(403).json({
+        message: `Your role (${scope.role}) cannot attach a plan to a bid.`,
+      });
+      return;
+    }
+    dataUserId = scope.dataUserId;
   } catch {
+    // Covers both a bad session and `resolveScope` refusing — a suspended
+    // member, or an account belonging to no company. Deliberately one message:
+    // the difference is not the uploader's to act on, and saying which would
+    // tell an unauthenticated caller that an account exists.
     res.status(401).json({ message: "Sign in to attach a plan." });
     return;
   }
@@ -185,15 +225,18 @@ export async function planUploadHandler(req: Request, res: Response) {
 
   // Ownership, before a signed URL exists for anything. Same rule as every
   // other path into a bid.
-  const bid = await db.getBidById(bidId, userId);
+  const bid = await db.getBidById(bidId, dataUserId);
   if (!bid) {
     res.status(404).json({ message: "Bid not found." });
     return;
   }
 
   try {
+    // The same key shape `bidPdfs.createUploadTicket` builds, and it has to
+    // stay that way: `confirmAttach` records a sheet from either path and
+    // checks the prefix against `dataUserId` before it will.
     const { key, uploadUrl } = await storagePresignPut(
-      `bid-plans/${userId}/${bidId}/${filename}`,
+      `bid-plans/${dataUserId}/${bidId}/${filename}`,
       "application/pdf"
     );
 

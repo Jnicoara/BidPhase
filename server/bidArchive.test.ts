@@ -35,7 +35,7 @@ import {
   retentionLabel,
   retentionUrgency,
 } from "../shared/retention";
-import { bidPdfs, bids, users } from "../drizzle/schema";
+import { bidPdfs, bids, taxJurisdictions, users } from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
 
 const USER = 7373;
@@ -91,6 +91,11 @@ beforeEach(async () => {
   if (!database) return;
   // Wipe both fixture users' bids; bid_pdfs cascade with them.
   await database.delete(bids).where(inArray(bids.userId, [USER, OTHER_USER]));
+  // Tax areas do NOT cascade from a bid — the FK is `set null`, deliberately,
+  // so deleting an area cannot delete the bids pointing at it.
+  await database
+    .delete(taxJurisdictions)
+    .where(inArray(taxJurisdictions.userId, [USER, OTHER_USER]));
 });
 
 // ── The pure rules ───────────────────────────────────────────────────────────
@@ -206,6 +211,65 @@ describe.skipIf(!hasDb)("archiving a bid", () => {
     expect(row.id).toBe(bid.id);
     expect(row.daysRemaining).toBe(RETENTION_DAYS);
     expect(row.urgency).toBe("normal");
+  });
+
+  /**
+   * Every other test in this file archives a bid straight out of `bids.create`,
+   * which leaves the newer columns at their defaults — tax NULL, isSample
+   * false. So none of them would notice a bid that actually CARRIES those
+   * values failing to come back.
+   *
+   * That matters because `getArchivedBids` is a bare `select()`: drizzle
+   * expands it to every column declared in drizzle/schema.ts, so the statement
+   * names `taxJurisdictionId`, `taxRateOverridePct`, `taxExempt`,
+   * `taxExemptReason` and `isSample` whether or not any bid uses them. Against
+   * a database that has not had 0036 and 0043 applied, MySQL answers "Unknown
+   * column" and the whole archive screen fails — not one row, the query.
+   *
+   * This asserts the values round-trip rather than merely that the query runs,
+   * so it also covers the column being present but mistyped.
+   */
+  it("loads an archived bid carrying the newer tax and sample columns", async () => {
+    const database = await getDb();
+    const [area] = await database!.insert(taxJurisdictions).values({
+      userId: USER,
+      name: `Archive tax area ${Math.random()}`,
+      state: "WA",
+      county: "King",
+      city: "Seattle",
+      components: [{ name: "State", ratePct: 6.5 }],
+    });
+
+    const bid = await newBid("Archived bid with tax");
+    await caller().bids.update({
+      id: bid.id,
+      taxJurisdictionId: area.insertId,
+      taxRateOverridePct: 8.75,
+      taxExempt: true,
+      taxExemptReason: "Registered reseller",
+    });
+    // isSample has no router route — it is set by the sample seeder — so it is
+    // written directly, which is also the honest way to prove the COLUMN reads
+    // back rather than proving the seeder works.
+    await database!
+      .update(bids)
+      .set({ isSample: true })
+      .where(eq(bids.id, bid.id));
+
+    await caller().bids.archive({ id: bid.id });
+
+    const [row] = await caller().bids.archived();
+    expect(row.id).toBe(bid.id);
+    expect(row.taxJurisdictionId).toBe(area.insertId);
+    expect(Number(row.taxRateOverridePct)).toBe(8.75);
+    expect(row.taxExempt).toBe(true);
+    expect(row.taxExemptReason).toBe("Registered reseller");
+    expect(row.isSample).toBe(true);
+    // And through the query function itself, which is what the route calls.
+    const direct = await db.getArchivedBids(USER);
+    expect(direct).toHaveLength(1);
+    expect(direct[0].isSample).toBe(true);
+    expect(direct[0].taxExempt).toBe(true);
   });
 
   it("does NOT restart the clock when archived twice", async () => {
