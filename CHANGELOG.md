@@ -15,6 +15,9 @@ This is the human-readable companion to the git history — read this to see wha
 - **Tracked down the error on the archived-bids screen: nothing was wrong with the app, the database it was running against was out of date.** Opening the archive reads a bid's full record, which now includes the sales-tax fields and the sample marker added in recent updates. On an environment where those updates had not been applied to the database, that read failed outright and took the whole screen with it.
 - **There is now a one-command way to ask whether a database is behind the code**, so the same thing is caught before a deploy instead of by someone hitting a screen — and a check that fails while building, if a change is ever made without its database update.
 
+- **Fixed: anyone other than the account that owns the company could not attach a plan to a bid.** The stand-in upload route — the one every upload currently goes through, while the storage service is still waiting on a configuration change — looked the bid up under the person uploading rather than under the company. An admin or estimator attaching a plan to an ordinary company bid was told "Bid not found".
+- **A read-only account can no longer upload a file through that route.** It sat outside the normal permission checks, so a viewer could push a file into the company's storage even though they cannot change a bid anywhere else in the app.
+
 ## [2026-08-14]
 
 - **A new account can open a finished example bid in one click.** The Dashboard now offers "Show me an example bid" — a small commercial retail buildout, 2,400 sq ft, priced end to end at around $16,800: 76 devices and fixtures, a labor modifier for the 14 ft ceiling, a permit and a lift charge, a client, and a proposal you can print. It answers "what does this thing actually produce?" before you have entered anything of your own.
