@@ -110,6 +110,7 @@ import {
 import { LegendPanel } from "@/components/takeoff/LegendPanel";
 import { CoPilotPanel } from "@/components/takeoff/CoPilotPanel";
 import { snapshotPage } from "@/lib/planSnapshot";
+import { canRetryWithFreshUrl, isExpiredPlanUrl } from "@/lib/planUrlRefresh";
 import { groupStamps } from "@shared/takeoffCounts";
 import { LayersPanel } from "@/components/takeoff/LayersPanel";
 import { MaterialsListDialog } from "@/components/MaterialsListDialog";
@@ -267,6 +268,20 @@ function usePdfWorker() {
 
 const RENDER_SCALE = 1.5;
 
+/**
+ * Storage refused the plan's URL, which almost always means it simply aged out.
+ *
+ * Carries the same message the plain failure would, so if the retry does not
+ * help — the object really is missing — the user sees exactly what they saw
+ * before this recovery existed, rather than an empty error.
+ */
+class PlanUrlExpired extends Error {
+  constructor() {
+    super("Could not fetch the plan (403)");
+    this.name = "PlanUrlExpired";
+  }
+}
+
 function PlanPane({
   doc,
   page,
@@ -276,6 +291,7 @@ function PlanPane({
   onSheetVisible,
   onPageRendered,
   overlay,
+  onUrlExpired,
 }: {
   doc: Document;
   page: number;
@@ -306,6 +322,15 @@ function PlanPane({
     renderScale: number;
     canvas: HTMLCanvasElement | null;
   }) => React.ReactNode;
+  /**
+   * Ask the server for a fresh URL for this document, and return it.
+   *
+   * Called only when storage refuses the current one — plan URLs are signed
+   * and expire (server/storageTokens.ts), so a plan left open long enough will
+   * eventually be reading with a stale token. Returns null when there is
+   * nothing to retry with.
+   */
+  onUrlExpired?: () => Promise<string | null>;
 }) {
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const { load, loadUrl, render, outline, pageText } = usePdfWorker();
@@ -316,6 +341,27 @@ function PlanPane({
   const [error, setError] = useState<string | null>(null);
   /** Pages already sent for scale detection, so it runs once each. */
   const detected = useRef(new Set<number>());
+
+  /**
+   * Held in a ref, and deliberately NOT in the effect's dependencies.
+   *
+   * The caller passes an inline arrow, so its identity changes every render.
+   * Listing it as a dependency would restart the document load on every render
+   * — the exact failure `usePdfWorker` memoises its own functions to avoid,
+   * where each load cancels the one in flight and the viewer spins forever.
+   * A ref keeps the latest callback reachable without making it a trigger.
+   */
+  const onUrlExpiredRef = useRef(onUrlExpired);
+  onUrlExpiredRef.current = onUrlExpired;
+
+  /**
+   * The URL that has already been refreshed once.
+   *
+   * One retry per URL. If a fresh URL fails the same way, the second failure is
+   * reported rather than triggering another round — a refresh loop behind a
+   * spinner is worse than an error, because it never ends and says nothing.
+   */
+  const refreshedFor = useRef<string | null>(null);
 
   const hash = String(doc.id);
 
@@ -334,6 +380,10 @@ function PlanPane({
         // fallback for ordinary-sized files.
         const pages = await loadUrl(doc.url, hash).catch(async rangeError => {
           const resp = await fetch(doc.url);
+          // A refused URL is usually just an old one — plan URLs are signed and
+          // expire. Distinguished here so the outer catch can ask for a fresh
+          // one instead of telling the user their plan is broken.
+          if (isExpiredPlanUrl(resp.status)) throw new PlanUrlExpired();
           if (!resp.ok)
             throw new Error(`Could not fetch the plan (${resp.status})`);
           const buffer = await resp.arrayBuffer();
@@ -354,6 +404,27 @@ function PlanPane({
         onDocumentReady({ pageCount: pages, outline: entries });
       } catch (err) {
         if (cancelled) return;
+
+        /**
+         * An expired URL is recoverable, and silently: ask for a new one and
+         * let this effect run again on it.
+         *
+         * `loading` stays true throughout, so the user sees one continuous
+         * spinner rather than an error that flashes and heals itself.
+         *
+         * Two guards keep this from becoming a loop. One refresh per URL, and
+         * `canRetryWithFreshUrl` refuses a URL identical to the one that just
+         * failed — which is what comes back when the 403 was never an expiry
+         * (this storage answers 403 for a missing object too). Either way it
+         * falls through to the honest error below.
+         */
+        if (err instanceof PlanUrlExpired && refreshedFor.current !== doc.url) {
+          refreshedFor.current = doc.url;
+          const fresh = await onUrlExpiredRef.current?.().catch(() => null);
+          if (cancelled) return;
+          if (canRetryWithFreshUrl(doc.url, fresh)) return;
+        }
+
         setError(
           err instanceof Error ? err.message : "That plan could not be opened."
         );
@@ -1752,6 +1823,18 @@ export default function TakeoffPage({
                     onDocumentReady={handleDocumentReady}
                     onSheetVisible={handleSheetVisible}
                     onPageRendered={handlePageRendered}
+                    /**
+                     * Re-read the sheet list and hand back this document's
+                     * current URL. Invalidating awaits the refetch, so what
+                     * `getData` returns afterwards is the freshly minted URL —
+                     * or the same one, if the window has not rolled over and
+                     * the refusal was never an expiry.
+                     */
+                    onUrlExpired={async () => {
+                      await utils.bidPdfs.list.invalidate({ bidId });
+                      const fresh = utils.bidPdfs.list.getData({ bidId });
+                      return fresh?.find(d => d.id === doc.id)?.url ?? null;
+                    }}
                     overlay={size =>
                       measurability ? (
                         <>

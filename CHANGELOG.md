@@ -20,6 +20,7 @@ This is the human-readable companion to the git history — read this to see wha
 
 - **Closed a hole that let anyone who knew a file's address read it, signed in or not.** The address a plan sheet or company logo is served from used to hand over the file to whoever asked, with no check that they were logged in, let alone that the file was theirs. Knowing the address was the only thing protecting one contractor's plans from another's.
 - **Plan and logo addresses now expire.** Each one is issued for a single file, signed so it cannot be edited to point at a different one, and stops working after about half an hour — at which point the app quietly issues a fresh one. Nothing changes in normal use: plans open and logos appear exactly as before.
+- **A plan left open all afternoon keeps working.** If its address goes stale while you are still working in it, the viewer fetches a new one and carries on without saying anything. If the file genuinely cannot be read, you still get a plain error rather than a spinner that never stops.
 
 ## [2026-08-14]
 
