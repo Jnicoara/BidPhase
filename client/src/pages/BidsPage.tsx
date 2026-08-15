@@ -62,6 +62,7 @@ import { ClientLinkField } from "@/components/ClientLinkField";
 import { BidTaxControls } from "@/components/BidTaxControls";
 import { BidExtrasPanel } from "@/components/BidExtrasPanel";
 import { CloseoutPanel } from "@/components/CloseoutPanel";
+import { SampleBidNotice } from "@/components/SampleBidNotice";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { RETENTION_DAYS } from "@shared/retention";
 
@@ -329,7 +330,14 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
             <ArrowLeft className="w-3.5 h-3.5" /> Bids
           </Button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold truncate">{bid.name}</h1>
+            <h1 className="text-lg font-semibold truncate flex items-center gap-2">
+              <span className="truncate">{bid.name}</span>
+              {bid.isSample && (
+                <span className="shrink-0 text-[0.65rem] uppercase tracking-wide px-1.5 py-0.5 rounded border border-[#F5C518]/40 text-[#F5C518] font-normal">
+                  sample
+                </span>
+              )}
+            </h1>
             <p className="text-xs text-muted-foreground">
               {lines.length} line{lines.length === 1 ? "" : "s"}
               {bid.trades?.length ? ` · ${bid.trades.join(", ")}` : ""}
@@ -431,6 +439,7 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
+        {bid.isSample && <SampleBidNotice bidId={bid.id} />}
         <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
           <div className="space-y-4 min-w-0">
             {/* Add an assembly — deliberately minimal */}

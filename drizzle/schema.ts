@@ -1353,6 +1353,9 @@ export const clients = mysqlTable(
      * name and a phone number attached to bid history, so keeping one costs
      * nothing — and deleting it would strand the bids that point at it.
      */
+    /** Part of the shipped sample. Same reasoning as bids.isSample. */
+    isSample: boolean("isSample").default(false).notNull(),
+
     archivedAt: timestamp("archivedAt"),
 
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -1837,6 +1840,22 @@ export const bids = mysqlTable(
      * up to 999ms early. Irrelevant against a 30-day window swept once a day,
      * and not worth an fsp(3) column to chase.
      */
+
+    /**
+     * This bid is the shipped sample, not the contractor's work.
+     *
+     * A COLUMN rather than a naming convention, and that is the whole point:
+     * "call it [SAMPLE]" is a promise kept by remembering it on a dashboard, a
+     * search, a proposal, an export and whatever gets built next, while this is
+     * a promise the query keeps. Every money AGGREGATE filters on it — see
+     * shared/sampleProject.ts, which owns the rule.
+     *
+     * The row is otherwise completely ordinary. It is editable, deletable and
+     * scoped to its company like any other bid, because a sample that behaved
+     * differently from a real bid would teach the wrong thing.
+     */
+    isSample: boolean("isSample").default(false).notNull(),
+
     archivedAt: timestamp("archivedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

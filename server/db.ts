@@ -308,7 +308,14 @@ export async function countBidsWithLineItems(userId: number): Promise<number> {
     .innerJoin(bidLineItems, eq(bidLineItems.bidId, bids.id))
     // Archived bids still count. The user did the work; putting the job away
     // afterwards does not un-complete their first bid.
-    .where(eq(bids.userId, userId));
+    //
+    // The SAMPLE does not count, and that exclusion matters more than it looks.
+    // CLAUDE.md § Onboarding is explicit that a step must never tick for
+    // anything but the user's own data — a checklist that says "you have
+    // completed your first bid" because they opened an example walks them to
+    // the end and leaves them believing they are set up when they have done
+    // nothing. Caught by looking at a real new account, not by review.
+    .where(and(eq(bids.userId, userId), eq(bids.isSample, false)));
   return Number(row?.n ?? 0);
 }
 
@@ -6397,4 +6404,173 @@ export async function respondToSuggestion(
         eq(assemblyHourSuggestions.userId, userId)
       )
     );
+}
+
+// ─── The sample project ───────────────────────────────────────────────────────
+/**
+ * Build the shipped sample bid inside one company.
+ *
+ * ── What it writes, and what it deliberately does not ───────────────────────
+ * Two rows and their children: a client and a bid. No materials, no assemblies,
+ * no labor rates, no company settings — so an account that creates the sample,
+ * explores it and deletes it is byte-identical to one that never touched it.
+ * That is what "cannot corrupt real company data" has to mean.
+ *
+ * The prices live on the line SNAPSHOTS, which is the mechanism bid lines
+ * already use to freeze cost and hours at add time. It is the only way to show
+ * a realistically priced job without writing prices into a library that ships
+ * unpriced on purpose (CLAUDE.md § Starter content ships unpriced).
+ *
+ * `assemblyId` is resolved by name against the shipped starter assemblies where
+ * one matches, so "open the assembly behind this line" works. Where nothing
+ * matches, the line stands on its snapshot alone — exactly as a line whose
+ * assembly was later deleted does.
+ */
+export async function seedSampleProject(
+  userId: number,
+  content: {
+    bidName: string;
+    clientName: string;
+    siteAddress: string;
+    laborRate: number;
+    overheadPct: number;
+    markupPct: number;
+    lines: ReadonlyArray<{
+      assemblyName: string;
+      qty: number;
+      materialCost: number;
+      laborHours: number;
+      modifierPct?: number;
+      modifierNames?: string[];
+      unitLabel?: string | null;
+    }>;
+    expenses: ReadonlyArray<{
+      name: string;
+      amount: number;
+      taxable: boolean;
+      markedUp: boolean;
+    }>;
+    scope: ReadonlyArray<{ kind: "include" | "exclude"; text: string }>;
+  }
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [client] = await db.insert(clients).values({
+    userId,
+    name: content.clientName,
+    kind: "company",
+    address: content.siteAddress,
+    isSample: true,
+  });
+
+  const [bid] = await db.insert(bids).values({
+    userId,
+    name: content.bidName,
+    status: "Draft",
+    trades: ["electrical"],
+    isSample: true,
+    clientId: client.insertId,
+    clientName: content.clientName,
+    siteAddress: content.siteAddress,
+    // Per-bid overrides rather than the company defaults. A new account has
+    // overhead and profit unset, so an inheriting sample would show a bid
+    // priced at cost — the opposite of what it is for — and writing them into
+    // the company settings instead would put a margin the user never chose on
+    // every real bid they go on to create.
+    overheadEnabled: true,
+    overheadMode: "percentage",
+    overheadValue: content.overheadPct.toFixed(4),
+    profitMethod: "markup",
+    profitValue: content.markupPct.toFixed(4),
+  });
+  const bidId = bid.insertId;
+
+  // Match line names to the shipped starters so the lines point somewhere real.
+  const library = await getLibraryAssemblies(userId);
+  const byName = new Map(library.map(row => [row.name.toLowerCase(), row.id]));
+
+  let sortOrder = 0;
+  for (const line of content.lines) {
+    await db.insert(bidLineItems).values({
+      bidId,
+      assemblyId: byName.get(line.assemblyName.toLowerCase()) ?? null,
+      name: line.assemblyName,
+      qty: line.qty.toFixed(4),
+      unitLabel: line.unitLabel ?? null,
+      snapshotMaterialCost: line.materialCost.toFixed(4),
+      snapshotLaborHours: line.laborHours.toFixed(4),
+      snapshotModifierPct: (line.modifierPct ?? 0).toFixed(4),
+      snapshotLaborRate: content.laborRate.toFixed(4),
+      snapshotModifierNames: line.modifierNames ?? null,
+      sortOrder: sortOrder++,
+    });
+  }
+
+  for (const expense of content.expenses) {
+    await db.insert(bidExpenses).values({
+      bidId,
+      name: expense.name,
+      amount: expense.amount.toFixed(2),
+      taxable: expense.taxable,
+      markedUp: expense.markedUp,
+    });
+  }
+
+  let scopeOrder = 0;
+  for (const note of content.scope) {
+    await db.insert(bidScopeNotes).values({
+      bidId,
+      kind: note.kind,
+      text: note.text,
+      sortOrder: scopeOrder++,
+    });
+  }
+
+  return bidId;
+}
+
+/**
+ * Delete the sample bid and the client that came with it.
+ *
+ * A hard delete: line items, expenses and scope notes cascade from the bid, and
+ * the client is removed only if it is itself flagged as sample data. A user who
+ * attached the sample's client to a real bid keeps it — deleting a client out
+ * from under a real bid to tidy up a demo would be a far worse outcome than
+ * leaving one labelled row behind.
+ */
+export async function removeSampleProject(
+  bidId: number,
+  userId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const [row] = await db
+    .select({ clientId: bids.clientId, isSample: bids.isSample })
+    .from(bids)
+    .where(and(eq(bids.id, bidId), eq(bids.userId, userId)))
+    .limit(1);
+  if (!row || !row.isSample) return;
+
+  await db.delete(bids).where(and(eq(bids.id, bidId), eq(bids.userId, userId)));
+
+  if (row.clientId !== null) {
+    const stillUsed = await db
+      .select({ id: bids.id })
+      .from(bids)
+      .where(and(eq(bids.userId, userId), eq(bids.clientId, row.clientId)))
+      .limit(1);
+    if (stillUsed.length === 0) {
+      await db
+        .delete(clients)
+        .where(
+          and(
+            eq(clients.id, row.clientId),
+            eq(clients.userId, userId),
+            eq(clients.isSample, true)
+          )
+        );
+    }
+  }
 }

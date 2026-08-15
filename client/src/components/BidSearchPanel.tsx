@@ -355,6 +355,14 @@ export function BidSearchPanel({
                 <span className="flex-1 min-w-[12rem]">
                   <span className="block text-sm font-medium truncate">
                     {bid.name}
+                    {/* Coloured rather than grey, unlike the archived tag: a
+                        sample must read as a different KIND of row, not as a
+                        row in a different state. */}
+                    {bid.isSample && (
+                      <span className="ml-2 text-[0.65rem] uppercase tracking-wide px-1.5 py-0.5 rounded border border-[#F5C518]/40 text-[#F5C518]">
+                        sample
+                      </span>
+                    )}
                     {bid.archivedAt && (
                       <span className="ml-2 text-[0.65rem] uppercase tracking-wide text-muted-foreground">
                         archived
