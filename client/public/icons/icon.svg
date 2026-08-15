@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    The "HB" placeholder mark as an app icon — the `any` purpose.
+
+    Rounded corners are drawn IN, because a non-maskable icon is placed as-is:
+    iOS applies its own squircle mask, Android and desktop do not. The radius
+    matches the favicon's proportions (22%), so the tab icon and the home
+    screen icon are recognisably the same mark.
+
+    The maskable variant is a separate file, and has to be: Android masks that
+    one to a circle or squircle of its own choosing, so it must be full-bleed
+    with the letterforms pulled well inside. Shipping one file for both purposes
+    is how an icon ends up either floating in a shrunken tile or with its
+    corners sliced off.
+  -->
+  <rect width="512" height="512" rx="112" fill="#0F1117" />
+  <text
+    x="256" y="262"
+    text-anchor="middle"
+    dominant-baseline="central"
+    font-family="'Space Grotesk', 'Segoe UI', Helvetica, Arial, sans-serif"
+    font-size="240"
+    font-weight="700"
+    letter-spacing="-8"
+    fill="#F5C518"
+  >HB</text>
+</svg>

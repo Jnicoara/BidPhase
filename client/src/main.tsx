@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
+import { registerServiceWorker } from "@/lib/registerServiceWorker";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -71,6 +72,11 @@ const trpcClient = trpc.createClient({
     }),
   ],
 });
+
+// Installed-app behaviour: caches the shell so a repeat visit is instant, and
+// nothing else. Production only, and a no-op wherever workers are unavailable —
+// see the module for why neither is incidental.
+registerServiceWorker();
 
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>

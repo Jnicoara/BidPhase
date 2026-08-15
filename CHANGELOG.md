@@ -6,6 +6,13 @@ This is the human-readable companion to the git history — read this to see wha
 
 ## [2026-08-14]
 
+- **HelixBid can be added to a phone's home screen and opens like an app** — full screen, no browser address bar, its own icon, its own dark splash screen. On Android and desktop Chrome the browser offers to install it; on an iPhone it is Share → Add to Home Screen.
+- **It loads instantly on repeat visits, and opens even with no signal.** The app's own files are kept on the phone, so a truck with one bar starts up as fast as one on wifi. If there is genuinely no connection it still opens and tells you it cannot reach the server, instead of showing the browser's error page.
+- **Your numbers are never cached.** Not one bid price, labor rate or tax figure. A stale price looks exactly like a fresh one on screen, and that is not a risk worth taking for a slightly faster load — so anything that comes from the server is always fetched from the server. This is deliberately not an offline-editing feature.
+- **A new version is picked up straight away.** The most common complaint about installed web apps is that they get stuck on an old version; the app checks for the current one every time it opens, and clears out anything left from a previous release.
+- **Installing is optional and changes nothing if you don't.** In a normal browser tab the app behaves exactly as it always has. Nothing requires installation and nothing is hidden behind it.
+- The HB mark is now a proper app icon at every size phones ask for, including the full-bleed version Android needs so it is not shrunk into a circle with a dark ring around it.
+
 - **You can close a job out and see how the estimate did.** On any bid there is now a Job close-out panel: enter the hours the job actually took — one total, or broken down per assembly — and it shows what you estimated, what it took, and the gap, as hours and as a percentage. It also tells you what productivity factor would have made that estimate right, as a reading rather than a button.
 - **Closing out is optional and stays optional.** A bid you never close out prices, proposes, exports and archives exactly as it always did. The panel sits shut until you open it.
 - **The estimate is frozen when you close out.** Editing an assembly afterwards will not quietly rewrite what an old job was estimated at — a comparison whose baseline moves is not a comparison, and this history is meant to be evidence.
