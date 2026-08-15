@@ -31,7 +31,8 @@ export default defineConfig({
       "server/**/*.spec.ts",
       "client/src/lib/**/*.test.ts",
     ],
-    setupFiles: ["dotenv/config"],
+    // dotenv first, so vitest.setup.ts fills only what .env did not supply.
+    setupFiles: ["dotenv/config", "./vitest.setup.ts"],
     /**
      * One file at a time, because every DB-backed file shares one MySQL.
      *

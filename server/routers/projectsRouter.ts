@@ -3,6 +3,7 @@ import { z } from "zod";
 import { router, scoped } from "../_core/trpc";
 import * as db from "../db";
 import { storagePut } from "../storage";
+import { storageUrl } from "../storageTokens";
 
 /**
  * This router's gate: a query needs `bids.view`, a mutation needs `bids.edit`.
@@ -152,7 +153,9 @@ export const projectsRouter = router({
         pdfKey: key,
         pdfFilename: filename,
       } as Parameters<typeof db.updateProject>[2]);
-      return { key, url, filename };
+      // `url` from storagePut is the stored reference; what goes back to the
+      // browser has to be a tokenized, fetchable one.
+      return { key, url: storageUrl(key, new Date()), filename };
     }),
 
   /** Get the stored PDF URL for a project */
@@ -170,7 +173,9 @@ export const projectsRouter = router({
         });
       if (!project.pdfKey) return { url: null, key: null, filename: null };
       return {
-        url: `/manus-storage/${project.pdfKey}`,
+        // Minted per read, from the KEY. `projects.pdfUrl` is a stored display
+        // path from before the proxy required a token and is not fetchable.
+        url: storageUrl(project.pdfKey, new Date()),
         key: project.pdfKey,
         filename: project.pdfFilename ?? null,
       };

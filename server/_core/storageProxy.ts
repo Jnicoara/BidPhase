@@ -1,11 +1,42 @@
 import type { Express } from "express";
 import { ENV } from "./env";
+import { verifyStorageToken } from "../storageTokens";
 
+/**
+ * Serve a stored object, to a caller holding a token for it.
+ *
+ * ── The token is the authorization ───────────────────────────────────────────
+ * This route used to presign and redirect for any key anyone asked for, with no
+ * session check of any kind. It could not simply start checking one: the things
+ * that fetch these URLs are pdf.js loading a document and `<img src>` loading a
+ * logo, and neither can attach an `Authorization` header. See
+ * server/storageTokens.ts for the full reasoning.
+ *
+ * Ownership is enforced where the URL is MINTED — in routers that have already
+ * resolved the company scope and checked the row belongs to it. This end only
+ * has to answer one question: was this URL issued by us, for this key, recently.
+ *
+ * ── Old-shape URLs land here too, and are refused ────────────────────────────
+ * A key always has at least two segments, so a pre-token URL still matches this
+ * route with the first segment read as a token. It fails verification and gets
+ * a 403 — which is the correct answer for a link that used to work and should
+ * not any more, and is far better than falling through to the SPA and answering
+ * an HTML page to something expecting a PDF.
+ */
 export function registerStorageProxy(app: Express) {
-  app.get("/manus-storage/*", async (req, res) => {
+  app.get("/manus-storage/:token/*", async (req, res) => {
+    const token = (req.params as Record<string, string>).token;
     const key = (req.params as Record<string, string>)[0];
-    if (!key) {
+    if (!key || !token) {
       res.status(400).send("Missing storage key");
+      return;
+    }
+
+    // Before anything is signed, and before the backend is even contacted: an
+    // unauthorised caller must not be able to make this server do work, and
+    // must learn nothing about whether the key exists.
+    if (!verifyStorageToken(token, key, new Date())) {
+      res.status(403).send("This link is not valid, or has expired.");
       return;
     }
 

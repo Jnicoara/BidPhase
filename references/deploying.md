@@ -158,6 +158,13 @@ load-bearing:
 Leaving Manus means replacing all four, including building a login system.
 It is not a configuration change.
 
+**`JWT_SECRET` now serves files as well as sessions.** Storage URLs carry a
+signed, expiring token in the path (`server/storageTokens.ts`) because the
+proxy would otherwise hand any stored object to any caller. The same secret
+signs both, so an environment missing it does not merely fail to log people in
+— it cannot serve a plan sheet or a logo either, and says so rather than
+serving them unsigned.
+
 **Gotcha:** when the gateway key is missing, the platform's own error message
 reads `OPENAI_API_KEY is not configured` (`server/_core/llm.ts`). That string is
 mislabelled — the variable it actually wants is `BUILT_IN_FORGE_API_KEY`, and

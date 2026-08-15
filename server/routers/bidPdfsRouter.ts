@@ -36,6 +36,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router, scoped } from "../_core/trpc";
 import { storagePresignPut } from "../storage";
+import { storageUrl } from "../storageTokens";
 import {
   detectScaleFromText,
   isAutoApplicable,
@@ -94,8 +95,16 @@ function toView(row: Awaited<ReturnType<typeof db.getBidPdf>> & object) {
     pageCount: row.pageCount,
     sortOrder: row.sortOrder,
     createdAt: row.createdAt,
-    /** Served through the storage proxy, which 307s to a signed S3 URL. */
-    url: `/manus-storage/${row.storageKey}`,
+    /**
+     * Served through the storage proxy, which verifies the token in this path
+     * before it 307s to a signed S3 URL.
+     *
+     * Minted here rather than stored, because it expires — see
+     * server/storageTokens.ts. Every caller of this function has already been
+     * through `requireBid`/`requirePdf`, which is what makes handing out the
+     * URL an authorization decision rather than a lookup.
+     */
+    url: storageUrl(row.storageKey, new Date()),
   };
 }
 

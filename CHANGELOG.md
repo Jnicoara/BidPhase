@@ -18,6 +18,9 @@ This is the human-readable companion to the git history — read this to see wha
 - **Fixed: anyone other than the account that owns the company could not attach a plan to a bid.** The stand-in upload route — the one every upload currently goes through, while the storage service is still waiting on a configuration change — looked the bid up under the person uploading rather than under the company. An admin or estimator attaching a plan to an ordinary company bid was told "Bid not found".
 - **A read-only account can no longer upload a file through that route.** It sat outside the normal permission checks, so a viewer could push a file into the company's storage even though they cannot change a bid anywhere else in the app.
 
+- **Closed a hole that let anyone who knew a file's address read it, signed in or not.** The address a plan sheet or company logo is served from used to hand over the file to whoever asked, with no check that they were logged in, let alone that the file was theirs. Knowing the address was the only thing protecting one contractor's plans from another's.
+- **Plan and logo addresses now expire.** Each one is issued for a single file, signed so it cannot be edited to point at a different one, and stops working after about half an hour — at which point the app quietly issues a fresh one. Nothing changes in normal use: plans open and logos appear exactly as before.
+
 ## [2026-08-14]
 
 - **A new account can open a finished example bid in one click.** The Dashboard now offers "Show me an example bid" — a small commercial retail buildout, 2,400 sq ft, priced end to end at around $16,800: 76 devices and fixtures, a labor modifier for the 14 ft ceiling, a permit and a lift charge, a client, and a proposal you can print. It answers "what does this thing actually produce?" before you have entered anything of your own.
