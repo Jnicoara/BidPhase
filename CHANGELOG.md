@@ -4,6 +4,11 @@ Plain-English record of what changed and when. Newest first.
 
 This is the human-readable companion to the git history — read this to see what happened, read the commits for the technical detail.
 
+## [2026-08-15]
+
+- **Tracked down the error on the archived-bids screen: nothing was wrong with the app, the database it was running against was out of date.** Opening the archive reads a bid's full record, which now includes the sales-tax fields and the sample marker added in recent updates. On an environment where those updates had not been applied to the database, that read failed outright and took the whole screen with it.
+- **There is now a one-command way to ask whether a database is behind the code**, so the same thing is caught before a deploy instead of by someone hitting a screen — and a check that fails while building, if a change is ever made without its database update.
+
 ## [2026-08-14]
 
 - **A new account can open a finished example bid in one click.** The Dashboard now offers "Show me an example bid" — a small commercial retail buildout, 2,400 sq ft, priced end to end at around $16,800: 76 devices and fixtures, a labor modifier for the 14 ft ceiling, a permit and a lift charge, a client, and a proposal you can print. It answers "what does this thing actually produce?" before you have entered anything of your own.

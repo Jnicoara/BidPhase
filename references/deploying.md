@@ -87,14 +87,30 @@ rendering as one flat list with no categories, and per-material trade slang
 finding nothing while the global alias map keeps working — so search looks fine
 until someone tries "1900" or "gem box".
 
-Count what is pending before you deploy:
+**It does not always fail quietly, though — sometimes it takes a whole screen
+with it.** Nearly every read in this app is a bare `select()`, which drizzle
+expands to _every_ column in `drizzle/schema.ts`. A database one migration
+behind therefore does not lose one field; the entire statement fails with
+`Unknown column`, and the feature behind it dies. That is what happened to the
+bid archive: `getArchivedBids` names `isSample` (0043) and the four tax columns
+(0036) whether or not any bid uses them, so an environment without those
+migrations threw on opening the archive. The query was fine. The database was
+behind.
+
+Ask the database directly, rather than counting files:
 
 ```bash
-ls drizzle/*.sql | wc -l        # migrations in the repo
+pnpm tsx scripts/schemaDrift.mts
 ```
 
-and compare against what the database has actually run. When in doubt, run
-`pnpm db:push` — it is idempotent.
+It prints how many migrations that database has recorded and exactly which
+columns the code expects that it does not have, and exits non-zero on drift.
+Run it **before** `pnpm db:push` to see what is pending and **after** to confirm
+it took. When in doubt, run `pnpm db:push` anyway — it is idempotent.
+
+The same check runs as `server/schemaDrift.test.ts`, so a column added to the
+schema without its migration fails on the author's machine rather than in
+somebody else's console a week later.
 
 ## 6. Verifying a deploy actually took
 
