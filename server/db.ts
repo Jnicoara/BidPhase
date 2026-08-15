@@ -6,7 +6,9 @@ import {
   inArray,
   isNull,
   isNotNull,
+  gte,
   lte,
+  lt,
   or,
   like,
   sql,
@@ -108,6 +110,7 @@ import {
   takeoffRunCircuits,
   BidPdfSheet,
   bidPdfSheets,
+  BID_STATUSES,
   companies,
   companyMembers,
   companyInvites,
@@ -147,6 +150,12 @@ import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
 import { BASELINE_KITS } from "./seed/baselineKits";
 import { TRADE_ALL, normalizeTradeId, resolveForTrade } from "../shared/trades";
 import { hourlyCostFor } from "../shared/laborRateLookup";
+import {
+  containsPattern,
+  dateRangeBounds,
+  toSqlTimestamp,
+  usableTerm,
+} from "../shared/bidSearch";
 import { addAssemblyOverheadHours } from "../shared/pricing";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -5807,4 +5816,278 @@ export async function getMembershipsForUser(
     )
     .orderBy(asc(companyMembers.id))
     .limit(50);
+}
+
+// ─── Historical search ────────────────────────────────────────────────────────
+/**
+ * Search a company's bids, one page at a time.
+ *
+ * ── Everything narrows in SQL ───────────────────────────────────────────────
+ * Nothing here reads a list into Node to filter it. The database is handed
+ * every predicate and returns at most `pageSize + 1` rows — the extra row being
+ * how the caller knows there is a next page without a second counting query
+ * that would scan what this one avoided.
+ *
+ * ── The join is not optional ────────────────────────────────────────────────
+ * A bid carries its client as free text, as a link, or both, and
+ * `shared/bidClient.ts` resolves which wins for display. Search has to look at
+ * both sources or it misses every bid created through the client picker, which
+ * carries only the link. That is a LEFT join: a bid with no client is a normal
+ * bid and must still be findable by name or address.
+ *
+ * ── Keyset, not OFFSET ──────────────────────────────────────────────────────
+ * The cursor is `(sortValue, id)` and the predicate is a row comparison against
+ * it, so the database seeks into `(userId, sortColumn)` and reads forward. Page
+ * 500 costs what page 1 costs, and a bid created mid-scroll cannot shift the
+ * window and cause a row to repeat or vanish.
+ *
+ * ── What is NOT indexed, and when that changes ──────────────────────────────
+ * `trades` is a JSON array matched with JSON_CONTAINS, which no b-tree can
+ * serve. It is a residual filter applied to rows already narrowed to one
+ * company, which is cheap while a company has thousands of bids rather than
+ * millions. MySQL 8.0.17+ has multi-valued indexes and this database is 8.0.46,
+ * so the escalation is available: index the array and switch the predicate to
+ * `MEMBER OF`. Worth doing when a trade filter on a large company starts
+ * showing up as slow, not before — drizzle cannot express that index, so it
+ * would have to live in a hand-written migration and drift from the schema.
+ */
+export async function searchBids(
+  userId: number,
+  filters: {
+    text?: string;
+    client?: string;
+    address?: string;
+    trade?: string;
+    status?: string;
+    dateField?: "created" | "due";
+    from?: string;
+    to?: string;
+    archive?: "live" | "archived" | "all";
+    sort?: "recent" | "created";
+  },
+  cursor: { at: number; id: number } | null,
+  pageSize: number
+): Promise<Bid[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const sortColumn =
+    filters.sort === "created" ? bids.createdAt : bids.updatedAt;
+  const conditions = [eq(bids.userId, userId)];
+
+  // Archived is its own axis, not a status. A won bid and an archived bid are
+  // different facts and a contractor searching history wants to say so.
+  if (filters.archive === "archived")
+    conditions.push(isNotNull(bids.archivedAt));
+  else if (filters.archive !== "all") conditions.push(isNull(bids.archivedAt));
+
+  /**
+   * A LIKE pattern with an explicit escape character.
+   *
+   * `escapeLike` has already neutralised any `%` or `_` the user typed; this
+   * tells MySQL that the backslash it used to do so is an escape rather than a
+   * literal. Without the ESCAPE clause the two halves disagree and a search for
+   * "50% deposit" matches everything the contractor owns.
+   *
+   * Four backslashes, and they are all doing something: two survive the
+   * TypeScript string to become `\\` in the SQL text, which MySQL then reads as
+   * one literal backslash. Writing two here emits `ESCAPE '\'`, an unterminated
+   * string literal, and every search fails at the driver.
+   */
+  const pat = (pattern: string) => sql`${pattern} ESCAPE '\\\\'`;
+
+  const text = usableTerm(filters.text);
+  if (text) {
+    const pattern = containsPattern(text);
+    conditions.push(
+      or(
+        sql`${bids.name} LIKE ${pat(pattern)}`,
+        sql`${bids.clientName} LIKE ${pat(pattern)}`,
+        sql`${bids.siteAddress} LIKE ${pat(pattern)}`,
+        sql`${clients.name} LIKE ${pat(pattern)}`,
+        sql`${clients.address} LIKE ${pat(pattern)}`
+      )!
+    );
+  }
+
+  const client = usableTerm(filters.client);
+  if (client) {
+    const pattern = containsPattern(client);
+    conditions.push(
+      or(
+        sql`${bids.clientName} LIKE ${pat(pattern)}`,
+        sql`${clients.name} LIKE ${pat(pattern)}`
+      )!
+    );
+  }
+
+  const address = usableTerm(filters.address);
+  if (address) {
+    const pattern = containsPattern(address);
+    conditions.push(
+      or(
+        sql`${bids.siteAddress} LIKE ${pat(pattern)}`,
+        sql`${clients.address} LIKE ${pat(pattern)}`
+      )!
+    );
+  }
+
+  const trade = usableTerm(filters.trade);
+  if (trade) {
+    conditions.push(
+      sql`JSON_CONTAINS(${bids.trades}, ${JSON.stringify(trade)})`
+    );
+  }
+
+  const status = usableTerm(filters.status);
+  if (status) {
+    conditions.push(eq(bids.status, status as (typeof BID_STATUSES)[number]));
+  }
+
+  const { start, end } = dateRangeBounds(filters.from, filters.to);
+  if (filters.dateField === "due") {
+    // dueDate is a DATE column read in string mode, so it compares against the
+    // same `YYYY-MM-DD` shape rather than against a timestamp. Both ends are
+    // inclusive here, which is what a person means by a date range.
+    if (filters.from) conditions.push(gte(bids.dueDate, filters.from));
+    if (filters.to) conditions.push(lte(bids.dueDate, filters.to));
+  } else {
+    if (start) conditions.push(gte(bids.createdAt, start));
+    // `end` is already the exclusive day-after, so this IS inclusive of `to`.
+    if (end) conditions.push(lt(bids.createdAt, end));
+  }
+
+  if (cursor) {
+    // Strictly after the cursor in descending order: an earlier sort value, or
+    // the same value with a lower id. The id half is what stops two bids saved
+    // in the same second from repeating across a page boundary.
+    // Formatted as a UTC string rather than passed as a Date: a raw sql
+    // parameter is serialised in the server's local timezone while the column
+    // is read back as UTC, and the gap between them skips rows at every page
+    // boundary. See toSqlTimestamp.
+    const at = toSqlTimestamp(new Date(cursor.at));
+    conditions.push(
+      sql`(${sortColumn} < ${at} OR (${sortColumn} = ${at} AND ${bids.id} < ${cursor.id}))`
+    );
+  }
+
+  const rows = await db
+    .select({ bid: bids })
+    .from(bids)
+    .leftJoin(clients, eq(clients.id, bids.clientId))
+    .where(and(...conditions))
+    .orderBy(desc(sortColumn), desc(bids.id))
+    .limit(pageSize + 1);
+
+  return rows.map(row => row.bid);
+}
+
+/**
+ * Search a company's clients, one page at a time.
+ *
+ * The same treatment as bids, and for the same reason: the Clients screen
+ * shipped with a client-side filter over an unpaginated list, flagged at the
+ * time as fine "if a user ever has hundreds of clients". A contractor with
+ * hundreds of clients is a successful contractor, so that condition was a
+ * promise to come back rather than a reason not to.
+ *
+ * Sorted by name, because that is how a person looks for one — so the cursor is
+ * a name and an id rather than a timestamp.
+ */
+export async function searchClients(
+  userId: number,
+  options: {
+    term?: string;
+    archived?: boolean;
+    cursorName?: string;
+    cursorId?: number;
+    pageSize: number;
+  }
+): Promise<Client[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [
+    eq(clients.userId, userId),
+    options.archived
+      ? isNotNull(clients.archivedAt)
+      : isNull(clients.archivedAt),
+  ];
+
+  const term = usableTerm(options.term);
+  if (term) {
+    const esc = sql`${containsPattern(term)} ESCAPE '\\\\'`;
+    conditions.push(
+      or(
+        sql`${clients.name} LIKE ${esc}`,
+        sql`${clients.address} LIKE ${esc}`,
+        sql`${clients.email} LIKE ${esc}`,
+        sql`${clients.phone} LIKE ${esc}`
+      )!
+    );
+  }
+
+  if (options.cursorName !== undefined && options.cursorId !== undefined) {
+    conditions.push(
+      sql`(${clients.name} > ${options.cursorName} OR (${clients.name} = ${options.cursorName} AND ${clients.id} > ${options.cursorId}))`
+    );
+  }
+
+  return db
+    .select()
+    .from(clients)
+    .where(and(...conditions))
+    .orderBy(asc(clients.name), asc(clients.id))
+    .limit(options.pageSize + 1);
+}
+
+/**
+ * Every distinct trade this company has actually bid, for the filter's picker.
+ *
+ * Read from the bids themselves rather than from a fixed list, so a company
+ * that has unlocked plumbing sees plumbing and one that has not is never
+ * offered a filter that can only return nothing.
+ *
+ * Bounded, because this is the one query here that does not paginate. At the
+ * scale where the cap bites, the answer is a `bid_trades` table rather than a
+ * bigger limit — the distinct-values question is what a junction table is for.
+ */
+export async function getUsedTrades(userId: number): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({ trades: bids.trades })
+    .from(bids)
+    .where(eq(bids.userId, userId))
+    .limit(5000);
+  const seen = new Set<string>();
+  for (const row of rows) {
+    for (const trade of row.trades ?? []) seen.add(trade);
+  }
+  return Array.from(seen).sort();
+}
+
+/**
+ * Bid counts for a specific set of clients — the page being displayed.
+ *
+ * The counterpart to pagination. `countBidsPerClient` groups over every bid the
+ * company has, which is exactly the unbounded query the paging was added to
+ * remove; this one is bounded by the ids handed to it.
+ */
+export async function countBidsForClients(
+  clientIds: number[]
+): Promise<Map<number, number>> {
+  if (clientIds.length === 0) return new Map();
+  const db = await getDb();
+  if (!db) return new Map();
+  const rows = await db
+    .select({ clientId: bids.clientId, n: sql<number>`count(*)` })
+    .from(bids)
+    .where(inArray(bids.clientId, clientIds))
+    .groupBy(bids.clientId);
+  const counts = new Map<number, number>();
+  for (const row of rows) {
+    if (row.clientId != null) counts.set(row.clientId, Number(row.n));
+  }
+  return counts;
 }

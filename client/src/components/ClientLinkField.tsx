@@ -71,11 +71,24 @@ export function ClientLinkField({
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
 
-  const clients = trpc.clients.list.useQuery(undefined, {
-    // Only fetched once the picker is opened — a bid screen that never touches
-    // the client field should not pull the whole customer list.
-    enabled: open,
-  });
+  /**
+   * The matches for what has been typed, found by the SERVER.
+   *
+   * This used to fetch every client and filter in the browser. It now sends the
+   * term and takes one page back, so a contractor with two thousand customers
+   * pays for the twenty rows shown rather than for all of them on every
+   * keystroke. `keepPreviousData` stops the list flashing empty between
+   * keystrokes, which is what makes a server-side picker feel like a local one.
+   */
+  const clients = trpc.clients.list.useQuery(
+    { term: query.trim() || undefined, archived: false, pageSize: 20 },
+    {
+      // Only fetched once the picker is opened — a bid screen that never
+      // touches the client field should not pull a customer list at all.
+      enabled: open,
+      placeholderData: previous => previous,
+    }
+  );
 
   const createClient = trpc.clients.create.useMutation({
     onSuccess: created => {
@@ -100,10 +113,10 @@ export function ClientLinkField({
     [bid, client]
   );
 
-  const matches = useMemo(
-    () => searchClients(clients.data ?? [], query),
-    [clients.data, query]
-  );
+  // Already filtered and ordered by the query. `searchClients` is still used
+  // by its own tests as the definition of what a match IS; the ranking it did
+  // here is now the database's ORDER BY.
+  const matches = clients.data?.items ?? [];
 
   return (
     <div className="space-y-1.5">

@@ -32,6 +32,16 @@ import {
   retentionUrgency,
 } from "../../shared/retention";
 import { resolveBidClient } from "../../shared/bidClient";
+import {
+  ARCHIVE_SCOPES,
+  BID_DATE_FIELDS,
+  BID_SORTS,
+  PAGE_SIZE_MAX,
+  clampPageSize,
+  decodeCursor,
+  rangeIsBackwards,
+  toPage,
+} from "../../shared/bidSearch";
 import * as db from "../db";
 
 /**
@@ -69,6 +79,90 @@ async function requireBid(id: number, userId: number) {
 }
 
 export const bidsRouter = router({
+  /**
+   * Historical search: find a bid out of thousands, by who it was for, what
+   * trade it was, where the job was, and when.
+   *
+   * ── Paginated at the query, not in the browser ──────────────────────────
+   * Returns one page and a cursor. Every filter is applied in SQL, so the
+   * response size is bounded by `pageSize` no matter how many bids the company
+   * has — see `db.searchBids` for the keyset reasoning.
+   *
+   * ── Scoped like everything else ─────────────────────────────────────────
+   * `ctx.scope.dataUserId`, so a member searches their company's bids and
+   * nobody else's, and a viewer can search but the `scoped()` gate still stops
+   * them changing anything they find.
+   */
+  search: procedure
+    .input(
+      z.object({
+        text: z.string().trim().max(200).optional(),
+        client: z.string().trim().max(200).optional(),
+        address: z.string().trim().max(200).optional(),
+        trade: z.string().trim().max(64).optional(),
+        status: z.enum(BID_STATUSES).optional(),
+        dateField: z.enum(BID_DATE_FIELDS).default("created"),
+        from: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        to: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        archive: z.enum(ARCHIVE_SCOPES).default("live"),
+        sort: z.enum(BID_SORTS).default("recent"),
+        cursor: z.string().max(200).nullish(),
+        pageSize: z.number().int().min(1).max(PAGE_SIZE_MAX).optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      const pageSize = clampPageSize(input.pageSize);
+
+      // A backwards range is a typo, not a query. Returning nothing would look
+      // like "no bids match" and send someone hunting for missing data.
+      if (rangeIsBackwards(input.from, input.to)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "The start of the date range is after its end.",
+        });
+      }
+
+      const rows = await db.searchBids(
+        ctx.scope.dataUserId,
+        input,
+        decodeCursor(input.cursor),
+        pageSize
+      );
+
+      // Priced through the same rollup the dashboard uses, so a search result
+      // and the card it corresponds to cannot show different money. Only the
+      // page's rows are priced — this is why the page is bounded.
+      const company = await companyDefaultsFor(ctx.scope.dataUserId);
+      const priced = await Promise.all(
+        rows.map(async bid => {
+          const lines = await db.getBidLineItems(bid.id);
+          const { directCost, bidPrice } = rollUpBid(bid, lines, company);
+          return {
+            ...bid,
+            lineCount: lines.length,
+            directCost,
+            finalPrice: bidPrice.finalPrice,
+          };
+        })
+      );
+
+      const page = toPage(priced, pageSize, row =>
+        input.sort === "created" ? row.createdAt : row.updatedAt
+      );
+      return { ...page, pageSize };
+    }),
+
+  /** The trades this company has actually bid, for the search filter. */
+  usedTrades: procedure.query(async ({ ctx }) =>
+    db.getUsedTrades(ctx.scope.dataUserId)
+  ),
+
   list: procedure.query(async ({ ctx }) => {
     return db.getBidsByUser(ctx.scope.dataUserId);
   }),

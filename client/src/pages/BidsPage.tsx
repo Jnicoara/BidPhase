@@ -56,6 +56,7 @@ import { UnitTemplateActions } from "@/components/UnitTemplateActions";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
 import { MaterialsListDialog } from "@/components/MaterialsListDialog";
 import { useCompany } from "@/hooks/useCompany";
+import { BidSearchPanel } from "@/components/BidSearchPanel";
 import { AccountingExportDialog } from "@/components/AccountingExportDialog";
 import { ClientLinkField } from "@/components/ClientLinkField";
 import { BidTaxControls } from "@/components/BidTaxControls";
@@ -1063,7 +1064,9 @@ export default function BidsPage({
   );
 
   const utils = trpc.useUtils();
-  const { data: bids = [], isLoading } = trpc.bids.list.useQuery();
+  const access = useCompany();
+  // The list itself is BidSearchPanel, which paginates. Only the archive COUNT
+  // is read here, for the header button.
   const { data: archived = [] } = trpc.bids.archived.useQuery();
 
   const createBid = trpc.bids.create.useMutation({
@@ -1210,79 +1213,19 @@ export default function BidsPage({
           </div>
         )}
 
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
-            <span className="flex-1">Bid</span>
-            <span className="w-24 shrink-0">Status</span>
-            <span className="w-28 text-right shrink-0">Created</span>
-            <span className="w-8 shrink-0" />
-          </div>
-
-          {isLoading ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              Loading bids…
-            </div>
-          ) : bids.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              No bids yet. Create one to start pricing a job.
-            </div>
-          ) : (
-            bids.map(bid => (
-              <div
-                key={bid.id}
-                className="flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-muted/20 transition-colors group"
-              >
-                <button
-                  onClick={() => setOpenId(bid.id)}
-                  className="flex-1 min-w-0 text-left"
-                >
-                  <span className="text-sm font-medium truncate">
-                    {bid.name}
-                  </span>
-                  {bid.trades?.length ? (
-                    <div className="text-xs text-muted-foreground truncate">
-                      {bid.trades.join(", ")}
-                    </div>
-                  ) : null}
-                </button>
-                <span className="w-24 shrink-0">
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs",
-                      STATUS_STYLES[bid.status as Status]
-                    )}
-                  >
-                    {bid.status}
-                  </Badge>
-                </span>
-                <span className="w-28 text-right shrink-0 text-xs text-muted-foreground">
-                  {new Date(bid.createdAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
-                </span>
-                {/* An Archive icon, not a trash can: this does not delete, and
-                    dressing a recoverable action as a destructive one teaches
-                    people to fear it. Confirmation comes from the shared
-                    dialog — this used to archive on a single click. */}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                  onClick={() =>
-                    setConfirmArchive({ id: bid.id, name: bid.name })
-                  }
-                  title="Archive — off this list, restorable for 30 days"
-                  aria-label={`Archive ${bid.name}`}
-                >
-                  <Archive className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ))
-          )}
-        </div>
+        {/*
+          The list IS the search. It used to be an unpaginated bids.list with
+          the whole table in the browser, which is fine at 24 bids and is the
+          thing that stops working first as a contractor builds history. Every
+          filter and every page now comes from the query — see
+          shared/bidSearch.ts.
+        */}
+        <BidSearchPanel
+          onOpenBid={setOpenId}
+          onArchive={
+            access.can("bids.edit") ? bid => setConfirmArchive(bid) : undefined
+          }
+        />
       </div>
 
       <ArchiveBidDialog

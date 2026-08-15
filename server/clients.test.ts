@@ -222,11 +222,11 @@ describe.skipIf(!hasDb)("client records", () => {
     const gone = await caller().clients.create({ name: "Mid Builders" });
     await caller().clients.archive({ id: gone!.id });
 
-    const list = await caller().clients.list();
+    const list = (await caller().clients.list({})).items;
     expect(list.map(c => c.name)).toEqual(["Alpha Builders", "Zeta Builders"]);
     expect(list[0].id).toBe(alpha!.id);
 
-    const archived = await caller().clients.archived();
+    const archived = (await caller().clients.list({ archived: true })).items;
     expect(archived.map(c => c.name)).toEqual(["Mid Builders"]);
   });
 
@@ -234,7 +234,7 @@ describe.skipIf(!hasDb)("client records", () => {
     const client = await newClient();
     await caller().clients.archive({ id: client.id });
     await caller().clients.restore({ id: client.id });
-    const list = await caller().clients.list();
+    const list = (await caller().clients.list({})).items;
     expect(list.map(c => c.id)).toContain(client.id);
   });
 
@@ -339,7 +339,7 @@ describe.skipIf(!hasDb)("linking a bid to a client", () => {
     await caller().bids.update({ id: a.id, clientId: client.id });
     await caller().bids.update({ id: b.id, clientId: client.id });
 
-    const list = await caller().clients.list();
+    const list = (await caller().clients.list({})).items;
     expect(list.find(c => c.id === client.id)?.bidCount).toBe(2);
   });
 
@@ -493,7 +493,7 @@ describe.skipIf(!hasDb)("the Clients screen", () => {
       notes: "Pays on time. Always wants a breakdown.",
     });
 
-    const listed = await caller().clients.list();
+    const listed = (await caller().clients.list({})).items;
     const row = listed.find(c => c.id === created!.id)!;
     expect(row.name).toBe("Harbour Construction Group");
     expect(row.notes).toMatch(/pays on time/i);
@@ -533,20 +533,20 @@ describe.skipIf(!hasDb)("the Clients screen", () => {
     const created = await newClient("Tab Traveller Ltd");
 
     await caller().clients.archive({ id: created.id });
-    expect((await caller().clients.list()).map(c => c.id)).not.toContain(
-      created.id
-    );
-    expect((await caller().clients.archived()).map(c => c.id)).toContain(
-      created.id
-    );
+    expect(
+      (await caller().clients.list({})).items.map(c => c.id)
+    ).not.toContain(created.id);
+    expect(
+      (await caller().clients.list({ archived: true })).items.map(c => c.id)
+    ).toContain(created.id);
 
     await caller().clients.restore({ id: created.id });
-    expect((await caller().clients.list()).map(c => c.id)).toContain(
+    expect((await caller().clients.list({})).items.map(c => c.id)).toContain(
       created.id
     );
-    expect((await caller().clients.archived()).map(c => c.id)).not.toContain(
-      created.id
-    );
+    expect(
+      (await caller().clients.list({ archived: true })).items.map(c => c.id)
+    ).not.toContain(created.id);
   });
 
   it("reports the bid count the list badge shows", async () => {
@@ -556,7 +556,9 @@ describe.skipIf(!hasDb)("the Clients screen", () => {
     await caller().bids.update({ id: a.id, clientId: created.id });
     await caller().bids.update({ id: b.id, clientId: created.id });
 
-    const row = (await caller().clients.list()).find(c => c.id === created.id)!;
+    const row = (await caller().clients.list({})).items.find(
+      c => c.id === created.id
+    )!;
     expect(row.bidCount).toBe(2);
   });
 });
@@ -593,7 +595,7 @@ describe.skipIf(!hasDb)("the client field on a bid", () => {
     expect(full.bid.name).toBe("Swap test");
 
     // The first client is untouched and keeps its own bid count at zero.
-    const firstRow = (await caller().clients.list()).find(
+    const firstRow = (await caller().clients.list({})).items.find(
       c => c.id === first.id
     )!;
     expect(firstRow.bidCount).toBe(0);

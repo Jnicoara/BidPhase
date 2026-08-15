@@ -232,12 +232,31 @@ export default function ClientsPage() {
     bidCount: number;
   } | null>(null);
 
-  const live = trpc.clients.list.useQuery();
-  const archived = trpc.clients.archived.useQuery();
+  /**
+   * One page of clients, searched by the SERVER.
+   *
+   * This screen used to fetch every client and filter in the browser — noted
+   * at the time as acceptable until someone had hundreds. Both halves are now
+   * the query's job: the term goes to SQL, and the result is a keyset page
+   * that loads more as you reach the end.
+   *
+   *  keeps the previous page on screen while the next term
+   * is fetched, so typing does not flash an empty list.
+   */
+  const listQuery = trpc.clients.list.useInfiniteQuery(
+    {
+      term: query.trim() || undefined,
+      archived: view === "archived",
+      pageSize: 50,
+    },
+    {
+      getNextPageParam: page => page.nextCursor,
+      placeholderData: previous => previous,
+    }
+  );
 
   const invalidate = useCallback(() => {
     void utils.clients.list.invalidate();
-    void utils.clients.archived.invalidate();
   }, [utils]);
 
   const createClient = trpc.clients.create.useMutation({
@@ -277,11 +296,12 @@ export default function ClientsPage() {
     },
   });
 
-  const liveRows = useMemo(() => live.data ?? [], [live.data]);
-  const archivedRows = useMemo(() => archived.data ?? [], [archived.data]);
-
-  const rows = view === "active" ? liveRows : archivedRows;
-  const visible = useMemo(() => searchClients(rows, query), [rows, query]);
+  // Flattened pages. Already filtered and ordered by the database — nothing
+  // here re-filters, which is the whole point of the change.
+  const visible = useMemo(
+    () => (listQuery.data?.pages ?? []).flatMap(page => page.items),
+    [listQuery.data]
+  );
 
   // Typed on the fields it reads rather than on the live row, because the
   // archived list carries the same client without the bid count.
@@ -360,7 +380,7 @@ export default function ClientsPage() {
               >
                 {tab === "active" ? "Working list" : "Archived"}
                 <span className="ml-1.5 text-muted-foreground/70">
-                  {tab === "active" ? liveRows.length : archivedRows.length}
+                  {view === tab ? visible.length : ""}
                 </span>
               </button>
             ))}
@@ -404,7 +424,7 @@ export default function ClientsPage() {
           />
         )}
 
-        {live.isLoading && view === "active" ? (
+        {listQuery.isLoading ? (
           <div className="space-y-2">
             {[0, 1, 2].map(n => (
               <div
@@ -552,6 +572,24 @@ export default function ClientsPage() {
                 </div>
               );
             })}
+
+            {/* The list is a page now, so it has to say so. Without this a
+                contractor with 400 customers sees 50 and concludes the rest
+                are gone. */}
+            {listQuery.hasNextPage && (
+              <div className="pt-2 flex justify-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={listQuery.isFetchingNextPage}
+                  onClick={() => void listQuery.fetchNextPage()}
+                >
+                  {listQuery.isFetchingNextPage
+                    ? "Loading…"
+                    : "Load more clients"}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

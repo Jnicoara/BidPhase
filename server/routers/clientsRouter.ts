@@ -18,6 +18,12 @@ import { z } from "zod";
 import { router, scoped } from "../_core/trpc";
 import { CLIENT_KINDS } from "../../drizzle/schema";
 import * as db from "../db";
+import {
+  PAGE_SIZE_MAX,
+  clampPageSize,
+  decodeNameCursor,
+  encodeNameCursor,
+} from "../../shared/bidSearch";
 
 /**
  * This router's gate: a query needs `clients.view`, a mutation needs `clients.edit`.
@@ -47,22 +53,59 @@ async function requireClient(id: number, userId: number) {
 }
 
 export const clientsRouter = router({
-  /** Live clients, A–Z, each with how many bids point at it. */
-  list: procedure.query(async ({ ctx }) => {
-    const [rows, counts] = await Promise.all([
-      db.getClientsByUser(ctx.scope.dataUserId),
-      db.countBidsPerClient(ctx.scope.dataUserId),
-    ]);
-    return rows.map(client => ({
-      ...client,
-      bidCount: counts.get(client.id) ?? 0,
-    }));
-  }),
+  /**
+   * Clients, A–Z, searched and paginated at the query.
+   *
+   * ── This replaced a client-side filter over the whole list ──────────────
+   * The screen used to fetch every client and filter in the browser, noted at
+   * the time as fine "if a user ever has hundreds of clients". A contractor
+   * with hundreds of clients is a successful one, so that was a promise to
+   * come back rather than a reason not to. Both halves are now server-side:
+   * the term is matched in SQL across name, address, email and phone, and the
+   * result is one keyset page.
+   *
+   * `bidCount` is looked up only for the rows on this page. Counting for every
+   * client in the company would put back exactly the unbounded query the
+   * pagination is here to remove.
+   */
+  list: procedure
+    .input(
+      z
+        .object({
+          term: z.string().trim().max(200).optional(),
+          archived: z.boolean().default(false),
+          cursor: z.string().max(300).nullish(),
+          pageSize: z.number().int().min(1).max(PAGE_SIZE_MAX).optional(),
+        })
+        .default({ archived: false })
+    )
+    .query(async ({ input, ctx }) => {
+      const pageSize = clampPageSize(input.pageSize);
+      const cursor = decodeNameCursor(input.cursor);
 
-  /** Archived clients. Kept indefinitely — nothing purges a client. */
-  archived: procedure.query(async ({ ctx }) => {
-    return db.getArchivedClients(ctx.scope.dataUserId);
-  }),
+      const rows = await db.searchClients(ctx.scope.dataUserId, {
+        term: input.term,
+        archived: input.archived,
+        cursorName: cursor?.name,
+        cursorId: cursor?.id,
+        pageSize,
+      });
+
+      const hasMore = rows.length > pageSize;
+      const items = hasMore ? rows.slice(0, pageSize) : rows;
+      const counts = await db.countBidsForClients(items.map(row => row.id));
+
+      const last = items[items.length - 1];
+      return {
+        items: items.map(client => ({
+          ...client,
+          bidCount: counts.get(client.id) ?? 0,
+        })),
+        nextCursor:
+          hasMore && last ? encodeNameCursor(last.name, last.id) : null,
+        pageSize,
+      };
+    }),
 
   get: procedure
     .input(z.object({ id: z.number().int().positive() }))

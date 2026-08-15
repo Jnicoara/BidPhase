@@ -6,6 +6,12 @@ This is the human-readable companion to the git history — read this to see wha
 
 ## [2026-08-14]
 
+- **You can search your bid history.** The Bids screen now has a search box across the job name, the client and the address, plus filters for trade, status, a date range (created or due), and whether to include archived bids. Built for finding a job from three years ago, not for scrolling.
+- **The searching happens in the database, not in your browser.** Every filter and every page is worked out by the query, so the screen is as quick with twenty thousand bids as with twenty — and stays quick however deep you scroll. Tested against three thousand real bids, paged all the way through.
+- **Searching by client finds bids that only have the client attached**, not just ones where the name was typed in. Those are different things in the data, and a search that only read one of them would quietly miss half your history.
+- **The Clients screen got the same treatment.** It used to load every client and filter them in the browser — fine at twenty, not at four hundred. Search and paging are now the query's job, and the client picker on a bid searches as you type instead of downloading your whole customer list.
+- **Fixed a paging bug found only by testing at volume:** a mismatch in how timestamps were read and written was quietly dropping one bid at every page boundary. At a handful of records it is invisible; at three thousand it lost twenty-nine.
+
 - **You can put your crew in HelixBid.** A company can now have several people in it, each with their own login, all working on the same bids, library and pricing. There is a new **Crew** screen next to Clients: invite someone with a code, set what they can do, suspend them if they leave.
 - **Four roles.** _Owner_ and _admin_ can do everything (an admin cannot act on the owner). _Estimator_ is the working role — builds bids, edits the library, manages clients, and can see costs, but cannot change your overhead, profit or labor rates, and cannot add people. _Viewer_ can only read. Your own account is the owner of your company and nothing about it changes.
 - **Nothing about working alone changes.** If you never invite anyone, your account is a company of one and every bid, price and setting stays exactly where it was. The change needed no data moved.

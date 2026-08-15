@@ -1363,6 +1363,13 @@ export const clients = mysqlTable(
     // Historical search lands here: "every bid for this client" starts by
     // finding the client by name within one account.
     index("clients_userId_name_idx").on(t.userId, t.name),
+    // The clients list is now cursor-paginated by name, so the sort key has
+    // to be indexed alongside the scope for the same reason bids are above.
+    index("clients_userId_archivedAt_name_idx").on(
+      t.userId,
+      t.archivedAt,
+      t.name
+    ),
     index("clients_archivedAt_idx").on(t.archivedAt),
   ]
 );
@@ -1836,6 +1843,17 @@ export const bids = mysqlTable(
   },
   t => [
     index("bids_userId_idx").on(t.userId),
+    // Composite, and this is what makes historical search page at constant
+    // cost. Keyset pagination walks (userId, sortColumn) in order and stops
+    // at LIMIT; without the sort column in the index the database has to
+    // read every one of that company's bids and sort them to return twenty.
+    // Both columns are NOT NULL, which is why they are the only sorts the
+    // search offers — see shared/bidSearch.ts.
+    index("bids_userId_updatedAt_idx").on(t.userId, t.updatedAt),
+    index("bids_userId_createdAt_idx").on(t.userId, t.createdAt),
+    // dueDate is a filter, never a sort. Indexed so a date range narrows
+    // before anything else runs.
+    index("bids_userId_dueDate_idx").on(t.userId, t.dueDate),
     index("bids_status_idx").on(t.status),
     // "Every bid for this client" — the query historical search is built on.
     index("bids_clientId_idx").on(t.clientId),
