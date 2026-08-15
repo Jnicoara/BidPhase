@@ -96,6 +96,7 @@ export const accountingRouter = router({
           bidName: bid.name,
           customerName: resolved.clientName,
           status: bid.status,
+          isSample: bid.isSample,
           totals: {
             materialCost: totals.materialCost,
             laborCost: totals.laborCost,

@@ -21,6 +21,7 @@ import { materialsListRouter } from "./routers/materialsListRouter";
 import { accountingRouter } from "./routers/accountingRouter";
 import { companyRouter } from "./routers/companyRouter";
 import { closeoutRouter } from "./routers/closeoutRouter";
+import { sampleRouter } from "./routers/sampleRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
@@ -66,6 +67,9 @@ export const appRouter = router({
   // Job close-out: actual hours against the estimate, and the suggestions that
   // fall out of them. Nothing here writes to the library without a person.
   closeout: closeoutRouter,
+  // The shipped example bid. Ordinary rows flagged isSample — see
+  // shared/sampleProject.ts for why that is a column and not a name.
+  sample: sampleRouter,
   proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,

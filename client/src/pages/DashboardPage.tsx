@@ -38,6 +38,8 @@ import { type PendingArchive } from "@/lib/archiveBid";
 import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
 import { NavigationHelper } from "@/components/NavigationHelper";
 import { StartBidCards } from "@/components/StartBidCards";
+import { SampleBidCard } from "@/components/SampleBidCard";
+import { realBidValue } from "@shared/sampleProject";
 import {
   bidNameFromFilename,
   clearPendingPlan,
@@ -219,11 +221,20 @@ export default function DashboardPage({
       ])
     ) as Record<string, { count: number; value: number }>;
 
-    const openValue =
-      (perStatus.Draft?.value ?? 0) + (perStatus.Active?.value ?? 0);
-    const openCount =
-      (perStatus.Draft?.count ?? 0) + (perStatus.Active?.count ?? 0);
-    return { perStatus, openValue, openCount };
+    // The sample is excluded from the headline figure, and that exclusion is
+    // the whole "never confusable with a real bid" guarantee. A row on a list
+    // gets inspected; a total does not — a fictional $15,000 folded into "Out
+    // for bid" is worse than an unlabelled row, because nobody checks it.
+    const open = realBidValue(
+      bids.filter(b => b.status === "Draft" || b.status === "Active"),
+      b => b.finalPrice
+    );
+    return {
+      perStatus,
+      openValue: open.total,
+      openCount: open.count,
+      sampleExcluded: open.sampleExcluded,
+    };
   }, [groups]);
 
   const start = () => {
@@ -332,6 +343,7 @@ export default function DashboardPage({
             onQuickBid={onQuickBid}
             busy={startFromPlan.isPending}
           />
+          <SampleBidCard onOpenBid={onOpenBid} />
           <GettingStartedChecklist />
           <NavigationHelper className="max-w-xl" />
         </div>
@@ -399,6 +411,15 @@ export default function DashboardPage({
                             <div className="flex items-start gap-2">
                               <span className="flex-1 min-w-0 text-sm font-medium truncate">
                                 {bid.name}
+                                {/* The dashboard is the surface where a
+                                    fictional figure would do the most damage,
+                                    so the row says what it is even though its
+                                    value is already left out of the total. */}
+                                {bid.isSample && (
+                                  <span className="ml-2 text-[0.65rem] uppercase tracking-wide px-1.5 py-0.5 rounded border border-[#F5C518]/40 text-[#F5C518]">
+                                    sample
+                                  </span>
+                                )}
                               </span>
                               <span className="font-mono text-sm shrink-0">
                                 {money(bid.finalPrice)}

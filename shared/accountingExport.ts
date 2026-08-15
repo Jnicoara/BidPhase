@@ -189,6 +189,8 @@ export type AccountingSource = {
   /** Resolved through shared/bidClient — the bid's text, then the record. */
   customerName: string | null;
   status: string;
+  /** The shipped example. Must never be posted to a real set of books. */
+  isSample?: boolean;
   totals: {
     materialCost: number;
     laborCost: number;
@@ -297,6 +299,14 @@ export function buildAccountingExport(
     warnings.push(
       "This bid has no customer name. QuickBooks needs one and will reject the row — " +
         "add a client to the bid, or fill the Customer column in before importing."
+    );
+  }
+  if (source.isSample) {
+    // Loudest of the three, and first. A permit charge on a fictional retail
+    // buildout landing in somebody's real ledger is a mess to unpick, and the
+    // export looks completely ordinary once it is a file on disk.
+    warnings.unshift(
+      "This is the SAMPLE bid. Do not import it — it is example data, not a real job."
     );
   }
   if (source.status !== "Won") {
