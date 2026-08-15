@@ -99,6 +99,23 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
       "The overview of recent bids and where things stand. The home screen.",
   },
   {
+    /**
+     * Listed for everybody, even though only owners and admins may open it.
+     *
+     * The helper has no company scope to filter on — it is `protectedProcedure`
+     * and reads nothing, which is what keeps it cheap and unprivileged. Sending
+     * an estimator here costs them one click and a sentence explaining that the
+     * company's overall figures are the owner's to share; leaving it out would
+     * cost the owner — the person this screen is FOR — the only question the
+     * helper is likely to be asked about it.
+     */
+    id: "analytics",
+    label: "Performance",
+    path: "#/analytics",
+    purpose:
+      "How the business is doing. Win rate, how many bids were won or lost, hit rate over time, whether jobs are making the margin they were quoted at, profitability by trade, which jobs ran over.",
+  },
+  {
     id: "material-database",
     label: "Material Database",
     path: "#/matdb",

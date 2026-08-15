@@ -36,7 +36,9 @@ import BidArchivePage from "@/pages/BidArchivePage";
 import KitsPage from "@/pages/KitsPage";
 import ClientsPage from "@/pages/ClientsPage";
 import TeamPage from "@/pages/TeamPage";
+import AnalyticsPage from "@/pages/AnalyticsPage";
 import FirstRunPage from "@/pages/FirstRunPage";
+import { useCompany } from "@/hooks/useCompany";
 import { trpc } from "@/lib/trpc";
 import {
   Settings,
@@ -54,6 +56,7 @@ import {
   Archive as ArchiveIcon,
   Users,
   UsersRound,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@shared/version";
@@ -70,6 +73,7 @@ type Route =
   | "bids"
   | "clients"
   | "team"
+  | "analytics"
   | "quickbid"
   | "takeoff"
   | "proposal"
@@ -112,6 +116,7 @@ function pathToRoute(path: string): { route: Route; projectId?: number } {
   }
   if (p === "clients") return { route: "clients" };
   if (p === "team") return { route: "team" };
+  if (p === "analytics") return { route: "analytics" };
   if (p === "quickbid") return { route: "quickbid" };
   if (p === "welcome") return { route: "welcome" };
   // Library § …. Bare /library lands on Materials; Assemblies is still to come.
@@ -147,6 +152,16 @@ export default function HelixBidShell() {
 
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  /**
+   * Whether to offer Performance at all.
+   *
+   * Not protection — the server enforces `analytics.view` and this hook says so
+   * at the top of its own file. It is honesty: an estimator who clicks a nav
+   * item and lands on "you cannot see this" has been shown a door that was
+   * never theirs, and hiding it tells them what their account is.
+   */
+  const { can } = useCompany();
+  const canSeeAnalytics = can("analytics.view");
 
   // ── URL-based routing using hash ──────────────────────────────────────────
   const [routeState, setRouteState] = useState<{
@@ -221,6 +236,7 @@ export default function HelixBidShell() {
   const isInBids = route === "bids";
   const isInClients = route === "clients";
   const isInTeam = route === "team";
+  const isInAnalytics = route === "analytics";
   const isInTakeoff = route === "takeoff";
   const isInProposal = route === "proposal";
   const isInBidArchive = route === "bid-archive";
@@ -299,6 +315,8 @@ export default function HelixBidShell() {
       );
     if (isInClients) return <ClientsPage />;
     if (isInTeam) return <TeamPage />;
+    if (isInAnalytics)
+      return <AnalyticsPage onOpenBid={id => navigate("bids", id)} />;
     if (isInQuickBid) return <QuickBidPage />;
     if (isOnWelcome) return <FirstRunPage />;
     if (isInAdmin) return <AdminSettingsPage />;
@@ -498,6 +516,19 @@ export default function HelixBidShell() {
               label="Crew"
               title="Crew — who can get into this company"
             />
+            {/* Last in Workspace, and only for those who hold the capability.
+                It sits here rather than in Settings because "how did we do
+                this quarter" is a thing a contractor asks while working, not
+                something they configure once. */}
+            {canSeeAnalytics && (
+              <NavBtn
+                onClick={() => navigate("analytics")}
+                isActive={isInAnalytics}
+                icon={BarChart3}
+                label="Performance"
+                title="Performance — win rate and what the work earned"
+              />
+            )}
           </NavSection>
 
           <NavSection label="Library">

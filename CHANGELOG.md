@@ -4,6 +4,14 @@ Plain-English record of what changed and when. Newest first.
 
 This is the human-readable companion to the git history — read this to see what happened, read the commits for the technical detail.
 
+## [2026-08-15]
+
+- **A new Performance screen shows how the business is actually doing.** Win rate over time, how much work is out for bid, and — from the hours entered at job close-out — whether finished jobs earned the margin they were quoted at, broken down by trade. Built entirely from bids and close-outs you already have; there is nothing to set up and no new field to fill in.
+- **The win rate counts bids that were answered, not everything you quoted.** A bid still sitting on somebody's desk is not a loss, and counting it as one would make a busy month look like a bad one. The number of bids still out is shown right beside the rate everywhere it appears, so it can never be read out of context.
+- **Profitability compares the hours a job took against the hours it was quoted at, priced at that bid's own labor rate.** Materials are held at their estimate, because the app records actual hours and not actual material cost — the screen says so at the top of the panel rather than presenting a partial figure as a full profit-and-loss.
+- **Only owners and admins can see it.** Tighter than everything else in the bid layer: an estimator can open and price any bid, but company-wide win rate and margin are the owner's to share. Estimators and viewers do not see the menu item at all.
+- **It stays fast on years of history.** Everything is totalled inside the database rather than by loading bids into the browser, so a contractor with a decade of quoting opens the screen as quickly as one with a month of it.
+
 ## [2026-08-14]
 
 - **A new account can open a finished example bid in one click.** The Dashboard now offers "Show me an example bid" — a small commercial retail buildout, 2,400 sq ft, priced end to end at around $16,800: 76 devices and fixtures, a labor modifier for the 14 ft ceiling, a permit and a lift charge, a client, and a proposal you can print. It answers "what does this thing actually produce?" before you have entered anything of your own.

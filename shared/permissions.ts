@@ -85,6 +85,29 @@ export const CAPABILITIES = [
    */
   "pricing.edit",
 
+  /**
+   * See the company's own performance: win rate, and what finished jobs
+   * actually earned against what they were quoted at.
+   *
+   * ── Deliberately not implied by bids.view ────────────────────────────────
+   * Anyone who can open a bid can already see that bid's price, so it is
+   * tempting to treat the aggregate as free. It is not the same disclosure.
+   * One bid is a job somebody worked on; the whole book of business is how
+   * well the company is doing — the figure a contractor would show an
+   * accountant, a lender or a buyer, and would not hand to a subcontractor
+   * they added as a viewer last week or to a client contact reading their own
+   * quote.
+   *
+   * The estimator case is the one worth being explicit about, because it is
+   * arguable in the other direction: an estimator's own hit rate is genuinely
+   * useful feedback for them. It is withheld anyway, because this figure is
+   * not scoped per person — it is the company's, across every estimator — and
+   * a company-wide margin is not a working tool for building a bid. If a
+   * contractor decides otherwise, adding "analytics.view" to the estimator
+   * list below is the whole change.
+   */
+  "analytics.view",
+
   "clients.view",
   "clients.edit",
 
@@ -109,7 +132,9 @@ export type Capability = (typeof CAPABILITIES)[number];
  *   estimator  the working role. Builds bids, edits the library, manages
  *              clients, and can SEE pricing because a bid cannot be built
  *              without costs — but cannot change the company's margin, its
- *              settings, or who is in it.
+ *              settings, or who is in it, and cannot see how the company is
+ *              performing overall. See "analytics.view" for why that last one
+ *              sits with the money settings rather than with the bid work.
  *   viewer     reads. For a customer contact, a partner, or a new hire.
  */
 export const ROLE_CAPABILITIES: Record<CompanyRole, readonly Capability[]> = {
@@ -171,6 +196,16 @@ export const FEATURES = {
    * mis-mapped column reaches somebody's books.
    */
   "accounting.quickbooks": { availability: "internal" },
+  /**
+   * The business analytics dashboard. Shipped to everyone.
+   *
+   * Tagged even though it is released, because the two axes answer different
+   * questions here and both are live: "analytics.view" decides WHO inside a
+   * company sees it (owners and admins), and this decides WHETHER the screen
+   * exists in the build at all. Withdrawing it — to rework the profitability
+   * basis, say — is changing one word here, with no change to any role.
+   */
+  "analytics.dashboard": { availability: "everyone" },
   /** The supplier materials list. Shipped to everyone. */
   "materials.supplierList": { availability: "everyone" },
   /** AI plan reading in Takeoff. Shipped to everyone. */
