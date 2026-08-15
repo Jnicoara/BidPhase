@@ -21,6 +21,7 @@ import { materialsListRouter } from "./routers/materialsListRouter";
 import { accountingRouter } from "./routers/accountingRouter";
 import { companyRouter } from "./routers/companyRouter";
 import { closeoutRouter } from "./routers/closeoutRouter";
+import { analyticsRouter } from "./routers/analyticsRouter";
 import { sampleRouter } from "./routers/sampleRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
@@ -67,6 +68,10 @@ export const appRouter = router({
   // Job close-out: actual hours against the estimate, and the suggestions that
   // fall out of them. Nothing here writes to the library without a person.
   closeout: closeoutRouter,
+  // Company performance — win rate and what finished jobs actually earned.
+  // Aggregated in SQL over the whole history, and gated tighter than the rest
+  // of the bid layer: owners and admins only. See the router header.
+  analytics: analyticsRouter,
   // The shipped example bid. Ordinary rows flagged isSample — see
   // shared/sampleProject.ts for why that is a column and not a name.
   sample: sampleRouter,

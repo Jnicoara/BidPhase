@@ -6,6 +6,12 @@ This is the human-readable companion to the git history — read this to see wha
 
 ## [2026-08-15]
 
+- **A new Performance screen shows how the business is actually doing.** Win rate over time, how much work is out for bid, and — from the hours entered at job close-out — whether finished jobs earned the margin they were quoted at, broken down by trade. Built entirely from bids and close-outs you already have; there is nothing to set up and no new field to fill in.
+- **The win rate counts bids that were answered, not everything you quoted.** A bid still sitting on somebody's desk is not a loss, and counting it as one would make a busy month look like a bad one. The number of bids still out is shown right beside the rate everywhere it appears, so it can never be read out of context.
+- **Profitability compares the hours a job took against the hours it was quoted at, priced at that bid's own labor rate.** Materials are held at their estimate, because the app records actual hours and not actual material cost — the screen says so at the top of the panel rather than presenting a partial figure as a full profit-and-loss.
+- **Only owners and admins can see it.** Tighter than everything else in the bid layer: an estimator can open and price any bid, but company-wide win rate and margin are the owner's to share. Estimators and viewers do not see the menu item at all.
+- **It stays fast on years of history.** Everything is totalled inside the database rather than by loading bids into the browser, so a contractor with a decade of quoting opens the screen as quickly as one with a month of it.
+
 - **Tracked down the error on the archived-bids screen: nothing was wrong with the app, the database it was running against was out of date.** Opening the archive reads a bid's full record, which now includes the sales-tax fields and the sample marker added in recent updates. On an environment where those updates had not been applied to the database, that read failed outright and took the whole screen with it.
 - **There is now a one-command way to ask whether a database is behind the code**, so the same thing is caught before a deploy instead of by someone hitting a screen — and a check that fails while building, if a change is ever made without its database update.
 
