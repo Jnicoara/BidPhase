@@ -61,6 +61,7 @@ import { AccountingExportDialog } from "@/components/AccountingExportDialog";
 import { ClientLinkField } from "@/components/ClientLinkField";
 import { BidTaxControls } from "@/components/BidTaxControls";
 import { BidExtrasPanel } from "@/components/BidExtrasPanel";
+import { CloseoutPanel } from "@/components/CloseoutPanel";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { RETENTION_DAYS } from "@shared/retention";
 
@@ -798,6 +799,11 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                 </>
               )}
             </div>
+
+            {/* After the bid is built, not before: closing out is something
+                that happens when the job is finished, and it sits shut until
+                somebody opens it. */}
+            <CloseoutPanel bidId={bid.id} />
 
             <BidExtrasPanel bidId={bid.id} />
 

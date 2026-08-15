@@ -93,6 +93,7 @@ import {
   defaultLaborHoursFor,
   isPlaceholderHours,
 } from "@shared/laborHourDefaults";
+import { HourSuggestions } from "@/components/HourSuggestions";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1388,6 +1389,8 @@ export default function AssembliesLibraryPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
+        {/* Above the list, because it proposes a change to something in it. */}
+        <HourSuggestions />
         <div className="relative mb-3">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
           <Input

@@ -20,6 +20,7 @@ import { bidExtrasRouter } from "./routers/bidExtrasRouter";
 import { materialsListRouter } from "./routers/materialsListRouter";
 import { accountingRouter } from "./routers/accountingRouter";
 import { companyRouter } from "./routers/companyRouter";
+import { closeoutRouter } from "./routers/closeoutRouter";
 import { proposalsRouter } from "./routers/proposalsRouter";
 import { bidPdfsRouter } from "./routers/bidPdfsRouter";
 import { takeoffRunsRouter } from "./routers/takeoffRunsRouter";
@@ -62,6 +63,9 @@ export const appRouter = router({
   // Access control: who is in the company and what they may do. Every route
   // acts on ctx.scope.companyId — none of them take a company id.
   company: companyRouter,
+  // Job close-out: actual hours against the estimate, and the suggestions that
+  // fall out of them. Nothing here writes to the library without a person.
+  closeout: closeoutRouter,
   proposals: proposalsRouter,
   bidPdfs: bidPdfsRouter,
   takeoffRuns: takeoffRunsRouter,

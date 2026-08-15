@@ -111,6 +111,14 @@ import {
   BidPdfSheet,
   bidPdfSheets,
   BID_STATUSES,
+  bidCloseouts,
+  bidCloseoutLines,
+  assemblyHourSuggestions,
+  CLOSEOUT_MODE_VALUES,
+  SUGGESTION_STATUS_VALUES,
+  type BidCloseout,
+  type BidCloseoutLine,
+  type AssemblyHourSuggestion,
   companies,
   companyMembers,
   companyInvites,
@@ -6090,4 +6098,303 @@ export async function countBidsForClients(
     if (row.clientId != null) counts.set(row.clientId, Number(row.n));
   }
   return counts;
+}
+
+// ─── Job close-out ────────────────────────────────────────────────────────────
+/**
+ * Storage for what a finished job actually took.
+ *
+ * Every function takes the company's scope id and filters on it. The suggestion
+ * queries are the ones to read carefully: a starter assembly is shared across
+ * every company, so "how has this assembly performed" is only ever a question
+ * about ONE company's close-outs and the userId predicate is what makes it so.
+ */
+
+export async function getCloseoutForBid(
+  bidId: number,
+  userId: number
+): Promise<BidCloseout | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(bidCloseouts)
+    .where(and(eq(bidCloseouts.bidId, bidId), eq(bidCloseouts.userId, userId)))
+    .limit(1);
+  return row;
+}
+
+export async function getCloseoutLines(
+  closeoutId: number,
+  userId: number
+): Promise<BidCloseoutLine[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(bidCloseoutLines)
+    .where(
+      and(
+        eq(bidCloseoutLines.closeoutId, closeoutId),
+        eq(bidCloseoutLines.userId, userId)
+      )
+    )
+    .orderBy(asc(bidCloseoutLines.id));
+}
+
+/**
+ * Create or replace a bid's close-out.
+ *
+ * Replace rather than patch: a close-out is one statement about a job, and
+ * editing it means restating it. The lines are deleted and rewritten together
+ * with the header so a mode change from byAssembly to total cannot leave
+ * orphaned lines behind that later queries would still count.
+ */
+export async function saveCloseout(
+  bidId: number,
+  userId: number,
+  data: {
+    mode: (typeof CLOSEOUT_MODE_VALUES)[number];
+    totalActualHours: string | null;
+    estimatedHours: string;
+    closedAt: Date;
+    notes: string | null;
+    enteredByUserId: number;
+    lines: Array<{
+      assemblyId: number | null;
+      assemblyName: string;
+      qty: string;
+      estimatedHours: string;
+      actualHours: string;
+    }>;
+  }
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const existing = await getCloseoutForBid(bidId, userId);
+  let closeoutId: number;
+
+  if (existing) {
+    await db
+      .update(bidCloseouts)
+      .set({
+        mode: data.mode,
+        totalActualHours: data.totalActualHours,
+        estimatedHours: data.estimatedHours,
+        closedAt: data.closedAt,
+        notes: data.notes,
+        enteredByUserId: data.enteredByUserId,
+      })
+      .where(eq(bidCloseouts.id, existing.id));
+    closeoutId = existing.id;
+    await db
+      .delete(bidCloseoutLines)
+      .where(eq(bidCloseoutLines.closeoutId, closeoutId));
+  } else {
+    const [inserted] = await db.insert(bidCloseouts).values({
+      bidId,
+      userId,
+      mode: data.mode,
+      totalActualHours: data.totalActualHours,
+      estimatedHours: data.estimatedHours,
+      closedAt: data.closedAt,
+      notes: data.notes,
+      enteredByUserId: data.enteredByUserId,
+    });
+    closeoutId = inserted.insertId;
+  }
+
+  if (data.lines.length > 0) {
+    await db.insert(bidCloseoutLines).values(
+      data.lines.map(line => ({
+        closeoutId,
+        userId,
+        assemblyId: line.assemblyId,
+        assemblyName: line.assemblyName,
+        qty: line.qty,
+        estimatedHours: line.estimatedHours,
+        actualHours: line.actualHours,
+      }))
+    );
+  }
+
+  return closeoutId;
+}
+
+/** Remove a close-out entirely — the job was never really finished. */
+export async function deleteCloseout(
+  bidId: number,
+  userId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(bidCloseouts)
+    .where(and(eq(bidCloseouts.bidId, bidId), eq(bidCloseouts.userId, userId)));
+}
+
+/**
+ * Every closed-out observation of one assembly, for THIS company.
+ *
+ * The userId predicate is the whole security of the suggestion engine. Assembly
+ * ids are shared — a starter assembly has `userId = NULL` and appears in every
+ * company's library — so without it, one contractor's crew performance would
+ * produce suggestions in another contractor's account.
+ */
+export async function getAssemblySamples(
+  userId: number,
+  assemblyId: number,
+  limit = 50
+): Promise<Array<{ estimatedHours: number; actualHours: number }>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      estimatedHours: bidCloseoutLines.estimatedHours,
+      actualHours: bidCloseoutLines.actualHours,
+    })
+    .from(bidCloseoutLines)
+    .where(
+      and(
+        eq(bidCloseoutLines.userId, userId),
+        eq(bidCloseoutLines.assemblyId, assemblyId)
+      )
+    )
+    .orderBy(desc(bidCloseoutLines.id))
+    .limit(limit);
+  return rows.map(row => ({
+    estimatedHours: Number(row.estimatedHours),
+    actualHours: Number(row.actualHours),
+  }));
+}
+
+/** Which assemblies this company has closed-out data for. */
+export async function getAssembliesWithSamples(
+  userId: number,
+  limit = 500
+): Promise<number[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .selectDistinct({ assemblyId: bidCloseoutLines.assemblyId })
+    .from(bidCloseoutLines)
+    .where(
+      and(
+        eq(bidCloseoutLines.userId, userId),
+        isNotNull(bidCloseoutLines.assemblyId)
+      )
+    )
+    .limit(limit);
+  return rows
+    .map(row => row.assemblyId)
+    .filter((id): id is number => id !== null);
+}
+
+export async function getHourSuggestions(
+  userId: number,
+  status?: (typeof SUGGESTION_STATUS_VALUES)[number]
+): Promise<AssemblyHourSuggestion[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(assemblyHourSuggestions.userId, userId)];
+  if (status) conditions.push(eq(assemblyHourSuggestions.status, status));
+  return db
+    .select()
+    .from(assemblyHourSuggestions)
+    .where(and(...conditions))
+    .orderBy(desc(assemblyHourSuggestions.id))
+    .limit(200);
+}
+
+export async function getHourSuggestion(
+  userId: number,
+  assemblyId: number
+): Promise<AssemblyHourSuggestion | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(assemblyHourSuggestions)
+    .where(
+      and(
+        eq(assemblyHourSuggestions.userId, userId),
+        eq(assemblyHourSuggestions.assemblyId, assemblyId)
+      )
+    )
+    .limit(1);
+  return row;
+}
+
+/**
+ * Record a suggestion, or refresh the numbers on one already pending.
+ *
+ * A DISMISSED suggestion is left alone. That is the point of keeping the row:
+ * a user who has said "no, I know why those ran long" must not be asked again
+ * every time another job closes out. Only an explicit re-open brings it back.
+ */
+export async function upsertHourSuggestion(
+  userId: number,
+  assemblyId: number,
+  data: {
+    currentHours: string;
+    suggestedHours: string;
+    sampleSize: number;
+    ratio: string;
+  }
+): Promise<"created" | "refreshed" | "left-dismissed"> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const existing = await getHourSuggestion(userId, assemblyId);
+  if (existing) {
+    if (existing.status !== "pending") return "left-dismissed";
+    await db
+      .update(assemblyHourSuggestions)
+      .set(data)
+      .where(eq(assemblyHourSuggestions.id, existing.id));
+    return "refreshed";
+  }
+
+  await db
+    .insert(assemblyHourSuggestions)
+    .values({ userId, assemblyId, ...data, status: "pending" });
+  return "created";
+}
+
+/** Withdraw a suggestion whose evidence no longer supports it. */
+export async function clearPendingSuggestion(
+  userId: number,
+  assemblyId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .delete(assemblyHourSuggestions)
+    .where(
+      and(
+        eq(assemblyHourSuggestions.userId, userId),
+        eq(assemblyHourSuggestions.assemblyId, assemblyId),
+        eq(assemblyHourSuggestions.status, "pending")
+      )
+    );
+}
+
+export async function respondToSuggestion(
+  userId: number,
+  suggestionId: number,
+  status: "accepted" | "dismissed",
+  respondedByUserId: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db
+    .update(assemblyHourSuggestions)
+    .set({ status, respondedAt: new Date(), respondedByUserId })
+    .where(
+      and(
+        eq(assemblyHourSuggestions.id, suggestionId),
+        eq(assemblyHourSuggestions.userId, userId)
+      )
+    );
 }

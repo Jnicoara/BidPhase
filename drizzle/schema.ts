@@ -2991,3 +2991,225 @@ export const companyInvites = mysqlTable(
 
 export type CompanyInvite = typeof companyInvites.$inferSelect;
 export type InsertCompanyInvite = typeof companyInvites.$inferInsert;
+
+// ─── Job close-out ────────────────────────────────────────────────────────────
+/**
+ * What a finished job actually took, recorded against the bid that estimated it.
+ *
+ * ── Optional, and structurally so ────────────────────────────────────────────
+ * A bid with no close-out row behaves exactly as it did before this table
+ * existed. Nothing joins to it on a required path, nothing counts it, and no
+ * query in the bid layer is aware of it. That is the promise "closing out is
+ * optional" has to be kept by — a nullable column on `bids` would have made
+ * every bid query carry the concept.
+ *
+ * ── Shaped for the analytics that comes later ────────────────────────────────
+ * The eventual dashboard will ask two kinds of question — "how are we doing
+ * over time" and "which assemblies do we misjudge" — so the figures needed to
+ * answer both are stored on the rows rather than derived by joining back
+ * through bids and line items at query time. `estimatedHours` in particular is
+ * SNAPSHOTTED: re-deriving it later would mean an assembly edited today
+ * silently rewrites what a job in 2024 was estimated at, which would make the
+ * whole history unusable as evidence.
+ *
+ * The indexes are chosen for those two questions: (userId, closedAt) for a time
+ * series, and (userId, assemblyId) on the lines for per-assembly performance.
+ */
+export const CLOSEOUT_MODE_VALUES = ["total", "byAssembly"] as const;
+export const SUGGESTION_STATUS_VALUES = [
+  "pending",
+  "accepted",
+  "dismissed",
+] as const;
+
+export const bidCloseouts = mysqlTable(
+  "bid_closeouts",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    /**
+     * One close-out per bid. The unique constraint is the rule: a job finishes
+     * once, and two rows would make "what did this take" ambiguous.
+     */
+    bidId: int("bidId")
+      .notNull()
+      .references(() => bids.id, { onDelete: "cascade" }),
+    /** The company scope, same as every other table. See companyScope.ts. */
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /**
+     * `total` — one figure for the job. `byAssembly` — the lines are the
+     * answer and this row's total is their sum.
+     *
+     * Explicit rather than inferred from whether lines exist, so there is never
+     * a typed total sitting beside lines that disagree with it.
+     */
+    mode: mysqlEnum("mode", CLOSEOUT_MODE_VALUES).default("total").notNull(),
+
+    /** The single figure, in `total` mode. Null in `byAssembly` mode. */
+    totalActualHours: decimal("totalActualHours", {
+      precision: 10,
+      scale: 2,
+    }),
+
+    /**
+     * What the bid estimated, frozen at close-out.
+     *
+     * Snapshotted for the reason in the header: a comparison whose baseline
+     * moves is not a comparison. This is the figure the variance is computed
+     * against forever.
+     */
+    estimatedHours: decimal("estimatedHours", { precision: 10, scale: 2 })
+      .default("0")
+      .notNull(),
+
+    /** When the job finished — the date the contractor picks, not the row's. */
+    closedAt: timestamp("closedAt").defaultNow().notNull(),
+    /** Anything worth remembering about why it went the way it did. */
+    notes: text("notes"),
+
+    /** Who recorded it. Provenance for a figure that will drive suggestions. */
+    enteredByUserId: int("enteredByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    unique("bid_closeouts_bidId_unique").on(t.bidId),
+    // The time-series index the future dashboard wants.
+    index("bid_closeouts_userId_closedAt_idx").on(t.userId, t.closedAt),
+  ]
+);
+
+export type BidCloseout = typeof bidCloseouts.$inferSelect;
+export type InsertBidCloseout = typeof bidCloseouts.$inferInsert;
+
+/**
+ * One assembly's actual hours within a close-out.
+ *
+ * `assemblyId` is provenance and goes null if the library assembly is deleted;
+ * `assemblyName` is the snapshot that keeps an old close-out readable, exactly
+ * as bid line items and takeoff stamps do.
+ *
+ * `userId` is repeated here rather than reached through the close-out. That is
+ * denormalisation on purpose: every per-assembly analytics question filters by
+ * company first, and making it a join would put the scoping key one table away
+ * from the rows being scanned — which is how a scoping mistake becomes possible
+ * in the first place.
+ */
+export const bidCloseoutLines = mysqlTable(
+  "bid_closeout_lines",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    closeoutId: int("closeoutId")
+      .notNull()
+      .references(() => bidCloseouts.id, { onDelete: "cascade" }),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    /** Null once the library assembly is gone. The name survives. */
+    assemblyId: int("assemblyId").references(() => assemblies.id, {
+      onDelete: "set null",
+    }),
+    assemblyName: varchar("assemblyName", { length: 255 }).notNull(),
+
+    /** How many of the assembly the bid carried, at close-out. */
+    qty: decimal("qty", { precision: 10, scale: 4 }).default("1").notNull(),
+    /** The bid's estimate for this line, at quantity, frozen. */
+    estimatedHours: decimal("estimatedHours", { precision: 10, scale: 2 })
+      .default("0")
+      .notNull(),
+    /** What it took. */
+    actualHours: decimal("actualHours", { precision: 10, scale: 2 })
+      .default("0")
+      .notNull(),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("bid_closeout_lines_closeoutId_idx").on(t.closeoutId),
+    // "How does this assembly perform for this company" — the query the
+    // suggestion engine runs, and the one the dashboard will run per assembly.
+    index("bid_closeout_lines_userId_assemblyId_idx").on(
+      t.userId,
+      t.assemblyId
+    ),
+  ]
+);
+
+export type BidCloseoutLine = typeof bidCloseoutLines.$inferSelect;
+export type InsertBidCloseoutLine = typeof bidCloseoutLines.$inferInsert;
+
+/**
+ * A proposal to change an assembly's base hours, and what the user did about it.
+ *
+ * ── Never applied by anything but a person ──────────────────────────────────
+ * Writing this row changes nothing about the assembly. Accepting it is a
+ * separate, explicit action that requires `library.edit` — because it edits the
+ * shared inputs every future bid is built from. The same suggest-then-confirm
+ * shape the alias suggestions and the plan co-pilot use.
+ *
+ * ── Scoped by company, even for a SHARED assembly ───────────────────────────
+ * This is the subtle one. Starter assemblies have `userId = NULL` and are
+ * visible to every company, so two contractors' close-outs can both reference
+ * assembly 412. The suggestion is keyed by (userId, assemblyId) so one
+ * company's field data can never produce a suggestion for another, and the
+ * unique constraint is on the PAIR rather than on the assembly alone. Keying it
+ * by assembly would have leaked one contractor's crew performance into another
+ * contractor's library.
+ *
+ * `dismissed` is kept rather than deleted: a suggestion the user has already
+ * said no to must not come back the next time the numbers are recomputed, and
+ * the record of having asked is what prevents that.
+ */
+export const assemblyHourSuggestions = mysqlTable(
+  "assembly_hour_suggestions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    assemblyId: int("assemblyId")
+      .notNull()
+      .references(() => assemblies.id, { onDelete: "cascade" }),
+
+    /** Snapshot of the library at the time, so a stale card reads honestly. */
+    currentHours: decimal("currentHours", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
+    suggestedHours: decimal("suggestedHours", { precision: 10, scale: 4 })
+      .default("0")
+      .notNull(),
+    /** How many closed-out jobs it rests on, and how strongly they agree. */
+    sampleSize: int("sampleSize").default(0).notNull(),
+    ratio: decimal("ratio", { precision: 8, scale: 4 }).default("1").notNull(),
+
+    status: mysqlEnum("status", SUGGESTION_STATUS_VALUES)
+      .default("pending")
+      .notNull(),
+    respondedAt: timestamp("respondedAt"),
+    respondedByUserId: int("respondedByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    unique("assembly_hour_suggestions_user_assembly_unique").on(
+      t.userId,
+      t.assemblyId
+    ),
+    index("assembly_hour_suggestions_userId_status_idx").on(t.userId, t.status),
+  ]
+);
+
+export type AssemblyHourSuggestion =
+  typeof assemblyHourSuggestions.$inferSelect;
+export type InsertAssemblyHourSuggestion =
+  typeof assemblyHourSuggestions.$inferInsert;
