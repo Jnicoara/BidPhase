@@ -818,11 +818,6 @@ left as written rather than rewritten to match the rename.
 - [x] Remove only the four approved stale test bid/PDF records: Trace test, Copilot test, Stamp test, and Sheet test
 - [x] Confirm the four `test/...` PDF references are gone before rerunning the backup
 
-## v5.99 — Exact GitHub Main Deployment Sync
-- [x] Synchronize the local project exactly with the latest GitHub `main` branch without local feature edits
-- [x] Apply only the pending migrations provided by GitHub `main` using `pnpm db:push`
-- [x] Validate the GitHub-aligned build and save the exact publish-ready checkpoint
-
 ## v6.0 — Multi-Trade Foundation, Clients & Dashboard Entry
 
 - [x] Add the `trade` axis to labor rates, kits and the company settings tables (migrations 0034/0035)
@@ -837,5 +832,10 @@ left as written rather than rewritten to match the rename.
 - [x] Remove the legacy splash page; `/`, `/home` and unknown routes land on the Dashboard
 - [x] Delete six dead legacy page files and retire the `/trash` and `/project/:id` routes
 - [ ] Apply the storage bucket CORS rule (references/deploying.md § 9) — plan upload above 25MB stays broken until it lands
-- [ ] Ranged PDF loading, so a 500MB set does not have to be fully resident in tab memory
+- [x] Add ranged PDF loading so a 500MB set does not have to be fully resident in tab memory
 - [ ] Verify plan tracing and scale-setting against a plan that actually uploaded
+
+## v5.99 — Exact GitHub Main Deployment Sync
+- [x] Synchronize the local project exactly with the latest GitHub `main` branch without local feature edits
+- [x] Apply only the pending migrations provided by GitHub `main` using `pnpm db:push`
+- [x] Validate the GitHub-aligned build and save the exact publish-ready checkpoint
