@@ -30,6 +30,7 @@ import {
   modifiers,
   users,
 } from "../drizzle/schema";
+import { DEFAULT_ASSEMBLY_ROLE } from "./seed/baselineAssemblies";
 import type { TrpcContext } from "./_core/context";
 
 const USER = 6161;
@@ -101,6 +102,84 @@ beforeEach(async () => {
 });
 
 describe.skipIf(!hasDb)("starter assemblies", () => {
+  /**
+   * Every shipped assembly has a role, so its hours are capable of costing
+   * something.
+   *
+   * They shipped with `laborRateId` null, which froze `snapshotLaborRate` at 0
+   * onto every bid line made from one: the line put its hours in the total and
+   * nothing in the price, and a bid could read "9.7 hours, $0.00" while looking
+   * completely finished. That is not this app's deliberate $0 — an unpriced
+   * material is flagged on the Materials screen and an unpriced rate on Labor
+   * Rates, and an unlinked assembly was flagged nowhere at all.
+   */
+  it("gives every starter assembly a role to be costed against", async () => {
+    const list = await caller().assemblies.list();
+    const starters = list.filter(a => a.userId === null);
+    expect(starters.length).toBeGreaterThan(0);
+
+    const unlinked = starters.filter(a => a.laborRateId === null);
+    expect({
+      unlinked: unlinked.map(a => a.name),
+      hint: "A starter assembly with no role prices its labor at $0 on every bid built from it.",
+    }).toEqual({ unlinked: [], hint: expect.anything() });
+  });
+
+  it("points them at the starter role", async () => {
+    // The zero does not disappear — it MOVES, to the one place the app already
+    // knows how to explain it: this role needing a number, which Labor Rates
+    // flags, the checklist counts, and first-run asks for. That the role itself
+    // ships unpriced is asserted in laborRates.test.ts, against the seed rather
+    // than against a shared database other suites have been editing.
+    const rates = await caller().laborRates.list();
+    const role = rates.find(r => r.name === DEFAULT_ASSEMBLY_ROLE)!;
+    expect(role).toBeDefined();
+
+    /**
+     * Compared against the BASELINE id, not whatever `list` handed back.
+     *
+     * Once this user has edited the rate, `list` returns their fork — a new row
+     * with a new id — while the shipped assembly still stores the starter's.
+     * That is the supersede chain working, not a broken link, and asserting on
+     * `role.id` would fail the moment anybody prices a rate. See
+     * shared/laborRateLookup.ts.
+     */
+    const shippedRoleId = role.baselineId ?? role.id;
+    const list = await caller().assemblies.list();
+    const starter = list.find(a => a.userId === null)!;
+    expect(starter.laborRateId).toBe(shippedRoleId);
+  });
+
+  it("costs a starter assembly at the rate once the contractor sets one", async () => {
+    /**
+     * The whole point, end to end. Editing a shipped role FORKS it, so the
+     * assembly's stored id now names a row the merged library hides — and the
+     * cost has to follow that supersede chain rather than reading 0. This is
+     * exactly what `resolveLaborRate` exists for, asserted from the assembly's
+     * side, which is where the silent $0 was actually landing.
+     */
+    const rates = await caller().laborRates.list();
+    const role = rates.find(r => r.name === DEFAULT_ASSEMBLY_ROLE)!;
+    await caller().laborRates.update({ id: role.id, hourlyCost: 68 });
+
+    const list = await caller().assemblies.list();
+    const starter = list.find(
+      a => a.userId === null && Number(a.baseLaborHours) > 0
+    )!;
+    const costed = await caller().assemblies.price({
+      id: starter.id,
+      quantity: 1,
+    });
+
+    expect(costed.laborRateMissing).toBe(false);
+    expect(costed.laborRate).toBe(68);
+    // Hours × $68, not hours × nothing.
+    expect(costed.line.laborCost).toBeCloseTo(
+      Number(starter.baseLaborHours) * 68,
+      2
+    );
+  });
+
   it("seeds recipes with their material lines attached", async () => {
     const list = await caller().assemblies.list();
     const duplex = list.find(a => a.name === "Duplex receptacle standard");

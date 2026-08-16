@@ -154,7 +154,10 @@ import {
 } from "./seed/baselineMaterials";
 import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
 import { BASELINE_MODIFIERS } from "./seed/baselineModifiers";
-import { BASELINE_ASSEMBLIES } from "./seed/baselineAssemblies";
+import {
+  BASELINE_ASSEMBLIES,
+  DEFAULT_ASSEMBLY_ROLE,
+} from "./seed/baselineAssemblies";
 import { BASELINE_KITS } from "./seed/baselineKits";
 import { TRADE_ALL, normalizeTradeId, resolveForTrade } from "../shared/trades";
 import { hourlyCostFor } from "../shared/laborRateLookup";
@@ -2632,6 +2635,45 @@ export async function seedBaselineAssemblies(): Promise<void> {
 
     await dedupeBaselineRows("assemblies");
 
+    /**
+     * The role every starter assembly is costed against.
+     *
+     * Looked up by name rather than hardcoded, the same way materials and
+     * modifiers are below — the seeder never holds an id. Labor rates are
+     * seeded before assemblies (see _core/index.ts), so this is present by the
+     * time it is needed; if it somehow is not, assemblies are still created and
+     * simply carry no role, which is what they did before this existed.
+     */
+    const [defaultRole] = await db
+      .select({ id: laborRates.id })
+      .from(laborRates)
+      .where(
+        and(
+          isNull(laborRates.userId),
+          eq(laborRates.name, DEFAULT_ASSEMBLY_ROLE)
+        )
+      )
+      .limit(1);
+
+    /**
+     * Give the assemblies that shipped BEFORE this a role, too.
+     *
+     * The insert below only runs for assemblies not already present, so without
+     * this the fix would reach nobody who already has a database — including
+     * every existing account, where the silent $0 is happening right now.
+     *
+     * Deliberately narrow: baseline rows only (`userId IS NULL`) that have no
+     * role yet. A user's own assembly, and any baseline someone has already
+     * pointed at a different role, are left exactly as they are — this fills a
+     * gap, it does not overwrite a decision.
+     */
+    if (defaultRole) {
+      await db
+        .update(assemblies)
+        .set({ laborRateId: defaultRole.id })
+        .where(and(isNull(assemblies.userId), isNull(assemblies.laborRateId)));
+    }
+
     const existingRows = await db
       .select({ name: assemblies.name })
       .from(assemblies)
@@ -2678,6 +2720,8 @@ export async function seedBaselineAssemblies(): Promise<void> {
         category: spec.category,
         projectType: spec.projectType,
         baseLaborHours: spec.baseLaborHours.toFixed(4),
+        // Without this the hours above cost nothing — see DEFAULT_ASSEMBLY_ROLE.
+        laborRateId: defaultRole?.id ?? null,
       });
       const assemblyId = result.insertId;
 

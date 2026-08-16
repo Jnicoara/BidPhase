@@ -8,6 +8,7 @@ This is the human-readable companion to the git history — read this to see wha
 
 - **A close-out can be corrected.** Once you had recorded one, the per-assembly breakdown said "this bid has no assemblies" and refused to save — so fixing a single wrong figure meant deleting the whole record and typing every line again, and switching a job from one total to a per-assembly breakdown was impossible. Both now work, and reopening a breakdown shows the hours you entered.
 - **Enter records the hours.** Typing the number and pressing Enter now saves it, instead of leaving you to reach for the mouse. On a per-assembly breakdown Enter moves down the column and the last one records, which takes a twenty-four assembly job from about two minutes to under thirty seconds.
+- **Assemblies that ship with the app now come with a labour role attached**, so their hours are able to cost something as soon as you set your rate. Nothing is priced for you — the starter Journeyman rate still ships blank — but the blank is now on the Labor Rates screen, which tells you about it, instead of hidden inside a bid total.
 - **A bid can no longer show hours with no money against them, silently.** Some assemblies ship without a labour role attached, and adding one put its hours in the total while pricing its labour at nothing — a bid could read "9.7 hours, $0.00" and look perfectly finished. The bid total now says how many lines are affected and what to do about it.
 
 ## [2026-08-15]

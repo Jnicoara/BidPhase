@@ -57,6 +57,38 @@ export type BaselineAssembly = {
   modifiers?: string[];
 };
 
+/**
+ * The starter role every shipped assembly is costed against.
+ *
+ * ── Why they need one at all ─────────────────────────────────────────────────
+ * `assemblies.laborRateId` is nullable, and these shipped with it null. An
+ * assembly with hours and no role freezes `snapshotLaborRate` at 0 onto every
+ * bid line made from it, so the line puts its hours into the total and nothing
+ * into the price: a bid could read "9.7 hours, $0.00" and look entirely
+ * finished. That is not the deliberate $0 this app ships — an unpriced MATERIAL
+ * is flagged on the Materials screen and an unpriced RATE on Labor Rates, but
+ * an unlinked assembly was flagged nowhere.
+ *
+ * ── This does NOT put a price on anything ────────────────────────────────────
+ * The starter Journeyman rate itself ships at $0, like every other piece of
+ * starter content, so a brand-new account still prices labor at nothing. What
+ * changes is WHERE that zero shows up: it becomes the Journeyman rate needing a
+ * number, which the Labor Rates screen flags, the getting-started checklist
+ * counts, and the first-run flow asks for before a user reaches their first
+ * bid. One zero, in the one place the app already knows how to explain.
+ *
+ * And once the contractor sets that rate, every starter assembly picks it up —
+ * including after a fork, because `resolveLaborRate` follows the supersede
+ * chain rather than matching the id outright.
+ *
+ * ── One role for all of them, on purpose ─────────────────────────────────────
+ * Journeyman is the rate a small electrical shop bids most work at. Assigning
+ * apprentice hours to the simpler assemblies would be inventing a labor
+ * allocation the contractor never chose, which is the same mistake as shipping
+ * a plausible price. One honest default, changed per assembly in the builder.
+ */
+export const DEFAULT_ASSEMBLY_ROLE = "Journeyman";
+
 export const BASELINE_ASSEMBLIES: BaselineAssembly[] = [
   // ── Devices ──
   // Quantities and run-length allowances come straight from
