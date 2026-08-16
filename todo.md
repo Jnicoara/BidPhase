@@ -839,3 +839,8 @@ left as written rather than rewritten to match the rename.
 - [x] Synchronize the local project exactly with the latest GitHub `main` branch without local feature edits
 - [x] Apply only the pending migrations provided by GitHub `main` using `pnpm db:push`
 - [x] Validate the GitHub-aligned build and save the exact publish-ready checkpoint
+
+## v6.09 — Bid 420001 Plan Storage 403
+- [x] Inspect production logs and the bid 420001 database plan record for the failed plan request
+- [x] Probe the recorded plan key through the configured server-side storage read path
+- [x] Document the storage access-denied finding and the non-destructive recovery path
