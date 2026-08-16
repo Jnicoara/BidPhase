@@ -311,6 +311,94 @@ describeDb("closing a job out", () => {
     expect(state.estimate!.lines).toHaveLength(1);
   });
 
+  /**
+   * A close-out has to stay EDITABLE, and this is what stopped it being so.
+   *
+   * `get` used to return `estimate: null` the moment anything was recorded, and
+   * the panel builds its per-assembly form from those lines. So a bid with two
+   * dozen assemblies answered "This bid has no assemblies to break down" as
+   * soon as a total was saved: a total-mode close-out could never be switched
+   * to per-assembly, and a per-assembly one could not be corrected without
+   * deleting the whole record and re-keying every line.
+   *
+   * Per-assembly is the mode that feeds the suggestion engine, so this was the
+   * shortest path to nobody logging actuals at all.
+   */
+  it("still offers the estimate after a total has been recorded", async () => {
+    const asm = await pricedAssembly(2);
+    const bidId = await bidWith(asm, 10);
+
+    await caller().closeout.save({
+      bidId,
+      mode: "total",
+      totalActualHours: 23,
+    });
+
+    const state = await caller().closeout.get({ bidId });
+    expect(state.closeout).not.toBeNull();
+    // The whole point: the form can still be built, so the mode can change.
+    expect(state.estimate).not.toBeNull();
+    expect(state.estimate!.lines).toHaveLength(1);
+    expect(state.estimate!.totalHours).toBe(20);
+  });
+
+  it("still offers the estimate after a per-assembly close-out", async () => {
+    const asm = await pricedAssembly(2);
+    const bidId = await bidWith(asm, 10);
+
+    await caller().closeout.save({
+      bidId,
+      mode: "byAssembly",
+      lines: [
+        {
+          assemblyId: asm,
+          assemblyName: "Asm",
+          qty: 10,
+          estimatedHours: 20,
+          actualHours: 26,
+        },
+      ],
+    });
+
+    const state = await caller().closeout.get({ bidId });
+    // Recorded lines are what WAS written down, and carry their own ids so the
+    // form can key on them without colliding when a bid repeats an assembly.
+    expect(state.lines).toHaveLength(1);
+    expect(Number(state.lines[0].actualHours)).toBe(26);
+    expect(state.lines[0].id).toBeGreaterThan(0);
+    // And the estimate is still there to record against.
+    expect(state.estimate!.lines).toHaveLength(1);
+  });
+
+  it("lets a recorded per-assembly close-out be corrected", async () => {
+    // The end-to-end version: record, then change one figure, and the record
+    // moves rather than being refused for having nothing to save.
+    const asm = await pricedAssembly(2);
+    const bidId = await bidWith(asm, 10);
+    const line = {
+      assemblyId: asm,
+      assemblyName: "Asm",
+      qty: 10,
+      estimatedHours: 20,
+    };
+
+    await caller().closeout.save({
+      bidId,
+      mode: "byAssembly",
+      lines: [{ ...line, actualHours: 26 }],
+    });
+    await caller().closeout.save({
+      bidId,
+      mode: "byAssembly",
+      lines: [{ ...line, actualHours: 22 }],
+    });
+
+    const state = await caller().closeout.get({ bidId });
+    expect(state.lines).toHaveLength(1);
+    expect(Number(state.lines[0].actualHours)).toBe(22);
+    expect(state.variance!.actualHours).toBe(22);
+  });
+
   it("records a total and compares it to the estimate", async () => {
     const asm = await pricedAssembly(2);
     const bidId = await bidWith(asm, 10); // 20 estimated hours

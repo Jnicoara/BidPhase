@@ -85,6 +85,27 @@ export function CloseoutPanel({ bidId }: { bidId: number }) {
     setNotes(data.closeout.notes ?? "");
   }, [data?.closeout]);
 
+  /**
+   * Put the recorded per-assembly hours back into the form.
+   *
+   * Without this a recorded per-assembly close-out came back with every field
+   * blank, so "Update close-out" submitted nothing and refused. Keyed by the
+   * close-out line's own id, which is exact — matching on assembly id would
+   * collide the moment a bid carries the same assembly on two lines, which is
+   * ordinary (twelve of the same downlight across two floors).
+   */
+  useEffect(() => {
+    if (!data?.lines?.length) return;
+    setLineHours(prev => {
+      if (Object.keys(prev).length > 0) return prev; // never clobber typing
+      const seeded: Record<number, string> = {};
+      for (const line of data.lines) {
+        seeded[line.id] = String(Number(line.actualHours));
+      }
+      return seeded;
+    });
+  }, [data?.lines]);
+
   const save = trpc.closeout.save.useMutation({
     onError: e => toast.error(e.message),
     onSuccess: result => {
@@ -109,7 +130,70 @@ export function CloseoutPanel({ bidId }: { bidId: number }) {
     },
   });
 
-  const estimateLines = data?.estimate?.lines ?? [];
+  /**
+   * The rows the per-assembly form is built from.
+   *
+   * Two sources, and which one wins matters:
+   *
+   *   RECORDED lines, when there are any. Editing a close-out means editing
+   *   what was written down, so the form shows those figures and their own
+   *   ids — a close-out is a measurement, and re-deriving its rows from a bid
+   *   that has since gained a line would quietly change what is being
+   *   corrected.
+   *
+   *   The live ESTIMATE otherwise. That covers a first close-out and, just as
+   *   importantly, switching a total-mode close-out to per-assembly — which
+   *   was impossible while the estimate stopped being sent once anything was
+   *   recorded.
+   */
+  const formLines = useMemo(() => {
+    const recorded = data?.lines ?? [];
+    if (recorded.length > 0) {
+      return recorded.map(line => ({
+        key: line.id,
+        assemblyId: line.assemblyId,
+        assemblyName: line.assemblyName,
+        qty: Number(line.qty),
+        estimatedHours: Number(line.estimatedHours),
+      }));
+    }
+    return (data?.estimate?.lines ?? []).map(line => ({
+      key: line.bidLineItemId,
+      assemblyId: line.assemblyId,
+      assemblyName: line.assemblyName,
+      qty: line.qty,
+      estimatedHours: line.estimatedHours,
+    }));
+  }, [data?.lines, data?.estimate?.lines]);
+
+  /**
+   * Enter walks down the column; on the last row it records.
+   *
+   * This is the flow CLAUDE.md § Editing fields describes — "Enter keeps focus
+   * ... so a column of figures can be typed straight down" — applied to the one
+   * screen where a contractor types a column of figures. Without it, twenty-four
+   * assemblies meant twenty-four trips to the mouse, which is most of why
+   * breaking a job down took two minutes instead of twenty seconds.
+   *
+   * The last row submits rather than trapping focus, because there is nowhere
+   * left to go and reaching for the button is the thing being removed.
+   */
+  const onLineKeyDown = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+    index: number
+  ) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const next = document.querySelector<HTMLInputElement>(
+      `[data-closeout-line="${index + 1}"]`
+    );
+    if (next) {
+      next.focus();
+      next.select();
+      return;
+    }
+    submit();
+  };
 
   const submit = () => {
     if (mode === "total") {
@@ -127,13 +211,13 @@ export function CloseoutPanel({ bidId }: { bidId: number }) {
       return;
     }
 
-    const lines = estimateLines
+    const lines = formLines
       .map(line => ({
         assemblyId: line.assemblyId,
         assemblyName: line.assemblyName,
         qty: line.qty,
         estimatedHours: line.estimatedHours,
-        actualHours: Number(lineHours[line.bidLineItemId] ?? ""),
+        actualHours: Number(lineHours[line.key] ?? ""),
       }))
       .filter(line => Number.isFinite(line.actualHours));
 
@@ -312,10 +396,22 @@ export function CloseoutPanel({ bidId }: { bidId: number }) {
                         <span className="text-xs text-muted-foreground block">
                           Actual hours
                         </span>
+                        {/*
+                          Enter records it. The whole of this mode is one
+                          number, and making somebody reach for the mouse after
+                          typing it was the single biggest cost in a flow that
+                          has to stay under a minute or contractors stop
+                          logging actuals at all.
+                        */}
                         <Input
                           value={total}
                           onChange={e => setTotal(e.target.value)}
                           onFocus={selectOnFocus}
+                          onKeyDown={e => {
+                            if (e.key !== "Enter") return;
+                            e.preventDefault();
+                            submit();
+                          }}
                           inputMode="decimal"
                           placeholder="e.g. 23"
                           className="h-8 w-32 text-sm font-mono"
@@ -329,14 +425,14 @@ export function CloseoutPanel({ bidId }: { bidId: number }) {
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      {estimateLines.length === 0 ? (
+                      {formLines.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
                           This bid has no assemblies to break down.
                         </p>
                       ) : (
-                        estimateLines.map(line => (
+                        formLines.map((line, index) => (
                           <div
-                            key={line.bidLineItemId}
+                            key={line.key}
                             className="flex items-center gap-3 text-sm"
                           >
                             <span className="flex-1 min-w-0 truncate">
@@ -346,17 +442,19 @@ export function CloseoutPanel({ bidId }: { bidId: number }) {
                               {hrs(line.estimatedHours)}
                             </span>
                             <Input
-                              value={lineHours[line.bidLineItemId] ?? ""}
+                              value={lineHours[line.key] ?? ""}
                               onChange={e =>
                                 setLineHours(prev => ({
                                   ...prev,
-                                  [line.bidLineItemId]: e.target.value,
+                                  [line.key]: e.target.value,
                                 }))
                               }
                               onFocus={selectOnFocus}
+                              onKeyDown={e => onLineKeyDown(e, index)}
                               inputMode="decimal"
                               placeholder="actual"
                               className="h-7 w-24 text-sm font-mono"
+                              data-closeout-line={index}
                               aria-label={`Actual hours for ${line.assemblyName}`}
                             />
                           </div>
@@ -372,6 +470,11 @@ export function CloseoutPanel({ bidId }: { bidId: number }) {
                     <Input
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        submit();
+                      }}
                       placeholder="Rain held us up on the Tuesday"
                       className="h-8 text-sm"
                     />

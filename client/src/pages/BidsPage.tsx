@@ -25,6 +25,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
+  AlertTriangle,
   Archive,
   ArrowLeft,
   CalendarDays,
@@ -65,6 +66,7 @@ import { CloseoutPanel } from "@/components/CloseoutPanel";
 import { SampleBidNotice } from "@/components/SampleBidNotice";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { RETENTION_DAYS } from "@shared/retention";
+import { countUnpricedLaborLines } from "@shared/laborRatePricing";
 
 const STATUSES = ["Draft", "Active", "Won", "Lost"] as const;
 type Status = (typeof STATUSES)[number];
@@ -296,6 +298,12 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     taxRate,
     taxNote,
   } = detailQuery.data;
+
+  /**
+   * Lines whose hours are being priced at nothing, because the assembly they
+   * came from had no labor rate attached. See shared/laborRatePricing.ts.
+   */
+  const unpricedLaborLines = countUnpricedLaborLines(lines);
 
   /** Lines grouped by unit, with un-labelled lines last under a null key. */
   const groups: Array<{ label: string | null; lines: typeof lines }> = [];
@@ -645,6 +653,33 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   {money(totals.laborCost)}
                 </span>
               </div>
+
+              {/*
+                Hours that are being priced at nothing.
+
+                Sits directly under the labor line because that is the number it
+                contradicts: a bid can show real hours and no labor cost when an
+                assembly was added with no role attached, and every other part
+                of the screen looks finished. The $0 convention flags an
+                unpriced material and an unpriced rate; this is the same $0
+                arriving by a route neither of those screens can see.
+              */}
+              {unpricedLaborLines > 0 && (
+                <div className="flex items-start gap-2 rounded-md border border-[#F5C518]/40 bg-[#F5C518]/10 px-2.5 py-2 my-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-[#F5C518] shrink-0 mt-0.5" />
+                  <p className="text-[11px] leading-snug text-muted-foreground">
+                    <span className="text-foreground font-medium">
+                      {unpricedLaborLines} line
+                      {unpricedLaborLines === 1 ? "" : "s"}{" "}
+                      {unpricedLaborLines === 1 ? "has" : "have"} hours but no
+                      labor rate
+                    </span>{" "}
+                    — their hours are in the total above and their labor is
+                    priced at $0. Open the assembly in the Library and give it a
+                    role, then re-add the line to pick the rate up.
+                  </p>
+                </div>
+              )}
 
               {/*
                 The productivity step, shown only when it is doing something.

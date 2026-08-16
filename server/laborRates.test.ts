@@ -16,7 +16,11 @@ import { appRouter } from "./routers";
 import { getDb, seedBaselineLaborRates } from "./db";
 import { laborRates, users } from "../drizzle/schema";
 import { BASELINE_LABOR_RATES } from "./seed/baselineLaborRates";
-import { needsRate } from "../shared/laborRatePricing";
+import {
+  countUnpricedLaborLines,
+  lineHasUnpricedLabor,
+  needsRate,
+} from "../shared/laborRatePricing";
 import type { TrpcContext } from "./_core/context";
 
 const USER = 5151;
@@ -60,6 +64,76 @@ beforeEach(async () => {
   await db
     .delete(laborRates)
     .where(inArray(laborRates.userId, [USER, OTHER_USER]));
+});
+
+/**
+ * The same $0 rule, one layer down: a bid line giving its labor away.
+ *
+ * No database — this is arithmetic on two frozen fields, and it belongs beside
+ * `needsRate` because it is the same convention arriving by a different route.
+ * An unpriced RATE is flagged on this screen and an unpriced MATERIAL on the
+ * Materials screen; a line built from a correctly-priced catalog and an
+ * assembly with no role attached was flagged nowhere at all.
+ */
+describe("a bid line whose hours cost nothing", () => {
+  it("flags real hours priced at a zero rate", () => {
+    // What an assembly with no laborRateId freezes onto a line. It contributes
+    // its hours to the total and nothing to the price, and every other part of
+    // the bid looks finished.
+    expect(
+      lineHasUnpricedLabor({ snapshotLaborHours: 8, snapshotLaborRate: 0 })
+    ).toBe(true);
+  });
+
+  it("leaves a properly priced line alone", () => {
+    expect(
+      lineHasUnpricedLabor({ snapshotLaborHours: 8, snapshotLaborRate: 68 })
+    ).toBe(false);
+  });
+
+  it("says nothing about a line with no hours", () => {
+    // A materials-only line is ordinary. Warning on it would put a banner on
+    // bids that have nothing wrong with them, which is how a warning stops
+    // being read.
+    expect(
+      lineHasUnpricedLabor({ snapshotLaborHours: 0, snapshotLaborRate: 0 })
+    ).toBe(false);
+  });
+
+  it("reads the decimal strings the database actually returns", () => {
+    // These columns come back as strings from drizzle, not numbers.
+    expect(
+      lineHasUnpricedLabor({
+        snapshotLaborHours: "1.5000",
+        snapshotLaborRate: "0.0000",
+      })
+    ).toBe(true);
+    expect(
+      lineHasUnpricedLabor({
+        snapshotLaborHours: "1.5000",
+        snapshotLaborRate: "68.0000",
+      })
+    ).toBe(false);
+  });
+
+  it("is not upset by nulls", () => {
+    expect(
+      lineHasUnpricedLabor({
+        snapshotLaborHours: null,
+        snapshotLaborRate: null,
+      })
+    ).toBe(false);
+  });
+
+  it("counts how many lines on a bid are affected", () => {
+    const lines = [
+      { snapshotLaborHours: 8, snapshotLaborRate: 0 },
+      { snapshotLaborHours: 2, snapshotLaborRate: 68 },
+      { snapshotLaborHours: 1.25, snapshotLaborRate: 0 },
+      { snapshotLaborHours: 0, snapshotLaborRate: 0 },
+    ];
+    expect(countUnpricedLaborLines(lines)).toBe(2);
+  });
 });
 
 describe.skipIf(!hasDb)("starter roles", () => {

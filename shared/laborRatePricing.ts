@@ -50,6 +50,50 @@ export function countNeedingRate(rates: RateLike[]): number {
   return rates.reduce((n, r) => (needsRate(r) ? n + 1 : n), 0);
 }
 
+// ─── The same $0, one layer down: a bid line ──────────────────────────────────
+
+/**
+ * A bid line, as far as unpriced labor is concerned.
+ *
+ * The two frozen fields that decide whether its hours cost anything. See
+ * drizzle/schema.ts on `bid_line_items` for why they are snapshots.
+ */
+export type PricedLineLike = {
+  snapshotLaborHours: string | number | null;
+  snapshotLaborRate: string | number | null;
+};
+
+/**
+ * True when this line carries real hours that are being priced at nothing.
+ *
+ * ── Why a line can end up like this ──────────────────────────────────────────
+ * An assembly's `laborRateId` is nullable, and `set null` on delete, so an
+ * assembly can carry hours with no role attached — six of the fourteen starter
+ * assemblies do. Adding one to a bid freezes `snapshotLaborRate` at 0, and the
+ * line then contributes its hours to the total and nothing at all to the price.
+ *
+ * ── Why it needs saying out loud ─────────────────────────────────────────────
+ * This is the exact failure the whole $0 convention exists to prevent, arriving
+ * by a route the convention did not cover. An unpriced MATERIAL is flagged on
+ * the Materials screen and an unpriced RATE is flagged on Labor Rates, but a
+ * bid built from a correctly-priced catalog and an unlinked assembly shows a
+ * confident total with a chunk of labor silently missing — and unlike a $0
+ * material, nothing on the bid looks unfinished.
+ *
+ * Hours are required, not just a zero rate: a line with no hours and no rate is
+ * a materials-only line, which is ordinary and not worth a warning.
+ */
+export function lineHasUnpricedLabor(line: PricedLineLike): boolean {
+  const hours = Number(line.snapshotLaborHours ?? 0);
+  if (!Number.isFinite(hours) || hours <= 0) return false;
+  return needsPricing(line.snapshotLaborRate);
+}
+
+/** How many lines on a bid are giving their labor away. */
+export function countUnpricedLaborLines(lines: PricedLineLike[]): number {
+  return lines.reduce((n, l) => (lineHasUnpricedLabor(l) ? n + 1 : n), 0);
+}
+
 /**
  * Has this user set up labor at all?
  *
