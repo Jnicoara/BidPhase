@@ -92,10 +92,25 @@ export const closeoutRouter = router({
         input.bidId,
         ctx.scope.dataUserId
       );
+
+      /**
+       * The estimate is returned WHETHER OR NOT a close-out exists.
+       *
+       * It used to be null once one was recorded, which quietly disabled the
+       * per-assembly form: the panel builds that form from these lines, so a
+       * bid with 24 assemblies showed "This bid has no assemblies to break
+       * down" the moment anything was recorded. Switching a total-mode
+       * close-out to per-assembly was impossible, and correcting one figure on
+       * a per-assembly one meant deleting the whole record and re-keying every
+       * line.
+       *
+       * The cost is one extra rollup on a bid that already has a close-out —
+       * the same two reads the no-close-out case always did, ~25ms. Cheap
+       * against a feature that could not be edited.
+       */
+      const estimate = await estimateFor(input.bidId, ctx.scope.dataUserId);
+
       if (!closeout) {
-        // Still hand back the estimate, so the form can be filled in against
-        // the real per-assembly figures without a second round trip.
-        const estimate = await estimateFor(input.bidId, ctx.scope.dataUserId);
         return {
           closeout: null,
           lines: [],
@@ -135,7 +150,15 @@ export const closeoutRouter = router({
             Number(line.actualHours)
           ),
         })),
-        estimate: null,
+        /**
+         * Present here too, so the form can be edited or switched to
+         * per-assembly. The recorded `lines` above stay the source of truth
+         * for what WAS recorded; this is what is available to record against.
+         */
+        estimate: {
+          totalHours: estimate.totalHours,
+          lines: estimate.lines,
+        },
         variance: compareHours(estimated, actual),
         impliedProductivity: impliedProductivity(estimated, actual),
       };
