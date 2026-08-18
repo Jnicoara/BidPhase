@@ -173,6 +173,88 @@ describe.skipIf(!hasDb)("bid basics", () => {
   });
 });
 
+/**
+ * The Dashboard card and the bid it opens must show the same money.
+ *
+ * ── Why this needs its own block ────────────────────────────────────────────
+ * `bids.dashboard` no longer prices by loading each bid's line items — it sums
+ * them in SQL and applies overhead and profit per bid afterwards. That is a
+ * second path to a number the bid screen also computes, and the whole reason
+ * the rollup lives in one module is that two paths to one price eventually
+ * disagree. So they are priced both ways and compared to the cent.
+ *
+ * The per-bid settings are the part most likely to drift, because they are the
+ * half that cannot be summed: a flat overhead is an amount rather than a rate,
+ * and a target margin divides instead of multiplying.
+ */
+describe.skipIf(!hasDb)("the dashboard board", () => {
+  it("prices a card exactly as the bid screen prices the bid", async () => {
+    const assembly = await readyAssembly();
+    const bid = await newBid("Dashboard parity");
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 7,
+    });
+
+    const [board, detail] = await Promise.all([
+      caller().bids.dashboard(),
+      caller().bids.get({ id: bid.id }),
+    ]);
+    const card = board.find(b => b.id === bid.id)!;
+
+    expect(card.finalPrice).toBe(detail.totals.finalPrice);
+    expect(card.directCost).toBe(detail.totals.directCost);
+    expect(card.lineCount).toBe(detail.lines.length);
+  });
+
+  it("agrees on a bid carrying its own overhead and a target margin", async () => {
+    // The settings that cannot be summed first, and so are the ones a
+    // sum-then-price shortcut would get wrong.
+    const assembly = await readyAssembly();
+    const bid = await newBid("Dashboard parity overrides");
+    await caller().bids.addAssembly({
+      bidId: bid.id,
+      assemblyId: assembly.id,
+      qty: 3,
+    });
+    await caller().bids.update({
+      id: bid.id,
+      overheadEnabled: true,
+      overheadMode: "flat",
+      overheadValue: 1750,
+      profitMethod: "margin",
+      profitValue: 0.3,
+    });
+
+    const [board, detail] = await Promise.all([
+      caller().bids.dashboard(),
+      caller().bids.get({ id: bid.id }),
+    ]);
+    expect(board.find(b => b.id === bid.id)!.finalPrice).toBe(
+      detail.totals.finalPrice
+    );
+  });
+
+  it("counts a bid with no lines at zero rather than omitting it", async () => {
+    // A left join has to keep the bid. Dropping empty bids would make a brand
+    // new one vanish from the board it was just created on.
+    const bid = await newBid("Dashboard empty");
+    const card = (await caller().bids.dashboard()).find(b => b.id === bid.id);
+    expect(card).toBeDefined();
+    expect(card!.lineCount).toBe(0);
+    expect(card!.directCost).toBe(0);
+  });
+
+  it("leaves archived bids off the board", async () => {
+    const bid = await newBid("Dashboard archived");
+    await caller().bids.archive({ id: bid.id });
+    expect((await caller().bids.dashboard()).some(b => b.id === bid.id)).toBe(
+      false
+    );
+  });
+});
+
 describe.skipIf(!hasDb)("snapshot at add time", () => {
   it("freezes material cost, hours, rate and modifier total onto the line", async () => {
     const assembly = await readyAssembly();
