@@ -21,6 +21,7 @@ import { BID_STATUSES } from "../../drizzle/schema";
 import {
   bidRollup,
   companyDefaultsFor,
+  priceFromDirectCost,
   rollUpBid,
   taxRulesFor,
   toTaxJurisdiction,
@@ -171,29 +172,42 @@ export const bidsRouter = router({
    * Every bid with enough to place it on the dashboard: its own fields plus a
    * rolled-up value.
    *
-   * Prices through the same rollUpBid the detail view uses, so a card and the
-   * bid it opens can never disagree. Grouping and ordering are deliberately NOT
-   * done here — those are presentation rules, they live in
-   * client/src/lib/bidDashboard.ts, and they are tested there.
+   * ── One query, not one per bid ─────────────────────────────────────────────
+   * This used to fetch the bids and then read every bid's line items in a
+   * loop. That answered in ~100ms at 249 bids and ~600ms at 1,149, growing in a
+   * straight line — on the screen the app opens on. `getDashboardBids` sums the
+   * lines in SQL instead, so the cost stops following the size of the history.
+   *
+   * ── The price is still computed here, and has to be ────────────────────────
+   * Only the per-LINE half can be summed in the database. Overhead and profit
+   * resolve per BID — either may be overridden, flat overhead is an amount
+   * rather than a rate, and a target margin divides — so the last step runs
+   * through `priceFromDirectCost`, which is the same resolution and the same
+   * engine call `rollUpBid` makes. A card and the bid it opens cannot disagree.
+   *
+   * Grouping and ordering are deliberately NOT done here — those are
+   * presentation rules, they live in client/src/lib/bidDashboard.ts, and they
+   * are tested there.
    */
   dashboard: procedure.query(async ({ ctx }) => {
-    const [bids, company] = await Promise.all([
-      db.getBidsByUser(ctx.scope.dataUserId),
-      companyDefaultsFor(ctx.scope.dataUserId),
-    ]);
-
-    return Promise.all(
-      bids.map(async bid => {
-        const lines = await db.getBidLineItems(bid.id);
-        const { directCost, bidPrice } = rollUpBid(bid, lines, company);
-        return {
-          ...bid,
-          lineCount: lines.length,
-          directCost,
-          finalPrice: bidPrice.finalPrice,
-        };
-      })
+    const company = await companyDefaultsFor(ctx.scope.dataUserId);
+    const rows = await db.getDashboardBids(
+      ctx.scope.dataUserId,
+      company.productivityPct
     );
+
+    return rows.map(row => {
+      const {
+        lineCount,
+        materialCost,
+        laborCost,
+        directCost,
+        totalHours,
+        ...bid
+      } = row;
+      const { price } = priceFromDirectCost(bid, directCost, company);
+      return { ...bid, lineCount, directCost, finalPrice: price };
+    });
   }),
 
   create: procedure

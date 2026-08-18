@@ -279,6 +279,72 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     return assemblies.filter(a => a.name.toLowerCase().includes(q)).slice(0, 8);
   }, [assemblies, assemblyQuery]);
 
+  /**
+   * Highlighted result, so the search box can be driven from the keyboard.
+   *
+   * Reset whenever the query changes — otherwise the highlight stays on row 4
+   * after a narrower search has left three results, and Enter adds nothing.
+   */
+  const [assemblyHighlight, setAssemblyHighlight] = useState(0);
+
+  /**
+   * Add the highlighted assembly, or complain about the quantity.
+   *
+   * Lifted out of the result button's onClick so the mouse and the keyboard
+   * take the SAME path. Two copies of "add a line" is how one of them ends up
+   * quietly skipping the quantity check.
+   */
+  const addHighlighted = useCallback(
+    (assemblyId: number) => {
+      const qty = Number(addQty);
+      if (!(qty > 0)) {
+        toast.error("Enter a quantity greater than zero.");
+        return;
+      }
+      addAssembly.mutate({
+        bidId,
+        assemblyId,
+        qty,
+        unitLabel: addUnit.trim() || null,
+      });
+      setAssemblyQuery("");
+      setAssemblyHighlight(0);
+    },
+    [addAssembly, addQty, addUnit, bidId]
+  );
+
+  /**
+   * Type, arrow, Enter — the same loop Quick bid's counting box has always had.
+   *
+   * This screen had the identical task and no keyboard path at all: every line
+   * meant a mouse trip to a result that was already on screen. A contractor who
+   * learns the flow in Quick bid found it dead here, which is the kind of
+   * inconsistency that reads as the app being broken rather than different.
+   */
+  const onAssemblyKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (assemblyResults.length === 0) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setAssemblyHighlight(h => Math.min(h + 1, assemblyResults.length - 1));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setAssemblyHighlight(h => Math.max(h - 1, 0));
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const chosen = assemblyResults[assemblyHighlight];
+      if (chosen) addHighlighted(chosen.id);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setAssemblyQuery("");
+    }
+  };
+
   if (!detailQuery.data) {
     return (
       <div className="flex flex-col h-full bg-background items-center justify-center text-sm text-muted-foreground">
@@ -460,9 +526,14 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                   <Input
                     value={assemblyQuery}
-                    onChange={e => setAssemblyQuery(e.target.value)}
-                    placeholder="Search the assembly library…"
+                    onChange={e => {
+                      setAssemblyQuery(e.target.value);
+                      setAssemblyHighlight(0);
+                    }}
+                    onKeyDown={onAssemblyKeyDown}
+                    placeholder="Search the assembly library — type, then Enter"
                     className="h-8 pl-9 text-sm"
+                    aria-label="Search assemblies to add"
                   />
                 </div>
                 <Input
@@ -484,24 +555,17 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
 
               {assemblyResults.length > 0 && (
                 <div className="rounded-lg border border-border overflow-hidden">
-                  {assemblyResults.map(assembly => (
+                  {assemblyResults.map((assembly, index) => (
                     <button
                       key={assembly.id}
-                      onClick={() => {
-                        const qty = Number(addQty);
-                        if (!(qty > 0)) {
-                          toast.error("Enter a quantity greater than zero.");
-                          return;
-                        }
-                        addAssembly.mutate({
-                          bidId,
-                          assemblyId: assembly.id,
-                          qty,
-                          unitLabel: addUnit.trim() || null,
-                        });
-                        setAssemblyQuery("");
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40 transition-colors border-b border-border last:border-0"
+                      onMouseEnter={() => setAssemblyHighlight(index)}
+                      onClick={() => addHighlighted(assembly.id)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors border-b border-border last:border-0",
+                        index === assemblyHighlight
+                          ? "bg-[#F5C518]/10 text-foreground"
+                          : "hover:bg-muted/40"
+                      )}
                     >
                       <Plus className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       <span className="flex-1 truncate">{assembly.name}</span>

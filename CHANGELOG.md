@@ -4,6 +4,12 @@ Plain-English record of what changed and when. Newest first.
 
 This is the human-readable companion to the git history — read this to see what happened, read the commits for the technical detail.
 
+## [2026-08-18]
+
+- **The Dashboard stays quick however many bids you have.** It was drawing every live bid — at around a thousand that meant a thousand cards, forty screens of scrolling and a noticeable wait every time the app opened. Each column now shows the most recent twelve with a "show all" underneath, and the totals at the top of each column are still counted from every bid, so nothing about the money changed.
+- **You can find a bid from the Dashboard.** The same search the Bids screen uses — by job name, client or address — now opens from the Dashboard too, so you no longer have to leave it to reach one job out of hundreds.
+- **Enter adds a line on the bid screen.** Type part of an assembly name, arrow to the one you want, press Enter. Quick bid has always worked that way; the bid screen made you reach for the mouse for every line.
+
 ## [2026-08-16]
 
 - **A close-out can be corrected.** Once you had recorded one, the per-assembly breakdown said "this bid has no assemblies" and refused to save — so fixing a single wrong figure meant deleting the whole record and typing every line again, and switching a job from one total to a per-assembly breakdown was impossible. Both now work, and reopening a breakdown shows the hours you entered.

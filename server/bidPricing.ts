@@ -22,6 +22,7 @@ import {
   calculateBidPrice,
   calculateLineItem,
   resolveBidPricingSettings,
+  type ResolvedPricingSettings,
   roundMoney,
   sumDirectCost,
   type CompanyPricingDefaults,
@@ -204,6 +205,68 @@ export function priceLine(line: BidLineItem, productivityPct: number) {
     quantity: Number(line.qty),
     productivityPct,
   });
+}
+
+/**
+ * Price a bid whose direct cost has ALREADY been summed, in SQL.
+ *
+ * ── Why this exists beside rollUpBid ─────────────────────────────────────────
+ * `rollUpBid` needs the line items, because it prices each one. Two screens do
+ * not have them and must not fetch them: the Dashboard and the Performance
+ * screen both sum the lines in the database and never ship them out, which is
+ * the whole reason they stay fast as a bid history grows.
+ *
+ * What is left is the per-BID half, and it cannot be summed first — a bid may
+ * override overhead or profit, flat overhead is an amount rather than a rate,
+ * and a target margin divides rather than multiplies. So the resolution and the
+ * final arithmetic run here, through the same two functions the bid screen uses.
+ *
+ * ── It refuses rather than guesses ───────────────────────────────────────────
+ * A bid whose stored settings the engine will not accept — a margin at or above
+ * 100% has no finite price — comes back at its direct cost with `priced: false`,
+ * so one unquotable bid costs a caller one row rather than taking down a screen
+ * that is summarising a thousand of them.
+ */
+export function priceFromDirectCost(
+  /**
+   * The bid ROW, not a pre-converted override bag.
+   *
+   * Its decimal columns arrive from drizzle as strings, and the conversion is
+   * done here rather than by each caller for the same reason rollUpBid does it:
+   * a caller that forgets turns "0.2000" into a silently different price.
+   */
+  bid: Pick<
+    Bid,
+    | "overheadEnabled"
+    | "overheadMode"
+    | "overheadValue"
+    | "profitMethod"
+    | "profitValue"
+    | "productivityPct"
+  >,
+  directCost: number,
+  company: CompanyPricingDefaults
+): { price: number; priced: boolean; settings: ResolvedPricingSettings } {
+  const settings = resolveBidPricingSettings(company, {
+    overheadEnabled: bid.overheadEnabled,
+    overheadMode: bid.overheadMode,
+    overheadValue:
+      bid.overheadValue === null ? null : Number(bid.overheadValue),
+    profitMethod: bid.profitMethod,
+    profitValue: bid.profitValue === null ? null : Number(bid.profitValue),
+    productivityPct:
+      bid.productivityPct === null ? null : Number(bid.productivityPct),
+  });
+  try {
+    const priced = calculateBidPrice({
+      directCost,
+      overhead: settings.overhead,
+      profit: settings.profit,
+    });
+    return { price: priced.finalPrice, priced: true, settings };
+  } catch {
+    return { price: roundMoney(directCost), priced: false, settings };
+  }
 }
 
 /** Roll one bid's lines up to a price, at whatever settings apply to it. */
