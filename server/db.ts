@@ -7003,6 +7003,66 @@ export async function countClosedJobs(
   return Number(row?.n ?? 0);
 }
 
+/** One live bid, with its line items already summed. See getDashboardBids. */
+export type DashboardBidRow = Bid & {
+  lineCount: number;
+  materialCost: number;
+  laborCost: number;
+  directCost: number;
+  totalHours: number;
+};
+
+/**
+ * Every live bid, costed, in ONE query.
+ *
+ * ── What this replaces ───────────────────────────────────────────────────────
+ * `bids.dashboard` fetched the bids and then ran `getBidLineItems` for each one
+ * in a loop. At 249 bids that answered in ~100ms; at 1,149 it took ~600ms, and
+ * it grows in a straight line, on the screen the app OPENS ON. The same data
+ * through this query is one round trip, the way `getBidCosts` already does it
+ * for the Performance screen — which answers all-time in ~50ms over the same
+ * bids, and is why that screen stayed fast while this one did not.
+ *
+ * ── Deliberately not `getBidCosts` itself ────────────────────────────────────
+ * That one excludes the shipped sample (`analyticsBase`), because CLAUDE.md's
+ * rule is that fictional money never reaches a headline figure. The Dashboard
+ * is the opposite case: it must SHOW the sample — badged, and left out of the
+ * "Out for bid" total by the client — so it cannot share that filter. The cost
+ * arithmetic is shared through `costSums`; only the WHERE differs.
+ */
+export async function getDashboardBids(
+  userId: number,
+  companyProductivityPct: number
+): Promise<DashboardBidRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const sums = costSums(companyProductivityPct);
+  const rows = await db
+    .select({
+      bid: bids,
+      lineCount: sql<string>`COUNT(${bidLineItems.id})`,
+      ...sums,
+    })
+    .from(bids)
+    .leftJoin(
+      bidLineItems,
+      and(eq(bidLineItems.bidId, bids.id), isNull(bidLineItems.archivedAt))
+    )
+    .where(and(eq(bids.userId, userId), isNull(bids.archivedAt)))
+    .groupBy(bids.id)
+    .orderBy(desc(bids.updatedAt));
+
+  return rows.map(row => ({
+    ...row.bid,
+    lineCount: Number(row.lineCount),
+    materialCost: Number(row.materialCents) / 100,
+    laborCost: Number(row.laborCents) / 100,
+    directCost: Number(row.directCents) / 100,
+    totalHours: Number(row.totalHours),
+  }));
+}
+
 /** The oldest bid this company has, so "all time" knows where to start. */
 export async function getEarliestBidDate(userId: number): Promise<Date | null> {
   const db = await getDb();

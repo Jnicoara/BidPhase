@@ -18,13 +18,14 @@
  * Card values come from bids.dashboard, which rolls each bid up through the
  * same code path the detail view uses. This screen formats; it never computes.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Archive,
   CalendarDays,
+  Search,
   LayoutDashboard,
   Plus,
   Check,
@@ -34,9 +35,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
+import { useCompany } from "@/hooks/useCompany";
 import { type PendingArchive } from "@/lib/archiveBid";
 import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
 import { NavigationHelper } from "@/components/NavigationHelper";
+import { BidSearchPanel } from "@/components/BidSearchPanel";
 import { StartBidCards } from "@/components/StartBidCards";
 import { SampleBidCard } from "@/components/SampleBidCard";
 import { realBidValue } from "@shared/sampleProject";
@@ -74,6 +77,22 @@ const formatDue = (value: string | Date | null) => {
     day: "numeric",
   });
 };
+
+/**
+ * How many cards a status column shows before it stops.
+ *
+ * ── Why the board is capped at all ──────────────────────────────────────────
+ * It used to render every live bid. At 1,149 bids that was 1,151 cards, ~29,000
+ * DOM nodes and forty screens of scrolling on the screen the app opens on — and
+ * CLAUDE.md § Responsiveness is explicit that a list which is fine at 28 rows
+ * and unusable at 5,000 is a bug rather than a future optimisation.
+ *
+ * Twelve because the board is a glance, not a list. The column heading already
+ * carries the true count and the true value — those come from the whole set and
+ * are NOT capped, so the money never lies — and anyone who wants the rest wants
+ * to search rather than scroll past four hundred cards.
+ */
+const CARDS_PER_COLUMN = 12;
 
 const STATUS_ACCENT: Record<string, string> = {
   Draft: "text-muted-foreground",
@@ -206,6 +225,23 @@ export default function DashboardPage({
       void utils.bids.list.invalidate();
     },
   });
+
+  /**
+   * Which columns the user has asked to see in full.
+   *
+   * Per column rather than one switch for the board: someone chasing a job
+   * expands the one status it is in, and expanding Draft should not also render
+   * four hundred Lost cards they did not ask for.
+   */
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  /** The find-a-bid panel, shut until asked for. See where it renders. */
+  const [findOpen, setFindOpen] = useState(false);
+  const access = useCompany();
+  const shownFor = useCallback(
+    <T,>(status: string, all: T[]): T[] =>
+      expanded[status] ? all : all.slice(0, CARDS_PER_COLUMN),
+    [expanded]
+  );
 
   const groups = useMemo(() => groupBidsByStatus(bids), [bids]);
 
@@ -348,6 +384,49 @@ export default function DashboardPage({
           <NavigationHelper className="max-w-xl" />
         </div>
 
+        {/*
+          Finding one job, without scrolling the board.
+
+          The board is a glance at what is live; this is how you reach a
+          specific bid out of thousands. It is the same BidSearchPanel the Bids
+          screen uses — server-side, keyset-paginated, ~30ms whatever the size
+          of the history — rather than a second search that would eventually
+          disagree with it. Collapsed by default so the board stays the thing
+          the Dashboard is.
+        */}
+        <div className="mb-4">
+          {findOpen ? (
+            <div className="rounded-xl border border-border bg-card p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium">Find a bid</span>
+                <button
+                  onClick={() => setFindOpen(false)}
+                  className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Close
+                </button>
+              </div>
+              <BidSearchPanel
+                onOpenBid={onOpenBid}
+                onArchive={
+                  access.can("bids.edit")
+                    ? bid => setConfirmArchive({ id: bid.id, name: bid.name })
+                    : undefined
+                }
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => setFindOpen(true)}
+              className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Search className="w-3.5 h-3.5" />
+              Find a bid — by job name, client or address
+            </button>
+          )}
+        </div>
+
         {isLoading ? (
           <div className="py-16 text-center text-sm text-muted-foreground">
             Loading bids…
@@ -388,7 +467,7 @@ export default function DashboardPage({
                         Nothing here
                       </div>
                     ) : (
-                      group.bids.map(bid => {
+                      shownFor(group.status, group.bids).map(bid => {
                         const urgency = dueUrgency(bid.dueDate);
                         const due = formatDue(bid.dueDate);
                         return (
@@ -480,6 +559,29 @@ export default function DashboardPage({
                           </div>
                         );
                       })
+                    )}
+
+                    {/*
+                      The rest of the column, on request.
+
+                      The heading above already shows the real count and the
+                      real value for the whole status, so nothing here is
+                      hidden money — this is only how many cards get drawn.
+                    */}
+                    {group.bids.length > CARDS_PER_COLUMN && (
+                      <button
+                        onClick={() =>
+                          setExpanded(prev => ({
+                            ...prev,
+                            [group.status]: !prev[group.status],
+                          }))
+                        }
+                        className="w-full rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:border-border/80 transition-colors"
+                      >
+                        {expanded[group.status]
+                          ? "Show fewer"
+                          : `Show all ${group.bids.length}`}
+                      </button>
                     )}
                   </div>
                 </div>
