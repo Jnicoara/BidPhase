@@ -151,11 +151,51 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
       "Who is in this company and what they are allowed to do. Invite someone, change a role, remove access.",
   },
   {
+    /**
+     * Settings is six panels now, so the helper names the one that answers the
+     * question rather than dropping everyone at the same door. "Where do I
+     * change my markup" and "how do I put my logo on a proposal" are different
+     * questions and used to get the same answer.
+     */
     id: "settings",
-    label: "Settings",
-    path: "#/settings",
+    label: "Company defaults",
+    path: "#/settings/pricing",
     purpose:
-      "Account and app settings, theme, display scale, company pricing defaults like overhead and profit, branding, sales tax and how a proposal looks.",
+      "Company-wide pricing defaults — overhead, profit, markup, target margin and the productivity factor. What every new bid starts from.",
+  },
+  {
+    id: "branding",
+    label: "Branding",
+    path: "#/settings/branding",
+    purpose:
+      "Your company name, address, licence number, phone and logo, as they appear on a proposal and everything else you send out.",
+  },
+  {
+    id: "sales-tax",
+    label: "Sales tax",
+    path: "#/settings/tax",
+    purpose:
+      "Turn sales tax on, set the rates for your tax areas, and choose whether materials, labor or both are taxable.",
+  },
+  {
+    id: "proposal-design",
+    label: "Proposal design",
+    path: "#/settings/proposal",
+    purpose:
+      "How a proposal looks — layout, accent colour, which sections print, your standard terms and how long a price stands.",
+  },
+  {
+    id: "display",
+    label: "Display",
+    path: "#/settings/display",
+    purpose:
+      "Light or dark theme, and how big the text is. Make the app easier to read on a big monitor or at arm's length.",
+  },
+  {
+    id: "account",
+    label: "Account",
+    path: "#/settings/account",
+    purpose: "Who you are signed in as, and how to sign out.",
   },
 ];
 

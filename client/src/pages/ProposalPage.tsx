@@ -316,7 +316,7 @@ export default function ProposalPage({
                 variant="outline"
                 className="h-7 w-full text-xs border-[#F5C518]/40 text-[#F5C518] hover:bg-[#F5C518]/15"
                 onClick={() => {
-                  window.location.hash = "/settings";
+                  window.location.hash = "/settings/branding";
                 }}
               >
                 Open branding settings
@@ -348,7 +348,7 @@ export default function ProposalPage({
                 variant="outline"
                 className="h-7 w-full text-xs border-destructive/40 text-destructive hover:bg-destructive/15"
                 onClick={() => {
-                  window.location.hash = "/settings";
+                  window.location.hash = "/settings/tax";
                 }}
               >
                 Open tax settings

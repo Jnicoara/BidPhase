@@ -14,6 +14,7 @@ import {
   RETIRED_PATHS,
   ASSEMBLY_VIEWS,
   MATERIALS_VIEWS,
+  SETTINGS_SECTIONS,
 } from "./appRoutes";
 import { NAVIGATION_TARGETS } from "@shared/navigationTargets";
 import { buildChecklist } from "@shared/onboarding";
@@ -46,6 +47,7 @@ describe("current addresses", () => {
     expect(pathToRoute("#/team").route).toBe("team");
     expect(pathToRoute("#/analytics").route).toBe("analytics");
     expect(pathToRoute("#/settings").route).toBe("settings");
+    expect(pathToRoute("#/settings/branding").route).toBe("settings");
     expect(pathToRoute("#/archive").route).toBe("bid-archive");
     expect(pathToRoute("#/admin").route).toBe("admin");
     expect(pathToRoute("#/library/labor-rates").route).toBe(
@@ -269,5 +271,53 @@ describe("advertised addresses resolve", () => {
       projectId: 7,
     });
     expect(retiredAddress("#/quickbid")).toBe("/dashboard");
+  });
+});
+
+describe("settings sections", () => {
+  it("defaults a bare /settings to Pricing", () => {
+    // Pricing rather than whatever comes first alphabetically: it is the panel
+    // that moves money, and the one carrying the "this reaches every bid"
+    // warning that used to sit three sections down a very long scroll.
+    expect(pathToRoute("#/settings")).toEqual({
+      route: "settings",
+      view: "pricing",
+    });
+  });
+
+  it("reads every declared section off the path", () => {
+    for (const section of SETTINGS_SECTIONS) {
+      expect(pathToRoute(`#/settings/${section}`)).toEqual({
+        route: "settings",
+        view: section,
+      });
+    }
+  });
+
+  it("falls back rather than trusting an invented section", () => {
+    // The value reaches a component that switches on it, so an unknown section
+    // has to resolve to a real panel rather than rendering an empty page.
+    expect(pathToRoute("#/settings/nope").view).toBe("pricing");
+    expect(pathToRoute("#/settings/../admin").view).toBe("pricing");
+  });
+
+  it("always spells the section out in the address", () => {
+    // Unlike the library tabs, where the default view is left off. A settings
+    // panel is a thing you link someone TO — the Proposal screen sends people
+    // straight to branding and to tax — so "/settings" alone would not say
+    // where they were going to land.
+    for (const section of SETTINGS_SECTIONS) {
+      expect(routeToPath("settings", { view: section })).toBe(
+        `/settings/${section}`
+      );
+    }
+    expect(routeToPath("settings")).toBe("/settings/pricing");
+  });
+
+  it("round-trips every section", () => {
+    for (const section of SETTINGS_SECTIONS) {
+      const path = routeToPath("settings", { view: section });
+      expect(pathToRoute(path).view).toBe(section);
+    }
   });
 });

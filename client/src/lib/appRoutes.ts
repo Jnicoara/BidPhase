@@ -56,6 +56,34 @@ export type MaterialsView = (typeof MATERIALS_VIEWS)[number];
 export const ASSEMBLY_VIEWS = ["assemblies", "kits", "modifiers"] as const;
 export type AssemblyView = (typeof ASSEMBLY_VIEWS)[number];
 
+/**
+ * Settings, one panel at a time.
+ *
+ * Eight sections used to stack in a single `max-w-lg` column — theme, font
+ * size, pricing defaults, branding, sales tax, proposal design, account, and a
+ * permanently-disabled "Units — coming soon". The three biggest are the ones
+ * that reach every bid, and the pricing defaults carry the yellow-triangle
+ * warning saying so. A warning three sections down a very long scroll is a
+ * warning nobody reads.
+ *
+ * These take a path segment (`/settings/branding`) rather than the `?view=`
+ * the library tabs use, because they are genuinely separate panels rather than
+ * lenses on one list — and because they get linked to: the Proposal screen
+ * sends people straight to the branding and proposal panels when a document
+ * still has placeholders in it.
+ *
+ * Pricing is first and is the default, because it is the one that moves money.
+ */
+export const SETTINGS_SECTIONS = [
+  "pricing",
+  "branding",
+  "tax",
+  "proposal",
+  "display",
+  "account",
+] as const;
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
 export type RouteState = {
   route: Route;
   /** The bid a per-bid screen is about. Only set for bids/takeoff/proposal. */
@@ -134,7 +162,16 @@ export function pathToRoute(path: string): RouteState {
   const p = parts[0];
 
   if (p === "" || p === "dashboard") return { route: "dashboard" };
-  if (p === "settings") return { route: "settings" };
+  if (p === "settings") {
+    // A section this app does not have resolves to Pricing rather than to
+    // nothing — same rule as an unknown ?view=, for the same reason: the value
+    // reaches a component that switches on it.
+    const asked = parts[1] ?? "";
+    const section = (SETTINGS_SECTIONS as readonly string[]).includes(asked)
+      ? asked
+      : "pricing";
+    return { route: "settings", view: section };
+  }
   // The archive of soft-deleted BIDS. The legacy projects system had its own
   // "trash" for soft-deleted projects; that screen and its route are gone, and
   // this is the only archive left.
@@ -210,6 +247,11 @@ export function routeToPath(
       return view && view !== "assemblies"
         ? `/library/assemblies?view=${view}`
         : "/library/assemblies";
+    // Unlike the library tabs, the default section IS spelled out. A settings
+    // panel is a place you link someone to, and "/settings" alone does not say
+    // which one they will land on.
+    case "settings":
+      return `/settings/${view ?? "pricing"}`;
     default:
       return `/${route}`;
   }

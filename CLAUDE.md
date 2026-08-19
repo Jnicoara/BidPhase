@@ -170,10 +170,13 @@ fixture, or the test is really asserting that the seed data has not changed.
 ## Company defaults vs per-bid overrides — say which one you are changing
 
 Overhead, profit and the productivity factor exist at two levels, and the whole
-risk is that they look identical. The company-level controls (Settings § Bid
-pricing defaults) each carry `CompanyDefaultNotice` — the same yellow-triangle
-panel warning `LaborRateQuickEdit` uses — because changing one moves every new
-bid AND every existing bid still inheriting it. The per-bid overrides in
+risk is that they look identical. The company-level controls (`/settings/pricing`)
+each carry `CompanyDefaultNotice` — the same yellow-triangle panel warning
+`LaborRateQuickEdit` uses — because changing one moves every new bid AND every
+existing bid still inheriting it. That panel is the reason Settings is six
+addressable sections rather than one scroll, and the reason Pricing is the one
+you land on: the warning used to sit three sections down a page nobody reached
+the bottom of, and a warning that is not read is not being given. The per-bid overrides in
 `BidsPage` deliberately carry no such notice: overriding on one bid is an
 ordinary local edit, and repeating the warning there teaches people to read past
 it in the one place it matters.
@@ -366,6 +369,8 @@ tRPC routers live in `server/routers/*Router.ts` and are composed in `server/rou
 **Client structure:** `client/src/pages/HelixBidShell.tsx` is the app shell — a hand-rolled hash router rather than Wouter's route matching, because navigation state also drives the sidebar. `contexts/AppContext.tsx` holds the UI scale and nothing else; theme in `contexts/ThemeContext.tsx`. tRPC client setup is in `lib/trpc.ts`.
 
 **The route model is `client/src/lib/appRoutes.ts`, not the shell.** `pathToRoute` / `routeToPath` / `retiredAddress` are pure functions with `appRoutes.test.ts` against them, and that is deliberate: the sidebar carries **eight** destinations, down from fourteen, because several screens were folded into others as `?view=` tabs — Kits and Modifiers into Assemblies, Supplier Pricing into Materials, the Bids list and Quick bid's chooser into the Dashboard.
+
+Settings is six addressable panels at `/settings/:section` (`SETTINGS_SECTIONS`), not one scroll — link to the panel, never to `/settings` and a scroll position.
 
 A bid carries three surfaces of its own — `/bids/:id/plans`, `/bids/:id/count`, `/bids/:id/proposal` — and **none of them is in the nav, deliberately**: each needs a bid, so a top-level entry would dead-end on "which one?". That is the fault that removed Bids and Quick bid from the sidebar; both were pages whose whole job was asking which bid you meant. When a screen needs a bid, reach it from the bid.
 

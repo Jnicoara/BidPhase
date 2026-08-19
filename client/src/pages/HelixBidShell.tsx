@@ -24,7 +24,7 @@
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import SettingsTab from "@/components/tabs/SettingsTab";
+import SettingsPage from "@/pages/SettingsPage";
 import MaterialDatabasePage from "@/pages/MaterialDatabasePage";
 import DashboardPage from "@/pages/DashboardPage";
 import AdminSettingsPage from "@/pages/AdminSettingsPage";
@@ -64,6 +64,7 @@ import {
   routeToPath,
   type Route,
   type RouteState,
+  type SettingsSection,
 } from "@/lib/appRoutes";
 
 /**
@@ -201,7 +202,10 @@ export default function HelixBidShell() {
   // ── Content renderer ───────────────────────────────────────────────────────
   const renderContent = () => {
     if (isOnDashboard) return dashboard;
-    if (isInSettings) return <SettingsTab onBack={goBack} />;
+    if (isInSettings)
+      return (
+        <SettingsPage section={(activeView ?? "pricing") as SettingsSection} />
+      );
     // Materials and its supply-house lens are the same rows; the view only
     // decides which columns. See LibraryTabs.
     if (isInLibraryMats)
