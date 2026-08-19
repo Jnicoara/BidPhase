@@ -240,3 +240,50 @@ describe("basics", () => {
     expect(search("emt zzzz")).toHaveLength(0);
   });
 });
+
+/**
+ * Typing a size and a type still lands on the row, not on its family.
+ *
+ * ── Why this is pinned here ─────────────────────────────────────────────────
+ * The Materials screen now groups a shelf into families — THHN, NM-B, EMT
+ * coupling — with a heading over each. That grouping is applied ONLY while
+ * browsing: the search branch stays flat and relevance-ordered, because a
+ * heading would bury the best match under whichever family it happens to sit
+ * in.
+ *
+ * These assertions exist so that promise cannot be quietly withdrawn. Somebody
+ * extending the grouping to the search results would fail here rather than in
+ * an estimator hunting for one wire size on a supply-house deadline.
+ */
+describe("a size and a type still go straight to the row", () => {
+  it("puts the exact wire first, ahead of its family", () => {
+    expect(search("12 THHN")[0]).toBe("#12 THHN");
+    expect(search("#12 THHN")[0]).toBe("#12 THHN");
+    expect(search("12 thhn")[0]).toBe("#12 THHN");
+  });
+
+  it("does not let another gauge of the same type outrank it", () => {
+    const results = search("12 THHN");
+    expect(rankOf(results, "#12 THHN")).toBeLessThan(
+      rankOf(results, "#14 THHN")
+    );
+    expect(rankOf(results, "#12 THHN")).toBeLessThan(
+      rankOf(results, "#10 THHN")
+    );
+  });
+
+  it("puts the conduit itself ahead of its fittings", () => {
+    // "1/2 EMT" means the pipe. The connectors and couplings share every word
+    // of it and must not come first.
+    const results = search("1/2 EMT");
+    expect(results[0]).toBe('1/2" EMT');
+  });
+
+  it("finds a cable by its printed spec", () => {
+    expect(search("12-2")[0]).toBe("12-2 NM-B");
+  });
+
+  it("still finds a breaker by amperage", () => {
+    expect(search("20A breaker")[0]).toBe("20A breaker");
+  });
+});

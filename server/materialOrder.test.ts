@@ -19,7 +19,7 @@ import {
   compareMaterials,
   groupMaterialsByCategory,
   materialTypeKey,
-  sortMaterialsForDisplay,
+  sortMaterialsForDisplay,  groupByType,
 } from "../shared/materialOrder";
 import { MATERIAL_CATEGORIES } from "../drizzle/schema";
 
@@ -242,5 +242,144 @@ describe("compareMaterials is a total order", () => {
     const rows = [m('1" EMT', "Conduit"), m('1/2" EMT', "Conduit")];
     sortMaterialsForDisplay(rows);
     expect(names(rows)).toEqual(['1" EMT', '1/2" EMT']);
+  });
+});
+
+/**
+ * Type as a visible level, and the rule that stops it being ceremony.
+ *
+ * The bug this closes: Wire & Cable had no type axis at all, so it sorted by
+ * size alone and every gauge produced a cluster of unrelated products — bare
+ * copper, THHN, MC and NM-B repeating at #14, then #12, then #10, with the
+ * eighteen THHN sizes scattered across all eighty-nine rows.
+ */
+describe("type as a grouping level", () => {
+  it("keeps each wire family in one run instead of interleaving by gauge", () => {
+    const rows = sortMaterialsForDisplay([
+      m("#12 THHN", "Wire & Cable"),
+      m("12-2 NM-B", "Wire & Cable"),
+      m("#14 THHN", "Wire & Cable"),
+      m("14-2 NM-B", "Wire & Cable"),
+      m("#10 THHN", "Wire & Cable"),
+      m("10-2 NM-B", "Wire & Cable"),
+    ]).map(r => r.name);
+
+    // Every THHN together, every NM-B together, each sized within its family.
+    expect(rows).toEqual([
+      "14-2 NM-B",
+      "12-2 NM-B",
+      "10-2 NM-B",
+      "#14 THHN",
+      "#12 THHN",
+      "#10 THHN",
+    ]);
+  });
+
+  it("splits a shelf into its families", () => {
+    const sections = groupByType(
+      sortMaterialsForDisplay([
+        m("#12 THHN", "Wire & Cable"),
+        m("#14 THHN", "Wire & Cable"),
+        m("12-2 NM-B", "Wire & Cable"),
+        m("14-2 NM-B", "Wire & Cable"),
+      ])
+    );
+    expect(sections.map(s => [s.typeLabel, s.items.length])).toEqual([
+      ["NM-B", 2],
+      ["THHN", 2],
+    ]);
+  });
+
+  it("leaves a family of one loose, in place, with no heading", () => {
+    // A heading over a single row costs a line and says nothing — and moving
+    // it to a leftovers pile would strand "#10 THHN stranded" away from the
+    // THHN it belongs beside.
+    const sections = groupByType(
+      sortMaterialsForDisplay([
+        m("#12 THHN", "Wire & Cable"),
+        m("#14 THHN", "Wire & Cable"),
+        m("#10 THHN stranded", "Wire & Cable"),
+      ])
+    );
+    expect(sections.map(s => s.typeLabel)).toEqual(["THHN", null]);
+    expect(sections[1].items.map(i => i.name)).toEqual(["#10 THHN stranded"]);
+  });
+
+  it("leaves a shelf that does not divide into families completely alone", () => {
+    // Switches, Consumables, Wall Plates and the rest come back exactly as they
+    // are today — by the rule, not by an allow-list that would need keeping up
+    // to date as the catalog grows.
+    const rows = sortMaterialsForDisplay([
+      m("Single-pole switch", "Switches"),
+      m("Three-way switch", "Switches"),
+      m("Dimmer switch", "Switches"),
+    ]);
+    const sections = groupByType(rows);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].typeLabel).toBeNull();
+    expect(sections[0].items).toHaveLength(3);
+  });
+
+  it("groups conduit and its fittings by family, then by trade size", () => {
+    const sections = groupByType(
+      sortMaterialsForDisplay([
+        m('1" EMT coupling', "Conduit Fittings"),
+        m('1/2" EMT coupling', "Conduit Fittings"),
+        m('1/2" EMT connector', "Conduit Fittings"),
+        m('1" EMT connector', "Conduit Fittings"),
+      ])
+    );
+    expect(sections.map(s => s.typeLabel)).toEqual([
+      "EMT connector",
+      "EMT coupling",
+    ]);
+    expect(sections[0].items.map(i => i.name)).toEqual([
+      '1/2" EMT connector',
+      '1" EMT connector',
+    ]);
+  });
+
+  it("groups breakers by class, sized by amperage", () => {
+    const sections = groupByType(
+      sortMaterialsForDisplay([
+        m("30A 2-Pole breaker", "Breakers"),
+        m("20A breaker", "Breakers"),
+        m("20A 2-Pole breaker", "Breakers"),
+        m("15A breaker", "Breakers"),
+      ])
+    );
+    expect(sections.map(s => s.typeLabel)).toEqual(["breaker", "2-Pole breaker"]);
+    expect(sections[0].items.map(i => i.name)).toEqual([
+      "15A breaker",
+      "20A breaker",
+    ]);
+  });
+
+  it("lists a tandem breaker loose, because its name states poles not a size", () => {
+    const sections = groupByType(
+      sortMaterialsForDisplay([
+        m("15/20 tandem breaker", "Breakers"),
+        m("20A breaker", "Breakers"),
+        m("15A breaker", "Breakers"),
+      ])
+    );
+    // The tandem still clusters ahead of single-pole, by breaker class.
+    expect(sections[0].typeLabel).toBeNull();
+    expect(sections[0].items.map(i => i.name)).toEqual(["15/20 tandem breaker"]);
+  });
+
+  it("never re-orders what the sort produced", () => {
+    // The sections are a pass over the sorted list, so flattening them has to
+    // give the identical sequence back. Building a map and emitting its keys
+    // would quietly reorder the shelf.
+    const rows = sortMaterialsForDisplay([
+      m("#12 THHN", "Wire & Cable"),
+      m("12-2 NM-B", "Wire & Cable"),
+      m("#10 THHN stranded", "Wire & Cable"),
+      m("#14 THHN", "Wire & Cable"),
+      m("14-2 NM-B", "Wire & Cable"),
+    ]);
+    const flattened = groupByType(rows).flatMap(s => s.items.map(i => i.name));
+    expect(flattened).toEqual(rows.map(r => r.name));
   });
 });

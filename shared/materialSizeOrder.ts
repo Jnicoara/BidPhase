@@ -242,3 +242,61 @@ export function compareBySize(a: string, b: string): number {
 export function hasSize(name: string): boolean {
   return readSize(name.trim()) !== null;
 }
+
+/**
+ * The leading size token, as TEXT — "#12", "1-1/4\"", "20A", "12-2".
+ *
+ * ── Why this lives here and not where the grouping does ──────────────────────
+ * `readSize` above already knows every shape a size can take in this catalog,
+ * and there must not be a second list that drifts from it: a grouping rule with
+ * its own idea of what a size looks like would put "1-1/4\" EMT" in a different
+ * family from "1/2\" EMT" the first time somebody added a branch to one and not
+ * the other. So the patterns are written once, here, and both the ordering and
+ * the grouping read them.
+ *
+ * Returns null when the name states no size, which is the honest answer for
+ * "Wire nuts" and is what stops such a row being grouped at all.
+ */
+const SIZE_PREFIXES: RegExp[] = [
+  // Multi-element aught cables — "4/0-4/0-2/0 SER aluminum".
+  /^#?\d\/0(?:-\d(?:\/0)?)*\s+/,
+  // kcmil, named — "250 kcmil THHN". Consumes the unit word too.
+  /^\d{2,4}\s*kcmil\s+/i,
+  // kcmil element lists — "250-250-250 SER aluminum".
+  /^\d{3,4}(?:-\d{3,4})+\s+/,
+  // Cable specs — "12-2 NM-B", "14-3 MC cable".
+  /^\d{1,4}-\d(?![\d/])\s*/,
+  // A hashed gauge — "#12 THHN".
+  /^#\d{1,4}\s+/,
+  // Raceway trade size or a plain measurement — "1-1/4\" EMT", "4\" square box".
+  /^\d+(?:-\d+\/\d+)?(?:\/\d+)?"\s*/,
+  // Feet — "4 ft LED strip fixture".
+  /^[\d.]+\s*ft\s+/i,
+  // Amperage — "20A breaker".
+  /^\d{1,4}\s*A\s+/,
+];
+
+/**
+ * A material's name with its leading size removed — its TYPE.
+ *
+ * "#12 THHN" -> "THHN", "1/2\" EMT coupling" -> "EMT coupling",
+ * "20A 2-Pole breaker" -> "2-Pole breaker".
+ *
+ * Null when the name has no leading size, or when removing it would leave
+ * nothing behind. Both cases mean the row has no type to group under and should
+ * be listed on its own.
+ *
+ * A tandem breaker — "15/20 tandem breaker" — is one of those: "15/20" is two
+ * circuits in a slot rather than a size, `readSize` deliberately does not read
+ * it as one, and so tandems list flat. They still cluster, because
+ * materialOrder ranks the tandem class together ahead of single-pole.
+ */
+export function materialTypeName(name: string): string | null {
+  const trimmed = name.trim();
+  if (!hasSize(trimmed)) return null;
+  for (const pattern of SIZE_PREFIXES) {
+    const stripped = trimmed.replace(pattern, "").trim();
+    if (stripped !== trimmed && stripped.length > 0) return stripped;
+  }
+  return null;
+}

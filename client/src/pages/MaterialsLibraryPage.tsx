@@ -58,6 +58,7 @@ import { AliasSuggestions } from "@/components/AliasSuggestions";
 import { countNeedingPricing, needsPricing } from "@shared/materialPricing";
 import {
   MATERIAL_CATEGORY_ORDER,
+  groupByType,
   groupMaterialsByCategory,
   type MaterialCategoryName,
 } from "@shared/materialOrder";
@@ -136,6 +137,8 @@ const UNIT_LABEL: Record<Material["unitOfSale"], string> = {
  */
 type ListItem =
   | { kind: "header"; label: string; count: number }
+  /** The second level: a type within a shelf, e.g. THHN inside Wire & Cable. */
+  | { kind: "typeHeader"; label: string; count: number }
   | { kind: "row"; material: Material };
 
 type Draft = {
@@ -695,7 +698,23 @@ export default function MaterialsLibraryPage() {
         label: group.label,
         count: group.items.length,
       },
-      ...group.items.map(material => ({ kind: "row" as const, material })),
+      /**
+       * The type level, from runs the sort has already produced. A run of one
+       * carries no header and stays exactly where the sort put it, so a shelf
+       * that does not divide into families reads as it always has.
+       */
+      ...groupByType(group.items).flatMap(section => [
+        ...(section.typeLabel
+          ? [
+              {
+                kind: "typeHeader" as const,
+                label: section.typeLabel,
+                count: section.items.length,
+              },
+            ]
+          : []),
+        ...section.items.map(material => ({ kind: "row" as const, material })),
+      ]),
     ]);
   }, [groups, visible, searching]);
 
@@ -715,7 +734,12 @@ export default function MaterialsLibraryPage() {
     getScrollElement: () => scrollRef.current,
     // A first guess only — every rendered row is measured, so a description or
     // an open editor corrects itself.
-    estimateSize: index => (listItems[index]?.kind === "header" ? 30 : 57),
+    estimateSize: index => {
+      const kind = listItems[index]?.kind;
+      if (kind === "header") return 30;
+      if (kind === "typeHeader") return 26;
+      return 57;
+    },
     overscan: 10,
     scrollMargin: listRef.current?.offsetTop ?? 0,
   });
@@ -1083,7 +1107,22 @@ export default function MaterialsLibraryPage() {
                       }px)`,
                     }}
                   >
-                    {item.kind === "header" ? (
+                    {item.kind === "typeHeader" ? (
+                      /*
+                        The type heading. Deliberately quieter than the shelf
+                        above it — indented, lower case, no background — so the
+                        eye still reads the shelf first and the families as
+                        subdivisions of it rather than as more shelves.
+                      */
+                      <div className="flex items-center gap-2 pl-8 pr-4 py-1 border-b border-border/40">
+                        <span className="text-[11px] font-medium text-foreground/80">
+                          {item.label}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground/60">
+                          {item.count}
+                        </span>
+                      </div>
+                    ) : item.kind === "header" ? (
                       <div className="flex items-center gap-2 px-4 py-1.5 bg-muted/40 border-b border-border">
                         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {item.label}

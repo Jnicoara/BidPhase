@@ -22,7 +22,7 @@
  * `server/materialOrder.test.ts` asserts this list still matches the schema
  * enum — the drift is caught rather than hoped against.
  */
-import { compareBySize } from "./materialSizeOrder";
+import { compareBySize, materialTypeName } from "./materialSizeOrder";
 
 /**
  * Display order of the shelves. Mirrors MATERIAL_CATEGORIES in drizzle/schema,
@@ -121,23 +121,57 @@ export function materialTypeKey(
 ): [number, string] {
   const trimmed = name.trim();
 
+  /**
+   * The type, derived from the name: everything after the leading size.
+   *
+   * ── Rank is curated; the LABEL is always the derived type ────────────────
+   * The two branches below keep their hand-written ordering, because a
+   * contractor expects EMT before PVC and a tandem breaker above single-pole,
+   * and neither order falls out of a name. What they must NOT do is label by
+   * family alone: "EMT connector" and "EMT coupling" both reduce to "emt", tie,
+   * and fall through to size — which interleaves nine connectors with nine
+   * couplings at every trade size, the same failure Wire & Cable had.
+   *
+   * So rank decides which family comes first, and the derived type decides what
+   * is one run within it.
+   */
+  const derived = materialTypeName(trimmed);
+
   if (category === "Conduit" || category === "Conduit Fittings") {
     const found = CONDUIT_FAMILIES.findIndex(family =>
       trimmed.toLowerCase().includes(family.toLowerCase())
     );
     // Unrecognised raceway sorts after the known families, grouped by name.
-    return found === -1
-      ? [CONDUIT_FAMILIES.length, trimmed.toLowerCase()]
-      : [found, CONDUIT_FAMILIES[found].toLowerCase()];
+    const rank = found === -1 ? CONDUIT_FAMILIES.length : found;
+    return [rank, (derived ?? trimmed).toLowerCase()];
   }
 
   if (category === "Breakers") {
     const rank = breakerClassRank(trimmed);
-    return [rank, String(rank)];
+    // Within a class, AFCI, GFCI and plain are still separate products.
+    return [rank, derived === null ? String(rank) : derived.toLowerCase()];
   }
 
-  // Everywhere else, Type is not a meaningful axis and size carries the order.
-  return [0, ""];
+  /**
+   * Everywhere else, the type is the name with its leading size removed.
+   *
+   * ── This is what stopped wire being browsable ────────────────────────────
+   * This branch used to return [0, ""] — "Type is not a meaningful axis" — so
+   * Wire & Cable sorted by size alone, and every gauge produced a cluster of
+   * unrelated products: #14 bare copper, #14 THHN, 14-2 MC, 14-2 NM-B, 14-3
+   * MC, 14-3 NM-B, then the same six again at #12, and again at #10. The
+   * eighteen THHN sizes were scattered across all eighty-nine rows, so a run
+   * of one wire type could not be seen at all.
+   *
+   * Deriving the type from the name fixes the ORDER on its own, before any
+   * grouping UI exists, because the catalog is named {size} {type} — largely
+   * because most of it is generated that way (server/seed/materials).
+   *
+   * A name with no size returns [1, ""], which sorts it after every typed
+   * family and leaves the order to compareBySize — the same place unsized rows
+   * already landed.
+   */
+  return derived === null ? [1, ""] : [0, derived.toLowerCase()];
 }
 
 /**
@@ -199,4 +233,66 @@ export function groupMaterialsByCategory<
       items: (buckets.get(label) ?? []).sort(compareMaterials),
     }))
     .filter(group => group.items.length > 0);
+}
+
+/** One run of rows under a category: a named type, or loose rows. */
+export type MaterialTypeSection<T> = {
+  /** The type these rows share, or null when they are listed loose. */
+  typeLabel: string | null;
+  items: T[];
+};
+
+/**
+ * A category's rows split into type runs, for a second level of headings.
+ *
+ * ── A pass over the sorted list, never a re-sort ─────────────────────────────
+ * `compareMaterials` has already put every family in one contiguous run, so
+ * this only has to notice where the runs begin and end. Grouping by building a
+ * map and emitting its keys would quietly re-order the shelf — and the order is
+ * the part of this module that took the most care to get right.
+ *
+ * ── A run of one is not a group ──────────────────────────────────────────────
+ * A heading over a single row costs a line and says nothing, and it is what
+ * would make this feel like added ceremony rather than less scrolling. So a run
+ * of one is emitted loose, IN PLACE: "#10 THHN stranded" stays where the sort
+ * put it, next to the THHN it belongs beside, instead of being relocated to a
+ * leftovers pile at the bottom.
+ *
+ * That rule is also what keeps small shelves alone. Switches, Consumables, Wall
+ * Plates, Fasteners, Grounding and Life Safety produce no runs of two at all,
+ * so they come back exactly as they are today — no allow-list, no exception,
+ * nothing to keep up to date as the catalog grows.
+ */
+export function groupByType<T extends { name: string; category?: string | null }>(
+  rows: readonly T[]
+): Array<MaterialTypeSection<T>> {
+  const sections: Array<MaterialTypeSection<T>> = [];
+
+  let runLabel: string | null = null;
+  let run: T[] = [];
+
+  const flush = () => {
+    if (run.length === 0) return;
+    // A run of one is loose, and merges with whatever loose rows precede it.
+    const label = run.length >= 2 ? runLabel : null;
+    const last = sections[sections.length - 1];
+    if (label === null && last && last.typeLabel === null) {
+      last.items.push(...run);
+    } else {
+      sections.push({ typeLabel: label, items: [...run] });
+    }
+    run = [];
+  };
+
+  for (const row of rows) {
+    const label = materialTypeName(row.name);
+    if (label !== runLabel) {
+      flush();
+      runLabel = label;
+    }
+    run.push(row);
+  }
+  flush();
+
+  return sections;
 }
