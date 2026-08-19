@@ -42,6 +42,22 @@ describe("current addresses", () => {
     });
   });
 
+  it("resolves canonical browser paths when a user refreshes or opens a shared link", () => {
+    expect(pathToRoute("/settings/pricing")).toEqual({
+      route: "settings",
+      view: "pricing",
+    });
+    expect(pathToRoute("/bids/12")).toEqual({ route: "bids", projectId: 12 });
+    expect(pathToRoute("/bids/12/count")).toEqual({
+      route: "count",
+      projectId: 12,
+    });
+    expect(pathToRoute("/bids/12/proposal")).toEqual({
+      route: "proposal",
+      projectId: 12,
+    });
+  });
+
   it("keeps the screens that stayed top-level", () => {
     expect(pathToRoute("#/clients").route).toBe("clients");
     expect(pathToRoute("#/team").route).toBe("team");
