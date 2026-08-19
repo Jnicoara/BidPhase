@@ -2,14 +2,14 @@
  * Run a backup: dump the database, copy every stored file, write a manifest.
  *
  * ── It reports; it does not throw ───────────────────────────────────────────
- * Every path returns a BackupReport with `ok` on it. A backup tool that throws
- * on the third of two hundred PDFs has thrown away the other 197 and told you
- * only about the one — and one that swallows the failure is worse still,
- * because it prints "done" over a backup with a hole in it. So a file that
- * cannot be fetched is recorded as a failure, the rest continue, and `ok` is
- * false at the end. The manifest that lands in R2 carries the same failures, so
- * the record of what went wrong sits next to the data itself rather than in a
- * terminal someone has closed.
+ * Every path returns a BackupReport carrying a `status`. A backup tool that
+ * throws on the third of two hundred PDFs has thrown away the other 197 and
+ * told you only about the one — and one that swallows the failure is worse
+ * still, because it prints "done" over a backup with a hole in it. So a file
+ * that cannot be fetched is recorded as a failure, the rest continue, and the
+ * run ends `partial` rather than `clean`. The manifest that lands in R2 carries
+ * the same failures, so the record of what went wrong sits next to the data
+ * itself rather than in a terminal someone has closed.
  *
  * The one exception is the destination being unreachable, which is checked
  * first and stops everything: there is no point reading a database for an hour
@@ -31,8 +31,33 @@ import type { BackupTarget } from "./target";
 
 export type FileFailure = { key: string; reason: string };
 
+/**
+ * How a run ended. Three states, because two could not tell the difference
+ * between "the database is safe and some files were unreadable" and "there is
+ * no backup".
+ *
+ * ── Why "partial" is not just a nicer word for failed ────────────────────────
+ * The two differ in the only way that matters operationally: whether trying
+ * again helps. A destination timeout or a half-written dump is worth retrying.
+ * A storage read that comes back 403 is deterministic — it will be 403 on the
+ * second and third attempt too, and the platform retries a failing scheduled
+ * call three times, so reporting a permanent condition as "failed" buys three
+ * full database dumps a night and no better outcome.
+ *
+ * The cost of getting this wrong in the other direction is worse, which is why
+ * partial is NOT success: the stored files are the half of this that cannot be
+ * rebuilt from anywhere else (see references/backups.md § 1). So partial keeps
+ * every failed key in the manifest, prints them, and never reports as clean.
+ * `ok` stays true only for a completely clean run, and every existing caller
+ * that reads it keeps its old strictness.
+ */
+export type BackupStatus = "clean" | "partial" | "failed";
+
 export type BackupReport = {
+  /** True only for a completely clean run. Unchanged meaning; see status. */
   ok: boolean;
+  /** clean | partial | failed — see BackupStatus. */
+  status: BackupStatus;
   /** Folder this run wrote to, under the target's prefix. */
   runId: string;
   target: string;
@@ -103,6 +128,7 @@ export async function runBackup(options: {
 
   const report: BackupReport = {
     ok: false,
+    status: "failed",
     runId,
     target: options.target.name,
     startedAt,
@@ -116,7 +142,18 @@ export async function runBackup(options: {
 
   const finish = (): BackupReport => {
     report.finishedAt = new Date().toISOString();
-    report.ok = report.errors.length === 0 && report.files.failed.length === 0;
+    // An error is anything that stopped a whole stage — the destination, the
+    // dump, the file listing, the manifest. Those mean "no usable backup".
+    // A failed FILE is narrower: the database is already uploaded by then, so
+    // the run has produced something worth keeping.
+    if (report.errors.length > 0 || !report.database) {
+      report.status = "failed";
+    } else if (report.files.failed.length > 0) {
+      report.status = "partial";
+    } else {
+      report.status = "clean";
+    }
+    report.ok = report.status === "clean";
     return report;
   };
 
@@ -194,7 +231,10 @@ export async function runBackup(options: {
   try {
     await writeManifest(options.target, runId, finished);
   } catch (error) {
+    // Failed outright, whatever else went right: a run nothing can find or
+    // verify is not a backup, and the retry should get a real attempt.
     finished.errors.push(`Manifest upload failed: ${message(error)}`);
+    finished.status = "failed";
     finished.ok = false;
   }
 
@@ -223,12 +263,26 @@ function message(error: unknown): string {
 
 /** One-screen summary for a terminal or a toast. */
 export function summarise(report: BackupReport): string {
-  const lines = [
-    report.ok
-      ? `Backup OK — ${report.runId}`
-      : `Backup FAILED — ${report.runId}`,
-    `  destination: ${report.target}`,
-  ];
+  const headline: Record<BackupStatus, string> = {
+    clean: `Backup OK — ${report.runId}`,
+    // Names the shortfall in the first line. "PARTIAL" on its own would be read
+    // as a synonym for OK by anyone skimming a log at 2am.
+    partial: `Backup PARTIAL — ${report.runId} — database safe, ${report.files.failed.length} file(s) unreadable`,
+    failed: `Backup FAILED — ${report.runId}`,
+  };
+  // Derived rather than indexed blindly: a manifest written before `status`
+  // existed carries only `ok`, and this function is the one someone points at a
+  // run to find out what happened. An unknown status must not produce a blank
+  // first line on the tool you reach for when something has gone wrong.
+  const status: BackupStatus =
+    report.status === "clean" ||
+    report.status === "partial" ||
+    report.status === "failed"
+      ? report.status
+      : report.ok
+        ? "clean"
+        : "failed";
+  const lines = [headline[status], `  destination: ${report.target}`];
   if (report.database) {
     lines.push(
       `  database:    ${report.database.tableCount} tables, ${report.database.rowCount} rows, ${kb(report.database.dumpBytes)} gzipped`

@@ -13,6 +13,15 @@
  * Exits 0 only on a completely clean run. Any failed file, any error, exits 1,
  * so this can be trusted by anything that checks an exit code later.
  *
+ * ── Deliberately stricter than the nightly cron ─────────────────────────────
+ * A PARTIAL run — database dumped and uploaded, some stored files unreadable —
+ * exits 1 here and returns 200 there, and that difference is the point. The
+ * cron's caller is a retry loop, and retrying a deterministic storage refusal
+ * three times a night costs three database dumps and fixes nothing. This
+ * script's caller is a person who typed the command, or a script checking an
+ * exit code, and both of those want the strict answer. Same run, same manifest,
+ * two audiences. See server/scheduled/backupToR2.ts.
+ *
  * Secrets come from the environment. `.env` is loaded, and is gitignored.
  */
 import "dotenv/config";

@@ -73,6 +73,8 @@ export const BACKUP_PATH = "/api/scheduled/backupToR2";
 
 export type ScheduledBackupOutcome =
   | { status: "completed"; report: BackupReport }
+  /** Database safe, some stored files unreadable. Not retried — see below. */
+  | { status: "partial"; reason: string; report: BackupReport }
   | { status: "skipped"; runId: string; reason: string }
   | { status: "failed"; reason: string; report: BackupReport | null };
 
@@ -142,12 +144,23 @@ export async function runScheduledBackup(options: {
     now: options.now,
   });
 
-  if (!report.ok) {
+  if (report.status === "failed") {
     return {
       status: "failed",
       reason:
         report.errors[0] ??
         `${report.files.failed.length} file(s) could not be copied.`,
+      report,
+    };
+  }
+
+  if (report.status === "partial") {
+    return {
+      status: "partial",
+      reason: `${report.files.failed.length} of ${report.files.found} stored file(s) could not be read: ${report.files.failed
+        .slice(0, 3)
+        .map(f => f.key)
+        .join(", ")}${report.files.failed.length > 3 ? ", …" : ""}`,
       report,
     };
   }
@@ -162,12 +175,23 @@ export async function runScheduledBackup(options: {
  * calls; a logged-in user hitting this URL is refused, because a backup reads
  * every row belonging to every user.
  *
- * ── Failure is a 500, deliberately ──────────────────────────────────────────
- * The same standard as the manual run: a partial backup is a failed backup. A
- * 500 makes the platform retry and puts the failure in its Investigate flow,
- * the summary goes to the log in full, and runBackup has already written a
- * manifest recording the failure beside the data in the bucket. Three places,
- * because the one thing this must never do is look like it worked.
+ * ── Failure is a 500; partial is a 200 ──────────────────────────────────────
+ * A 500 makes the platform retry and puts the run in its Investigate flow, and
+ * that is right when retrying could help: a timeout, an unreachable bucket, a
+ * dump that did not finish.
+ *
+ * It is wrong for a partial run. Those stored-file reads fail deterministically
+ * — a storage 403 is still a 403 ninety seconds later — so a 500 buys three
+ * full database dumps a night and the same refusals each time, plus a nightly
+ * alert for a condition nobody can act on from here. An alert that fires every
+ * night is one nobody reads, which is how the real failure gets missed.
+ *
+ * So partial returns 200 and is loud in the places that keep a record: a
+ * console.warn naming the unreadable keys, and the manifest beside the data in
+ * the bucket carrying `status: "partial"` and every failed key. It is never
+ * reported as OK — the stored files are the half of this that cannot be
+ * rebuilt from anywhere else, so "the database is safe" is the most this may
+ * ever claim.
  */
 export async function backupToR2Handler(req: Request, res: Response) {
   try {
@@ -181,6 +205,15 @@ export async function backupToR2Handler(req: Request, res: Response) {
     if (outcome.status === "skipped") {
       console.log(`[BackupToR2] skipped — ${outcome.reason}`);
       return res.json({ ok: true, ...outcome });
+    }
+
+    // 200, so the platform does not retry a deterministic refusal three times —
+    // but warn-level and naming the keys, so it still lands in the log.
+    if (outcome.status === "partial") {
+      console.warn(
+        `[BackupToR2] PARTIAL — ${outcome.reason}\n${summarise(outcome.report)}`
+      );
+      return res.json({ ok: false, ...outcome });
     }
 
     if (outcome.status === "failed") {

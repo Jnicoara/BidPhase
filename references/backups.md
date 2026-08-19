@@ -58,6 +58,8 @@ timeout sitting over a job that legitimately takes minutes. **On the day this
 matters, the app being up is not a safe assumption.**
 
 Exit code is 0 only on a completely clean run. Any failed file, any error, is 1.
+**Deliberately stricter than the nightly cron** — see § 4 Outcomes. A person who
+typed the command wants the strict answer; a retry loop does not.
 
 There is also an admin-only route — `backup.run` and `backup.status`
 (`server/routers/backupRouter.ts`) — for taking one from a phone, and for
@@ -124,17 +126,40 @@ asserts the ordering, so it cannot drift.
 
 The platform retries a `5xx` up to three times. A full backup is not cheap, so a
 retry first checks the bucket: if a **successful** backup already exists for
-today it returns 200 having done nothing. A failed or half-finished run leaves
-no successful manifest, so the retry does the work — which is what a retry is
+today it returns 200 having done nothing — and a `partial` run counts, since its
+dump is complete. A failed or half-finished run leaves no such manifest, so the
+retry does the work — which is what a retry is
 for. If the bucket cannot be read at all, it backs up rather than skipping: a
 duplicate is harmless, a skipped night is not.
 
-### Failure
+### Outcomes
 
-Identical to the manual run, in three places at once — a `500` so the platform
+A run ends in one of three states, and the difference is whether trying again
+could help.
+
+| Status    | Means                                                         | Cron gets | Retried |
+| --------- | ------------------------------------------------------------- | --------- | ------- |
+| `clean`   | Database and every stored file copied                         | `200`     | —       |
+| `partial` | Database dumped and uploaded; some stored files unreadable    | `200`     | **No**  |
+| `failed`  | Dump, upload, file listing or manifest failed; R2 unreachable | `500`     | Yes     |
+
+`partial` is not success. The stored files are the half that cannot be rebuilt
+from anywhere else (§ 1), so the run records every unreadable key in the
+manifest, prints them, warns in the log, and `ok` stays false.
+
+It is not `failed` either, because that would be wrong about the only thing the
+status is used for operationally. A storage `403` is deterministic — still a
+`403` ninety seconds later — so a `500` buys three full database dumps a night,
+the same refusals each time, and a nightly alert nobody can act on. An alert
+that fires every night is one nobody reads, which is how the real failure gets
+missed.
+
+A `partial` run also satisfies the retry guard above: its dump is already whole,
+so re-running would re-dump the database to collect the identical refusals.
+
+A genuine failure is still loud in three places at once — a `500` so the platform
 retries and its Investigate flow shows it, the full summary in the server log,
-and a manifest recording the failure beside the data in the bucket. A partial
-backup is a failed backup.
+and a manifest recording the failure beside the data in the bucket.
 
 ## 5. What lands in the bucket
 

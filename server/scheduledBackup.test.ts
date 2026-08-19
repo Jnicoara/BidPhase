@@ -237,9 +237,19 @@ runIf("a failed scheduled run against a real database", () => {
     expect(outcome.report?.ok).toBe(false);
   });
 
-  it("reports failure when a single file cannot be copied", async () => {
-    // A partial backup is a failed backup. The database dump succeeding does
-    // not redeem it, and this is the case most likely to be waved through.
+  it("reports PARTIAL when files cannot be read but the database is safe", async () => {
+    /**
+     * The case this whole three-state split exists for.
+     *
+     * An unreadable stored file must not read as success — the files are the
+     * half that cannot be rebuilt from anywhere else. But it must not read as
+     * "failed" either, because the platform retries a failed scheduled call
+     * three times and a storage 403 is deterministic: three retries buy three
+     * more database dumps and the same refusals.
+     *
+     * So: not ok, status partial, database present, every failed key recorded
+     * in the manifest beside the data.
+     */
     const target = fakeTarget();
     const outcome = await runScheduledBackup({
       now,
@@ -255,14 +265,51 @@ runIf("a failed scheduled run against a real database", () => {
       expect(outcome.report.files.found).toBe(0);
       return;
     }
-    expect(outcome.status).toBe("failed");
-    if (outcome.status !== "failed") return;
-    expect(outcome.report?.database).not.toBeNull();
-    expect(outcome.report?.files.failed.length).toBeGreaterThan(0);
-    // And the failure is recorded in the bucket, beside the data.
-    const manifestKey = `${outcome.report!.runId}/manifest.json`;
+    expect(outcome.status).toBe("partial");
+    if (outcome.status !== "partial") return;
+    expect(outcome.report.database).not.toBeNull();
+    expect(outcome.report.files.failed.length).toBeGreaterThan(0);
+    // Never reported as OK, whatever the retry behaviour.
+    expect(outcome.report.ok).toBe(false);
+    // The reason names keys, so the log line is actionable on its own.
+    expect(outcome.reason).toContain("could not be read");
+
+    const manifestKey = `${outcome.report.runId}/manifest.json`;
     const manifest = JSON.parse(target.written.get(manifestKey)!.toString());
     expect(manifest.ok).toBe(false);
+    expect(manifest.status).toBe("partial");
+    expect(manifest.files.failed.length).toBeGreaterThan(0);
+  });
+
+  it("counts a partial run as today's, so a retry does not re-dump", async () => {
+    /**
+     * The retry guard, on the case it was widened for. Re-running after a
+     * partial must skip rather than dump the whole database again to collect
+     * the identical refusals.
+     */
+    const target = fakeTarget();
+    const first = await runScheduledBackup({
+      now,
+      databaseUrl,
+      target,
+      fetchFile: async () => {
+        throw new Error("403 from storage");
+      },
+    });
+    // Only meaningful when the fixture database actually references files.
+    if (first.status !== "partial") return;
+
+    const second = await runScheduledBackup({
+      now,
+      databaseUrl,
+      target,
+      fetchFile: async () => {
+        throw new Error("403 from storage");
+      },
+    });
+    expect(second.status).toBe("skipped");
+    if (second.status !== "skipped") return;
+    expect(second.runId).toBe(first.report.runId);
   });
 
   it("succeeds and reports completed when everything works", async () => {

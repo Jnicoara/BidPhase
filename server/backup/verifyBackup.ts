@@ -32,6 +32,11 @@ export type VerifyResult = {
   restored: { tables: number; rows: number } | null;
   /** The backup's own record of whether it succeeded. */
   manifestOk: boolean | null;
+  /**
+   * The run's own verdict: clean | partial | failed. Null for a manifest
+   * written before the three-state change, which carried only `ok`.
+   */
+  manifestStatus: string | null;
   /** Per-table disagreements between manifest and restore. */
   mismatches: string[];
   errors: string[];
@@ -66,6 +71,7 @@ export async function verifyBackup(options: {
     claimed: null,
     restored: null,
     manifestOk: null,
+    manifestStatus: null,
     mismatches: [],
     errors: [],
   };
@@ -88,6 +94,8 @@ export async function verifyBackup(options: {
       (await options.target.get(`${runId}/manifest.json`)).toString("utf8")
     );
     result.manifestOk = Boolean(manifest.ok);
+    result.manifestStatus =
+      typeof manifest.status === "string" ? manifest.status : null;
     result.claimed = {
       tables: manifest.database?.tableCount ?? 0,
       rows: manifest.database?.rowCount ?? 0,
@@ -201,7 +209,13 @@ export function summariseVerify(result: VerifyResult): string {
       `  restored:      ${result.restored.tables} tables, ${result.restored.rows} rows`
     );
   }
-  if (result.manifestOk === false) {
+  // A partial run is a different animal from a failed one, and this is the
+  // tool someone reaches for to find out whether a bad-looking run is usable.
+  if (result.manifestStatus === "partial") {
+    lines.push(
+      `  NOTE: this run was PARTIAL — the database dump is complete; some stored files could not be read. See the manifest for which.`
+    );
+  } else if (result.manifestOk === false) {
     lines.push(
       `  NOTE: this run reported failures when it was taken — the dump may be fine but files were missed.`
     );

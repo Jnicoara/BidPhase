@@ -614,12 +614,51 @@ describe("the summary line", () => {
       warnings: [],
       errors: [],
     };
-    expect(summarise({ ...base, ok: true }).split("\n")[0]).toContain(
-      "Backup OK"
-    );
     expect(
-      summarise({ ...base, ok: false, errors: ["boom"] }).split("\n")[0]
+      summarise({ ...base, ok: true, status: "clean" as const }).split("\n")[0]
+    ).toContain("Backup OK");
+    expect(
+      summarise({
+        ...base,
+        ok: false,
+        status: "failed" as const,
+        errors: ["boom"],
+      }).split("\n")[0]
     ).toContain("Backup FAILED");
+
+    /**
+     * Partial names the shortfall on the first line. Anyone skimming a log at
+     * 2am reads only that line, and a bare "PARTIAL" gets filed as a synonym
+     * for OK — which is the exact misreading the third state exists to prevent.
+     */
+    const partial = summarise({
+      ...base,
+      ok: false,
+      status: "partial" as const,
+      files: {
+        found: 2,
+        copied: 1,
+        bytes: 10,
+        failed: [
+          { key: "bid-plans/1/9/E1.pdf", reason: "storage returned 403" },
+        ],
+      },
+    }).split("\n");
+    expect(partial[0]).toContain("Backup PARTIAL");
+    expect(partial[0]).toContain("database safe");
+    expect(partial.join("\n")).toContain("bid-plans/1/9/E1.pdf");
+
+    /**
+     * A manifest written before `status` existed carries only `ok`. This is the
+     * tool someone points at a run to find out what happened, so an unknown
+     * status must degrade to a real verdict rather than a blank first line.
+     */
+    const legacy = summarise({
+      ...base,
+      ok: true,
+      status: undefined as unknown as "clean",
+    }).split("\n")[0];
+    expect(legacy).toContain("Backup OK");
   });
 });
 
