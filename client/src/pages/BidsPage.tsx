@@ -1,9 +1,8 @@
 /**
- * BidsPage — the Foundation bid layer (list + detail).
+ * BidsPage — one bid: its line items and the settings that price them.
  *
  * A bid is line items (assemblies frozen at add time) plus the settings that
- * turn their sum into a price. Distinct from the legacy /projects screens,
- * which belong to the master_* system.
+ * turn their sum into a price.
  *
  * ── Deliberately plain ───────────────────────────────────────────────────────
  * The add-assembly control is a search box and a quantity, nothing more. The
@@ -26,7 +25,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
-  Archive,
   ArrowLeft,
   CalendarDays,
   Check,
@@ -54,18 +52,14 @@ import { selectOnFocus } from "@/lib/selectOnFocus";
 import { DuplicateUnitPanel } from "@/components/DuplicateUnitPanel";
 import { UnitLinkBadge } from "@/components/UnitLinkBadge";
 import { UnitTemplateActions } from "@/components/UnitTemplateActions";
-import { ArchiveBidDialog } from "@/components/ArchiveBidDialog";
 import { MaterialsListDialog } from "@/components/MaterialsListDialog";
 import { useCompany } from "@/hooks/useCompany";
-import { BidSearchPanel } from "@/components/BidSearchPanel";
 import { AccountingExportDialog } from "@/components/AccountingExportDialog";
 import { ClientLinkField } from "@/components/ClientLinkField";
 import { BidTaxControls } from "@/components/BidTaxControls";
 import { BidExtrasPanel } from "@/components/BidExtrasPanel";
 import { CloseoutPanel } from "@/components/CloseoutPanel";
 import { SampleBidNotice } from "@/components/SampleBidNotice";
-import { type PendingArchive } from "@/lib/archiveBid";
-import { RETENTION_DAYS } from "@shared/retention";
 import { countUnpricedLaborLines } from "@shared/laborRatePricing";
 
 const STATUSES = ["Draft", "Active", "Won", "Lost"] as const;
@@ -179,7 +173,21 @@ function DueDateField({
 
 // ─── Bid detail ───────────────────────────────────────────────────────────────
 
-function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
+/**
+ * One bid. This file used to export a list-or-detail switch; the list is gone.
+ *
+ * It was a header, a New bid button, an archive entry and `BidSearchPanel` —
+ * and the Dashboard rendered all four already, so /bids was a second door into
+ * a room you were standing in. /bids now redirects there (see RETIRED_PATHS in
+ * @/lib/appRoutes) and this screen always has a bid.
+ */
+export default function BidsPage({
+  bidId,
+  onBack,
+}: {
+  bidId: number;
+  onBack: () => void;
+}) {
   const [assemblyQuery, setAssemblyQuery] = useState("");
   const [addQty, setAddQty] = useState("1");
   const [addUnit, setAddUnit] = useState("");
@@ -345,6 +353,34 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
     }
   };
 
+  /**
+   * A bid that cannot be loaded says so, rather than saying "Loading…" forever.
+   *
+   * This branch used to be a single `!detailQuery.data`, which is true both
+   * while the query is in flight AND after it has failed — so a deleted bid, or
+   * an id typed wrong in the address bar, sat on a loading message that would
+   * never resolve. It matters more now than it did: /bids/:id is the only way
+   * into a bid since the list was folded into the Dashboard, so there is no
+   * surrounding screen left to notice you are stuck on.
+   */
+  if (detailQuery.isError) {
+    return (
+      <div className="flex flex-col h-full bg-background items-center justify-center gap-3 px-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          That bid could not be opened — it may have been archived or deleted.
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={onBack}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to the dashboard
+        </Button>
+      </div>
+    );
+  }
+
   if (!detailQuery.data) {
     return (
       <div className="flex flex-col h-full bg-background items-center justify-center text-sm text-muted-foreground">
@@ -401,7 +437,7 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
             className="h-8 gap-1.5 text-xs"
             onClick={onBack}
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> Bids
+            <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
           </Button>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold truncate flex items-center gap-2">
@@ -1158,195 +1194,6 @@ function BidDetail({ bidId, onBack }: { bidId: number; onBack: () => void }) {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── List ─────────────────────────────────────────────────────────────────────
-
-export default function BidsPage({
-  initialBidId,
-}: { initialBidId?: number } = {}) {
-  // Seeded from /bids/:id so the Dashboard can link straight into one bid.
-  // State, not derived: once open, closing must be able to return to the list
-  // without the route dragging it back in.
-  const [openId, setOpenId] = useState<number | null>(initialBidId ?? null);
-  const [newName, setNewName] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [confirmArchive, setConfirmArchive] = useState<PendingArchive | null>(
-    null
-  );
-
-  const utils = trpc.useUtils();
-  const access = useCompany();
-  // The list itself is BidSearchPanel, which paginates. Only the archive COUNT
-  // is read here, for the header button.
-  const { data: archived = [] } = trpc.bids.archived.useQuery();
-
-  const createBid = trpc.bids.create.useMutation({
-    onError: error => toast.error(error.message),
-    onSuccess: bid => {
-      if (bid) setOpenId(bid.id);
-    },
-    onSettled: () => {
-      void utils.bids.list.invalidate();
-    },
-  });
-
-  const restoreBid = trpc.bids.restore.useMutation({
-    onError: error => toast.error(error.message),
-    onSuccess: () => toast.success("Back on your bids list."),
-    onSettled: () => {
-      void utils.bids.list.invalidate();
-      void utils.bids.archived.invalidate();
-      void utils.bids.dashboard.invalidate();
-    },
-  });
-
-  const archiveBid = trpc.bids.archive.useMutation({
-    onMutate: async vars => {
-      await utils.bids.list.cancel();
-      const previous = utils.bids.list.getData();
-      // Captured before the optimistic removal — afterwards the row is gone
-      // from the cache and every bid would be named "Bid" in the toast.
-      const name = previous?.find(b => b.id === vars.id)?.name;
-      utils.bids.list.setData(
-        undefined,
-        old => (old ?? []).filter(b => b.id !== vars.id) as typeof old
-      );
-      return { previous, name };
-    },
-    onError: (error, _vars, context) => {
-      if (context?.previous !== undefined)
-        utils.bids.list.setData(undefined, context.previous as never);
-      toast.error(error.message);
-    },
-    onSuccess: (_result, vars, context) => {
-      // Undo in the toast as well as the dialog before it: the dialog stops the
-      // accident, this fixes the one that got through anyway.
-      toast.success(
-        `${context?.name ?? "Bid"} archived — ${RETENTION_DAYS} days to change your mind.`,
-        {
-          action: {
-            label: "Undo",
-            onClick: () => restoreBid.mutate({ id: vars.id }),
-          },
-        }
-      );
-    },
-    onSettled: () => {
-      void utils.bids.list.invalidate();
-      void utils.bids.archived.invalidate();
-      void utils.bids.dashboard.invalidate();
-    },
-  });
-
-  if (openId !== null) {
-    return <BidDetail bidId={openId} onBack={() => setOpenId(null)} />;
-  }
-
-  return (
-    <div className="flex flex-col h-full bg-background">
-      <div className="border-b border-border px-6 py-4">
-        <div className="flex items-center gap-3">
-          <FileText className="w-5 h-5 text-primary" />
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold">Bids</h1>
-            <p className="text-xs text-muted-foreground">
-              Assemblies priced into a job. Costs freeze when an assembly is
-              added, so a submitted bid never moves on its own.
-            </p>
-          </div>
-          {/* The way back to anything archived from here. Appears once there
-              is something in it — the Dashboard carries the same entry. */}
-          {archived.length > 0 && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 gap-1.5 text-xs shrink-0"
-              onClick={() => {
-                window.location.hash = "/archive";
-              }}
-            >
-              <Archive className="w-3.5 h-3.5" /> Archive
-              <span className="text-muted-foreground">{archived.length}</span>
-            </Button>
-          )}
-          <Button
-            size="sm"
-            className="h-8 gap-1.5 text-xs shrink-0"
-            onClick={() => setAdding(v => !v)}
-          >
-            <Plus className="w-3.5 h-3.5" /> New bid
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        {adding && (
-          <div className="rounded-xl border border-border bg-card px-4 py-3 mb-3 flex flex-wrap items-center gap-2">
-            <Input
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              placeholder="Bid name — e.g. Maple Street duplex"
-              className="h-8 flex-1 min-w-[14rem] text-sm"
-              autoFocus
-              onKeyDown={e => {
-                if (e.key !== "Enter" || !newName.trim()) return;
-                createBid.mutate({ name: newName.trim() });
-                setNewName("");
-                setAdding(false);
-              }}
-            />
-            <Button
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={() => {
-                if (!newName.trim()) {
-                  toast.error("Give the bid a name.");
-                  return;
-                }
-                createBid.mutate({ name: newName.trim() });
-                setNewName("");
-                setAdding(false);
-              }}
-            >
-              <Check className="w-3 h-3" /> Create
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 gap-1.5 text-xs"
-              onClick={() => {
-                setAdding(false);
-                setNewName("");
-              }}
-            >
-              <X className="w-3 h-3" /> Cancel
-            </Button>
-          </div>
-        )}
-
-        {/*
-          The list IS the search. It used to be an unpaginated bids.list with
-          the whole table in the browser, which is fine at 24 bids and is the
-          thing that stops working first as a contractor builds history. Every
-          filter and every page now comes from the query — see
-          shared/bidSearch.ts.
-        */}
-        <BidSearchPanel
-          onOpenBid={setOpenId}
-          onArchive={
-            access.can("bids.edit") ? bid => setConfirmArchive(bid) : undefined
-          }
-        />
-      </div>
-
-      <ArchiveBidDialog
-        pending={confirmArchive}
-        onClose={() => setConfirmArchive(null)}
-        onArchive={id => archiveBid.mutate({ id })}
-      />
     </div>
   );
 }

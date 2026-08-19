@@ -28,15 +28,9 @@ import { useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { LibraryTabs } from "@/components/library/LibraryTabs";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-  ArrowLeft,
-  Upload,
-  Search,
-  X,
-  Store,
-  AlertTriangle,
-} from "lucide-react";
+import { Upload, Search, X, Store, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { InlineNumberField } from "@/components/InlineNumberField";
@@ -70,11 +64,7 @@ const AGE_FILTERS: Array<{ key: PriceAge | "all"; label: string }> = [
   { key: "unpriced", label: "No price" },
 ];
 
-export default function MaterialDatabasePage({
-  onBack,
-}: {
-  onBack?: () => void;
-}) {
+export default function MaterialDatabasePage() {
   const utils = trpc.useUtils();
   const { data: materials = [], isLoading } = trpc.materials.list.useQuery({
     status: "active",
@@ -148,17 +138,11 @@ export default function MaterialDatabasePage({
     <div className="flex flex-col h-full bg-background">
       {/* ── Header ── */}
       <div className="border-b border-border px-6 py-4">
+        {/* No Back button: this is a tab within Materials now, not a screen
+            you arrived at from somewhere else. The tab strip below is the way
+            across, and "Back" would have meant "wherever you were before",
+            which is not a place this header can name. */}
         <div className="flex items-center gap-3">
-          {onBack && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 gap-1.5 text-xs"
-              onClick={onBack}
-            >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
-            </Button>
-          )}
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold">Supplier Pricing</h1>
             <p className="text-xs text-muted-foreground">
@@ -180,6 +164,7 @@ export default function MaterialDatabasePage({
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         {/* ── Search + age filters ── */}
         <div className="px-6 pt-4 pb-3 space-y-3">
+          <LibraryTabs group="materials" current="pricing" />
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input

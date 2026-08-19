@@ -22,6 +22,7 @@ import { useCallback, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { LibraryTabs } from "@/components/library/LibraryTabs";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { ScopeFilter } from "@/components/library/LibraryControls";
 import {
@@ -505,8 +506,15 @@ export default function ModifiersPage() {
           )}
         </div>
 
+        {/* Which library section, then which list within it — outermost
+            grouping first, so the two strips read as a hierarchy rather than
+            as two rows of similar-looking buttons. */}
+        <div className="mt-3">
+          <LibraryTabs group="assemblies" current="modifiers" />
+        </div>
+
         {/* View switch */}
-        <div className="flex items-center gap-1 mt-3">
+        <div className="flex items-center gap-1">
           {(["active", "archived"] as const).map(tab => (
             <button
               key={tab}

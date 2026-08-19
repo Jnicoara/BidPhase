@@ -23,6 +23,7 @@ import { useCallback, useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { LibraryTabs } from "@/components/library/LibraryTabs";
 import {
   Archive as ArchiveIcon,
   ArrowLeft,
@@ -556,6 +557,7 @@ export default function KitsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
+        <LibraryTabs group="assemblies" current="kits" />
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <ViewTabs
             view={view}

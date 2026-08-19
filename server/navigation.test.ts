@@ -83,21 +83,33 @@ describe("the navigation allowlist", () => {
 
   it("only ever points inside the app", () => {
     // Nothing in the list may send a user off-site or outside the hash router.
+    //
+    // The query string is allowed because folding Kits, Modifiers and Supplier
+    // Pricing into tabs gave three targets a `?view=` — but it is allowed in
+    // exactly that shape and no other. A bare `[^#]*` here would let a future
+    // entry smuggle in a second `#`, a protocol or an encoded traversal, which
+    // is the whole class of thing this assertion exists to stop.
     for (const target of NAVIGATION_TARGETS) {
       expect(target.path, `${target.id} leaves the app`).toMatch(
-        /^#\/[a-z0-9/-]*$/
+        /^#\/[a-z0-9/-]*(\?view=[a-z-]+)?$/
       );
       expect(target.path).not.toContain("..");
     }
   });
 
-  it("has no duplicate ids or paths", () => {
-    // Two entries for one screen means the model picks between identical
-    // options, and a duplicate id would shadow whichever came first.
+  it("has no duplicate ids, and no two ids describing the same screen twice", () => {
+    // A duplicate id would shadow whichever came first, so ids stay unique.
+    //
+    // Paths deliberately may repeat. Screens were folded into each other, and
+    // one screen can answer to several vocabularies: the Dashboard is both
+    // "the dashboard" and "my bids", and dropping one of those phrasings would
+    // turn the app's most common navigation request into a text-only answer.
+    // What must not happen is two entries a user could not tell apart, so the
+    // LABELS have to differ even where the paths do not.
     const ids = NAVIGATION_TARGETS.map(t => t.id);
-    const paths = NAVIGATION_TARGETS.map(t => t.path);
+    const labels = NAVIGATION_TARGETS.map(t => t.label);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(new Set(paths).size).toBe(paths.length);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 
   it("describes every target well enough to be matched", () => {

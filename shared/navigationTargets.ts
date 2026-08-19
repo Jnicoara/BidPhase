@@ -33,21 +33,63 @@ export type NavigationTarget = {
    */
   purpose: string;
 };
-
 export const NAVIGATION_TARGETS: NavigationTarget[] = [
   {
-    id: "labor-rates",
-    label: "Labor Rates",
-    path: "#/library/labor-rates",
+    id: "dashboard",
+    label: "Dashboard",
+    path: "#/dashboard",
     purpose:
-      "Set or edit hourly and salaried labor rates for roles like apprentice, journeyman, foreman. Change what an hour costs. Crew pay rates.",
+      "The overview of every bid and where things stand, and where a new one starts. All your bids and estimates — open an existing bid, check its status, see what you have quoted. The home screen.",
+  },
+  {
+    /**
+     * Kept pointing at the Dashboard, which absorbed the Bids list.
+     *
+     * The id stays `bids` even though the path moved: the id is what the model
+     * names, "take me to my bids" is one of the likeliest things a lost user
+     * says, and retiring the id would turn the app's most common navigation
+     * request into a text-only answer.
+     */
+    id: "bids",
+    label: "Bids",
+    path: "#/dashboard",
+    purpose:
+      "Find one bid out of hundreds by job name, client or address. See what is in draft, out for bid, won or lost.",
+  },
+  {
+    id: "quick-bid",
+    label: "Quick bid",
+    path: "#/quickbid",
+    purpose:
+      "Build a bid fast by adding assemblies and quantities, with no plan takeoff. The quickest way to price a job or start a new estimate.",
+  },
+  {
+    id: "clients",
+    label: "Clients",
+    path: "#/clients",
+    purpose:
+      "The customers you bid for — their contact details, phone number and address. Add a customer, or see which bids belong to one.",
   },
   {
     id: "materials",
     label: "Materials",
     path: "#/library/materials",
     purpose:
-      "The material catalog assemblies are built from. Price materials, add a material, edit costs, set trade slang, find items that still need a price.",
+      "The material catalog assemblies are built from. Add a material, edit its unit or category, set trade slang so it can be found.",
+  },
+  {
+    id: "supplier-pricing",
+    label: "Supplier pricing",
+    path: "#/library/materials?view=pricing",
+    purpose:
+      "Put your supply house's prices on the catalog, import a price list, and find the prices nobody has checked in a while. What a material costs, and how old that figure is.",
+  },
+  {
+    id: "labor-rates",
+    label: "Labor Rates",
+    path: "#/library/labor-rates",
+    purpose:
+      "Set or edit hourly and salaried labor rates for roles like apprentice, journeyman, foreman. Change what an hour costs. Crew pay rates.",
   },
   {
     id: "assemblies",
@@ -59,30 +101,16 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
   {
     id: "kits",
     label: "Kits",
-    path: "#/library/kits",
+    path: "#/library/assemblies?view=kits",
     purpose:
-      "Groups of assemblies bundled together to drop onto a bid in one go.",
+      "Groups of assemblies bundled together to drop onto a bid in one go. A bedroom package, a bathroom package.",
   },
   {
     id: "modifiers",
     label: "Modifiers",
-    path: "#/library/modifiers",
+    path: "#/library/assemblies?view=modifiers",
     purpose:
       "Percentage adjustments to labor for conditions like working at height, overtime, or difficult access.",
-  },
-  {
-    id: "quick-bid",
-    label: "Quick bid",
-    path: "#/quickbid",
-    purpose:
-      "Build a bid fast by adding assemblies and quantities. The quickest way to price a job or start a new estimate.",
-  },
-  {
-    id: "bids",
-    label: "Bids",
-    path: "#/bids",
-    purpose:
-      "All your bids and estimates. Open an existing bid, check its status, see what you have quoted.",
   },
   {
     id: "bid-archive",
@@ -90,13 +118,6 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
     path: "#/archive",
     purpose:
       "Archived bids, and where to restore one that was removed by mistake before it is permanently deleted.",
-  },
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    path: "#/dashboard",
-    purpose:
-      "The overview of recent bids and where things stand. The home screen.",
   },
   {
     /**
@@ -116,18 +137,18 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
       "How the business is doing. Win rate, how many bids were won or lost, hit rate over time, whether jobs are making the margin they were quoted at, profitability by trade, which jobs ran over.",
   },
   {
-    id: "material-database",
-    label: "Material Database",
-    path: "#/matdb",
+    id: "crew",
+    label: "Crew",
+    path: "#/team",
     purpose:
-      "The supply-house price list — imported or connected supplier pricing. Distinct from the material catalog used by assemblies.",
+      "Who is in this company and what they are allowed to do. Invite someone, change a role, remove access.",
   },
   {
     id: "settings",
     label: "Settings",
     path: "#/settings",
     purpose:
-      "Account and app settings, theme, display scale, company pricing defaults like overhead and profit.",
+      "Account and app settings, theme, display scale, company pricing defaults like overhead and profit, branding, sales tax and how a proposal looks.",
   },
 ];
 

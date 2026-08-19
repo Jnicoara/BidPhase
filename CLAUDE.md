@@ -363,7 +363,17 @@ its own commit.
 
 tRPC routers live in `server/routers/*Router.ts` and are composed in `server/routers.ts`; DB access goes through query functions in `server/db.ts` (no ORM calls directly inside routers).
 
-**Client structure:** `client/src/pages/HelixBidShell.tsx` is the app shell — a hand-rolled hash router (`pathToRoute`/`getCurrentRouteState`) rather than using Wouter's route matching directly, because navigation state also drives the sidebar. `contexts/AppContext.tsx` holds the UI scale and nothing else; theme in `contexts/ThemeContext.tsx`. tRPC client setup is in `lib/trpc.ts`.
+**Client structure:** `client/src/pages/HelixBidShell.tsx` is the app shell — a hand-rolled hash router rather than Wouter's route matching, because navigation state also drives the sidebar. `contexts/AppContext.tsx` holds the UI scale and nothing else; theme in `contexts/ThemeContext.tsx`. tRPC client setup is in `lib/trpc.ts`.
+
+**The route model is `client/src/lib/appRoutes.ts`, not the shell.** `pathToRoute` / `routeToPath` / `retiredAddress` are pure functions with `appRoutes.test.ts` against them, and that is deliberate: the sidebar carries **eight** destinations, down from fourteen, because several screens were folded into others as `?view=` tabs — Kits and Modifiers into Assemblies, Supplier Pricing into Materials, the Bids list and Quick bid's chooser into the Dashboard.
+
+Folding a screen retires its address, and **a retired address is what breaks silently** — an unrecognised path lands on the Dashboard, so nobody notices until they wonder where their kits went. So every one is listed in `RETIRED_PATHS` and redirected to the screen that took the job over, with the address bar rewritten via `replaceState` so bookmarks heal. When you move a screen:
+
+- add its old address to `RETIRED_PATHS` (never rely on the catch-all);
+- update `shared/navigationTargets.ts`, whose paths the AI helper hands to users as links;
+- check `shared/onboarding.ts`, which hard-codes four hrefs.
+
+`appRoutes.test.ts` cross-checks the last two against the router, because neither module can see it. Note that navigation targets may now share a `path` — one screen legitimately answers to several vocabularies ("the dashboard" and "my bids") — so it is the **ids and labels** that must stay unique, not the paths.
 
 The original four-workspace design (Residential / Commercial / Civil / Industrial estimating tabs, each with its own named projects and calculator state) is **gone**, along with the screens that read it — `ExportButton`, `PlanPanel`, `PlanViewer`, `AIChatBox`, `DashboardLayout`, and the `pages/tabs/` project screens built on the legacy `master_*` tables. Don't reintroduce per-workspace client state; a bid is the unit of work now.
 

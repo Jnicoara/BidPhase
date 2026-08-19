@@ -31,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { LibraryTabs } from "@/components/library/LibraryTabs";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { LaborRateQuickEdit } from "@/components/LaborRateQuickEdit";
 import { resolveLaborRate } from "@shared/laborRateLookup";
@@ -1389,6 +1390,7 @@ export default function AssembliesLibraryPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
+        <LibraryTabs group="assemblies" current="assemblies" />
         {/* Above the list, because it proposes a change to something in it. */}
         <HourSuggestions />
         <div className="relative mb-3">

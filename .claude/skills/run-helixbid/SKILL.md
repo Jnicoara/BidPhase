@@ -158,9 +158,17 @@ foreach ($p in 3000..3005) { $c = Get-NetTCPConnection -LocalPort $p -State List
 - **Don't put POSIX inline env vars in `package.json` scripts.** cmd.exe can't
   parse them and the script dies with `'NODE_ENV' is not recognized`. The repo
   uses `cross-env` for exactly this reason.
-- **`/matdb` and `/library/materials` are different screens.** The former is
-  the supply-house price list; the latter is the Foundation catalog that
-  assemblies are built from. Same word, unrelated tables.
+- **Five addresses now redirect.** `/matdb`, `/library/kits`,
+  `/library/modifiers`, `/bids` and `/projects` were folded into other screens
+  and are rewritten in the address bar when followed — so a URL you type may
+  not be the URL you end up on. The table is `RETIRED_PATHS` in
+  `client/src/lib/appRoutes.ts`, with `appRoutes.test.ts` against it. Supplier
+  pricing is `#/library/materials?view=pricing`; kits and modifiers are
+  `?view=` tabs on `#/library/assemblies`.
+- **Supplier pricing and the catalog are one table.** Both views read and write
+  the same `materials` rows — the catalog edits what a material _is_, the
+  pricing view edits what it _costs_. They were separate screens on separate
+  data long ago; they are not any more.
 
 ## Troubleshooting
 

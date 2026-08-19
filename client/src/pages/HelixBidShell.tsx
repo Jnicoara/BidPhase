@@ -1,21 +1,25 @@
 /**
  * HelixBidShell — Main layout shell
- * Desktop: fixed left sidebar (icon-only 64px, expands to 220px on hover)
+ * Desktop: fixed left sidebar (icon-only 64px, expands to 224px on hover)
  * Mobile:  fixed bottom navigation bar
  * Design: Tactical Dark Mode SaaS, Safety Yellow accent (#F5C518)
  *
- * Routing (hash-based):
- *   /           → Dashboard (the app has no separate splash; see § below)
- *   /dashboard  → Dashboard (all bids by status; replaced the Projects grid)
- *   /settings    → Settings
- *   /matdb       → Supplier Pricing (prices the real materials catalog)
- *   /library/materials   → Materials (Foundation library catalog)
- *   /library/labor-rates → Labor Rates (roles and what they cost per hour)
- *   /library/modifiers   → Modifiers (job-condition labor adjustments)
- *   /library/assemblies  → Assembly Builder (materials + labor + modifiers)
- *   /bids                → Bids (Foundation bid layer; NOT legacy /projects)
- *   /quickbid            → Quick bid (keyboard counting entry onto the same bids)
- *   /admin       → Admin Settings (admin role only)
+ * ── Eight destinations, in three groups ──────────────────────────────────────
+ * The sidebar carried fourteen. Six of those sat in one group, which is past
+ * the point where a group reads as a group — and the sidebar is 64px of
+ * unlabelled icons until you hover it, so a new user was choosing between
+ * fourteen glyphs.
+ *
+ * Three of the fourteen were not screens at all. The Bids LIST was a header, a
+ * New bid button, an archive entry and a search panel — every one of which the
+ * Dashboard already rendered. Quick bid's top-level page was a bid CHOOSER over
+ * an unpaginated list. Supplier Pricing showed the same `materials` rows as the
+ * catalog, with different columns. Folding those, plus Kits and Modifiers into
+ * Assemblies and Crew into Company, leaves eight.
+ *
+ * The addresses they used to live at are not dead — see RETIRED_PATHS in
+ * @/lib/appRoutes, which sends each to the screen that took its job and
+ * rewrites the address bar so a bookmark heals itself.
  */
 import { useApp } from "@/contexts/AppContext";
 import { useState, useEffect, useCallback } from "react";
@@ -43,98 +47,33 @@ import { trpc } from "@/lib/trpc";
 import {
   Settings,
   ChevronRight,
-  Database,
-  Package,
   Shield,
   Boxes,
   HardHat,
-  SlidersHorizontal,
   Layers,
-  FileText,
-  Zap,
   LayoutDashboard,
-  Archive as ArchiveIcon,
   Users,
   UsersRound,
   BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_VERSION_LABEL } from "@shared/version";
+import {
+  pathToRoute,
+  retiredAddress,
+  routeToPath,
+  type Route,
+  type RouteState,
+} from "@/lib/appRoutes";
 
-type Route =
-  | "dashboard"
-  | "settings"
-  | "matdb"
-  | "library-materials"
-  | "library-labor-rates"
-  | "library-modifiers"
-  | "library-assemblies"
-  | "library-kits"
-  | "bids"
-  | "clients"
-  | "team"
-  | "analytics"
-  | "quickbid"
-  | "takeoff"
-  | "proposal"
-  | "bid-archive"
-  | "welcome"
-  | "admin";
-
-// ── Path ↔ Route mapping ────────────────────────────────────────────────────
-function pathToRoute(path: string): { route: Route; projectId?: number } {
-  const full = path
-    .replace(/^#\/?/, "")
-    .replace(/^\//, "")
-    .split("?")[0]
-    .split("#")[0];
-  const parts = full.split("/");
-  const p = parts[0];
-
-  // Bare / and the old /home both land on the Dashboard. The splash page they
-  // used to show was removed — see the § comment above renderContent.
-  if (p === "" || p === "home") return { route: "dashboard" };
-  // The Dashboard replaced the old Projects list. /projects is still spelled
-  // out rather than left to the fallthrough, so the intent is on the record:
-  // it is a retired address kept pointing somewhere real, not an oversight.
-  if (p === "dashboard" || p === "projects") return { route: "dashboard" };
-  if (p === "matdb") return { route: "matdb" };
-  if (p === "settings") return { route: "settings" };
-  // The archive of soft-deleted BIDS. The legacy projects system had its own
-  // "trash" for soft-deleted projects; that screen and its route are gone, and
-  // this is the only archive left.
-  if (p === "archive") return { route: "bid-archive" };
-  if (p === "bids") {
-    // /bids/:id opens straight into one bid, which is what the Dashboard links to.
-    const id = parts[1] ? parseInt(parts[1]) : NaN;
-    if (isNaN(id)) return { route: "bids" };
-    // /bids/:id/plans is the takeoff surface for that bid.
-    if (parts[2] === "plans") return { route: "takeoff", projectId: id };
-    // /bids/:id/proposal is the client-facing document for that bid.
-    if (parts[2] === "proposal") return { route: "proposal", projectId: id };
-    return { route: "bids", projectId: id };
-  }
-  if (p === "clients") return { route: "clients" };
-  if (p === "team") return { route: "team" };
-  if (p === "analytics") return { route: "analytics" };
-  if (p === "quickbid") return { route: "quickbid" };
-  if (p === "welcome") return { route: "welcome" };
-  // Library § …. Bare /library lands on Materials; Assemblies is still to come.
-  if (p === "library") {
-    if (parts[1] === "labor-rates") return { route: "library-labor-rates" };
-    if (parts[1] === "modifiers") return { route: "library-modifiers" };
-    if (parts[1] === "assemblies") return { route: "library-assemblies" };
-    if (parts[1] === "kits") return { route: "library-kits" };
-    if (!parts[1] || parts[1] === "materials")
-      return { route: "library-materials" };
-  }
-  if (p === "admin") return { route: "admin" };
-  // Anything unrecognised lands on the Dashboard — the honest destination for
-  // an address that no longer exists.
-  return { route: "dashboard" };
-}
-
-function getCurrentRouteState(): { route: Route; projectId?: number } {
+/**
+ * The route model lives in @/lib/appRoutes, with a test against it.
+ *
+ * Folding five screens into three retires five addresses, and a retired address
+ * is what breaks quietly in a restructure — so the mapping is a table that can
+ * be asserted without a browser rather than a switch statement in here.
+ */
+function getCurrentRouteState(): RouteState {
   const hash = window.location.hash;
   if (hash && hash.length > 1) return pathToRoute(hash);
   return pathToRoute(window.location.pathname);
@@ -157,39 +96,19 @@ export default function HelixBidShell() {
   const canSeeAnalytics = can("analytics.view");
 
   // ── URL-based routing using hash ──────────────────────────────────────────
-  const [routeState, setRouteState] = useState<{
-    route: Route;
-    projectId?: number;
-  }>(() => getCurrentRouteState());
+  const [routeState, setRouteState] = useState<RouteState>(() =>
+    getCurrentRouteState()
+  );
   const [previousRoute, setPreviousRoute] = useState<Route>("dashboard");
 
-  const { route, projectId: activeProjectId } = routeState;
+  const { route, projectId: activeProjectId, view: activeView } = routeState;
 
-  const navigate = useCallback((r: Route, id?: number) => {
-    if (r === "dashboard") {
-      window.location.hash = "/dashboard";
-    } else if (r === "bids" && id) {
-      window.location.hash = `/bids/${id}`;
-    } else if (r === "takeoff" && id) {
-      window.location.hash = `/bids/${id}/plans`;
-    } else if (r === "proposal" && id) {
-      window.location.hash = `/bids/${id}/proposal`;
-    } else if (r === "bid-archive") {
-      window.location.hash = "/archive";
-    } else if (r === "library-materials") {
-      window.location.hash = "/library/materials";
-    } else if (r === "library-labor-rates") {
-      window.location.hash = "/library/labor-rates";
-    } else if (r === "library-modifiers") {
-      window.location.hash = "/library/modifiers";
-    } else if (r === "library-assemblies") {
-      window.location.hash = "/library/assemblies";
-    } else if (r === "library-kits") {
-      window.location.hash = "/library/kits";
-    } else {
-      window.location.hash = `/${r}`;
-    }
-  }, []);
+  const navigate = useCallback(
+    (r: Route, options: { id?: number; view?: string } = {}) => {
+      window.location.hash = routeToPath(r, options);
+    },
+    []
+  );
 
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
@@ -216,15 +135,27 @@ export default function HelixBidShell() {
     };
   }, []);
 
+  /**
+   * Rewrite a retired address to the one that replaced it.
+   *
+   * `replaceState` rather than assigning the hash: following an old bookmark
+   * should not leave a dead address in history for Back to return to. The
+   * screen is already correct before this runs — pathToRoute resolves retired
+   * paths on the first paint — so this only makes the URL agree with what the
+   * user is already looking at.
+   */
+  useEffect(() => {
+    const canonical = retiredAddress(window.location.hash);
+    if (!canonical) return;
+    window.history.replaceState(null, "", `#${canonical}`);
+  }, [routeState]);
+
   // ── Derived state ──────────────────────────────────────────────────────────
   const isOnDashboard = route === "dashboard";
   const isInSettings = route === "settings";
-  const isInMatDb = route === "matdb";
   const isInLibraryMats = route === "library-materials";
   const isInLaborRates = route === "library-labor-rates";
-  const isInModifiers = route === "library-modifiers";
   const isInLibraryAsms = route === "library-assemblies";
-  const isInLibraryKits = route === "library-kits";
   const isInBids = route === "bids";
   const isInClients = route === "clients";
   const isInTeam = route === "team";
@@ -239,9 +170,9 @@ export default function HelixBidShell() {
   /**
    * Send a brand-new account to the welcome screen instead of the Dashboard.
    *
-   * Only from the two landing routes. Redirecting from ANY route would trap a
-   * new user who deliberately clicked into, say, Materials — and would fight
-   * the welcome screen's own "start my first bid" hand-off to Quick bid.
+   * Only from the landing route. Redirecting from ANY route would trap a new
+   * user who deliberately clicked into, say, Materials — and would fight the
+   * welcome screen's own "start my first bid" hand-off.
    *
    * Existing accounts were stamped as onboarded by the migration that added the
    * column, so nobody who already uses the app sees this.
@@ -253,30 +184,47 @@ export default function HelixBidShell() {
     window.location.hash = "#/welcome";
   }, [onboarding?.isFirstRun, route]);
 
+  const openBid = useCallback(
+    (id: number) => navigate("bids", { id }),
+    [navigate]
+  );
+
+  const dashboard = (
+    <DashboardPage
+      onOpenBid={openBid}
+      onOpenArchive={() => navigate("bid-archive")}
+      onOpenPlans={id => navigate("takeoff", { id })}
+      onQuickBid={() => navigate("quickbid")}
+    />
+  );
+
   // ── Content renderer ───────────────────────────────────────────────────────
   const renderContent = () => {
-    if (isInMatDb) return <MaterialDatabasePage onBack={goBack} />;
-    if (isOnDashboard)
-      return (
-        <DashboardPage
-          onOpenBid={id => navigate("bids", id)}
-          onOpenArchive={() => navigate("bid-archive")}
-          onOpenPlans={id => navigate("takeoff", id)}
-          onQuickBid={() => navigate("quickbid")}
-        />
-      );
+    if (isOnDashboard) return dashboard;
     if (isInSettings) return <SettingsTab onBack={goBack} />;
-    if (isInLibraryMats) return <MaterialsLibraryPage />;
+    // Materials and its supply-house lens are the same rows; the view only
+    // decides which columns. See LibraryTabs.
+    if (isInLibraryMats)
+      return activeView === "pricing" ? (
+        <MaterialDatabasePage />
+      ) : (
+        <MaterialsLibraryPage />
+      );
     if (isInLaborRates) return <LaborRatesPage />;
-    if (isInModifiers) return <ModifiersPage />;
-    if (isInLibraryAsms) return <AssembliesLibraryPage />;
-    if (isInLibraryKits) return <KitsPage />;
-    // Keyed on the id so a fresh /bids/:id remounts into that bid.
-    if (isInBids)
+    if (isInLibraryAsms) {
+      if (activeView === "kits") return <KitsPage />;
+      if (activeView === "modifiers") return <ModifiersPage />;
+      return <AssembliesLibraryPage />;
+    }
+    // Keyed on the id so a fresh /bids/:id remounts into that bid. There is no
+    // list mode any more — /bids redirects to the Dashboard, which carried the
+    // same search and the same New bid all along.
+    if (isInBids && activeProjectId)
       return (
         <BidsPage
-          key={activeProjectId ?? "list"}
-          initialBidId={activeProjectId}
+          key={activeProjectId}
+          bidId={activeProjectId}
+          onBack={() => navigate("dashboard")}
         />
       );
     if (isInTakeoff && activeProjectId) {
@@ -284,7 +232,7 @@ export default function HelixBidShell() {
         <TakeoffPage
           key={`takeoff-${activeProjectId}`}
           bidId={activeProjectId}
-          onBack={() => navigate("bids", activeProjectId)}
+          onBack={() => navigate("bids", { id: activeProjectId })}
         />
       );
     }
@@ -294,7 +242,7 @@ export default function HelixBidShell() {
         <ProposalPage
           key={`proposal-${activeProjectId}`}
           bidId={activeProjectId}
-          onBack={() => navigate("bids", activeProjectId)}
+          onBack={() => navigate("bids", { id: activeProjectId })}
         />
       );
     }
@@ -302,29 +250,24 @@ export default function HelixBidShell() {
       return (
         <BidArchivePage
           onBack={() => navigate("dashboard")}
-          onOpenBid={id => navigate("bids", id)}
+          onOpenBid={openBid}
         />
       );
     if (isInClients) return <ClientsPage />;
     if (isInTeam) return <TeamPage />;
-    if (isInAnalytics)
-      return <AnalyticsPage onOpenBid={id => navigate("bids", id)} />;
+    if (isInAnalytics) return <AnalyticsPage onOpenBid={openBid} />;
     if (isInQuickBid) return <QuickBidPage />;
     if (isOnWelcome) return <FirstRunPage />;
     if (isInAdmin) return <AdminSettingsPage />;
     // Every legacy workspace this used to fall through to is gone. The
     // Dashboard is the honest landing for an address that no longer exists.
-    return (
-      <DashboardPage
-        onOpenBid={id => navigate("bids", id)}
-        onOpenArchive={() => navigate("bid-archive")}
-        onOpenPlans={id => navigate("takeoff", id)}
-        onQuickBid={() => navigate("quickbid")}
-      />
-    );
+    return dashboard;
   };
 
-  const routeKey = route;
+  // Keyed on the view as well as the route, so switching Assemblies → Kits
+  // replays the enter transition instead of swapping content under a static
+  // frame — the tab strip is the only thing telling you the screen changed.
+  const routeKey = `${route}:${activeView ?? ""}`;
 
   // ── Sidebar nav item helper ────────────────────────────────────────────────
   const NavBtn = ({
@@ -372,9 +315,9 @@ export default function HelixBidShell() {
    * expanded, that rule is replaced by the actual word. Either way the three
    * purposes read as three things rather than one long list.
    *
-   * The headings are deliberately plain nouns — Workspace, Library, Settings —
-   * naming what the group is FOR, so someone scanning top to bottom can tell
-   * daily tools from building blocks from things they touch twice a year.
+   * The headings are plain nouns naming what the group is FOR — Work, Library,
+   * Company — so someone scanning top to bottom can tell daily tools from
+   * building blocks from the things they set up once.
    */
   const NavSection = ({
     label,
@@ -434,61 +377,43 @@ export default function HelixBidShell() {
         </div>
 
         {/*
-          Three groups, in the order a job goes: the things you open every day,
-          the things you build once and reuse, and the things you set up and
-          forget. See NavSection for how the grouping survives the collapsed
-          64px state.
+          Three groups, in the order a job goes: what you open every day, what
+          you build once and reuse, and what you set up and forget.
 
-          Two screens are deliberately absent, and are now GONE rather than
-          merely unadvertised. `assemblies` (the old master_*-backed Assembly
-          Builder) is superseded by Library § Assemblies, and having both in
-          one list meant two entries called almost the same thing pointing at
-          two different systems. `trash` held soft-deleted LEGACY projects and
-          is superseded by the bid Archive below.
+          ── What is deliberately absent ──────────────────────────────────────
+          Bids, Quick bid, Kits, Modifiers and Supplier Pricing are not hidden;
+          they are not destinations. The first two were choosers over lists the
+          Dashboard already shows, and the last three are views of the screen
+          above them in this list. Every one of their addresses still resolves
+          (see RETIRED_PATHS).
 
-          They were left routed-but-hidden for a while so no bookmark would
-          break. That has outlived its usefulness: the legacy `projects` system
-          they belong to is being retired, and a hidden door into it is a way
-          to reach a screen that reports on tables nothing else writes to. Both
-          paths now fall through to the Dashboard like any other unrecognised
-          address, which is a bookmark landing somewhere real rather than in a
-          dead wing of the app.
+          The Archive is not here either, and that is a change: it is offered on
+          the Dashboard and on a bid, but only once something is IN it. A
+          permanent entry to a room that is empty for most users most of the
+          time is a door to nowhere, and it was sitting in the group people
+          scan when they are lost.
 
-          Takeoff is absent for a different reason: it is not a destination.
-          It lives at /bids/:id/plans and needs a bid to open, so a top-level
-          entry would dead-end on "which one?" — the worst thing to put in the
-          group meant to be someone's daily tools. It is entered from a bid,
-          where the context already exists.
+          Takeoff is absent for the original reason: it lives at /bids/:id/plans
+          and needs a bid to open, so a top-level entry would dead-end on
+          "which one?" — which is exactly the fault that removed Bids and Quick
+          bid from this list too.
         */}
         <nav
           className="flex flex-col gap-1 p-2 flex-1 overflow-y-auto"
           aria-label="Main"
         >
-          <NavSection label="Workspace">
+          <NavSection label="Work">
             <NavBtn
               onClick={() => navigate("dashboard")}
-              isActive={isOnDashboard}
+              isActive={isOnDashboard || isInBids || isInTakeoff}
               icon={LayoutDashboard}
               label="Dashboard"
-              title="Dashboard — every bid by stage"
+              title="Dashboard — every bid by stage, and where a new one starts"
             />
-            <NavBtn
-              onClick={() => navigate("quickbid")}
-              isActive={isInQuickBid}
-              icon={Zap}
-              label="Quick bid"
-              title="Quick bid — count without a plan"
-            />
-            <NavBtn
-              onClick={() => navigate("bids")}
-              isActive={isInBids || isInTakeoff}
-              icon={FileText}
-              label="Bids"
-              title="Bids — open a bid, or its plans"
-            />
-            {/* Workspace rather than Library: the Library is what a bid is
-                assembled FROM, and a client is the other party, not a building
-                block. It sits next to Bids because that is what it attaches to. */}
+            {/* Business data about people outside the company, not
+                configuration — so it stays out here rather than going under
+                Company with the settings. It sits next to the Dashboard
+                because a bid is what it attaches to. */}
             <NavBtn
               onClick={() => navigate("clients")}
               isActive={isInClients}
@@ -496,22 +421,9 @@ export default function HelixBidShell() {
               label="Clients"
               title="Clients — who the work is for"
             />
-            {/* Beside Clients because both answer "who", and deliberately NOT
-                buried in Settings: adding someone to the company is a thing a
-                contractor does while working, not a thing they configure once.
-                Shown to every member, whatever their role — a viewer needs to
-                be able to find out that they are a viewer. */}
-            <NavBtn
-              onClick={() => navigate("team")}
-              isActive={isInTeam}
-              icon={UsersRound}
-              label="Crew"
-              title="Crew — who can get into this company"
-            />
-            {/* Last in Workspace, and only for those who hold the capability.
-                It sits here rather than in Settings because "how did we do
-                this quarter" is a thing a contractor asks while working, not
-                something they configure once. */}
+            {/* Last in Work, and only for those who hold the capability. The
+                one read-only screen in the app: reporting behind a
+                configuration menu is reporting nobody opens. */}
             {canSeeAnalytics && (
               <NavBtn
                 onClick={() => navigate("analytics")}
@@ -524,13 +436,19 @@ export default function HelixBidShell() {
           </NavSection>
 
           <NavSection label="Library">
+            {/* Materials carries its own supply-house lens as a tab. Two nav
+                entries for one table meant an estimator had to know which
+                address owned the field they wanted to edit. */}
             <NavBtn
               onClick={() => navigate("library-materials")}
               isActive={isInLibraryMats}
               icon={Boxes}
               label="Materials"
-              title="Materials — the catalog assemblies are built from"
+              title="Materials — the catalog, and your supplier's prices on it"
             />
+            {/* Rare after setup, but it is the first onboarding step and the
+                rate multiplies every line of every bid, so it stays findable
+                on its own rather than becoming a tab. */}
             <NavBtn
               onClick={() => navigate("library-labor-rates")}
               isActive={isInLaborRates}
@@ -538,62 +456,40 @@ export default function HelixBidShell() {
               label="Labor Rates"
               title="Labor Rates — what an hour costs, by role"
             />
+            {/* Kits and Modifiers are tabs in here: a kit contains assemblies
+                and nothing else, and a modifier adjusts an assembly's labor,
+                so neither means anything without this screen. */}
             <NavBtn
               onClick={() => navigate("library-assemblies")}
               isActive={isInLibraryAsms}
               icon={Layers}
               label="Assemblies"
-              title="Assemblies — reusable recipes of materials and labor"
-            />
-            {/* After Assemblies, not before: a modifier adjusts an assembly's
-                labor, so it only means anything once you know what an assembly
-                is. The group now reads in build order — parts, then rates, then
-                the recipes, then what tunes them, then bundles of them. */}
-            <NavBtn
-              onClick={() => navigate("library-modifiers")}
-              isActive={isInModifiers}
-              icon={SlidersHorizontal}
-              label="Modifiers"
-              title="Modifiers — labor adjustments for job conditions"
-            />
-            <NavBtn
-              onClick={() => navigate("library-kits")}
-              isActive={isInLibraryKits}
-              icon={Package}
-              label="Kits"
-              title="Kits — groups of assemblies added together"
-            />
-            {/* Labelled "Supplier Pricing" rather than by its route name. The
-                screen is the supply-house price list, and calling it "Material
-                Database" next to "Materials" put two near-identical names in
-                one group for two unrelated tables. The route is unchanged. */}
-            <NavBtn
-              onClick={() => navigate("matdb")}
-              isActive={isInMatDb}
-              icon={Database}
-              label="Supplier Pricing"
-              title="Supplier Pricing — imported supply-house price list"
+              title="Assemblies — recipes, kits and job-condition modifiers"
             />
           </NavSection>
         </nav>
 
-        {/* Settings sits outside the scrolling nav so it stays reachable at the
+        {/* Company sits outside the scrolling nav so it stays reachable at the
             bottom however long the Library grows. */}
         <div className="flex flex-col gap-1 p-2 pt-0 shrink-0">
-          <NavSection label="Settings">
+          <NavSection label="Company">
             <NavBtn
               onClick={() => navigate("settings")}
               isActive={isInSettings}
               icon={Settings}
-              label="Company Defaults"
-              title="Company defaults — pricing, theme and display"
+              label="Settings"
+              title="Settings — pricing defaults, branding, tax and display"
             />
+            {/* Here rather than in Work: hiring is not a working rhythm, and
+                this screen is invite codes and role assignment. Shown to every
+                member whatever their role — a viewer needs to be able to find
+                out that they are a viewer. */}
             <NavBtn
-              onClick={() => navigate("bid-archive")}
-              isActive={isInBidArchive}
-              icon={ArchiveIcon}
-              label="Archive"
-              title="Archive — restore an archived bid"
+              onClick={() => navigate("team")}
+              isActive={isInTeam}
+              icon={UsersRound}
+              label="Crew"
+              title="Crew — who can get into this company"
             />
             {/* Admin only, and last: nobody else has it, and those who do do
                 not need it above the things they use. */}
@@ -602,7 +498,7 @@ export default function HelixBidShell() {
                 onClick={() => navigate("admin")}
                 isActive={isInAdmin}
                 icon={Shield}
-                label="Admin Settings"
+                label="Admin"
                 title="Admin Settings"
               />
             )}
@@ -630,18 +526,32 @@ export default function HelixBidShell() {
           </span>
           <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground font-mono">
             <ChevronRight size={12} />
-            <span className="capitalize">
+            <span>
               {isOnDashboard
                 ? "Dashboard"
                 : isInSettings
                   ? "Settings"
-                  : isInMatDb
-                    ? "Supplier Pricing"
-                    : isInLibraryMats
-                      ? "Materials"
-                      : isInAdmin
-                        ? "Admin Settings"
-                        : "Workspace"}
+                  : isInLibraryMats
+                    ? activeView === "pricing"
+                      ? "Supplier pricing"
+                      : "Materials"
+                    : isInLibraryAsms
+                      ? activeView === "kits"
+                        ? "Kits"
+                        : activeView === "modifiers"
+                          ? "Modifiers"
+                          : "Assemblies"
+                      : isInLaborRates
+                        ? "Labor Rates"
+                        : isInClients
+                          ? "Clients"
+                          : isInTeam
+                            ? "Crew"
+                            : isInAnalytics
+                              ? "Performance"
+                              : isInAdmin
+                                ? "Admin"
+                                : "Bid"}
             </span>
           </div>
         </header>
@@ -654,15 +564,13 @@ export default function HelixBidShell() {
 
       {/*
         ── Mobile Bottom Nav ──────────────────────────────────────────────────
-        The same three purposes, minus the room to say so. There is no space for
-        section headings across five icons, so this carries only the Workspace
-        items plus one way into the Library and one into Settings — grouping by
-        omission rather than by label.
+        Five slots, and now they hold five of the eight real destinations
+        rather than two choosers and three screens. Performance, Crew and Admin
+        are reachable from Settings and are not things anyone does on a phone
+        in a truck.
 
-        It previously offered Home, the legacy Assembly Builder and the legacy
-        Trash. All three are gone for the reasons given on the sidebar above; on
-        a phone, where there are five slots total, spending two of them on
-        superseded screens was the costliest version of that mistake.
+        It previously spent two of the five on Bids and Quick bid, which on the
+        smallest screen was the most expensive place to put a "which one?".
       */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex bg-sidebar border-t border-border"
@@ -673,26 +581,26 @@ export default function HelixBidShell() {
             {
               label: "Dashboard",
               icon: LayoutDashboard,
-              active: isOnDashboard,
+              active: isOnDashboard || isInBids || isInTakeoff,
               go: () => navigate("dashboard"),
             },
             {
-              label: "Quick bid",
-              icon: Zap,
-              active: isInQuickBid,
-              go: () => navigate("quickbid"),
-            },
-            {
-              label: "Bids",
-              icon: FileText,
-              active: isInBids || isInTakeoff,
-              go: () => navigate("bids"),
+              label: "Clients",
+              icon: Users,
+              active: isInClients,
+              go: () => navigate("clients"),
             },
             {
               label: "Materials",
               icon: Boxes,
               active: isInLibraryMats,
               go: () => navigate("library-materials"),
+            },
+            {
+              label: "Assemblies",
+              icon: Layers,
+              active: isInLibraryAsms,
+              go: () => navigate("library-assemblies"),
             },
             {
               label: "Settings",
