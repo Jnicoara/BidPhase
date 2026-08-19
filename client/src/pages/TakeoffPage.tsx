@@ -1,14 +1,16 @@
 /**
  * TakeoffPage — the plan workspace for a bid.
  *
- * Phase 1 attached PDFs and let you page through one. Phase 2a puts the
- * workspace structure around that: the split screen, the sheet index, and the
- * per-sheet scale. Still no measuring — 2b traces, 2c stamps and the legend,
- * 2d layers.
- *
  * A fresh build rather than a reworking of the legacy takeoff screen. The PDF
  * rendering engine underneath is unchanged, as ASSEMBLIES_PLAN.md § TAKEOFF
  * PAGE REDESIGN intends: this is the surrounding workflow.
+ *
+ * ── What is on it ────────────────────────────────────────────────────────────
+ * All of it, now. Documents and the sheet index, per-sheet scale, stamping
+ * assemblies onto the drawing, tracing conduit and cable runs against that
+ * scale, the legend that maps a symbol to an assembly, layer visibility, and
+ * the plan reader that proposes stamps for you to accept. Everything placed
+ * lands on the bid — see RunsPanel and the counted-items list for the totals.
  *
  * ── Layout, and why this shape ───────────────────────────────────────────────
  *   documents + sheet index │ the drawing │ work pane
@@ -16,10 +18,8 @@
  * The index is permanently docked rather than a drawer, because choosing the
  * sheet is the single most frequent action on this screen and a drawer would
  * put a click in front of every one of them. The work pane is a resizable
- * split: it holds nothing yet, but the counted-items list (2b/2c) and legend
- * (2c) land there, and building the two-pane structure now means neither
- * arrives as a bolted-on drawer later. Its empty state says what is coming so
- * the space does not read as a rendering fault.
+ * split holding the Co-pilot, Layers and Legend panels above the counted-items
+ * list — a two-pane structure rather than a stack of bolted-on drawers.
  *
  * ── What happens when a document opens ───────────────────────────────────────
  * 1. Bytes are fetched and handed to the worker (phase 1).
@@ -1636,7 +1636,8 @@ export default function TakeoffPage({
               Plans{bid?.bid?.name ? ` — ${bid.bid.name}` : ""}
             </h1>
             <p className="text-xs text-muted-foreground">
-              Pick a sheet, set its scale. Measuring and counting come next.
+              Set each sheet's scale, then stamp and trace what is on it.
+              Everything you place lands on the bid.
             </p>
           </div>
           {/* Left of "Add PDF" and available from the first mark, not at the

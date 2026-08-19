@@ -1,7 +1,6 @@
 import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { Loader2 } from "lucide-react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -40,14 +39,31 @@ function AppChunkFallback() {
   );
 }
 
+/**
+ * One route, matching everything.
+ *
+ * ── Why there is no 404 screen ───────────────────────────────────────────────
+ * Routing inside the app is hash-based, so every real address shares the single
+ * pathname `/` and wouter has nothing to discriminate on. What the catch-all
+ * actually caught was a pathname-spelled address — someone typing
+ * `helixbid.app/settings`, or a link written before the hash — and it answered
+ * with the template's 404 card: a light slate gradient and a blue button inside
+ * a dark app, telling a contractor the page "may have been moved or deleted"
+ * when it had not.
+ *
+ * The shell already knows what to do with those. `getCurrentRouteState` falls
+ * back to `window.location.pathname` when there is no hash, so `/settings`
+ * resolves to Settings and a genuinely unknown path resolves to the Dashboard —
+ * which is the destination @/lib/appRoutes argues for and the one this screen
+ * was overriding. The shell then rewrites the address into its hash spelling,
+ * the same way a retired address heals itself.
+ */
 function Router() {
   return (
     <AuthGuard>
       <Suspense fallback={<AppChunkFallback />}>
         <Switch>
-          <Route path={"/"} component={HelixBidShell} />
-          <Route path={"/404"} component={NotFound} />
-          <Route component={NotFound} />
+          <Route component={HelixBidShell} />
         </Switch>
       </Suspense>
     </AuthGuard>

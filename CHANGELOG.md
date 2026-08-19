@@ -4,6 +4,14 @@ Plain-English record of what changed and when. Newest first.
 
 This is the human-readable companion to the git history — read this to see what happened, read the commits for the technical detail.
 
+## [2026-08-19]
+
+- **The plan screen stopped underselling itself.** Its subtitle still read "Pick a sheet, set its scale. Measuring and counting come next." — written when that was true, and left there after stamping, conduit and cable tracing, the symbol legend, layer visibility and the AI plan reader all shipped. Anyone reading the top of the screen was being told the main thing they came for did not exist yet. It now says what the screen actually does.
+
+- **Retired the Feature Flags panel in Admin, which had quietly stopped doing anything.** It listed toggles and stated on the page that switching one took effect immediately for contractors. Nothing had read those toggles for some time — what features an account can see is decided by its access tier now — so every switch on that page did nothing at all while claiming otherwise. A control that lies about working is worse than no control, so the panel is gone rather than reworded. The rest of the Admin screen — early access signups, the platform role reference — is unchanged and now says plainly that there is no control for unreleased features there yet.
+
+- **Mistyped web addresses land somewhere useful instead of on a broken-looking 404.** Because the app puts its addresses after a "#", typing something like helixbid.app/settings by hand — or following a link written before that changed — hit a leftover error card from the original project template: a white-and-blue "Page Not Found" box inside an otherwise dark app, saying the page may have been deleted when it had not. Those addresses now open the screen they name, unrecognised ones open the Dashboard, and either way the address bar tidies itself up so the bookmark works properly next time.
+
 ## [2026-08-18]
 
 - **A tidy-up across the screens you use most.** The bid header had grown to five buttons; the three that are really "send this bid to someone" — proposal, materials list, accounting export — are now one **Send** menu that names who each one is for, leaving Plans and Count out where they belong. The panels down the right-hand side of a bid (charges, scope, pricing settings) start closed with a line saying what is in them — "3 charges · $420", "Following your company defaults" — and remember how you left them. On the plan takeoff screen the layer filters fold away too, though the "some marks are hidden" warning deliberately does not. The Dashboard now graduates: once you have finished the getting-started checklist the two big start cards fold into a single **New bid** menu carrying the same three routes, so the board starts higher up the screen. And the All/Mine filter on the library screens stops appearing before you own anything to filter to.

@@ -151,6 +151,31 @@ export default function HelixBidShell() {
     window.history.replaceState(null, "", `#${canonical}`);
   }, [routeState]);
 
+  /**
+   * Rewrite a pathname-spelled address into the hash spelling.
+   *
+   * `helixbid.app/settings` — typed by hand, or a link written before the app
+   * became hash-routed — resolves correctly already, because
+   * getCurrentRouteState falls back to the pathname. But the pathname then
+   * stays on the URL while every later navigation writes only the hash, giving
+   * addresses like `/settings#/dashboard` that say two different things.
+   *
+   * Once, on mount, and only when there is no hash to conflict with. An
+   * unrecognised pathname resolves to the Dashboard on the way through, so this
+   * heals a bad bookmark rather than preserving it.
+   */
+  useEffect(() => {
+    if (window.location.hash.length > 1) return;
+    if (window.location.pathname === "/") return;
+    const canonical = routeToPath(routeState.route, {
+      id: routeState.projectId,
+      view: routeState.view,
+    });
+    window.history.replaceState(null, "", `/#${canonical}`);
+    // Mount only, deliberately: after this the hash is authoritative and the
+    // effect above owns any further rewriting.
+  }, []);
+
   // ── Derived state ──────────────────────────────────────────────────────────
   const isOnDashboard = route === "dashboard";
   const isInSettings = route === "settings";

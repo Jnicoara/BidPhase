@@ -362,7 +362,8 @@ its own commit.
 - `projectAssemblies` / `projectAssemblyItems` — master assemblies _copied_ into a project as a snapshot (`masterMaterialCost`/`masterLaborHours` frozen at add-time) plus separate `override*` fields the user edits per-bid. Never mutate the snapshot fields after creation; write to the override fields instead.
 - `projectItems` — standalone items added directly to a project outside any assembly, same override pattern.
 - `bidSummary` — one row per project holding global labor/markup multipliers (`percentageLaborFactor`, `lumpSumHours`, `markupPct`) and the default labor rate to price against.
-- `featureFlags` — admin-toggleable flags gating features for the `contractor` role. Read client-side through `useCompany().hasFeature(key)`; the old standalone `useFeatureFlag` hook is gone.
+
+**Feature availability is decided by access tier**, not by a flags table: `users.accessTier` (`standard` | `internal`) against the `FEATURES` map in `shared/permissions.ts`, resolved server-side into `scope.features` and read client-side through `useCompany().hasFeature(key)`. The `featureFlags` table and its admin toggles are retired — nothing reads them, and the table survives in `drizzle/schema.ts` only so drizzle-kit does not queue a `DROP TABLE`. Gate a new unreleased feature by adding it to `FEATURES` with `availability: "internal"`; there is no flag row to create.
 
 tRPC routers live in `server/routers/*Router.ts` and are composed in `server/routers.ts`; DB access goes through query functions in `server/db.ts` (no ORM calls directly inside routers).
 

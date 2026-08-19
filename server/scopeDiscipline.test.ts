@@ -51,8 +51,6 @@ const UNGATED: Record<string, string> = {
     "Identity. Gating it behind a company role would lock a new user out of their own account.",
   "earlyAccessRouter.ts":
     "A public marketing signup; it has no user data to scope.",
-  "featureFlagsRouter.ts":
-    "Reads the actor's platform role to answer which flags are on. Touches no company data.",
   "navigationRouter.ts":
     "Sends a question to an LLM and returns a route id. Reads nothing.",
   "companyRouter.ts":

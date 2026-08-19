@@ -8,7 +8,6 @@ import { masterLaborRatesRouter } from "./routers/masterLaborRatesRouter";
 import { projectAssembliesRouter } from "./routers/projectAssembliesRouter";
 import { projectItemsRouter } from "./routers/projectItemsRouter";
 import { bidSummaryRouter } from "./routers/bidSummaryRouter";
-import { featureFlagsRouter } from "./routers/featureFlagsRouter";
 import { materialsRouter } from "./routers/materialsRouter";
 import { laborRatesRouter } from "./routers/laborRatesRouter";
 import { modifiersRouter } from "./routers/modifiersRouter";
@@ -44,7 +43,6 @@ export const appRouter = router({
   projectAssemblies: projectAssembliesRouter,
   projectItems: projectItemsRouter,
   bidSummary: bidSummaryRouter,
-  featureFlags: featureFlagsRouter,
   materials: materialsRouter,
   laborRates: laborRatesRouter,
   modifiers: modifiersRouter,

@@ -2839,9 +2839,19 @@ export const earlyAccessSignups = mysqlTable(
 export type EarlyAccessSignup = typeof earlyAccessSignups.$inferSelect;
 export type InsertEarlyAccessSignup = typeof earlyAccessSignups.$inferInsert;
 
-// ─── Feature Flags ────────────────────────────────────────────────────────────
-// Admin-controlled toggles that gate features for the Contractor role.
-// Each row is identified by a unique flagKey string.
+// ─── Feature Flags (RETIRED — nothing reads this) ─────────────────────────────
+//
+// Admin-controlled toggles that once gated features for the Contractor role.
+// Feature availability is decided by ACCESS TIER now: `users.accessTier` against
+// the FEATURES map in shared/permissions.ts, handed to the client through
+// `company.me`. The admin screen that wrote these rows, its router and its query
+// functions are gone; no code path reads the table.
+//
+// The table itself is kept ONLY so drizzle-kit does not generate a DROP TABLE.
+// Deleting these lines queues a destructive migration that runs on the next
+// `pnpm db:push` in Manus — which is fine to do deliberately, and a bad way to
+// find out. Drop it in its own change, or leave it: an unread table costs
+// nothing.
 export const featureFlags = mysqlTable("feature_flags", {
   id: int("id").autoincrement().primaryKey(),
   flagKey: varchar("flagKey", { length: 128 }).notNull().unique(),
