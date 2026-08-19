@@ -1,28 +1,19 @@
 /**
  * HelixBid — Settings Tab
- * UI preferences: theme (Light / Dark), font size scale, and CSV material database.
+ * Company defaults, branding, sales tax and proposal design, plus theme and
+ * display scale. The two CSV importers this file once carried are gone —
+ * importing a supplier price list happens on Supplier Pricing, against the
+ * same catalog the rest of the app uses.
  */
-import { useState, useRef } from "react";
 import { useApp } from "@/contexts/AppContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { cn } from "@/lib/utils";
-import {
-  Sun,
-  Moon,
-  Upload,
-  Trash2,
-  CheckCircle2,
-  AlertCircle,
-  LogOut,
-  User,
-} from "lucide-react";
+import { Sun, Moon, LogOut, User } from "lucide-react";
 import { BidPricingDefaultsSection } from "@/components/BidPricingDefaultsSection";
 import { BrandingSection } from "@/components/BrandingSection";
 import { SalesTaxSection } from "@/components/SalesTaxSection";
 import { ProposalDesignControls } from "@/components/proposal/ProposalDesignControls";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { toast } from "sonner";
 
 const FONT_PRESETS = [
   { label: "80%", value: 0.8, title: "80% zoom" },

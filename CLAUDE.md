@@ -359,16 +359,19 @@ its own commit.
 - `projectAssemblies` / `projectAssemblyItems` — master assemblies _copied_ into a project as a snapshot (`masterMaterialCost`/`masterLaborHours` frozen at add-time) plus separate `override*` fields the user edits per-bid. Never mutate the snapshot fields after creation; write to the override fields instead.
 - `projectItems` — standalone items added directly to a project outside any assembly, same override pattern.
 - `bidSummary` — one row per project holding global labor/markup multipliers (`percentageLaborFactor`, `lumpSumHours`, `markupPct`) and the default labor rate to price against.
-- `featureFlags` — admin-toggleable flags gating features for the `contractor` role (`useFeatureFlag` hook client-side).
+- `featureFlags` — admin-toggleable flags gating features for the `contractor` role. Read client-side through `useCompany().hasFeature(key)`; the old standalone `useFeatureFlag` hook is gone.
 
 tRPC routers live in `server/routers/*Router.ts` and are composed in `server/routers.ts`; DB access goes through query functions in `server/db.ts` (no ORM calls directly inside routers).
 
-**Client structure:** `client/src/pages/HelixBidShell.tsx` is the app shell — a hand-rolled hash router (`pathToRoute`/`getCurrentRouteState`) rather than using Wouter's route matching directly, because navigation state also drives sidebar/tab UI. Global app state (active tab/category, UI scale, etc.) lives in `contexts/AppContext.tsx`; theme in `contexts/ThemeContext.tsx`. `components/tabs/` holds per-workspace views (Residential/Commercial/Civil/Industrial estimating, PlanViewer). tRPC client setup is in `lib/trpc.ts`.
+**Client structure:** `client/src/pages/HelixBidShell.tsx` is the app shell — a hand-rolled hash router (`pathToRoute`/`getCurrentRouteState`) rather than using Wouter's route matching directly, because navigation state also drives the sidebar. `contexts/AppContext.tsx` holds the UI scale and nothing else; theme in `contexts/ThemeContext.tsx`. tRPC client setup is in `lib/trpc.ts`.
+
+The original four-workspace design (Residential / Commercial / Civil / Industrial estimating tabs, each with its own named projects and calculator state) is **gone**, along with the screens that read it — `ExportButton`, `PlanPanel`, `PlanViewer`, `AIChatBox`, `DashboardLayout`, and the `pages/tabs/` project screens built on the legacy `master_*` tables. Don't reintroduce per-workspace client state; a bid is the unit of work now.
 
 **PDF plan viewer pipeline** (the most performance-sensitive part of the client):
 
 - Rendering happens in `client/src/workers/pdfRenderer.worker.ts` — a dedicated Web Worker that owns the pdfjs instance, so `page.render()` (0.5–13s on dense drawings) never blocks the main thread. ImageBitmaps transfer back zero-copy.
-- Large PDF binaries are cached client-side in IndexedDB (`hooks/useIndexedDB.ts`, bypasses the 5MB localStorage cap) and mirrored to S3 (`projects.pdfUrl`) so a project's plan follows the user across devices — IndexedDB is just the fast local cache, S3 is the source of truth.
+- `TakeoffPage` loads a plan by **URL**, so pdfjs pulls byte ranges straight from storage and a large sheet set never lands in the tab's memory whole. A full download is kept only as a fallback for gateways that refuse range requests. S3 is the source of truth; there is no client-side binary cache, and the IndexedDB layer the old `PlanPanel` used is gone.
+- Plan URLs are signed and expire — `lib/planUrlRefresh.ts` tells an expired URL apart from a broken plan so the screen asks for a fresh one instead of reporting failure.
 - Page thumbnails/overview render progressively in the background as bitmaps arrive; don't reintroduce synchronous/ref-callback thumbnail generation.
 
 **Path aliases** (`@` → `client/src`, `@shared` → `shared`) are declared in three places that must stay in sync: `tsconfig.json`, `vite.config.ts`, `vitest.config.ts`.

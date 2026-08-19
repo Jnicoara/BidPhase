@@ -141,14 +141,7 @@ function getCurrentRouteState(): { route: Route; projectId?: number } {
 }
 
 export default function HelixBidShell() {
-  const {
-    activeTab,
-    setActiveTab,
-    uiFontScale,
-    setShowMaterialList,
-    activeCategory,
-    setActiveCategory,
-  } = useApp();
+  const { uiFontScale } = useApp();
 
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -213,7 +206,6 @@ export default function HelixBidShell() {
         setPreviousRoute(prev.route);
         return state;
       });
-      if (state.route === "settings") setActiveTab("settings");
     };
     window.addEventListener("hashchange", onHashChange);
     window.addEventListener("popstate", onHashChange);
@@ -222,7 +214,7 @@ export default function HelixBidShell() {
       window.removeEventListener("hashchange", onHashChange);
       window.removeEventListener("popstate", onHashChange);
     };
-  }, [setActiveTab]);
+  }, []);
 
   // ── Derived state ──────────────────────────────────────────────────────────
   const isOnDashboard = route === "dashboard";
