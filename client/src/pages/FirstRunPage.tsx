@@ -80,7 +80,10 @@ export default function FirstRunPage() {
     try {
       await complete.mutateAsync();
       await utils.onboarding.state.invalidate();
-      window.location.hash = "#/quickbid";
+      // The Dashboard, where both ways into a first bid are the first thing
+      // on the screen. This used to hand off to Quick bid, whose page was a
+      // chooser over bids a new account does not have yet.
+      window.location.hash = "#/dashboard";
     } catch {
       /* surfaced by onError */
     }

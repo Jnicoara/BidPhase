@@ -163,7 +163,7 @@ export default function HelixBidShell() {
   const isInTakeoff = route === "takeoff";
   const isInProposal = route === "proposal";
   const isInBidArchive = route === "bid-archive";
-  const isInQuickBid = route === "quickbid";
+  const isInCount = route === "count";
   const isOnWelcome = route === "welcome";
   const isInAdmin = route === "admin";
 
@@ -194,7 +194,7 @@ export default function HelixBidShell() {
       onOpenBid={openBid}
       onOpenArchive={() => navigate("bid-archive")}
       onOpenPlans={id => navigate("takeoff", { id })}
-      onQuickBid={() => navigate("quickbid")}
+      onCount={id => navigate("count", { id })}
     />
   );
 
@@ -236,6 +236,17 @@ export default function HelixBidShell() {
         />
       );
     }
+    // Counting, given a bid. Keyed like the takeoff surface for the same
+    // reason: a different bid is a different set of counts.
+    if (isInCount && activeProjectId) {
+      return (
+        <QuickBidPage
+          key={`count-${activeProjectId}`}
+          bidId={activeProjectId}
+          onBack={() => navigate("bids", { id: activeProjectId })}
+        />
+      );
+    }
     // Keyed like the takeoff surface: a different bid is a different document.
     if (isInProposal && activeProjectId) {
       return (
@@ -256,7 +267,6 @@ export default function HelixBidShell() {
     if (isInClients) return <ClientsPage />;
     if (isInTeam) return <TeamPage />;
     if (isInAnalytics) return <AnalyticsPage onOpenBid={openBid} />;
-    if (isInQuickBid) return <QuickBidPage />;
     if (isOnWelcome) return <FirstRunPage />;
     if (isInAdmin) return <AdminSettingsPage />;
     // Every legacy workspace this used to fall through to is gone. The

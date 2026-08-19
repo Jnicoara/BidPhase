@@ -99,7 +99,10 @@ export function buildChecklist(facts: OnboardingFacts): OnboardingStep[] {
       title: "Complete your first bid",
       detail:
         "Put the pieces together on a real job and see the number come out.",
-      href: "#/quickbid",
+      // The Dashboard, because starting a bid needs a bid to exist first and
+      // this is the only step whose screen cannot be linked to directly. Both
+      // ways in — upload a plan, or count it out — are the first thing on it.
+      href: "#/dashboard",
       done: facts.hasBidWithLines,
     },
   ];

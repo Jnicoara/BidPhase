@@ -25,7 +25,7 @@ describe("current addresses", () => {
     expect(pathToRoute("/dashboard").route).toBe("dashboard");
   });
 
-  it("opens a bid by id, and its two per-bid surfaces", () => {
+  it("opens a bid by id, and its three per-bid surfaces", () => {
     expect(pathToRoute("#/bids/12")).toEqual({ route: "bids", projectId: 12 });
     expect(pathToRoute("#/bids/12/plans")).toEqual({
       route: "takeoff",
@@ -33,6 +33,10 @@ describe("current addresses", () => {
     });
     expect(pathToRoute("#/bids/12/proposal")).toEqual({
       route: "proposal",
+      projectId: 12,
+    });
+    expect(pathToRoute("#/bids/12/count")).toEqual({
+      route: "count",
       projectId: 12,
     });
   });
@@ -154,7 +158,6 @@ describe("routeToPath", () => {
         ["settings"],
         ["admin"],
         ["bid-archive"],
-        ["quickbid"],
         ["welcome"],
         ["library-labor-rates"],
         ["library-materials", undefined, "catalog"],
@@ -165,6 +168,7 @@ describe("routeToPath", () => {
         ["bids", 7],
         ["takeoff", 7],
         ["proposal", 7],
+        ["count", 7],
       ];
 
     for (const [route, id, view] of cases) {
@@ -194,6 +198,7 @@ describe("routeToPath", () => {
   it("will not build a per-bid address without a bid", () => {
     expect(routeToPath("bids")).toBe("/dashboard");
     expect(routeToPath("takeoff")).toBe("/dashboard");
+    expect(routeToPath("count")).toBe("/dashboard");
   });
 });
 
@@ -243,10 +248,26 @@ describe("advertised addresses resolve", () => {
       hasBidWithLines: false,
     });
     for (const step of steps) {
+      // "Complete your first bid" genuinely belongs on the Dashboard — starting
+      // a bid needs a bid to exist, so it is the one step whose screen cannot
+      // be linked to directly. Every other step names a screen, and landing on
+      // the Dashboard would mean its address had gone stale.
+      if (step.href === "#/dashboard") continue;
       expect(
         pathToRoute(step.href).route,
         `${step.id} (${step.href}) fell through to the Dashboard`
       ).not.toBe("dashboard");
     }
+  });
+
+  it("keeps counting reachable, given a bid", () => {
+    // /bids/:id/count replaced the Quick bid chooser. Nothing advertises it,
+    // because it needs a bid — so this is the only thing pinning it down.
+    expect(routeToPath("count", { id: 7 })).toBe("/bids/7/count");
+    expect(pathToRoute("#/bids/7/count")).toEqual({
+      route: "count",
+      projectId: 7,
+    });
+    expect(retiredAddress("#/quickbid")).toBe("/dashboard");
   });
 });

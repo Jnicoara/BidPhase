@@ -158,8 +158,13 @@ foreach ($p in 3000..3005) { $c = Get-NetTCPConnection -LocalPort $p -State List
 - **Don't put POSIX inline env vars in `package.json` scripts.** cmd.exe can't
   parse them and the script dies with `'NODE_ENV' is not recognized`. The repo
   uses `cross-env` for exactly this reason.
-- **Five addresses now redirect.** `/matdb`, `/library/kits`,
-  `/library/modifiers`, `/bids` and `/projects` were folded into other screens
+- **A bid has three per-bid surfaces**, all needing an id: `/bids/:id/plans`
+  (takeoff), `/bids/:id/count` (keyboard counting, formerly Quick bid) and
+  `/bids/:id/proposal`. None is reachable without a bid, which is why none of
+  them is in the nav.
+- **Six addresses now redirect.** `/matdb`, `/library/kits`,
+  `/library/modifiers`, `/quickbid`, `/bids` and `/projects` were folded into
+  other screens
   and are rewritten in the address bar when followed — so a URL you type may
   not be the URL you end up on. The table is `RETIRED_PATHS` in
   `client/src/lib/appRoutes.ts`, with `appRoutes.test.ts` against it. Supplier

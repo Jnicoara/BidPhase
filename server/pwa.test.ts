@@ -94,9 +94,18 @@ describe("the web app manifest", () => {
   });
 
   it("offers shortcuts that point at real routes", () => {
-    const routes = ["/#/quickbid", "/#/bids"];
+    // Deliberately not the start_url, and deliberately not each other.
+    //
+    // These used to be Quick bid and Bids, and both of those addresses have
+    // since been retired — they now redirect to the Dashboard, which is where
+    // the icon already lands. Two shortcuts to the screen you were going to get
+    // anyway is a menu that costs a long-press and gives nothing back, so they
+    // were replaced with the two things worth jumping straight to from a phone
+    // away from a desk: a price at the counter, and a customer's number.
+    const routes = ["/#/library/materials", "/#/clients"];
     for (const shortcut of manifest.shortcuts ?? []) {
       expect(routes).toContain(shortcut.url);
+      expect(shortcut.url).not.toBe(manifest.start_url);
     }
   });
 });

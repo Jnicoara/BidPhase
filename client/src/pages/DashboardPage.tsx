@@ -46,6 +46,7 @@ import { realBidValue } from "@shared/sampleProject";
 import {
   bidNameFromFilename,
   clearPendingPlan,
+  newBidName,
   putPendingPlan,
 } from "@/lib/pendingPlanUpload";
 import { RETENTION_DAYS } from "@shared/retention";
@@ -119,13 +120,14 @@ export default function DashboardPage({
   onOpenBid,
   onOpenArchive,
   onOpenPlans,
-  onQuickBid,
+  onCount,
 }: {
   onOpenBid: (id: number) => void;
   onOpenArchive: () => void;
   /** Open a bid's Takeoff screen — where an uploaded plan lands. */
   onOpenPlans: (id: number) => void;
-  onQuickBid: () => void;
+  /** Open a bid's counting screen. */
+  onCount: (id: number) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -178,6 +180,33 @@ export default function DashboardPage({
   const handleUploadPlan = (file: File) => {
     putPendingPlan(file);
     startFromPlan.mutate({ name: bidNameFromFilename(file.name) });
+  };
+
+  /**
+   * "Quick bid": make the bid, then open it in counting mode.
+   *
+   * Symmetric with the plan upload above, and for the same reason its comment
+   * gives — asking for a name first puts a form in front of the single action
+   * the button offers. This card used to open a chooser listing every bid the
+   * user had ever written, which is the friction Quick bid exists to remove.
+   *
+   * The bid is named for the day rather than left blank: a nameless bid is
+   * indistinguishable from every other nameless bid on the board, and the name
+   * is editable the moment the screen opens.
+   */
+  const startCounting = trpc.bids.create.useMutation({
+    onError: error => toast.error(error.message),
+    onSuccess: bid => {
+      if (bid) onCount(bid.id);
+    },
+    onSettled: () => {
+      void utils.bids.dashboard.invalidate();
+      void utils.bids.list.invalidate();
+    },
+  });
+
+  const handleQuickBid = () => {
+    startCounting.mutate({ name: newBidName(new Date()) });
   };
 
   /**
@@ -376,8 +405,8 @@ export default function DashboardPage({
         <div className="mb-5 space-y-3">
           <StartBidCards
             onUploadPlan={handleUploadPlan}
-            onQuickBid={onQuickBid}
-            busy={startFromPlan.isPending}
+            onQuickBid={handleQuickBid}
+            busy={startFromPlan.isPending || startCounting.isPending}
           />
           <SampleBidCard onOpenBid={onOpenBid} />
           <GettingStartedChecklist />

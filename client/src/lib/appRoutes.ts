@@ -29,7 +29,7 @@ export type Route =
   | "clients"
   | "team"
   | "analytics"
-  | "quickbid"
+  | "count"
   | "takeoff"
   | "proposal"
   | "bid-archive"
@@ -81,6 +81,10 @@ export const RETIRED_PATHS: Record<string, string> = {
   bids: "/dashboard",
   projects: "/dashboard",
   home: "/dashboard",
+  // Quick bid's CHOOSER. Counting itself moved to /bids/:id/count, where it has
+  // a bid and never has to ask which one. The Dashboard is where you pick up a
+  // bid or start one, so that is where this lands.
+  quickbid: "/dashboard",
 };
 
 /** Split a hash or path into its path part and its query params. */
@@ -145,12 +149,15 @@ export function pathToRoute(path: string): RouteState {
     if (parts[2] === "plans") return { route: "takeoff", projectId: id };
     // /bids/:id/proposal is the client-facing document for that bid.
     if (parts[2] === "proposal") return { route: "proposal", projectId: id };
+    // /bids/:id/count is the keyboard counting surface. Deliberately shaped
+    // like /plans: both are ways of putting quantities on a bid, both need a
+    // bid to mean anything, and neither is a destination on its own.
+    if (parts[2] === "count") return { route: "count", projectId: id };
     return { route: "bids", projectId: id };
   }
   if (p === "clients") return { route: "clients" };
   if (p === "team") return { route: "team" };
   if (p === "analytics") return { route: "analytics" };
-  if (p === "quickbid") return { route: "quickbid" };
   if (p === "welcome") return { route: "welcome" };
   // Library § …. Bare /library lands on Materials.
   if (p === "library") {
@@ -187,6 +194,8 @@ export function routeToPath(
       return id ? `/bids/${id}/plans` : "/dashboard";
     case "proposal":
       return id ? `/bids/${id}/proposal` : "/dashboard";
+    case "count":
+      return id ? `/bids/${id}/count` : "/dashboard";
     case "bid-archive":
       return "/archive";
     case "library-materials":

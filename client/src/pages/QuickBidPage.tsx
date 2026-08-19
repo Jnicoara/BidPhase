@@ -54,7 +54,28 @@ const MAX_RESULTS = 7;
 
 // ─── The counting screen ──────────────────────────────────────────────────────
 
-function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
+/**
+ * Counting, on a bid that already exists.
+ *
+ * This file used to export a CHOOSER above this screen: a name field, and
+ * beneath it every bid the user had ever written, from an unpaginated
+ * `bids.list`. It was the last query in the app that fetched the whole table,
+ * and it sat in front of the one thing Quick bid exists to remove — friction
+ * before you can start counting.
+ *
+ * So the entry point moved to where the context already is. The Dashboard's
+ * Quick bid card creates the bid and opens this screen with it, exactly as the
+ * Upload-a-plan card beside it already did; an existing bid reaches it from its
+ * own header, next to Plans. Both give this screen a bid, so it never has to
+ * ask which one.
+ */
+export default function QuickBidPage({
+  bidId,
+  onBack,
+}: {
+  bidId: number;
+  onBack: () => void;
+}) {
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
   const [qty, setQty] = useState("1");
@@ -229,7 +250,7 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
             className="h-8 gap-1.5 text-xs"
             onClick={onBack}
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> Bids
+            <ArrowLeft className="w-3.5 h-3.5" /> Bid
           </Button>
           <Zap className="w-5 h-5 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
@@ -521,111 +542,6 @@ function QuickAdd({ bidId, onBack }: { bidId: number; onBack: () => void }) {
               </div>
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Bid chooser ──────────────────────────────────────────────────────────────
-
-export default function QuickBidPage() {
-  const [bidId, setBidId] = useState<number | null>(null);
-  const [name, setName] = useState("");
-
-  const utils = trpc.useUtils();
-  const { data: bids = [], isLoading } = trpc.bids.list.useQuery();
-
-  const createBid = trpc.bids.create.useMutation({
-    onError: error => toast.error(error.message),
-    onSuccess: bid => {
-      if (bid) setBidId(bid.id);
-    },
-    onSettled: () => {
-      void utils.bids.list.invalidate();
-    },
-  });
-
-  if (bidId !== null) {
-    return <QuickAdd bidId={bidId} onBack={() => setBidId(null)} />;
-  }
-
-  const start = () => {
-    if (!name.trim()) {
-      toast.error("Give the bid a name.");
-      return;
-    }
-    createBid.mutate({ name: name.trim() });
-    setName("");
-  };
-
-  return (
-    <div className="flex flex-col h-full bg-background">
-      <div className="border-b border-border px-6 py-4">
-        <div className="flex items-center gap-3">
-          <Zap className="w-5 h-5 text-primary" />
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold">Quick bid</h1>
-            <p className="text-xs text-muted-foreground">
-              Build a bid by counting, with no plan takeoff — for jobs where you
-              already know the numbers.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="max-w-2xl space-y-4">
-          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Start a new one
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                value={name}
-                onChange={e => setName(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === "Enter") start();
-                }}
-                placeholder="Bid name — e.g. Oak Street remodel"
-                className="h-9 flex-1 min-w-[14rem] text-sm"
-                autoFocus
-              />
-              <Button size="sm" className="h-9 gap-1.5 text-xs" onClick={start}>
-                <Check className="w-3.5 h-3.5" /> Start counting
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="px-4 py-2 border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground">
-              Or carry on with an existing bid
-            </div>
-            {isLoading ? (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                Loading bids…
-              </div>
-            ) : bids.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No bids yet — name one above to begin.
-              </div>
-            ) : (
-              bids.map(bid => (
-                <button
-                  key={bid.id}
-                  onClick={() => setBidId(bid.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                >
-                  <span className="flex-1 min-w-0 text-sm font-medium truncate">
-                    {bid.name}
-                  </span>
-                  <Badge variant="outline" className="text-xs">
-                    {bid.status}
-                  </Badge>
-                </button>
-              ))
-            )}
-          </div>
         </div>
       </div>
     </div>

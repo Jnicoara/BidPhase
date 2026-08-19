@@ -38,17 +38,17 @@
   ],
   "shortcuts": [
     {
-      "name": "Quick bid",
-      "short_name": "Quick bid",
-      "description": "Count a job out without a plan",
-      "url": "/#/quickbid",
+      "name": "Materials",
+      "short_name": "Materials",
+      "description": "Look up what something costs",
+      "url": "/#/library/materials",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Bids",
-      "short_name": "Bids",
-      "description": "Open a bid, or search past ones",
-      "url": "/#/bids",
+      "name": "Clients",
+      "short_name": "Clients",
+      "description": "Find a customer's number",
+      "url": "/#/clients",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]

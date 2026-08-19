@@ -35,6 +35,7 @@ import {
   Plus,
   Search,
   X,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -469,6 +470,23 @@ export default function BidsPage({
             {sheetCount > 0 && (
               <span className="text-muted-foreground">{sheetCount}</span>
             )}
+          </Button>
+
+          {/* Beside Plans because they are the two ways of putting quantities
+              on this bid — off a drawing, or off a count in someone's head.
+              Quick bid used to be a top-level nav item that opened a chooser
+              asking which bid you meant; from here the bid is already known. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            onClick={() => {
+              window.location.hash = `/bids/${bid.id}/count`;
+            }}
+            title="Count — add assemblies by typing, without a plan"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Count
           </Button>
 
           {/* The other document this bid produces, and the one that goes the

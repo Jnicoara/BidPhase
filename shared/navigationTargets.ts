@@ -57,9 +57,16 @@ export const NAVIGATION_TARGETS: NavigationTarget[] = [
       "Find one bid out of hundreds by job name, client or address. See what is in draft, out for bid, won or lost.",
   },
   {
+    /**
+     * Same reasoning as `bids`: the id stays, the path moved.
+     *
+     * Counting now lives at /bids/:id/count, which needs a bid and so cannot
+     * be linked to from here. The Dashboard is where a bid gets picked up or
+     * started, and both ways in are the first thing on it.
+     */
     id: "quick-bid",
     label: "Quick bid",
-    path: "#/quickbid",
+    path: "#/dashboard",
     purpose:
       "Build a bid fast by adding assemblies and quantities, with no plan takeoff. The quickest way to price a job or start a new estimate.",
   },

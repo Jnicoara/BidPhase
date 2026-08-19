@@ -367,6 +367,8 @@ tRPC routers live in `server/routers/*Router.ts` and are composed in `server/rou
 
 **The route model is `client/src/lib/appRoutes.ts`, not the shell.** `pathToRoute` / `routeToPath` / `retiredAddress` are pure functions with `appRoutes.test.ts` against them, and that is deliberate: the sidebar carries **eight** destinations, down from fourteen, because several screens were folded into others as `?view=` tabs — Kits and Modifiers into Assemblies, Supplier Pricing into Materials, the Bids list and Quick bid's chooser into the Dashboard.
 
+A bid carries three surfaces of its own — `/bids/:id/plans`, `/bids/:id/count`, `/bids/:id/proposal` — and **none of them is in the nav, deliberately**: each needs a bid, so a top-level entry would dead-end on "which one?". That is the fault that removed Bids and Quick bid from the sidebar; both were pages whose whole job was asking which bid you meant. When a screen needs a bid, reach it from the bid.
+
 Folding a screen retires its address, and **a retired address is what breaks silently** — an unrecognised path lands on the Dashboard, so nobody notices until they wonder where their kits went. So every one is listed in `RETIRED_PATHS` and redirected to the screen that took the job over, with the address bar rewritten via `replaceState` so bookmarks heal. When you move a screen:
 
 - add its old address to `RETIRED_PATHS` (never rely on the catch-all);

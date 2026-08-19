@@ -79,3 +79,25 @@ export function bidNameFromFilename(filename: string): string {
   // nameless bid, which the create call would reject anyway.
   return cleaned || "New bid";
 }
+
+/**
+ * A starting name for a bid nobody has named yet.
+ *
+ * The counting entry point creates the bid before asking anything, the same
+ * way the plan upload does — but a plan upload has a filename to work from and
+ * this has nothing. Dating it is the next best thing: "Count — Tue 18 Aug"
+ * tells you which one you started this morning, where a board of identical
+ * "New bid" rows tells you nothing.
+ *
+ * Takes the clock as a parameter so it can be tested without freezing time.
+ */
+export function newBidName(now: Date): string {
+  // The same shape the Dashboard prints deadlines in, so two dates on one
+  // screen do not read as two different date formats.
+  const day = now.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  return `Count — ${day}`;
+}

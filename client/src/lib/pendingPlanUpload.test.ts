@@ -18,6 +18,7 @@ import {
   bidNameFromFilename,
   clearPendingPlan,
   hasPendingPlan,
+  newBidName,
   putPendingPlan,
   takePendingPlan,
 } from "./pendingPlanUpload";
@@ -117,5 +118,27 @@ describe("naming the bid after the file", () => {
     expect(bidNameFromFilename("Maple Street duplex.pdf")).toBe(
       "Maple Street duplex"
     );
+  });
+});
+
+describe("newBidName", () => {
+  it("names a counted bid for the day it was started", () => {
+    // The counting entry point creates the bid before asking anything, so this
+    // is what lands on the board. A date is what tells two of them apart.
+    expect(newBidName(new Date(2026, 7, 18))).toBe("Count — Tue, Aug 18");
+  });
+
+  it("never returns something empty", () => {
+    // The create call rejects a blank name, and this is the only thing between
+    // the Quick bid card and that rejection.
+    expect(newBidName(new Date(2026, 0, 1)).trim().length).toBeGreaterThan(0);
+  });
+
+  it("takes the clock as a parameter", () => {
+    // Not Date.now() internally — otherwise the assertion above could only be
+    // written by freezing time, and nothing here would be testable.
+    const a = newBidName(new Date(2026, 7, 18));
+    const b = newBidName(new Date(2026, 7, 19));
+    expect(a).not.toBe(b);
   });
 });
