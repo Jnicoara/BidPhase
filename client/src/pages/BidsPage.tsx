@@ -34,9 +34,17 @@ import {
   FileText,
   Plus,
   Search,
+  Send,
+  ChevronDown,
   X,
   Zap,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -60,6 +68,7 @@ import { ClientLinkField } from "@/components/ClientLinkField";
 import { BidTaxControls } from "@/components/BidTaxControls";
 import { BidExtrasPanel } from "@/components/BidExtrasPanel";
 import { CloseoutPanel } from "@/components/CloseoutPanel";
+import { CollapsiblePanel } from "@/components/CollapsiblePanel";
 import { SampleBidNotice } from "@/components/SampleBidNotice";
 import { countUnpricedLaborLines } from "@shared/laborRatePricing";
 
@@ -408,6 +417,21 @@ export default function BidsPage({
    */
   const unpricedLaborLines = countUnpricedLaborLines(lines);
 
+  /**
+   * Which pricing settings this bid has taken off the company default.
+   *
+   * Read from the SOURCE the server resolved rather than from the bid's own
+   * columns, so the summary agrees with the badges inside the panel and with
+   * what the bid is actually priced at. Naming them matters: "overridden on
+   * this bid" without saying which one sends the estimator opening the panel
+   * to find out, which is the click the summary exists to save.
+   */
+  const overriddenHere = [
+    settings.overheadSource === "bid" ? "overhead" : null,
+    settings.profitSource === "bid" ? "profit" : null,
+    settings.productivitySource === "bid" ? "productivity" : null,
+  ].filter((label): label is string => label !== null);
+
   /** Lines grouped by unit, with un-labelled lines last under a null key. */
   const groups: Array<{ label: string | null; lines: typeof lines }> = [];
   for (const line of lines) {
@@ -489,57 +513,79 @@ export default function BidsPage({
             Count
           </Button>
 
-          {/* The other document this bid produces, and the one that goes the
-              other way — out to a supplier rather than to the customer. Here as
-              well as on the Takeoff screen because a Quick Bid has line items
-              and no plan at all, and its materials still have to be quoted.
-              A dialog rather than a screen: it is read, exported and closed. */}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs shrink-0"
-            onClick={() => setMaterialsListOpen(true)}
-            title="Materials list — quantities only, for a supplier quote"
-          >
-            <ClipboardList className="w-3.5 h-3.5" />
-            Materials list
-          </Button>
+          {/*
+            ── The three ways this bid leaves the app ─────────────────────────
+            They were three separate outline buttons beside Plans and Count,
+            which made five in a row and wrapped the header at laptop width.
+            Plans and Count stay out here because they are places you GO and
+            work; these three are one idea in three costumes, and they differ
+            only in who receives the document and therefore in what it is
+            allowed to carry.
 
-          {/* The third document, and the third audience: the bookkeeper. Sits
-              beside the other two because all three are ways this bid leaves
-              the app, and they differ only in who receives them and therefore
-              in what they are allowed to carry. */}
-          {/* Hidden rather than disabled when the feature is not available to
-              this account: the server returns NOT_FOUND, so a visible button
-              would announce an unreleased feature and then fail on click.
-              Hiding is the UI agreeing with the server, not protecting it. */}
-          {access.hasFeature("accounting.quickbooks") && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 gap-1.5 text-xs shrink-0"
-              onClick={() => setAccountingOpen(true)}
-              title="Accounting export — the numbers, as a QuickBooks CSV"
-            >
-              <Receipt className="w-3.5 h-3.5" />
-              Accounting
-            </Button>
-          )}
+            So the menu is labelled by AUDIENCE, which is the thing an estimator
+            is actually choosing between — not by format, and not by the name of
+            the screen it opens.
+          */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs shrink-0"
+              >
+                <Send className="w-3.5 h-3.5" />
+                Send
+                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              {/* Its own screen rather than a dialog, because it is a full page
+                  being composed and it has to be printable. */}
+              <DropdownMenuItem
+                onSelect={() => {
+                  window.location.hash = `/bids/${bid.id}/proposal`;
+                }}
+              >
+                <FileSignature className="w-3.5 h-3.5" />
+                <span className="flex-1">
+                  Proposal
+                  <span className="block text-xs text-muted-foreground">
+                    For the client
+                  </span>
+                </span>
+              </DropdownMenuItem>
 
-          {/* The way out of the app: this bid as a document a client receives.
-              Its own screen rather than a dialog, because it is a full page
-              being composed and it has to be printable. */}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs shrink-0"
-            onClick={() => {
-              window.location.hash = `/bids/${bid.id}/proposal`;
-            }}
-          >
-            <FileSignature className="w-3.5 h-3.5" />
-            Proposal
-          </Button>
+              {/* Goes the other way — out to a supplier rather than to the
+                  customer. Available from the first line, not just a finished
+                  bid: a supplier quote is how a contractor finds out what
+                  things cost. A dialog, because it is read, exported, closed. */}
+              <DropdownMenuItem onSelect={() => setMaterialsListOpen(true)}>
+                <ClipboardList className="w-3.5 h-3.5" />
+                <span className="flex-1">
+                  Materials list
+                  <span className="block text-xs text-muted-foreground">
+                    For the supplier — quantities, no prices
+                  </span>
+                </span>
+              </DropdownMenuItem>
+
+              {/* Hidden rather than disabled when the feature is not available
+                  to this account: the server returns NOT_FOUND, so a visible
+                  entry would announce an unreleased feature and then fail on
+                  click. Hiding is the UI agreeing with the server. */}
+              {access.hasFeature("accounting.quickbooks") && (
+                <DropdownMenuItem onSelect={() => setAccountingOpen(true)}>
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span className="flex-1">
+                    Accounting export
+                    <span className="block text-xs text-muted-foreground">
+                      For the bookkeeper — QuickBooks CSV
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <DueDateField
             value={bid.dueDate}
@@ -984,12 +1030,28 @@ export default function BidsPage({
               />
             )}
 
-            {/* Settings, with their source stated */}
-            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Pricing settings
-              </div>
-
+            {/* Settings, with their source stated. Shut by default: three
+                inherit-or-override selects open on every bid implies choices
+                that are expected, when most bids follow the company defaults
+                and never touch these. The summary says which case you are in,
+                so a shut panel still answers the only question worth asking
+                from outside it. */}
+            <CollapsiblePanel
+              id="bid-pricing"
+              title="Pricing settings"
+              summary={
+                overriddenHere.length > 0
+                  ? `Overridden on this bid — ${overriddenHere.join(", ")}`
+                  : "Following your company defaults"
+              }
+              badge={
+                overriddenHere.length > 0 ? (
+                  <Badge variant="outline" className="text-[10px]">
+                    this bid
+                  </Badge>
+                ) : undefined
+              }
+            >
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-muted-foreground">
@@ -1208,7 +1270,7 @@ export default function BidsPage({
                   job-condition modifiers rather than added to them.
                 </p>
               </div>
-            </div>
+            </CollapsiblePanel>
           </div>
         </div>
       </div>

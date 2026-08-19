@@ -31,6 +31,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { selectOnFocus } from "@/lib/selectOnFocus";
 import { ScopeNotesPanel } from "@/components/ScopeNotesPanel";
+import { CollapsiblePanel } from "@/components/CollapsiblePanel";
 
 const money = (value: number) =>
   value.toLocaleString("en-US", {
@@ -105,16 +106,24 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
 
   return (
     <div className="space-y-4">
-      {/* ── Additional expenses ── */}
-      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Additional expenses
-          </div>
-          {expensesTotal > 0 && (
+      {/* Shut until there is a reason to open it. The summary carries the
+          count and the money, which is the whole of what a closed panel has to
+          answer — an estimator checking a bid before sending wants to know
+          whether there are charges on it, not to re-read the form. */}
+      <CollapsiblePanel
+        id="bid-expenses"
+        title="Additional expenses"
+        summary={
+          expenses.length === 0
+            ? "Permits, inspections, anything not in an assembly"
+            : `${expenses.length} charge${expenses.length === 1 ? "" : "s"} · ${money(expensesTotal)}`
+        }
+      >
+        {expensesTotal > 0 && (
+          <div className="flex items-center justify-end">
             <span className="font-mono text-sm">{money(expensesTotal)}</span>
-          )}
-        </div>
+          </div>
+        )}
 
         {expenses.length > 0 && (
           <div className="space-y-1">
@@ -271,7 +280,7 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
           They are independent, and both start off. Typing a charge here does
           not save it to your list.
         </p>
-      </div>
+      </CollapsiblePanel>
 
       <ScopeNotesPanel bidId={bidId} />
     </div>

@@ -40,9 +40,10 @@ import { type PendingArchive } from "@/lib/archiveBid";
 import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
 import { NavigationHelper } from "@/components/NavigationHelper";
 import { BidSearchPanel } from "@/components/BidSearchPanel";
-import { StartBidCards } from "@/components/StartBidCards";
+import { NewBidMenu, StartBidCards } from "@/components/StartBidCards";
 import { SampleBidCard } from "@/components/SampleBidCard";
 import { realBidValue } from "@shared/sampleProject";
+import { isChecklistComplete } from "@shared/onboarding";
 import {
   bidNameFromFilename,
   clearPendingPlan,
@@ -210,6 +211,25 @@ export default function DashboardPage({
   };
 
   /**
+   * Whether this account has outgrown the explanatory start cards.
+   *
+   * Tied to the getting-started checklist rather than to a count of bids or a
+   * "seen it" flag, because the checklist is already decided from the user's
+   * real data — see shared/onboarding.ts, which is explicit that a step must
+   * never tick because a screen was opened. Reusing it means the Dashboard
+   * graduates on the same evidence the checklist does.
+   *
+   * While the query is in flight this reads as graduated, NOT as new. Either
+   * default shows the wrong thing for a moment, and this is the cheaper wrong:
+   * the compact menu carries all three routes, so a new user briefly sees a
+   * working control that then expands into the explained version. The other way
+   * round, every returning user watches six inches of cards appear and then
+   * vanish on every single load.
+   */
+  const { data: onboarding } = trpc.onboarding.state.useQuery();
+  const graduated = onboarding ? isChecklistComplete(onboarding.steps) : true;
+
+  /**
    * Optimistic: the card leaves the board the moment it is archived, per the
    * responsiveness rules. The undo in the toast is the safety net — archiving
    * the wrong bid is a slip, and the fix should not require finding the
@@ -345,18 +365,32 @@ export default function DashboardPage({
               <span className="text-muted-foreground">{archived.length}</span>
             </Button>
           )}
-          {/* Deliberately quiet, and outlined rather than filled. The two cards
-              below are the ways in; this is the third case neither covers —
-              a shell to hold a name, a date and a client before any pricing
-              exists. Three loud buttons would be no emphasis at all. */}
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 gap-1.5 text-xs shrink-0"
-            onClick={() => setAdding(v => !v)}
-          >
-            <Plus className="w-3.5 h-3.5" /> Empty bid
-          </Button>
+          {/*
+            While the checklist is unfinished, the two cards below are the ways
+            in and this stays a quiet third option — a shell to hold a name, a
+            date and a client before any pricing exists. Three loud buttons
+            would be no emphasis at all.
+
+            Once the checklist is done the cards go, and this becomes the one
+            control that carries all three routes. See NewBidMenu.
+          */}
+          {graduated ? (
+            <NewBidMenu
+              onUploadPlan={handleUploadPlan}
+              onQuickBid={handleQuickBid}
+              onEmptyBid={() => setAdding(v => !v)}
+              busy={startFromPlan.isPending || startCounting.isPending}
+            />
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs shrink-0"
+              onClick={() => setAdding(v => !v)}
+            >
+              <Plus className="w-3.5 h-3.5" /> Empty bid
+            </Button>
+          )}
         </div>
 
         {adding && (
@@ -403,11 +437,13 @@ export default function DashboardPage({
             stay for a returning user too, because starting the next job is the
             other thing this screen is for. */}
         <div className="mb-5 space-y-3">
-          <StartBidCards
-            onUploadPlan={handleUploadPlan}
-            onQuickBid={handleQuickBid}
-            busy={startFromPlan.isPending || startCounting.isPending}
-          />
+          {!graduated && (
+            <StartBidCards
+              onUploadPlan={handleUploadPlan}
+              onQuickBid={handleQuickBid}
+              busy={startFromPlan.isPending || startCounting.isPending}
+            />
+          )}
           <SampleBidCard onOpenBid={onOpenBid} />
           <GettingStartedChecklist />
           <NavigationHelper className="max-w-xl" />

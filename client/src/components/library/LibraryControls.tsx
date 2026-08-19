@@ -73,6 +73,18 @@ export function ScopeFilter({
   onChange: (scope: LibraryScope) => void;
   counts: { all: number; mine: number };
 }) {
+  /**
+   * Nothing of your own means nothing to filter to — the same rule ViewTabs
+   * follows above, for the same reason: "Mine 0" is a door to a blank room, and
+   * every brand-new account saw one on every library screen before they had
+   * created anything.
+   *
+   * Guarded on the current scope so it cannot vanish out from under someone who
+   * is standing in it: if the last item you own is archived while "Mine" is
+   * selected, the control stays until you switch back.
+   */
+  if (counts.mine === 0 && scope === "all") return null;
+
   return (
     <div className="inline-flex rounded-lg border border-border p-0.5">
       {(["all", "mine"] as const).map(value => (

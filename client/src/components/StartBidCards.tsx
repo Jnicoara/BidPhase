@@ -23,8 +23,15 @@
  */
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
-import { FileUp, Zap } from "lucide-react";
+import { ChevronDown, FileUp, Plus, Zap } from "lucide-react";
 import { MAX_PDF_BYTES, formatBytes } from "@shared/uploadLimits";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function StartCard({
   icon: Icon,
@@ -126,5 +133,93 @@ export function StartBidCards({
         onClick={onQuickBid}
       />
     </div>
+  );
+}
+
+/**
+ * The same three ways in, once the user no longer needs them explained.
+ *
+ * ── Why the Dashboard graduates ──────────────────────────────────────────────
+ * A new account needs the two doors open and labelled — that is what the cards
+ * above are for. A contractor on their fortieth bid does not: they know how
+ * they start a job, and the cards are three inches of screen between them and
+ * the board they came to read. Before this, the landing screen carried an
+ * "Empty bid" button, two start cards, a sample-bid card, the checklist and the
+ * navigation helper, all above the first row of work.
+ *
+ * So once the getting-started checklist is finished, the cards fold into this
+ * and the board starts higher. Nothing is removed — all three routes are here,
+ * and the wording is the same, so what someone learned from the cards still
+ * describes what the menu does. The app already knows when to switch: the
+ * checklist is decided from real data, never from screens visited.
+ */
+export function NewBidMenu({
+  onUploadPlan,
+  onQuickBid,
+  onEmptyBid,
+  busy,
+}: {
+  onUploadPlan: (file: File) => void;
+  onQuickBid: () => void;
+  onEmptyBid: () => void;
+  busy?: boolean;
+}) {
+  const fileInput = useRef<HTMLInputElement | null>(null);
+
+  return (
+    <>
+      <input
+        ref={fileInput}
+        type="file"
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) onUploadPlan(file);
+        }}
+      />
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 text-xs shrink-0"
+            disabled={busy}
+          >
+            <Plus className="w-3.5 h-3.5" /> New bid
+            <ChevronDown className="w-3 h-3 opacity-70" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-60">
+          <DropdownMenuItem onSelect={() => fileInput.current?.click()}>
+            <FileUp className="w-3.5 h-3.5" />
+            <span className="flex-1">
+              Upload a plan
+              <span className="block text-xs text-muted-foreground">
+                Start from a drawing set and take it off
+              </span>
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onQuickBid}>
+            <Zap className="w-3.5 h-3.5" />
+            <span className="flex-1">
+              Quick bid
+              <span className="block text-xs text-muted-foreground">
+                Count it out without a plan
+              </span>
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onEmptyBid}>
+            <Plus className="w-3.5 h-3.5" />
+            <span className="flex-1">
+              Empty bid
+              <span className="block text-xs text-muted-foreground">
+                Just a name, a date and a client for now
+              </span>
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
 }
