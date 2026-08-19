@@ -11,6 +11,15 @@ build/
 *.tsbuildinfo
 coverage/
 
+# Drizzle's migration snapshots.
+#
+# Written by `drizzle-kit generate`, read by drizzle-kit to work out what
+# changed since the last migration. Nobody reads them by hand and nobody edits
+# them, so formatting them buys nothing — and it costs: reformatting seventeen
+# generated files is churn on every `pnpm format`, and the next `db:push` writes
+# them back in drizzle-kit's own style anyway, so the diff never settles.
+drizzle/meta/
+
 # Package files
 package-lock.json
 pnpm-lock.yaml

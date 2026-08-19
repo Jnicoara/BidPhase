@@ -1,0 +1,28 @@
+# Line endings — the reason `pnpm format` used to rewrite the whole repo.
+#
+# Git on Windows is commonly configured with core.autocrlf=true, which checks
+# every text file out with CRLF. `.prettierrc` asks for `"endOfLine": "lf"`.
+# With nothing to reconcile the two, prettier saw CRLF everywhere and reported
+# all ~500 tracked text files as unformatted — permanently. Running
+# `prettier --write` "fixed" them, git converted them straight back on the next
+# checkout, and the next person to run `pnpm format` got 80+ files of churn
+# mixed into whatever they were actually changing.
+#
+# This settles it in git's favour of LF, in the repo AND in the working tree,
+# which is what prettier, the Linux build and the deployed server all expect.
+# `text=auto` still detects binaries and leaves them alone.
+#
+# There are no .bat or .cmd files in this repo; if one is ever added it needs
+# `eol=crlf`, because cmd.exe will not run an LF-terminated batch file.
+* text=auto eol=lf
+
+# Declared rather than left to detection, so a corrupt diff can never be
+# attempted on them.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

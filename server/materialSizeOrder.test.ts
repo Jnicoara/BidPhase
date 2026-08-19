@@ -146,11 +146,9 @@ describe("conductor ranges", () => {
   it("sorts a range among the conductors, not after them", () => {
     // The range shares the AWG scale with a plain gauge, so a #10 lands
     // between the 14-10 and 8-6 ranges rather than in a group of its own.
-    expect(sorted(["8-6 AWG crimp lug", "#10 THHN", "14-10 AWG crimp lug"])).toEqual([
-      "14-10 AWG crimp lug",
-      "#10 THHN",
-      "8-6 AWG crimp lug",
-    ]);
+    expect(
+      sorted(["8-6 AWG crimp lug", "#10 THHN", "14-10 AWG crimp lug"])
+    ).toEqual(["14-10 AWG crimp lug", "#10 THHN", "8-6 AWG crimp lug"]);
   });
 
   it("still needs the AWG to call a hyphenated pair a range", () => {

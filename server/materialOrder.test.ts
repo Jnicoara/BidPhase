@@ -19,7 +19,8 @@ import {
   compareMaterials,
   groupMaterialsByCategory,
   materialTypeKey,
-  sortMaterialsForDisplay,  groupByType,
+  sortMaterialsForDisplay,
+  groupByType,
 } from "../shared/materialOrder";
 import { MATERIAL_CATEGORIES } from "../drizzle/schema";
 
@@ -348,7 +349,10 @@ describe("type as a grouping level", () => {
         m("15A breaker", "Breakers"),
       ])
     );
-    expect(sections.map(s => s.typeLabel)).toEqual(["breaker", "2-Pole breaker"]);
+    expect(sections.map(s => s.typeLabel)).toEqual([
+      "breaker",
+      "2-Pole breaker",
+    ]);
     expect(sections[0].items.map(i => i.name)).toEqual([
       "15A breaker",
       "20A breaker",
@@ -365,7 +369,9 @@ describe("type as a grouping level", () => {
     );
     // The tandem still clusters ahead of single-pole, by breaker class.
     expect(sections[0].typeLabel).toBeNull();
-    expect(sections[0].items.map(i => i.name)).toEqual(["15/20 tandem breaker"]);
+    expect(sections[0].items.map(i => i.name)).toEqual([
+      "15/20 tandem breaker",
+    ]);
   });
 
   it("never re-orders what the sort produced", () => {

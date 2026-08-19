@@ -263,9 +263,9 @@ export type MaterialTypeSection<T> = {
  * so they come back exactly as they are today — no allow-list, no exception,
  * nothing to keep up to date as the catalog grows.
  */
-export function groupByType<T extends { name: string; category?: string | null }>(
-  rows: readonly T[]
-): Array<MaterialTypeSection<T>> {
+export function groupByType<
+  T extends { name: string; category?: string | null },
+>(rows: readonly T[]): Array<MaterialTypeSection<T>> {
   const sections: Array<MaterialTypeSection<T>> = [];
 
   let runLabel: string | null = null;

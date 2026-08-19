@@ -394,3 +394,7 @@ The original four-workspace design (Residential / Commercial / Civil / Industria
 **Path aliases** (`@` → `client/src`, `@shared` → `shared`) are declared in three places that must stay in sync: `tsconfig.json`, `vite.config.ts`, `vitest.config.ts`.
 
 **Conventions:** Prettier enforced (double quotes, semicolons, 2-space indent — see `.prettierrc`); TypeScript strict mode; no ESLint. Commit messages in this repo are versioned checkpoints (`vX.YY`) summarizing what shipped and which GitHub issues they close — follow that style when asked to commit.
+
+**Line endings are LF, and `.gitattributes` is what keeps them that way.** Git on Windows is usually configured `core.autocrlf=true`, which checks every text file out as CRLF, while `.prettierrc` sets `"endOfLine": "lf"`. With nothing reconciling the two, prettier reported every tracked file as unformatted no matter how often it was run, and `pnpm format` produced 80+ files of churn on top of whatever was actually being changed — which made the command unusable and the check worthless. `* text=auto eol=lf` settles it. Don't remove it, and don't "fix" a CRLF diff by changing `.prettierrc`. A `.bat` or `.cmd` file, if one is ever added, needs an explicit `eol=crlf` — cmd.exe will not run an LF-terminated batch file.
+
+`drizzle/meta/` is in `.prettierignore`: those snapshots are written and rewritten by `drizzle-kit`, so formatting them is churn that never settles.
