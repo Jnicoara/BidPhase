@@ -39,6 +39,7 @@ import {
 import {
   containsMoney,
   groupScopeNotes,
+  partitionScopeNotes,
   sectionAllowedInMode,
   sumExpenses,
 } from "../shared/bidExtras";
@@ -106,6 +107,53 @@ describe("grouping includes and excludes", () => {
     ]);
     expect(grouped.includes).toHaveLength(0);
     expect(grouped.excludes).toEqual(["Trenching"]);
+  });
+
+  /**
+   * The editor is now laid out in the same two columns the document prints, so
+   * it needs the same split — but with the whole row, because it removes lines
+   * by id and shows a bookmark only on ones the user typed. Both callers go
+   * through partitionScopeNotes so the two cannot disagree about which side a
+   * line lands on.
+   */
+  it("keeps the rest of the row, for the editor", () => {
+    const rows = [
+      { id: 1, kind: "include" as const, text: "Rough-in", scopeNoteId: null },
+      { id: 2, kind: "exclude" as const, text: "Permits", scopeNoteId: 9 },
+    ];
+    const { includes, excludes } = partitionScopeNotes(rows);
+    expect(includes).toEqual([rows[0]]);
+    expect(excludes).toEqual([rows[1]]);
+    // The id survives — without it the editor cannot remove the line.
+    expect(includes[0].id).toBe(1);
+    expect(excludes[0].scopeNoteId).toBe(9);
+  });
+
+  it("drops blanks for the editor too, by the same rule", () => {
+    const { includes, excludes } = partitionScopeNotes([
+      { id: 1, kind: "include" as const, text: "  " },
+      { id: 2, kind: "exclude" as const, text: "Trenching" },
+    ]);
+    expect(includes).toHaveLength(0);
+    expect(excludes).toHaveLength(1);
+  });
+
+  it("agrees with what the document prints", () => {
+    // The regression this guards: two implementations of "which column" that
+    // drift, putting a line on the editor's left and the proposal's right.
+    const rows = [
+      { kind: "include" as const, text: "Rough-in" },
+      { kind: "exclude" as const, text: " Permits " },
+      { kind: "include" as const, text: "" },
+    ];
+    const grouped = groupScopeNotes(rows);
+    const partitioned = partitionScopeNotes(rows);
+    expect(partitioned.includes.map(n => n.text.trim())).toEqual(
+      grouped.includes
+    );
+    expect(partitioned.excludes.map(n => n.text.trim())).toEqual(
+      grouped.excludes
+    );
   });
 });
 

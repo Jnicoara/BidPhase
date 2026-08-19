@@ -1,5 +1,9 @@
 /**
- * Flat charges and includes/excludes, on a bid.
+ * Flat charges on a bid, plus the scope panel beneath them.
+ *
+ * Includes and excludes used to live in here as a second flat list; they moved
+ * to `ScopeNotesPanel`, which lays them out as the two columns the proposal
+ * actually prints.
  *
  * ── Pick from the list, or type a one-off ────────────────────────────────────
  * Both halves work the same way and both make the one-off the equal of the
@@ -14,8 +18,7 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { BookmarkPlus, Plus, Trash2, X } from "lucide-react";
+import { BookmarkPlus, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { selectOnFocus } from "@/lib/selectOnFocus";
+import { ScopeNotesPanel } from "@/components/ScopeNotesPanel";
 
 const money = (value: number) =>
   value.toLocaleString("en-US", {
@@ -42,22 +46,16 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
   const utils = trpc.useUtils();
 
   const savedExpenses = trpc.bidExtras.expenses.list.useQuery();
-  const savedNotes = trpc.bidExtras.scope.list.useQuery();
   const onBidExpenses = trpc.bidExtras.expenses.onBid.useQuery({ bidId });
-  const onBidNotes = trpc.bidExtras.scope.onBid.useQuery({ bidId });
 
   const [expenseName, setExpenseName] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseTaxable, setExpenseTaxable] = useState(false);
   const [expenseMarkedUp, setExpenseMarkedUp] = useState(false);
-  const [noteKind, setNoteKind] = useState<"include" | "exclude">("exclude");
-  const [noteText, setNoteText] = useState("");
 
   const refresh = () => {
     void utils.bidExtras.expenses.onBid.invalidate({ bidId });
-    void utils.bidExtras.scope.onBid.invalidate({ bidId });
     void utils.bidExtras.expenses.list.invalidate();
-    void utils.bidExtras.scope.list.invalidate();
     // The rollup and the document both change when a charge does.
     void utils.bids.get.invalidate({ id: bidId });
     void utils.proposals.document.invalidate({ bidId });
@@ -85,25 +83,8 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
     onError,
     onSettled: refresh,
   });
-  const addNote = trpc.bidExtras.scope.addToBid.useMutation({
-    onError,
-    onSettled: refresh,
-  });
-  const removeNote = trpc.bidExtras.scope.removeFromBid.useMutation({
-    onError,
-    onSettled: refresh,
-  });
-  const saveNote = trpc.bidExtras.scope.saveToLibrary.useMutation({
-    onSuccess: r =>
-      toast.success(
-        r.alreadySaved ? "Already on your list." : "Saved to your list."
-      ),
-    onError,
-    onSettled: refresh,
-  });
 
   const expenses = onBidExpenses.data ?? [];
-  const notes = onBidNotes.data ?? [];
   const expensesTotal = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   const submitExpense = () => {
@@ -120,12 +101,6 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
     setExpenseAmount("");
     setExpenseTaxable(false);
     setExpenseMarkedUp(false);
-  };
-
-  const submitNote = () => {
-    if (!noteText.trim()) return;
-    addNote.mutate({ bidId, kind: noteKind, text: noteText.trim() });
-    setNoteText("");
   };
 
   return (
@@ -298,112 +273,7 @@ export function BidExtrasPanel({ bidId }: { bidId: number }) {
         </p>
       </div>
 
-      {/* ── Includes / excludes ── */}
-      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Includes &amp; excludes
-        </div>
-
-        {notes.length > 0 && (
-          <div className="space-y-1">
-            {notes.map(row => (
-              <div
-                key={row.id}
-                className="flex items-start gap-2 group text-sm"
-              >
-                <span
-                  className={cn(
-                    "shrink-0 text-xs font-medium uppercase tracking-wide mt-0.5 w-14",
-                    row.kind === "exclude"
-                      ? "text-destructive"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  {row.kind === "exclude" ? "Excl" : "Incl"}
-                </span>
-                <span className="flex-1 min-w-0">{row.text}</span>
-                {row.scopeNoteId === null && (
-                  <button
-                    className="shrink-0 p-1 rounded text-muted-foreground/60 opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all"
-                    onClick={() => saveNote.mutate({ bidId, id: row.id })}
-                    aria-label="Save to my list"
-                    title="Save to my list for next time"
-                  >
-                    <BookmarkPlus className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <button
-                  className="shrink-0 p-1 rounded text-muted-foreground/60 opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-muted transition-all"
-                  onClick={() => removeNote.mutate({ bidId, id: row.id })}
-                  aria-label="Remove"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {(savedNotes.data ?? []).length > 0 && (
-          <Select
-            value={PICK_NONE}
-            onValueChange={value => {
-              if (value === PICK_NONE) return;
-              addNote.mutate({ bidId, noteId: Number(value) });
-            }}
-          >
-            <SelectTrigger
-              className="h-8 text-sm"
-              aria-label="Add a saved line"
-            >
-              <SelectValue placeholder="Add from your list…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={PICK_NONE}>Add from your list…</SelectItem>
-              {(savedNotes.data ?? []).map(note => (
-                <SelectItem key={note.id} value={String(note.id)}>
-                  {note.kind === "exclude" ? "Excl" : "Incl"} — {note.text}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        <div className="flex items-center gap-2">
-          <Select
-            value={noteKind}
-            onValueChange={v => setNoteKind(v as "include" | "exclude")}
-          >
-            <SelectTrigger className="h-8 w-24 text-sm" aria-label="Kind">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="include">Includes</SelectItem>
-              <SelectItem value="exclude">Excludes</SelectItem>
-            </SelectContent>
-          </Select>
-          <Input
-            value={noteText}
-            onChange={e => setNoteText(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && submitNote()}
-            className="h-8 flex-1 text-sm"
-            placeholder="e.g. Permit pulled by owner"
-            aria-label="Include or exclude text"
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 w-8 p-0 shrink-0"
-            onClick={submitNote}
-            aria-label="Add line"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Printed on the proposal. Excludes are what settle the argument later.
-        </p>
-      </div>
+      <ScopeNotesPanel bidId={bidId} />
     </div>
   );
 }

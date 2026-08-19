@@ -136,23 +136,42 @@ export type GroupedScopeNotes = {
 };
 
 /**
- * Split scope notes into the two lists a document prints.
+ * Split scope notes in two, keeping whatever else the rows carry.
  *
- * Blank text is dropped rather than rendered as an empty bullet — an exclusion
- * that says nothing is worse than no exclusion, because it looks like a line
+ * Blank text is dropped rather than kept as an empty bullet — an exclusion that
+ * says nothing is worse than no exclusion, because it looks like a line
  * somebody meant to finish.
+ *
+ * ── Why this is generic ─────────────────────────────────────────────────────
+ * The document only needs the words, and `groupScopeNotes` below hands it
+ * exactly those. The EDITOR needs the whole row — the id to remove it by, and
+ * whether it came from the user's saved list — and it needs the split to be the
+ * same split, because the editor is now laid out in the two columns the
+ * document prints. Two implementations of "which side is this on" would
+ * eventually disagree, and the disagreement would be a scope line appearing on
+ * one and not the other.
  */
+export function partitionScopeNotes<T extends ScopeNoteLine>(
+  notes: readonly T[]
+): { includes: T[]; excludes: T[] } {
+  const includes: T[] = [];
+  const excludes: T[] = [];
+  for (const note of notes) {
+    if (!(note.text ?? "").trim()) continue;
+    (note.kind === "exclude" ? excludes : includes).push(note);
+  }
+  return { includes, excludes };
+}
+
+/** The two lists a document prints — the words only. */
 export function groupScopeNotes(
   notes: readonly ScopeNoteLine[]
 ): GroupedScopeNotes {
-  const includes: string[] = [];
-  const excludes: string[] = [];
-  for (const note of notes) {
-    const text = (note.text ?? "").trim();
-    if (!text) continue;
-    (note.kind === "exclude" ? excludes : includes).push(text);
-  }
-  return { includes, excludes };
+  const { includes, excludes } = partitionScopeNotes(notes);
+  return {
+    includes: includes.map(n => n.text.trim()),
+    excludes: excludes.map(n => n.text.trim()),
+  };
 }
 
 // ─── Scope-only output ────────────────────────────────────────────────────────
