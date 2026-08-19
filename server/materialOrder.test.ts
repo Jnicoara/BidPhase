@@ -382,4 +382,34 @@ describe("type as a grouping level", () => {
     const flattened = groupByType(rows).flatMap(s => s.items.map(i => i.name));
     expect(flattened).toEqual(rows.map(r => r.name));
   });
+
+  it("keeps the five lug ranges together as one family", () => {
+    // A lug is named by the conductor RANGE its barrel accepts, so its size is
+    // a pair. Until the size parser learned to read one, "1-1/0" and "14-10"
+    // matched no branch, sorted to the end as sizeless, and split a family of
+    // five into a group of three and two strays further down the shelf.
+    const lugs = sortMaterialsForDisplay([
+      { name: "2/0-4/0 AWG crimp lug", category: "Connectors & Terminations" },
+      { name: "Wire nuts", category: "Connectors & Terminations" },
+      { name: "14-10 AWG crimp lug", category: "Connectors & Terminations" },
+      { name: "1-1/0 AWG crimp lug", category: "Connectors & Terminations" },
+      { name: "8-6 AWG crimp lug", category: "Connectors & Terminations" },
+      { name: "4-2 AWG crimp lug", category: "Connectors & Terminations" },
+    ]);
+    const sections = groupByType(lugs);
+    const family = sections.find(s => s.typeLabel === "crimp lug");
+    expect(family?.items.map(i => i.name)).toEqual([
+      "14-10 AWG crimp lug",
+      "8-6 AWG crimp lug",
+      "4-2 AWG crimp lug",
+      "1-1/0 AWG crimp lug",
+      "2/0-4/0 AWG crimp lug",
+    ]);
+    // And nothing is left stranded outside it.
+    expect(
+      sections
+        .filter(s => s.typeLabel === null)
+        .flatMap(s => s.items.map(i => i.name))
+    ).toEqual(["Wire nuts"]);
+  });
 });

@@ -144,6 +144,25 @@ function readSize(name: string): SizeKey | null {
   const hashed = name.match(/^#(\d{1,4}\/0|\d{1,4})(?![\d/])/);
   if (hashed) return conductor(hashed[1]);
 
+  // A conductor RANGE, named as such — "14-10 AWG crimp lug", "1-1/0 AWG".
+  //
+  // A lug is sold by the span of conductor its barrel accepts, not per gauge
+  // (see LUG_RANGES in server/seed/materials/connectors.ts), so its size is a
+  // pair. It sorts by the range's SMALLEST conductor, which is the physical
+  // sequence: 14-10, 8-6, 4-2, 1-1/0, 2/0-4/0 runs thinnest to thickest.
+  //
+  // The trailing "AWG" is doing real work, and this branch must not drop it.
+  // Without that marker "14-10" is indistinguishable from a cable spec, and
+  // the branch below would read it as #14 wire with 10 conductors in it.
+  // Three of the five ranges used to fall through to exactly that: "8-6 AWG"
+  // read as a six-conductor #8 cable. The ORDER it produced happened to be
+  // right — a range starts at its own first element — so nothing looked
+  // wrong, while the other two ("1-1/0" and "14-10") matched no branch at all
+  // and sorted to the end as sizeless, splitting one family of five into
+  // three and two.
+  const range = name.match(/^(\d{1,4}(?:\/0)?)-\d{1,4}(?:\/0)?\s+AWG\b/i);
+  if (range) return conductor(range[1]);
+
   // kcmil, named as such — "250 kcmil THHN".
   const kcmil = name.match(/^(\d{2,4})\s*kcmil\b/i);
   if (kcmil) return conductor(kcmil[1]);
@@ -258,6 +277,9 @@ export function hasSize(name: string): boolean {
  * "Wire nuts" and is what stops such a row being grouped at all.
  */
 const SIZE_PREFIXES: RegExp[] = [
+  // A conductor range — "14-10 AWG crimp lug". Consumes the unit word, so the
+  // five lug ranges all derive the same type and list as one family.
+  /^\d{1,4}(?:\/0)?-\d{1,4}(?:\/0)?\s+AWG\s+/i,
   // Multi-element aught cables — "4/0-4/0-2/0 SER aluminum".
   /^#?\d\/0(?:-\d(?:\/0)?)*\s+/,
   // kcmil, named — "250 kcmil THHN". Consumes the unit word too.

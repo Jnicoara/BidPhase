@@ -10,6 +10,7 @@ import {
   compareBySize,
   CONDUCTOR_SIZES,
   hasSize,
+  materialSizeKey,
 } from "../shared/materialSizeOrder";
 import { BASELINE_MATERIALS } from "./seed/baselineMaterials";
 
@@ -98,6 +99,90 @@ describe("conductor sizes", () => {
 
     const kcmil = CONDUCTOR_SIZES.filter(s => Number(s) >= 100).map(Number);
     expect(kcmil).toEqual([...kcmil].sort((a, b) => a - b));
+  });
+});
+
+/**
+ * Lugs are sold by the RANGE of conductor the barrel accepts — "14-10 AWG" —
+ * rather than per gauge, so their size is a pair rather than a number. See
+ * LUG_RANGES in server/seed/materials/connectors.ts for why the catalog names
+ * them that way.
+ */
+describe("conductor ranges", () => {
+  it("reads a size off every lug range, including the two with an aught", () => {
+    // "1-1/0" and "14-10" were the two that read as sizeless: neither is a
+    // cable spec, and no other branch claimed them. A sizeless row sorts to
+    // the end of its category, which put two of one family of five somewhere
+    // else entirely.
+    for (const name of [
+      "14-10 AWG crimp lug",
+      "8-6 AWG crimp lug",
+      "4-2 AWG crimp lug",
+      "1-1/0 AWG crimp lug",
+      "2/0-4/0 AWG crimp lug",
+    ]) {
+      expect(hasSize(name), name).toBe(true);
+    }
+  });
+
+  it("orders a range by the smallest conductor it accepts", () => {
+    expect(
+      sorted([
+        "2/0-4/0 AWG crimp lug",
+        "8-6 AWG crimp lug",
+        "14-10 AWG crimp lug",
+        "1-1/0 AWG crimp lug",
+        "4-2 AWG crimp lug",
+      ])
+    ).toEqual([
+      "14-10 AWG crimp lug",
+      "8-6 AWG crimp lug",
+      "4-2 AWG crimp lug",
+      "1-1/0 AWG crimp lug",
+      "2/0-4/0 AWG crimp lug",
+    ]);
+  });
+
+  it("sorts a range among the conductors, not after them", () => {
+    // The range shares the AWG scale with a plain gauge, so a #10 lands
+    // between the 14-10 and 8-6 ranges rather than in a group of its own.
+    expect(sorted(["8-6 AWG crimp lug", "#10 THHN", "14-10 AWG crimp lug"])).toEqual([
+      "14-10 AWG crimp lug",
+      "#10 THHN",
+      "8-6 AWG crimp lug",
+    ]);
+  });
+
+  it("still needs the AWG to call a hyphenated pair a range", () => {
+    // Without the marker "14-10" is a cable spec and nothing else. This is the
+    // rule the whole module runs on — a bare number is never a size — and a
+    // range is no exception to it.
+    expect(hasSize("14-10 crimp lug")).toBe(false);
+    // And the cable branch keeps the specs that ARE cable specs.
+    expect(sorted(["12-3 NM-B", "12-2 NM-B", "14-2 NM-B"])).toEqual([
+      "14-2 NM-B",
+      "12-2 NM-B",
+      "12-3 NM-B",
+    ]);
+  });
+
+  it("does not read the range's second element as a conductor count", () => {
+    // "8-6 AWG" used to match the cable branch and come out as a #8 with SIX
+    // conductors in it. The order it produced was right by luck — a range
+    // starts at its own first element — but the count was fiction, and a
+    // fiction that sorts correctly is the kind that survives. The count slot
+    // is the third element of the key.
+    expect(materialSizeKey("8-6 AWG crimp lug")[2]).toBe(0);
+    expect(materialSizeKey("2/0-4/0 AWG crimp lug")[2]).toBe(0);
+    // A real cable spec still carries its count.
+    expect(materialSizeKey("12-3 NM-B")[2]).toBe(3);
+  });
+
+  it("covers every lug range the catalog actually ships", () => {
+    const lugs = BASELINE_MATERIALS.filter(m => /AWG crimp lug$/.test(m.name));
+    expect(lugs.length).toBeGreaterThan(0);
+    const unread = lugs.filter(m => !hasSize(m.name)).map(m => m.name);
+    expect(unread).toEqual([]);
   });
 });
 
